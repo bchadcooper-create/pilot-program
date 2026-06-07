@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pilot Program">
+<meta name="theme-color" content="#0d1b2a">
+<title>Pilot Program</title>
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --navy:#0d1b2a;--navy2:#152639;--navy3:#1e3550;
+  --gold:#c9a84c;--gold2:#e8c46a;--gold-bg:#fdf8ee;
+  --red:#e05c4b;--red-bg:#fff0ee;
+  --green:#2a9d5c;--green-bg:#edfaf3;
+  --blue:#2f6eb5;--blue-bg:#eef4fd;
+  --purple:#7c5cbf;--purple-bg:#f4f0fc;
+  --amber:#d97706;--amber-bg:#fef3c7;
+  --bg:#f5f3ef;--card:#ffffff;--border:#e2ddd6;
+  --text:#0d1b2a;--muted:#6b6560;--hint:#a39e99;--light:#f9f7f4;
+  --r:14px;--rs:8px;--rx:20px;
+  --safe-top: env(safe-area-inset-top);
+  --safe-bottom: env(safe-area-inset-bottom);
+}
+html,body{height:100%;overflow:hidden}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column}
+h1,h2,h3,.bebas{font-family:'Bebas Neue',sans-serif;letter-spacing:0.04em}
+input,button,select{font-family:'DM Sans',sans-serif}
+input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+
+/* LAYOUT */
+#app{display:flex;flex-direction:column;height:100%;height:100dvh}
+.nav{background:var(--navy);padding:calc(12px + var(--safe-top)) 20px 12px;flex-shrink:0}
+.nav-inner{display:flex;align-items:center;justify-content:space-between}
+.nav-title{color:var(--gold);font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:0.08em}
+.nav-right{display:flex;align-items:center;gap:10px}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:#3aab6d}
+.sync-dot.offline{background:#888}
+.sync-dot.syncing{background:var(--gold);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+.user-badge{font-size:11px;color:#8899aa;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.page{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 16px calc(16px + var(--safe-bottom))}
+.tab-bar{background:var(--navy2);border-top:1px solid var(--navy3);display:flex;padding:8px 8px calc(8px + var(--safe-bottom));flex-shrink:0}
+.tab{flex:1;border:none;background:transparent;color:#8899aa;font-family:'DM Sans',sans-serif;font-size:10px;font-weight:500;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 4px;border-radius:var(--rs);transition:all 0.15s}
+.tab svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.tab.active{color:var(--gold)}
+.tab.active svg{stroke:var(--gold)}
+
+/* CARDS */
+.card{background:var(--card);border-radius:var(--r);border:1px solid var(--border);padding:16px;margin-bottom:12px}
+.card-tight{padding:12px 14px}
+.section-hdr{font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:0.06em;color:var(--muted);margin-bottom:8px;margin-top:4px}
+
+/* GYM SELECTOR */
+.gym-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.gym-btn{border:2px solid var(--border);background:var(--card);border-radius:var(--r);padding:16px 10px 14px;cursor:pointer;text-align:center;transition:all 0.2s;-webkit-user-select:none}
+.gym-btn:active{transform:scale(0.96)}
+.gym-btn.sel{border-color:var(--gold);background:var(--gold-bg)}
+.gym-icon{font-size:28px;margin-bottom:6px}
+.gym-label{font-family:'Bebas Neue',sans-serif;font-size:17px;color:var(--text);letter-spacing:0.05em}
+.gym-sub{font-size:11px;color:var(--muted);margin-top:2px}
+
+/* WORKOUT CARD */
+.wk-badge{display:inline-flex;align-items:center;gap:6px;font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:0.06em;padding:3px 10px;border-radius:20px;margin-bottom:8px}
+.wk-title{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:0.04em}
+.wk-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.prog-wrap{background:var(--border);border-radius:4px;height:5px;margin-top:10px;overflow:hidden}
+.prog-fill{height:100%;border-radius:4px;background:var(--gold);transition:width 0.5s}
+.prog-label{font-size:11px;color:var(--muted);margin-top:4px}
+
+/* EXERCISE */
+.ex-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);margin-bottom:10px;overflow:hidden}
+.ex-hdr{display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer;background:var(--light);-webkit-user-select:none}
+.ex-name{font-weight:600;font-size:14px}
+.ex-target{font-size:11px;color:var(--muted);margin-top:2px}
+.ex-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.ex-check{width:22px;height:22px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;transition:all 0.2s}
+.ex-check.done{background:var(--green);border-color:var(--green);color:white}
+.ex-caret{color:var(--hint);font-size:16px;transition:transform 0.2s;line-height:1}
+.ex-caret.open{transform:rotate(180deg)}
+.ex-body{padding:12px 14px;border-top:1px solid var(--border)}
+.rec-weight{font-size:12px;color:var(--blue);font-weight:500;margin-bottom:10px;display:flex;align-items:center;gap:5px}
+
+/* SET INPUT SCROLL */
+.sets-scroll{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.sets-scroll::-webkit-scrollbar{display:none}
+.set-tile{flex-shrink:0;width:88px;background:var(--light);border-radius:10px;padding:10px 8px;border:1.5px solid var(--border);transition:border-color 0.2s}
+.set-tile.logged{border-color:var(--green);background:var(--green-bg)}
+.set-lbl{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;text-align:center}
+.set-input{width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 4px;font-size:14px;font-weight:500;text-align:center;background:white;color:var(--text);margin-bottom:4px;-webkit-appearance:none}
+.set-input:focus{outline:none;border-color:var(--gold)}
+.set-hint{font-size:9px;color:var(--hint);text-align:center}
+.sets-scroll-hint{font-size:10px;color:var(--hint);text-align:center;margin-top:4px}
+
+/* INFO */
+.note{background:var(--blue-bg);border-left:3px solid var(--blue);border-radius:0 var(--rs) var(--rs) 0;padding:10px 12px;font-size:12px;color:#1a4a8a;line-height:1.5;margin-bottom:12px}
+.note.gold{background:var(--gold-bg);border-color:var(--gold);color:#7a5010}
+.note.green{background:var(--green-bg);border-color:var(--green);color:#145c35}
+
+/* BUTTONS */
+.btn{display:block;width:100%;padding:14px;border:none;border-radius:var(--rs);font-size:14px;font-weight:600;cursor:pointer;transition:all 0.15s;text-align:center;letter-spacing:0.02em;-webkit-user-select:none}
+.btn:active{transform:scale(0.97)}
+.btn-primary{background:var(--navy);color:var(--gold)}
+.btn-gold{background:var(--gold);color:var(--navy)}
+.btn-green{background:var(--green);color:white}
+.btn-outline{background:transparent;border:1.5px solid var(--border);color:var(--text)}
+.btn-sm{padding:7px 14px;font-size:12px;font-weight:600;width:auto;display:inline-block;border-radius:var(--rs)}
+.btn-info{background:transparent;border:1.5px solid var(--border);color:var(--blue);font-size:12px;padding:6px 10px;border-radius:6px;width:auto;display:inline-block}
+.mt8{margin-top:8px}
+.mt12{margin-top:12px}
+.mt16{margin-top:16px}
+.mb12{margin-bottom:12px}
+
+/* MODAL */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:200;display:flex;align-items:flex-end}
+.modal-sheet{background:var(--card);border-radius:20px 20px 0 0;padding:20px 20px calc(20px + var(--safe-bottom));width:100%;max-height:75vh;overflow-y:auto}
+.modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px}
+.modal-title{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:0.04em;margin-bottom:6px}
+.modal-body{font-size:14px;line-height:1.7;color:#333}
+
+/* COMPLETE */
+.complete-banner{background:linear-gradient(135deg,#1a7a4a,#2a9d5c);color:white;border-radius:var(--r);padding:20px;text-align:center;margin-bottom:16px}
+.complete-banner .big{font-size:36px;margin-bottom:6px}
+.complete-banner h2{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:0.06em}
+.complete-banner p{font-size:13px;opacity:0.85;margin-top:4px}
+
+/* STAT STRIP */
+.stat-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+.stat-box{background:var(--card);border-radius:var(--rs);border:1px solid var(--border);padding:12px 8px;text-align:center}
+.stat-val{font-family:'Bebas Neue',sans-serif;font-size:26px;color:var(--text)}
+.stat-lbl{font-size:10px;color:var(--muted);margin-top:1px;line-height:1.3}
+
+/* CHART */
+.chart-wrap{position:relative;height:200px;margin:10px 0 4px}
+
+/* PILLS */
+.pills{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.pill{padding:6px 12px;border-radius:20px;background:var(--light);border:1px solid var(--border);font-size:12px;font-weight:500;cursor:pointer;transition:all 0.15s;-webkit-user-select:none}
+.pill.active{background:var(--navy);color:var(--gold);border-color:var(--navy)}
+
+/* HISTORY ITEM */
+.hist-item{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:var(--card);border:1px solid var(--border);border-radius:var(--rs);margin-bottom:8px}
+.hist-left .h-name{font-weight:600;font-size:14px}
+.hist-left .h-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.hist-badge{font-size:11px;padding:3px 8px;border-radius:10px;font-weight:600}
+
+/* SETUP / AUTH */
+.setup-wrap{padding:32px 24px;text-align:center}
+.setup-logo{font-family:'Bebas Neue',sans-serif;font-size:42px;color:var(--navy);letter-spacing:0.08em;margin-bottom:4px}
+.setup-sub{font-size:14px;color:var(--muted);margin-bottom:32px}
+.setup-card{background:var(--card);border-radius:var(--r);border:1px solid var(--border);padding:20px;margin-bottom:16px;text-align:left}
+.setup-card h3{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:0.04em;margin-bottom:12px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em}
+.field input{width:100%;border:1.5px solid var(--border);border-radius:var(--rs);padding:11px 12px;font-size:15px;color:var(--text);background:white}
+.field input:focus{outline:none;border-color:var(--gold)}
+.setup-step{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;font-size:13px;line-height:1.5;color:var(--text)}
+.step-num{width:22px;height:22px;border-radius:50%;background:var(--navy);color:var(--gold);font-family:'Bebas Neue',sans-serif;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.setup-link{color:var(--blue);text-decoration:underline;word-break:break-all}
+.err-msg{color:var(--red);font-size:12px;margin-top:8px;display:none}
+.err-msg.show{display:block}
+
+/* EMPTY */
+.empty{text-align:center;padding:48px 20px;color:var(--muted)}
+.empty-icon{font-size:44px;margin-bottom:12px}
+.empty-title{font-size:16px;font-weight:600;color:var(--text);margin-bottom:6px}
+.empty-sub{font-size:13px;line-height:1.5}
+
+/* EXPORT */
+.export-hero{background:var(--navy);border-radius:var(--r);padding:24px;text-align:center;margin-bottom:16px}
+.export-hero .big{font-size:42px;margin-bottom:8px}
+.export-hero-title{font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--gold);letter-spacing:0.06em}
+.export-hero-sub{font-size:13px;color:#8899aa;margin-top:4px}
+
+.hidden{display:none!important}
+.flex-between{display:flex;justify-content:space-between;align-items:center}
+.flex-center{display:flex;align-items:center;gap:8px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+//  CONFIG  —  paste your Supabase URL and anon key here
+// ─────────────────────────────────────────────────────────────────────────────
+const SUPABASE_URL  = 'https://dnxkydxbyihgsictbzjz.supabase.co/rest/v1/';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRueGt5ZHhieWloZ3NpY3Riemp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3ODk4MTEsImV4cCI6MjA5NjM2NTgxMX0.oLUGuorQkbQ_u679NpE8FGBVAUmVE1K_rxl8q4B0n7k';
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  WORKOUT DATA
+// ─────────────────────────────────────────────────────────────────────────────
+const WORKOUTS = {
+  A:{name:'Lower Body',label:'Day A',color:'#2a9d5c',icon:'🏋️',
+    exercises:[
+      {id:'squat',    name:'Back Squat',           target:'5×5',      sets:5,ref:'Stand bar on traps, feet shoulder-width. Break at hips and knees together. Descend until thighs are parallel or below. Drive through heels to stand. NEW to squats — start with empty bar or just bodyweight and nail the form first. 3–4 min rest between sets.'},
+      {id:'rdl',      name:'Romanian Deadlift',     target:'4×6',      sets:4,ref:'Hip hinge. Soft knee bend. Bar stays close to legs — drag it down your shins. Push hips back until you feel a deep hamstring stretch. Drive hips forward to stand. Moderate weight, feel the stretch.'},
+      {id:'bss',      name:'Bulgarian Split Squat', target:'3×8/leg',  sets:3,ref:'Rear foot on bench or box, laces down. Front foot forward enough that your shin stays vertical. Lower until rear knee nearly touches floor. Drive through front heel. One of the best exercises for vertical jump — embrace the burn.'},
+      {id:'legpress', name:'Leg Press',             target:'3×12',     sets:3,ref:'Full range of motion. Don\'t lock knees at the top. Feet shoulder-width on the plate. Control the descent — no bouncing at the bottom. Moderate weight, quality reps.'},
+      {id:'calf',     name:'Standing Calf Raise',   target:'4×12',     sets:4,ref:'Full ROM: deep stretch at the bottom, full peak contraction at the top. Pause 1 second at the top each rep. Use a step for full range when possible. 90 sec rest.'},
+      {id:'plank',    name:'Plank',                 target:'3×60s',    sets:3,ref:'Straight line from head to heels — no sagging hips, no pike. Brace your core like someone\'s about to punch you. Breathe steadily. Record hold time in seconds in the reps field (e.g., 60). Work toward weighted plank over time.'},
+    ]},
+  B:{name:'Upper Pull',label:'Day B',color:'#2f6eb5',icon:'💪',
+    exercises:[
+      {id:'latpd',   name:'Lat Pulldown',           target:'4×8',   sets:4,ref:'Arms fully extended overhead at the top — get the stretch. Pull bar to upper chest. Slight lean back. Control the ascent. 2 min rest.'},
+      {id:'csrow',   name:'Chest Supported Row',    target:'4×10',  sets:4,ref:'Chest on pad eliminates lower back fatigue. Let your shoulders protract fully at the bottom. Pull elbows back past torso. Full retraction at the top. Keep your face off the pad.'},
+      {id:'cabrow',  name:'Cable Row',              target:'3×10',  sets:3,ref:'Seated. Drive elbows back. Squeeze shoulder blades together at the finish. Don\'t round forward on the return — keep chest tall throughout.'},
+      {id:'facepull',name:'Face Pull',              target:'3×15',  sets:3,ref:'Critical for long-term shoulder health. Cable at face height. Pull to forehead with elbows high and wide. Finish with external rotation — thumbs pointing behind you. Light-to-moderate weight only.'},
+      {id:'curl',    name:'EZ Bar Curl',            target:'3×10',  sets:3,ref:'Upper arms stay pinned at your sides — no swinging. Control the eccentric (lowering) for 2–3 seconds. Full extension at the bottom, hard squeeze at the top.'},
+    ]},
+  C:{name:'Power / Jump',label:'Day C',color:'#e05c4b',icon:'🔥',star:true,
+    exercises:[
+      {id:'boxjump', name:'Box Jump',         target:'5×3',      sets:5,ref:'PRIORITY EXERCISE for your dunk goal. FULL 3-minute rest between every set — each rep must be maximum effort. Load your hips, big arm swing, explode up. Land softly in a quarter-squat. ALWAYS step down — never jump down. Use a challenging height that forces full effort.'},
+      {id:'broad',   name:'Broad Jump',       target:'5×3',      sets:5,ref:'Horizontal power is directly trainable and transfers strongly to vertical. Aggressive arm swing back then forward. Explode forward and upward simultaneously. Stick the landing — no shuffle steps. Full 3-minute rest between sets.'},
+      {id:'tbdl',    name:'Trap Bar Deadlift',target:'5×3',      sets:5,ref:'HEAVY and FAST. This is your primary strength builder for the dunk goal. Set up with hip-width stance, sit back into the handles, big breath, then drive the floor away EXPLOSIVELY. Reset each rep. Work up to heavy triples — this should feel challenging. 3–4 min rest.'},
+      {id:'lunge',   name:'Walking Lunge',    target:'3×10/leg', sets:3,ref:'Bodyweight or light DBs. Long stride. Upright torso. Keep front shin vertical. Speed and hip extension are the goal here — this trains the hip flexor strength important for jump takeoff. Count each leg separately.'},
+      {id:'sprint',  name:'Sprint 40yd',      target:'6×40yd',   sets:6,ref:'FULL sprint speed — not a fast jog. Maximum ground force application. Walk back for 90+ seconds between each rep. Ground contact mechanics and explosive power directly transfer to jump height. Record weight as 0.'},
+    ]},
+  D:{name:'Upper Push',label:'Day D',color:'#c9a84c',icon:'🏅',
+    exercises:[
+      {id:'bench',     name:'Bench Press',       target:'4×6',   sets:4,ref:'Moderate-heavy. Elbows 45–70° from torso — not flared wide. Slight arch, feet flat. Bar touches lower chest. Control the descent, explode up. Full lockout at top.'},
+      {id:'incdb',     name:'Incline DB Press',  target:'3×8',   sets:3,ref:'30–45° incline. Full stretch at the bottom — let the DBs come down. Control the descent, press explosively. Wrists stacked over elbows throughout.'},
+      {id:'ohp',       name:'Overhead Press',    target:'3×6',   sets:3,ref:'Standing preferred. Core braced hard. Bar from upper chest, press overhead to full lockout — head through at the top. Trains the full-body drive that matters for jump and eventual ball release height.'},
+      {id:'lateral',   name:'Lateral Raise',     target:'3×15',  sets:3,ref:'Light weight. Raise to shoulder height — no higher. Lead with elbows, not wrists. Slow and controlled in both directions. Shoulder health maintenance — don\'t ego load this one.'},
+      {id:'pressdown', name:'Triceps Pressdown', target:'3×12',  sets:3,ref:'Cable with rope or bar attachment. Full elbow extension at the bottom — squeeze hard. Control the return. Upper arms stay pinned at your sides throughout.'},
+    ]},
+};
+
+const HOTEL = {
+  O1:{name:'Hotel — Option 1',label:'Option 1',color:'#7c5cbf',icon:'🏨',
+    note:'30–40 min. Maintenance mode — no PRs needed. Consistency is the win.',
+    exercises:[
+      {id:'goblet',    name:'Goblet Squat',         target:'4×10',     sets:4,ref:'DB or KB held at chest. Full depth — sit into it. Elbows track inside knees. Drive through heels to stand. Maintenance focus — moderate weight, quality reps.'},
+      {id:'dbrdl',     name:'Dumbbell RDL',          target:'4×10',     sets:4,ref:'Same hip hinge as barbell RDL. Keep back flat, soft knee bend. Feel the hamstring stretch at the bottom. Go heavy enough to feel challenged.'},
+      {id:'splitsq',   name:'Split Squat',           target:'3×10/leg', sets:3,ref:'Both feet on floor (front foot elevated version optional). Front foot forward. Lower rear knee toward floor. Drive through front heel. Count each leg separately.'},
+      {id:'stepup',    name:'Step-Ups',              target:'3×10/leg', sets:3,ref:'Use a bench or box. Step up and drive through the working heel — don\'t push off the back foot. Full hip extension at the top before stepping down. Count each leg.'},
+      {id:'hotelcalf', name:'Calf Raises',           target:'3×15',     sets:3,ref:'Step edge preferred for full ROM. Slow and controlled. If floor only, go higher reps (20+).'},
+    ]},
+  O2:{name:'Hotel — Option 2',label:'Option 2',color:'#d97706',icon:'🏃',
+    note:'20–30 min. Minimal or no equipment. The Box Jump is the most important exercise here.',
+    exercises:[
+      {id:'wlunge',    name:'Walking Lunges',        target:'3×10/leg', sets:3,ref:'Hallway works fine. Upright torso, long stride, front shin vertical. Bodyweight only.'},
+      {id:'hbss',      name:'Bulgarian Split Squat', target:'3×10/leg', sets:3,ref:'Use the bed or a sturdy chair. Best bodyweight leg exercise available. Go slow on the way down.'},
+      {id:'benchjump', name:'Box/Bench Jumps',       target:'5×3',      sets:5,ref:'MOST IMPORTANT exercise on a minimal day. Any stable elevated surface. Full max effort every single rep. 2+ min rest between sets. This is what keeps your jump training alive on the road.'},
+      {id:'pushup',    name:'Pushups',               target:'3×max',    sets:3,ref:'Chest to floor, elbows at 45°. Control down, explode up. Record your max reps in the reps field. Progress: elevate feet, add pauses at bottom, or use a weight vest.'},
+      {id:'pullup',    name:'Pullups',               target:'3×max',    sets:3,ref:'Dead hang at the bottom, chin over bar at the top. Find a doorframe bar, gym pull-up station, or anything sturdy. Record max reps. Every rep counts on the road.'},
+    ]},
+};
+
+const ROTATION = ['A','B','C','D'];
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  SUPABASE INIT
+// ─────────────────────────────────────────────────────────────────────────────
+let sb = null;
+let sbUser = null;
+
+function initSupabase(){
+  if(SUPABASE_URL === 'YOUR_SUPABASE_URL') return false;
+  try{
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+    return true;
+  }catch(e){
+    console.error('Supabase init failed', e);
+    return false;
+  }
+}
+
+async function checkAuth(){
+  if(!sb) return null;
+  const {data:{session}} = await sb.auth.getSession();
+  return session?.user || null;
+}
+
+async function signIn(email, password){
+  const {data, error} = await sb.auth.signInWithPassword({email, password});
+  if(error) throw error;
+  return data.user;
+}
+
+async function signUp(email, password){
+  const {data, error} = await sb.auth.signUp({email, password});
+  if(error) throw error;
+  return data.user;
+}
+
+async function signOut(){
+  await sb.auth.signOut();
+  sbUser = null;
+  state.sessions = [];
+  state.currentWorkout = null;
+  render();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  DB HELPERS  (local fallback if not configured)
+// ─────────────────────────────────────────────────────────────────────────────
+const LOCAL = {
+  get(k){try{const v=localStorage.getItem(k);return v?JSON.parse(v):null}catch{return null}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}},
+  keys(prefix){try{return Object.keys(localStorage).filter(k=>k.startsWith(prefix))}catch{return[]}},
+};
+
+async function dbGetCurrentWorkout(){
+  if(!sb || !sbUser){
+    return LOCAL.get('pp_current');
+  }
+  const {data} = await sb.from('current_workout').select('*').eq('user_id',sbUser.id).maybeSingle();
+  return data?.workout_data || null;
+}
+
+async function dbSetCurrentWorkout(wk){
+  if(!sb || !sbUser){
+    LOCAL.set('pp_current', wk);
+    return;
+  }
+  const payload = {user_id:sbUser.id, workout_data:wk, updated_at:new Date().toISOString()};
+  await sb.from('current_workout').upsert(payload, {onConflict:'user_id'});
+}
+
+async function dbGetSessions(){
+  if(!sb || !sbUser){
+    const keys = LOCAL.keys('pp_session:');
+    return keys.map(k=>LOCAL.get(k)).filter(Boolean).sort((a,b)=>a.started-b.started);
+  }
+  const {data} = await sb.from('workout_sessions').select('*').eq('user_id',sbUser.id).order('started_at',{ascending:true});
+  return (data||[]).map(r=>r.session_data);
+}
+
+async function dbSaveSession(session){
+  if(!sb || !sbUser){
+    LOCAL.set('pp_session:'+session.started, session);
+    return;
+  }
+  await sb.from('workout_sessions').upsert({
+    user_id:sbUser.id,
+    session_key:String(session.started),
+    session_data:session,
+    started_at:new Date(session.started).toISOString(),
+    workout_key:session.key || 'hotel',
+  },{onConflict:'user_id,session_key'});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────────────────────────────────────────
+let state = {
+  page:'workout',       // 'workout'|'trends'|'export'|'setup'|'auth'
+  gymType:'commercial', // 'commercial'|'hotel'
+  hotelOpt:'O1',
+  currentWorkout:null,
+  expanded:{},
+  modal:null,
+  trendExId:null,
+  sessions:[],
+  loaded:false,
+  syncing:false,
+  authMode:'signin',    // 'signin'|'signup'
+  authEmail:'',
+  authPass:'',
+  authError:'',
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  INIT
+// ─────────────────────────────────────────────────────────────────────────────
+async function init(){
+  const configured = initSupabase();
+  if(configured){
+    sbUser = await checkAuth();
+  }
+
+  if(!configured){
+    // No Supabase yet — show setup screen
+    state.page = 'setup';
+    state.loaded = true;
+    render();
+    return;
+  }
+
+  if(!sbUser && configured){
+    state.page = 'auth';
+    state.loaded = true;
+    render();
+    return;
+  }
+
+  await loadData();
+}
+
+async function loadData(){
+  state.sessions = await dbGetSessions();
+  state.currentWorkout = await dbGetCurrentWorkout();
+  if(!state.currentWorkout){
+    await startNext();
+  }
+  state.loaded = true;
+  render();
+}
+
+async function startNext(){
+  const done = state.sessions.filter(s=>s.complete);
+  let rotIdx = 0;
+  if(done.length) rotIdx = (done[done.length-1].rotIdx + 1) % ROTATION.length;
+  state.currentWorkout = {
+    rotIdx, key:ROTATION[rotIdx],
+    started:Date.now(), sets:{}, complete:false
+  };
+  await dbSetCurrentWorkout(state.currentWorkout);
+}
+
+async function completeWorkout(){
+  state.currentWorkout.complete = true;
+  state.currentWorkout.completedAt = Date.now();
+  state.currentWorkout.gymUsed = state.gymType;
+  state.currentWorkout.hotelOpt = state.hotelOpt;
+  await dbSaveSession({...state.currentWorkout});
+  state.sessions.push({...state.currentWorkout});
+  await startNext();
+}
+
+async function saveCurrent(){
+  await dbSetCurrentWorkout(state.currentWorkout);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+function getWDef(){
+  if(!state.currentWorkout) return null;
+  if(state.gymType==='hotel') return HOTEL[state.hotelOpt];
+  return WORKOUTS[state.currentWorkout.key];
+}
+
+function lastWeight(exId){
+  for(let i=state.sessions.length-1;i>=0;i--){
+    const s=state.sessions[i];
+    if(!s.sets||!s.sets[exId]) continue;
+    const ws=s.sets[exId].map(x=>parseFloat(x.weight)||0).filter(w=>w>0);
+    if(ws.length) return Math.max(...ws);
+  }
+  return null;
+}
+
+function allExIds(){
+  const all=[];
+  const seen=new Set();
+  for(const w of [...Object.values(WORKOUTS),...Object.values(HOTEL)]){
+    for(const e of w.exercises){
+      if(!seen.has(e.id)){seen.add(e.id);all.push(e);}
+    }
+  }
+  return all;
+}
+
+function trendData(exId){
+  return state.sessions
+    .filter(s=>s.sets&&s.sets[exId]&&s.sets[exId].some(x=>parseFloat(x.weight)>0))
+    .map(s=>{
+      const ws=s.sets[exId].map(x=>parseFloat(x.weight)||0).filter(w=>w>0);
+      const vol=s.sets[exId].reduce((a,x)=>a+(parseFloat(x.weight)||0)*(parseFloat(x.reps)||0),0);
+      return {date:new Date(s.started),maxW:Math.max(...ws),vol:Math.round(vol)};
+    });
+}
+
+function completedCount(){
+  const w=getWDef();
+  if(!w||!state.currentWorkout) return 0;
+  return w.exercises.filter(e=>{
+    const s=state.currentWorkout.sets[e.id];
+    return s&&s.some(x=>x.reps||x.weight);
+  }).length;
+}
+
+function exportCSV(){
+  const allEx = allExIds();
+  const exMap = Object.fromEntries(allEx.map(e=>[e.id,e.name]));
+  const rows = ['Date,Workout,Gym,Exercise,Set,Reps,Weight(lb)'];
+  for(const s of state.sessions){
+    if(!s.sets) continue;
+    const wDef = s.gymUsed==='hotel'
+      ? (HOTEL[s.hotelOpt]||HOTEL.O1)
+      : (WORKOUTS[s.key]||WORKOUTS.A);
+    const date = new Date(s.started).toLocaleDateString('en-US');
+    for(const [exId,sets] of Object.entries(s.sets)){
+      const name = exMap[exId]||exId;
+      sets.forEach((st,i)=>{
+        if(!st.reps&&!st.weight) return;
+        rows.push([date,wDef.name,s.gymUsed||'commercial',name,i+1,st.reps||'',st.weight||''].join(','));
+      });
+    }
+  }
+  const blob = new Blob([rows.join('\n')],{type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download='pilot_program.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  RENDER
+// ─────────────────────────────────────────────────────────────────────────────
+let chartInst = null;
+
+function render(){
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+
+  if(!state.loaded){
+    app.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:\'Bebas Neue\',sans-serif;font-size:28px;color:#0d1b2a;letter-spacing:0.08em">✈ LOADING...</div>';
+    return;
+  }
+
+  if(state.page==='setup'){ renderSetup(app); return; }
+  if(state.page==='auth'){  renderAuth(app);  return; }
+
+  // Main shell
+  const nav = mkEl('div','nav',`
+    <div class="nav-inner">
+      <div>
+        <div class="nav-title">✈ PILOT PROGRAM</div>
+      </div>
+      <div class="nav-right">
+        <div class="sync-dot ${sb&&sbUser?'':'offline'}" title="${sb&&sbUser?'Synced':'Local only'}"></div>
+        ${sbUser?`<span class="user-badge">${sbUser.email}</span>`:''}
+        ${sbUser?'<button class="btn btn-outline btn-sm" onclick="doSignOut()" style="padding:5px 10px;font-size:11px;color:#aaa;border-color:#2a4060">Sign out</button>':''}
+      </div>
+    </div>
+  `);
+  app.appendChild(nav);
+
+  const main = mkEl('div','page');
+  if(state.page==='workout') renderWorkout(main);
+  else if(state.page==='trends') renderTrends(main);
+  else renderExport(main);
+  app.appendChild(main);
+
+  const tabBar = mkEl('div','tab-bar');
+  const tabs = [
+    {id:'workout', label:'Workout', svg:'<path d="M6 4v16M18 4v16M6 12h12M3 8h3M18 8h3M3 16h3M18 16h3"/>'},
+    {id:'trends',  label:'Trends',  svg:'<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>'},
+    {id:'export',  label:'Export',  svg:'<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'},
+  ];
+  for(const t of tabs){
+    const b = document.createElement('button');
+    b.className = 'tab'+(state.page===t.id?' active':'');
+    b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${t.svg}</svg>${t.label}`;
+    b.onclick = ()=>{ state.page=t.id; state.expanded={}; render(); };
+    tabBar.appendChild(b);
+  }
+  app.appendChild(tabBar);
+
+  // Modal
+  if(state.modal){
+    const bg = mkEl('div','modal-bg');
+    bg.onclick = e=>{ if(e.target===bg){state.modal=null;render();} };
+    const sheet = mkEl('div','modal-sheet');
+    sheet.innerHTML = `
+      <div class="modal-handle"></div>
+      <div class="modal-title">${state.modal.name}</div>
+      <div class="wk-badge" style="background:${state.modal.color}22;color:${state.modal.color};border:1px solid ${state.modal.color}44;margin-bottom:12px">${state.modal.label}</div>
+      <div class="modal-body">${state.modal.ref}</div>
+      <button class="btn btn-outline mt16" onclick="state.modal=null;render()">Close</button>
+    `;
+    bg.appendChild(sheet);
+    app.appendChild(bg);
+  }
+
+  // Draw chart after DOM
+  if(state.page==='trends' && state.trendExId){
+    const td = trendData(state.trendExId);
+    if(td.length) setTimeout(()=>drawChart(td), 10);
+  }
+}
+
+function renderWorkout(page){
+  const wDef = getWDef();
+
+  // GYM SELECTOR
+  page.appendChild(hdr('Gym Type'));
+  const gymGrid = mkEl('div','gym-grid');
+  for(const g of [{id:'commercial',icon:'🏋️',label:'Commercial',sub:'Full gym at home'},
+                   {id:'hotel',    icon:'🏨',label:'Hotel Gym',  sub:'Layover — maintenance'}]){
+    const b = mkEl('div','gym-btn'+(state.gymType===g.id?' sel':''));
+    b.innerHTML=`<div class="gym-icon">${g.icon}</div><div class="gym-label">${g.label}</div><div class="gym-sub">${g.sub}</div>`;
+    b.onclick=()=>{state.gymType=g.id;render();};
+    gymGrid.appendChild(b);
+  }
+  page.appendChild(gymGrid);
+
+  if(state.gymType==='hotel'){
+    const hGrid = mkEl('div','gym-grid');
+    for(const o of [{id:'O1',icon:'🏨',label:'Option 1',sub:'30–40 min'},
+                     {id:'O2',icon:'🏃',label:'Option 2',sub:'20–30 min'}]){
+      const b = mkEl('div','gym-btn'+(state.hotelOpt===o.id?' sel':''));
+      b.innerHTML=`<div class="gym-icon">${o.icon}</div><div class="gym-label">${o.label}</div><div class="gym-sub">${o.sub}</div>`;
+      b.onclick=()=>{state.hotelOpt=o.id;render();};
+      hGrid.appendChild(b);
+    }
+    page.appendChild(hGrid);
+  }
+
+  if(!state.currentWorkout || !wDef) return;
+
+  page.appendChild(hdr('Current Workout'));
+
+  if(state.currentWorkout.complete){
+    const banner = mkEl('div','complete-banner');
+    banner.innerHTML=`<div class="big">🎉</div><h2>Workout Complete!</h2><p>Next workout is queued and ready</p>`;
+    page.appendChild(banner);
+  }
+
+  // Workout header card
+  const cc = completedCount();
+  const total = wDef.exercises.length;
+  const pct = Math.min(100, Math.round(cc/total*100));
+  const wCard = mkEl('div','card');
+  wCard.style.borderLeft = `4px solid ${wDef.color}`;
+  wCard.innerHTML = `
+    <div class="wk-badge" style="background:${wDef.color}22;color:${wDef.color};border:1px solid ${wDef.color}44">${wDef.label}</div>
+    <div class="wk-title">${wDef.name}</div>
+    <div class="wk-sub">${state.gymType==='hotel'?(wDef.note||'Maintenance — consistency is the win'):'Home gym — push the weights'}</div>
+    <div class="prog-wrap"><div class="prog-fill" style="width:${pct}%"></div></div>
+    <div class="prog-label">${cc} of ${total} exercises logged</div>
+  `;
+  page.appendChild(wCard);
+
+  if(wDef.star){
+    const n=mkEl('div','note gold');
+    n.textContent='🔥 Power Day — your most important workout. Full rest between every explosive set.';
+    page.appendChild(n);
+  }
+
+  // Exercises
+  for(const ex of wDef.exercises){
+    page.appendChild(renderExercise(ex, wDef));
+  }
+
+  // Bottom buttons
+  const gap = mkEl('div','');
+  gap.style.height='12px';
+  page.appendChild(gap);
+
+  if(!state.currentWorkout.complete){
+    const b = mkEl('button','btn btn-green');
+    b.textContent = 'Workout Complete ✓';
+    b.onclick = async()=>{ await completeWorkout(); render(); };
+    page.appendChild(b);
+  } else {
+    const b = mkEl('button','btn btn-primary mt8');
+    b.textContent = 'Start Next Workout →';
+    b.onclick = ()=>render();
+    page.appendChild(b);
+  }
+}
+
+function renderExercise(ex, wDef){
+  const isOpen = !!state.expanded[ex.id];
+  if(!state.currentWorkout.sets[ex.id]){
+    state.currentWorkout.sets[ex.id] = Array.from({length:ex.sets},()=>({reps:'',weight:''}));
+  }
+  const sets = state.currentWorkout.sets[ex.id];
+  while(sets.length < ex.sets) sets.push({reps:'',weight:''});
+  const hasData = sets.some(s=>s.reps||s.weight);
+
+  const card = mkEl('div','ex-card');
+
+  // Header
+  const hdrEl = mkEl('div','ex-hdr');
+  hdrEl.innerHTML = `
+    <div style="flex:1">
+      <div class="ex-name">${ex.name}</div>
+      <div class="ex-target">${ex.target}</div>
+    </div>
+    <div class="ex-right">
+      <button class="btn-info" data-info="${ex.id}">ℹ Guide</button>
+      <div class="ex-check ${hasData?'done':''}">${hasData?'✓':''}</div>
+      <div class="ex-caret ${isOpen?'open':''}">⌄</div>
+    </div>
+  `;
+  hdrEl.querySelector('[data-info]').onclick = e=>{
+    e.stopPropagation();
+    state.modal={name:ex.name,ref:ex.ref,label:wDef.label,color:wDef.color};
+    render();
+  };
+  hdrEl.onclick = e=>{
+    if(e.target.closest('[data-info]')) return;
+    state.expanded[ex.id]=!state.expanded[ex.id];
+    render();
+  };
+  card.appendChild(hdrEl);
+
+  // Body
+  if(isOpen){
+    const body = mkEl('div','ex-body');
+    const lw = lastWeight(ex.id);
+    if(lw!==null){
+      const rec=mkEl('div','rec-weight');
+      rec.innerHTML=`📊 Last logged max: <strong>${lw} lb</strong> — match or beat it`;
+      body.appendChild(rec);
+    }
+
+    // Sets scroll
+    const scroll = mkEl('div','sets-scroll');
+    sets.forEach((s,i)=>{
+      const tile = mkEl('div','set-tile'+(s.reps||s.weight?' logged':''));
+      tile.innerHTML=`<div class="set-lbl">Set ${i+1}</div>`;
+
+      const repsInp = document.createElement('input');
+      repsInp.type='number'; repsInp.className='set-input';
+      repsInp.placeholder='Reps'; repsInp.value=s.reps||'';
+      repsInp.setAttribute('inputmode','numeric');
+      repsInp.onchange = repsInp.onblur = ()=>{
+        sets[i].reps=repsInp.value;
+        tile.className='set-tile'+(repsInp.value||sets[i].weight?' logged':'');
+        saveCurrent();
+      };
+
+      const wtInp = document.createElement('input');
+      wtInp.type='number'; wtInp.className='set-input';
+      wtInp.placeholder='lb'; wtInp.value=s.weight||'';
+      wtInp.setAttribute('inputmode','decimal');
+      wtInp.onchange = wtInp.onblur = ()=>{
+        sets[i].weight=wtInp.value;
+        tile.className='set-tile'+(sets[i].reps||wtInp.value?' logged':'');
+        saveCurrent();
+      };
+
+      const hintEl = mkEl('div','set-hint');
+      hintEl.textContent='reps / lb';
+
+      tile.appendChild(repsInp);
+      tile.appendChild(wtInp);
+      tile.appendChild(hintEl);
+      scroll.appendChild(tile);
+    });
+    body.appendChild(scroll);
+    const hint=mkEl('div','sets-scroll-hint');
+    hint.textContent='← swipe for all sets';
+    body.appendChild(hint);
+    card.appendChild(body);
+  }
+
+  return card;
+}
+
+function renderTrends(page){
+  const total = state.sessions.length;
+  const comm = state.sessions.filter(s=>s.gymUsed==='commercial').length;
+  const hotel = state.sessions.filter(s=>s.gymUsed==='hotel').length;
+
+  const strip = mkEl('div','stat-strip');
+  strip.innerHTML=`
+    <div class="stat-box"><div class="stat-val">${total}</div><div class="stat-lbl">Sessions</div></div>
+    <div class="stat-box"><div class="stat-val">${comm}</div><div class="stat-lbl">Home</div></div>
+    <div class="stat-box"><div class="stat-val">${hotel}</div><div class="stat-lbl">Hotel</div></div>
+  `;
+  page.appendChild(strip);
+
+  if(!total){
+    const e=mkEl('div','empty');
+    e.innerHTML='<div class="empty-icon">📈</div><div class="empty-title">No data yet</div><div class="empty-sub">Complete your first workout to start seeing trends</div>';
+    page.appendChild(e);
+    return;
+  }
+
+  page.appendChild(hdr('Exercise Trends'));
+
+  // Pills for exercises with data
+  const pills = mkEl('div','pills');
+  let anyPills = false;
+  for(const ex of allExIds()){
+    const td = trendData(ex.id);
+    if(!td.length) continue;
+    anyPills = true;
+    const p = mkEl('div','pill'+(state.trendExId===ex.id?' active':''));
+    p.textContent = ex.name;
+    p.onclick=()=>{state.trendExId=ex.id;render();};
+    pills.appendChild(p);
+  }
+  if(anyPills) page.appendChild(pills);
+
+  if(state.trendExId){
+    const td = trendData(state.trendExId);
+    if(td.length){
+      const ex = allExIds().find(e=>e.id===state.trendExId);
+      const latest = td[td.length-1];
+      const first = td[0];
+      const gain = Math.round(latest.maxW - first.maxW);
+
+      const chartCard = mkEl('div','card');
+      chartCard.innerHTML=`
+        <div class="flex-between mb12">
+          <div style="font-weight:600;font-size:15px">${ex?.name||state.trendExId}</div>
+          ${gain!==0?`<div style="font-size:13px;font-weight:600;color:${gain>0?'var(--green)':'var(--red)'}">${gain>0?'+':''}${gain} lb</div>`:''}
+        </div>
+        <div class="chart-wrap"><canvas id="tc"></canvas></div>
+        <div class="stat-strip" style="margin-top:12px;margin-bottom:0">
+          <div class="stat-box"><div class="stat-val">${latest.maxW}</div><div class="stat-lbl">Max Weight lb</div></div>
+          <div class="stat-box"><div class="stat-val">${td.length}</div><div class="stat-lbl">Sessions</div></div>
+          <div class="stat-box"><div class="stat-val">${latest.vol}</div><div class="stat-lbl">Last Volume</div></div>
+        </div>
+      `;
+      page.appendChild(chartCard);
+    }
+  }
+}
+
+function drawChart(td){
+  const canvas = document.getElementById('tc');
+  if(!canvas) return;
+  if(chartInst){ chartInst.destroy(); chartInst=null; }
+  chartInst = new Chart(canvas.getContext('2d'),{
+    type:'line',
+    data:{
+      labels:td.map(d=>d.date.toLocaleDateString('en-US',{month:'short',day:'numeric'})),
+      datasets:[{
+        label:'Max Weight (lb)',
+        data:td.map(d=>d.maxW),
+        borderColor:'#c9a84c',
+        backgroundColor:'rgba(201,168,76,0.12)',
+        tension:0.35, fill:true,
+        pointBackgroundColor:'#c9a84c', pointRadius:5, pointHoverRadius:7,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw} lb`}}},
+      scales:{
+        x:{grid:{display:false},ticks:{font:{size:10},color:'#888',maxRotation:45}},
+        y:{grid:{color:'#f0ede8'},ticks:{font:{size:10},color:'#888'}},
+      }
+    }
+  });
+}
+
+function renderExport(page){
+  const hero = mkEl('div','export-hero');
+  hero.innerHTML=`<div class="big">📊</div><div class="export-hero-title">Export Data</div><div class="export-hero-sub">${state.sessions.length} sessions logged</div>`;
+  page.appendChild(hero);
+
+  const dlBtn = mkEl('button','btn btn-gold mb12');
+  dlBtn.textContent='Download CSV';
+  dlBtn.onclick=exportCSV;
+  page.appendChild(dlBtn);
+
+  const n=mkEl('div','note');
+  n.textContent='Exports all sessions: date, workout, gym, exercise, set number, reps, and weight. Opens in Excel, Numbers, or Google Sheets.';
+  page.appendChild(n);
+
+  if(state.sessions.length){
+    page.appendChild(hdr('Session History'));
+    const recent=[...state.sessions].reverse().slice(0,20);
+    for(const s of recent){
+      const wDef=s.gymUsed==='hotel'?(HOTEL[s.hotelOpt]||HOTEL.O1):(WORKOUTS[s.key]||WORKOUTS.A);
+      const date=new Date(s.started).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      const exCnt=Object.values(s.sets||{}).filter(sets=>sets.some(x=>x.reps||x.weight)).length;
+      const it=mkEl('div','hist-item');
+      it.innerHTML=`
+        <div class="hist-left">
+          <div class="h-name" style="border-left:3px solid ${wDef.color};padding-left:8px">${wDef.name}</div>
+          <div class="h-meta">${date} · ${exCnt} exercise${exCnt!==1?'s':''} · ${s.gymUsed==='hotel'?'Hotel':'Commercial'}</div>
+        </div>
+        <div class="hist-badge" style="background:${wDef.color}22;color:${wDef.color}">${wDef.label}</div>
+      `;
+      page.appendChild(it);
+    }
+  }
+}
+
+function renderSetup(app){
+  app.innerHTML=`
+    <div class="page">
+      <div class="setup-wrap">
+        <div class="setup-logo">✈ PILOT PROGRAM</div>
+        <div class="setup-sub">One-time setup — takes about 10 minutes</div>
+      </div>
+
+      <div class="setup-card">
+        <h3>Step 1 — Create a Free Supabase Account</h3>
+        <div class="setup-step"><div class="step-num">1</div><div>Go to <a class="setup-link" href="https://supabase.com" target="_blank">supabase.com</a> and click <strong>Start your project</strong> (free)</div></div>
+        <div class="setup-step"><div class="step-num">2</div><div>Create a new project. Name it anything (e.g. "pilot-program"). Save your database password somewhere safe.</div></div>
+        <div class="setup-step"><div class="step-num">3</div><div>Once the project loads, go to <strong>Project Settings → API</strong>. You'll see your Project URL and anon/public key.</div></div>
+      </div>
+
+      <div class="setup-card">
+        <h3>Step 2 — Create the Database Tables</h3>
+        <div class="setup-step"><div class="step-num">1</div><div>In Supabase, go to <strong>SQL Editor</strong> and run this:</div></div>
+        <div style="background:#0d1b2a;color:#c9a84c;border-radius:8px;padding:12px;font-family:monospace;font-size:11px;line-height:1.6;overflow-x:auto;margin:8px 0;white-space:pre">create table current_workout (
+  user_id uuid references auth.users primary key,
+  workout_data jsonb,
+  updated_at timestamptz
+);
+create table workout_sessions (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users,
+  session_key text,
+  session_data jsonb,
+  started_at timestamptz,
+  workout_key text,
+  unique(user_id, session_key)
+);
+alter table current_workout enable row level security;
+alter table workout_sessions enable row level security;
+create policy "own data" on current_workout for all using (auth.uid()=user_id);
+create policy "own data" on workout_sessions for all using (auth.uid()=user_id);</div>
+      </div>
+
+      <div class="setup-card">
+        <h3>Step 3 — Edit This File</h3>
+        <div class="setup-step"><div class="step-num">1</div><div>Open <code style="background:#f0ede8;padding:2px 5px;border-radius:4px">index.html</code> in a text editor</div></div>
+        <div class="setup-step"><div class="step-num">2</div><div>Find the two lines near the top that say <code style="background:#f0ede8;padding:2px 5px;border-radius:4px">YOUR_SUPABASE_URL</code> and <code style="background:#f0ede8;padding:2px 5px;border-radius:4px">YOUR_SUPABASE_ANON_KEY</code></div></div>
+        <div class="setup-step"><div class="step-num">3</div><div>Replace them with the values from your Supabase project settings</div></div>
+        <div class="setup-step"><div class="step-num">4</div><div>Save the file and deploy to GitHub Pages (see the README)</div></div>
+      </div>
+
+      <div class="note gold" style="margin-top:4px">
+        📋 Check the README.md file in this folder for full step-by-step GitHub Pages deployment instructions.
+      </div>
+    </div>
+  `;
+}
+
+function renderAuth(app){
+  const isSignup = state.authMode==='signup';
+  app.innerHTML=`
+    <div class="page" style="display:flex;flex-direction:column;justify-content:center;min-height:100vh">
+      <div style="text-align:center;padding:24px 0 32px">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:38px;color:#0d1b2a;letter-spacing:0.08em">✈ PILOT PROGRAM</div>
+        <div style="font-size:14px;color:#6b6560;margin-top:4px">Your dunk goal starts here</div>
+      </div>
+      <div class="setup-card" style="margin:0 0 12px">
+        <h3>${isSignup?'Create Account':'Sign In'}</h3>
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="ae" value="${state.authEmail}" placeholder="your@email.com" autocomplete="email">
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="ap" value="${state.authPass}" placeholder="${isSignup?'Choose a password':'Your password'}" autocomplete="${isSignup?'new-password':'current-password'}">
+        </div>
+        <div class="err-msg ${state.authError?'show':''}" id="aerr">${state.authError}</div>
+        <button class="btn btn-primary mt12" id="asubmit">${isSignup?'Create Account':'Sign In'}</button>
+      </div>
+      <div style="text-align:center;font-size:13px;color:#6b6560">
+        ${isSignup?'Already have an account?':'Don\'t have an account?'}
+        <button onclick="state.authMode='${isSignup?'signin':'signup'}';state.authError='';render();" style="background:none;border:none;color:var(--blue);font-size:13px;cursor:pointer;text-decoration:underline;font-family:'DM Sans',sans-serif">${isSignup?'Sign in':'Sign up'}</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('ae').oninput=e=>state.authEmail=e.target.value;
+  document.getElementById('ap').oninput=e=>state.authPass=e.target.value;
+  document.getElementById('asubmit').onclick=async()=>{
+    const email=document.getElementById('ae').value.trim();
+    const pass=document.getElementById('ap').value;
+    const btn=document.getElementById('asubmit');
+    btn.textContent='...'; btn.disabled=true;
+    try{
+      sbUser = isSignup ? await signUp(email,pass) : await signIn(email,pass);
+      if(sbUser){ state.page='workout'; await loadData(); }
+      else{ state.authError='Check your email to confirm your account, then sign in.'; render(); }
+    }catch(e){
+      state.authError=e.message||'Authentication failed';
+      render();
+    }
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  DOM UTILS
+// ─────────────────────────────────────────────────────────────────────────────
+function mkEl(tag, cls, html){
+  const e=document.createElement(tag);
+  if(cls) e.className=cls;
+  if(html!==undefined) e.innerHTML=html;
+  return e;
+}
+
+function hdr(txt){
+  const e=mkEl('div','section-hdr');
+  e.textContent=txt;
+  return e;
+}
+
+function doSignOut(){ signOut(); }
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  GO
+// ─────────────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>

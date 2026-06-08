@@ -2,7 +2,7 @@
   "name": "Pilot Program",
   "short_name": "Pilot Program",
   "description": "Workout tracker built for dunking a basketball",
-  "start_url": "/",
+  "start_url": "/pilot-program/",
   "display": "standalone",
   "background_color": "#0d1b2a",
   "theme_color": "#0d1b2a",

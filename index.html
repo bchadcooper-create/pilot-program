@@ -588,7 +588,7 @@ function renderWorkout(page){
   // GYM SELECTOR
   page.appendChild(hdr('Gym Type'));
   const gymGrid = mkEl('div','gym-grid');
-  for(const g of [{id:'commercial',icon:'🏋️',label:'Commercial',sub:'Full gym at home'},
+  for(const g of [{id:'commercial',icon:'🏋️',label:'Commercial',sub:'Full Gym'},
                    {id:'hotel',    icon:'🏨',label:'Hotel Gym',  sub:'Layover — maintenance'}]){
     const b = mkEl('div','gym-btn'+(state.gymType===g.id?' sel':''));
     b.innerHTML=`<div class="gym-icon">${g.icon}</div><div class="gym-label">${g.label}</div><div class="gym-sub">${g.sub}</div>`;
@@ -628,7 +628,7 @@ function renderWorkout(page){
   wCard.innerHTML = `
     <div class="wk-badge" style="background:${wDef.color}22;color:${wDef.color};border:1px solid ${wDef.color}44">${wDef.label}</div>
     <div class="wk-title">${wDef.name}</div>
-    <div class="wk-sub">${state.gymType==='hotel'?(wDef.note||'Maintenance — consistency is the win'):'Home gym — push the weights'}</div>
+    <div class="wk-sub">${state.gymType==='hotel'?(wDef.note||'Maintenance — consistency is the win'):'Gym — push the weights'}</div>
     <div class="prog-wrap"><div class="prog-fill" style="width:${pct}%"></div></div>
     <div class="prog-label">${cc} of ${total} exercises logged</div>
   `;

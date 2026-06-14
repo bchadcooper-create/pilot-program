@@ -1,31 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <!-- Asset Version Control (Forces Safari to bypass old mobile cache) -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="app-version" content="1.0.4">
+    <meta name="app-version" content="1.1.1">
     <title>Flight Crew Fitness</title>
 
-    <!-- Global Error Interceptor: Catch cross-origin line 0 errors before they disrupt telemetry -->
     <script>
         window.onerror = function (message, url, line, column, error) {
-            // Log locally to the console for remote debugging
-            console.warn(`[Telemetry Intercept] ${message} at ${url}:${line}:${column}`);
-            
-            // Prevent the generic 'Script error' crash state from breaking the UI app runtime
-            if (line === 0 || message.toLowerCase().includes('script error')) {
-                console.info('Handled cross-origin script error quietly.');
-                return true; // Tends to suppress the intrusive runtime crash message
+            console.warn("[Telemetry Intercept] " + message + " at " + url + ":" + line + ":" + column);
+            if (line === 0 || message.toLowerCase().includes("script error")) {
+                return true;
             }
             return false; 
         };
     </script>
 
-    <!-- Tailwind CSS CDN - Configured with CORS handling -->
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" crossorigin="anonymous">
-    
-    <!-- Google Fonts - Configured with CORS handling -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" crossorigin="anonymous">
@@ -39,46 +30,37 @@
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen flex flex-col justify-between">
 
-    <!-- Header / Navigation -->
     <header class="border-b border-gray-800 bg-gray-900 sticky top-0 z-50 px-4 py-3">
         <div class="max-w-md mx-auto flex items-center justify-between">
             <div class="flex items-center space-x-2">
                 <span class="text-2xl">✈️</span>
                 <h1 class="text-lg font-bold tracking-tight">Flight Crew Fitness</h1>
             </div>
-            <!-- Native iOS Web Share Trigger Button -->
             <button id="shareAppBtn" class="p-2 text-gray-400 hover:text-white focus:outline-none" aria-label="Share App">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 10.742l4.632-2.316m0 0a3 3 0 102.686-2.316 3 3 0 00-2.686 2.316zm-4.632 2.74l4.632 2.316m0 0a3 3 0 102.686 +2.316 3 3 0 00-2.686-2.316z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 10.742l4.632-2.316m0 0a3 3 0 102.686-2.316 3 3 0 00-2.686 2.316zm-4.632 2.74l4.632 2.316m0 0a3 3 0 102.686 2.316 3 3 0 00-2.686-2.316z" />
                 </svg>
             </button>
         </div>
     </header>
 
-    <!-- Main Dynamic Application Container -->
     <main class="flex-grow p-4 max-w-md mx-auto w-full space-y-6">
-        
-        <!-- Status Panel Example -->
         <div class="bg-gray-800 border border-gray-700 rounded-xl p-5 shadow-lg space-y-3">
             <div class="flex justify-between items-center">
                 <span class="text-xs font-semibold uppercase tracking-wider text-blue-400">Current Status</span>
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-900 text-green-200">Telemetry Active</span>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-900 text-green-200">Active</span>
             </div>
-            <p class="text-2xl font-bold">Systems Online</p>
-            <p class="text-sm text-gray-400">Your performance telemetry metrics are processing accurately across local application modules.</p>
+            <p class="text-2xl font-bold">Systems Operational</p>
+            <p class="text-sm text-gray-400">Telemetry engine running cleanly across both WebKit and V8 browser targets.</p>
         </div>
-
     </main>
 
-    <!-- Footer Stack -->
     <footer class="p-4 border-t border-gray-800 bg-gray-900 text-center text-xs text-gray-500">
-        <p>© 2026 Flight Crew Fitness • Build v1.0.4</p>
+        <p>© 2026 Flight Crew Fitness • Build v1.1.1</p>
     </footer>
 
-    <!-- App Logic Scripts (Busts browser caches using unique version query flags) -->
-    <script src="app.js?v=1.0.4" crossorigin="anonymous"></script>
+    <script src="app.js?v=1.1.1" crossorigin="anonymous"></script>
 
-    <!-- Native Share Component Handler Script -->
     <script>
         document.getElementById('shareAppBtn').addEventListener('click', async () => {
             if (navigator.share) {
@@ -86,22 +68,19 @@
                     await navigator.share({
                         title: 'Flight Crew Fitness',
                         text: 'Track real-time flight metrics, health progress, and recovery telemetry profiles.',
-                        url: window.location.origin + window.location.pathname + '?v=1.0.4'
+                        url: window.location.origin + window.location.pathname + '?v=1.1.1'
                     });
-                    console.log('App URL shared successfully.');
                 } catch (err) {
-                    // Check if user cancelled natively or if a real crash occurred
                     if (err.name !== 'AbortError') {
-                        console.error('Share failure processing:', err);
+                        console.error('Share processing error:', err);
                     }
                 }
             } else {
-                // Clipboard fallback for legacy desktop or old Webkits
                 try {
-                    await navigator.clipboard.writeText(window.location.href);
-                    alert('App link copied to your clipboard!');
+                    await navigator.clipboard.writeText(window.location.origin + window.location.pathname);
+                    alert('App link copied to clipboard!');
                 } catch (clipErr) {
-                    console.error('Clipboard copy backup failed:', clipErr);
+                    console.error('Clipboard backup failure:', clipErr);
                 }
             }
         });

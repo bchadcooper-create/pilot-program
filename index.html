@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="app-version" content="1.1.1">
+    <meta name="app-version" content="1.1.2">
     <title>Flight Crew Fitness</title>
 
     <script>
+        // Global error shield to handle cross-origin line 0 anomalies safely
         window.onerror = function (message, url, line, column, error) {
             console.warn("[Telemetry Intercept] " + message + " at " + url + ":" + line + ":" + column);
             if (line === 0 || message.toLowerCase().includes("script error")) {
@@ -56,31 +57,33 @@
     </main>
 
     <footer class="p-4 border-t border-gray-800 bg-gray-900 text-center text-xs text-gray-500">
-        <p>© 2026 Flight Crew Fitness • Build v1.1.1</p>
+        <p>© 2026 Flight Crew Fitness • Build v1.1.2</p>
     </footer>
 
-    <script src="app.js?v=1.1.1" crossorigin="anonymous"></script>
+    <script src="app.js?v=1.1.2" crossorigin="anonymous"></script>
 
     <script>
-        document.getElementById('shareAppBtn').addEventListener('click', async () => {
+        document.getElementById("shareAppBtn").addEventListener("click", async function() {
             if (navigator.share) {
                 try {
+                    var targetUrl = window.location.origin + window.location.pathname + "?v=1.1.2";
                     await navigator.share({
-                        title: 'Flight Crew Fitness',
-                        text: 'Track real-time flight metrics, health progress, and recovery telemetry profiles.',
-                        url: window.location.origin + window.location.pathname + '?v=1.1.1'
+                        title: "Flight Crew Fitness",
+                        text: "Track real-time flight metrics, health progress, and recovery telemetry profiles.",
+                        url: targetUrl
                     });
                 } catch (err) {
-                    if (err.name !== 'AbortError') {
-                        console.error('Share processing error:', err);
+                    if (err.name !== "AbortError") {
+                        console.error("Share processing error:", err);
                     }
                 }
             } else {
                 try {
-                    await navigator.clipboard.writeText(window.location.origin + window.location.pathname);
-                    alert('App link copied to clipboard!');
+                    var backupUrl = window.location.origin + window.location.pathname;
+                    await navigator.clipboard.writeText(backupUrl);
+                    alert("App link copied to clipboard!");
                 } catch (clipErr) {
-                    console.error('Clipboard backup failure:', clipErr);
+                    console.error("Clipboard backup failure:", clipErr);
                 }
             }
         });

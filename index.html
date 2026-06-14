@@ -134,7 +134,8 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 .phero{background:linear-gradient(135deg,var(--navy),var(--navy2));border-radius:var(--r);padding:20px;margin-bottom:16px;text-align:center}
 .gcrd{border:2px solid var(--border);background:var(--card);border-radius:12px;padding:12px 8px;cursor:pointer;text-align:center;transition:all 0.2s;-webkit-user-select:none}
 .gcrd:active{transform:scale(0.96)}.gcrd.sel{border-color:var(--gold);background:var(--gold-bg)}
-.gcrd .gi{font-size:20px;margin-bottom:4px}.gcrd .gl nudge{font-family:'Bebas Neue',sans-serif;font-size:11px;letter-spacing:0.04em;line-height:1.2}
+.gcrd .gi{font-size:20px;margin-bottom:4px}
+.gcrd .gl{font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:0.04em;line-height:1.2}
 .gcrd .gs{font-size:9px;color:var(--muted);margin-top:2px}
 .fld{margin-bottom:12px}
 .fld label{display:block;font-size:11px;font-weight:600;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em}
@@ -161,11 +162,45 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 .briefing-item{font-size:12px;line-height:1.5;margin-bottom:8px;color:var(--text)}
 .briefing-item strong{color:var(--navy)}
 .disclaimer-text{font-size:10px;line-height:1.4;color:var(--hint);text-align:justify}
+
+/* Update Banner Animation Styles */
+.update-banner {
+  position: fixed;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  left: 16px;
+  right: 16px;
+  background: var(--navy);
+  color: white;
+  border: 2px solid var(--gold);
+  border-radius: var(--r);
+  padding: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transform: translateY(150%);
+  transition: transform 0.40s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.update-banner.visible { transform: translateY(0); }
 </style>
 </head>
 <body>
 <div id="app"></div>
+
+<div id="update-toast" class="update-banner">
+  <div style="display:flex; align-items:center; gap:10px">
+    <div style="font-size:24px">✈️</div>
+    <div style="flex:1">
+      <div style="font-family:'Bebas Neue',sans-serif; font-size:16px; color:var(--gold); letter-spacing:0.04em">FLIGHT STRATEGY UPDATE AVAILABLE</div>
+      <div style="font-size:12px; color:#c8d6e5; margin-top:1px">A new core layout optimization template is ready.</div>
+    </div>
+  </div>
+  <button class="btn btn-g" onclick="triggerPWAUpdate()" style="padding:10px; font-size:13px">Install Strategy Update</button>
+</div>
+
 <script>
+const APP_VERSION='1.1.0';
 const SB_URL='https://dnxkydxbyihgsictbzjz.supabase.co', SB_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRueGt5ZHhieWloZ3NpY3Riemp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3ODk4MTEsImV4cCI6MjA5NjM2NTgxMX0.oLUGuorQkbQ_u679NpE8FGBVAUmVE1K_rxl8q4B0n7k';
 
 // ── MEDIA MAP ─────────────────────────────────────────────────────────────────
@@ -383,7 +418,7 @@ WK.muscle={color:'#3b82f6',
       e('mu_slowsq','Slow Squats','4×15',4,'3s down, 1s pause, explode up.'),
       e('mu_bss2','Bulgarian Split Squat','4×12/leg',4,'Bed or chair. Deep.'),
       e('mu_gbrid','Glute Bridge','4×20',4,'Drive through heels. Squeeze hard.'),
-      e('mu_calf2','Calf Raise','4×20',4px,'Step edge. Full ROM.'),
+      e('mu_calf2','Calf Raise','4×20',4,'Step edge. Full ROM.'),
     ]},
   },
   B:{
@@ -423,7 +458,7 @@ WK.muscle={color:'#3b82f6',
       e('mu_conc','Concentration Curl','3×12/side',3,'Peak squeeze.'),
     ]},
     hotel2:{name:'Back & Biceps',label:'Day C',note:'Inverted row focus. Upper only.',exercises:[
-      e('mu_invrow3','Inverted Row (Table)','4×max',4,'Safe vertical/horizontal compound substitution.'),
+      e('mu_invrow3','Inverted Row (Table)','4×max',4,'Safe vertical/horizontal combo pulling.'),
       e('mu_doorrow','Door Frame Row','3×15',3,'Lean back, hook frame, squeeze mid-back.'),
       e('mu_chin','Chinups','3×max',3,'Supinated. (Advanced/Intermediate path).'),
     ]},
@@ -501,7 +536,7 @@ WK.strength={color:'#2a9d5c',
     ]},
     hotel1:{name:'Upper Pull Day',label:'Day C',note:'Pull strength. No legs.',exercises:[
       e('st_dbrow2','DB Row','5×5/side',5,'Heaviest available. Dead stop reps.'),
-      e('st_db_latpd','DB Lat ISO-Row','4×8',4,'Hinge forwards, pull weights into pockets.'),
+      e('st_db_latpd','DB Lat ISO-Row','4×8',4,'Keep chest tall, pull weights into pockets.'),
       e('st_wplank2','Plank','3×45s',3,'Core strength for deadlift.'),
       e('st_wpull2','Weighted Pullups','4×5',4,'(Advanced threshold only).'),
     ]},
@@ -583,7 +618,7 @@ WK.jump={color:'#c9a84c',
       e('jm_pogo_h1','Pogo Hops (Ankle Stiffness)','5×20',5,'Spring strictly from ankles. Minimal knee bend.'),
       e('jm_bjump','Bench/Box Jump','5×3',5,'Highest stable surface. Full effort. (Advanced/Intermediate).'),
       e('jm_broad2','Broad Jump','5×3',5,'Max horizontal. Stick landing.'),
-      e('jm_dbjsq','DB Jump Squat','4×4',4px,'Light DBs. Explosive. Land soft.'),
+      e('jm_dbjsq','DB Jump Squat','4×4',4,'Light DBs. Explosive. Land soft.'),
     ]},
     hotel2:{name:'Power / Plyometrics',label:'Day C',note:'⭐ Most critical layover workout. Legs rested from B.',exercises:[
       e('jm_pogo_h2','Pogo Hops','5×20',5,'Stiff ankles. Springy, rhythmic rhythm.'),
@@ -597,7 +632,7 @@ WK.jump={color:'#c9a84c',
       e('jm_pogo_comm','Pogo Hops','4×20',4,'Ankle elasticity preparation matrix.'),
       e('jm_track','Track Sprint','8×40yd',8,'Full speed. Walk back. 2 min rest.'),
       e('jm_djump','Depth Jump','4×4',4,'Step off box, explode up. (Advanced only).'),
-      e('jm_hgknee','Hanging Knee Raise','3×12',3,'Hip flexor strength.'),
+      e('jm_hgknee','Hanging Knee Raise','3×12',3px,'Hip flexor strength.'),
     ]},
     hotel1:{name:'Sprint & Reactive',label:'Day D',note:'Reactive and sprint. Light leg work.',exercises:[
       e('jm_pogo3','Ankle Pogo Hops','4×20',4,'Stiff ankles. Lower limb reactivity.'),
@@ -732,7 +767,7 @@ WK.tactical={color:'#7c5cbf',
       e('tc_burpee2','Burpees','3×10',3,'Paced continuous movement.'),
     ]},
     hotel2:{name:'Conditioning Circuit',label:'Day B',note:'Bodyweight conditioning.',exercises:[
-      e('tc_rev_lunge','Alternating Reverse Lunges','4px×12/leg',4,'Joint-friendly alignment alternative to explosive jumps.'),
+      e('tc_rev_lunge','Alternating Reverse Lunges','4×12/leg',4,'Joint-friendly alignment alternative to explosive jumps.'),
       e('tc_mtn','Mountain Climbers','4×30s',4,'Fast feet. Hips level.'),
       e('tc_burp2','Burpees','4×10',4,'Keep structural control. Do not hit absolute failure.'),
       e('tc_jlunge','Jump Lunges','4×10/leg',4,'(Advanced/Intermediate target).'),
@@ -741,7 +776,7 @@ WK.tactical={color:'#7c5cbf',
   C:{
     commercial:{name:'Overhead + Carries',label:'Day C',note:'Functional strength. Upper dominant.',exercises:[
       e('tc_ohp','Standing Overhead Press','4×6',4,'Heavy. Full lockout.'),
-      e('tc_barrow','Barbell Row','4×6',4,'Overhand. Heavy.'),
+      e('tc_barrow','Barbell Row','4×6',4px,'Overhand. Heavy.'),
       e('tc_hfarmer','Heavy Farmer Carry','5×40yd',5,'Heaviest possible.'),
       e('tc_suit','Suitcase Carry','4×30yd/side',4,'Anti-lateral core.'),
     ]},
@@ -867,7 +902,7 @@ async function checkAuth(){
 }
 async function doSignIn(e,p){const{data,error}=await sb.auth.signInWithPassword({email:e,password:p});if(error)throw error;return data.user;}
 async function doSignUp(e,p){const{data,error}=await sb.auth.signUp({email:e,password:p});if(error)throw error;return data.user;}
-async function doSignOut(){await sb.auth.signOut();sbUser=null;ST.sessions=[];ST.cur=null;ST.page='auth';render();}
+async function doSignOut(){await sb.auth.signOut();sbUser=null;ST.sessions=[];ST.cur=null;ST.page='landing';render();}
 
 // ─── LOCAL STORAGE OVERRIDES ───────────────────────────────────────────────────
 const LS={
@@ -886,7 +921,7 @@ async function dbLogWeight(w,waist){if(!sb||!sbUser){const a=LS.get('fcf_wts')||
 
 // ─── STATE ENGINE ─────────────────────────────────────────────────────────────
 let ST={
-  page:'workout',gymType:'commercial',hotelOpt:'hotel1',
+  page:'landing',gymType:'commercial',hotelOpt:'hotel1',
   cur:null,expanded:{},modal:null,
   trendEx:null,trendMode:'exercise',
   sessions:[],weights:[],profile:null,
@@ -896,16 +931,44 @@ let ST={
   fatigueScale:false,roomOverride:false
 };
 
-// ─── LIFECYCLE INITIALIZATION ─────────────────────────────────────────────────
+// PWA Update Automation Check Engine
+let registrationObject = null;
 async function init(){
   if('serviceWorker' in navigator){
-    navigator.serviceWorker.register('/pilot-program/sw.js').catch(()=>{});
+    navigator.serviceWorker.register('/pilot-program/sw.js')
+    .then(reg => {
+      registrationObject = reg;
+      // Hook system update checker logic loop
+      setInterval(() => { reg.update(); }, 120000); // Check remote hashes every 2 minutes
+      
+      if(reg.waiting) { showUpdateNotificationToast(); }
+      reg.addEventListener('updatefound', () => {
+        const swNew = reg.installing;
+        swNew.addEventListener('statechange', () => {
+          if(swNew.state === 'installed' && navigator.serviceWorker.controller) {
+            showUpdateNotificationToast();
+          }
+        });
+      });
+    }).catch(()=>{});
   }
+  
   const ok=initSB();
-  if(ok) sbUser=await checkAuth();
   if(!ok){ST.page='setup';ST.loaded=true;render();return;}
-  if(!sbUser){ST.page='auth';ST.loaded=true;render();return;}
+  sbUser=await checkAuth();
+  if(!sbUser){ST.page='landing';ST.loaded=true;render();return;}
   await loadData();
+}
+
+function showUpdateNotificationToast() {
+  document.getElementById('update-toast').classList.add('visible');
+}
+function triggerPWAUpdate() {
+  if (registrationObject && registrationObject.waiting) {
+    registrationObject.waiting.postMessage('skipWaiting');
+  }
+  document.getElementById('update-toast').classList.remove('visible');
+  setTimeout(() => { location.reload(); }, 300);
 }
 
 async function loadData(){
@@ -1011,7 +1074,7 @@ function exportCSV(){
     for(const[exId,sets]of Object.entries(s.sets)){
       const name=exMap[exId]||exId.replace('c_','[Custom] ');
       sets.forEach((st,i)=>{
-        if(!st.reps&&!st.weight&&!st.seconds)return;
+        if(!st.reps&&st.weight&&!st.seconds)return;
         rows.push([date,s.goal||'',wName,s.gymUsed||'',name,i+1,st.reps||'',st.weight||'',st.seconds||''].join(','));
       });
     }
@@ -1030,6 +1093,7 @@ function render(){
     return;
   }
   if(ST.page==='setup'){renderSetup(app);return;}
+  if(ST.page==='landing'){renderProductTourLanding(app);return;}
 
   const nav=mk('div','nav');
   nav.innerHTML=`<div class="nav-inner">
@@ -1111,6 +1175,67 @@ function render(){
         ST.weights.filter(d=>d.waist).map(d=>d.waist),'Waist (in)'),50);
     }
   }
+}
+
+// ─── NEW PRODUCT TOUR MARKETING LANDING VIEW ─────────────────────────────────
+function renderProductTourLanding(app) {
+  app.innerHTML=`<div class="page" style="overflow-y:auto; padding:24px 20px calc(40px + var(--safe-bottom)); background:var(--bg); min-height:100vh">
+    <div style="text-align:center; padding:32px 0 20px">
+      <div style="font-family:'Bebas Neue',sans-serif; font-size:42px; color:var(--navy); letter-spacing:0.06em; line-height:1.0">✈️ DESIGNED FOR THE FLIGHT CREWS</div>
+      <div style="font-size:14px; font-weight:600; color:var(--gold); text-transform:uppercase; letter-spacing:0.1em; margin-top:6px">Operational Fitness Engine</div>
+    </div>
+    
+    <div class="scard" style="border-left:4px solid var(--gold)">
+      <p style="font-size:14px; line-height:1.6; color:var(--navy); font-weight:500">
+        Flight Crew Fitness is the first training architecture engineered specifically around the unique physiological challenges, schedule disruptions, and physical stress environments faced by aviation professionals.
+      </p>
+    </div>
+
+    <div class="shdr">THE PILOT STRESS MATRIX COUNTERMEASURE</div>
+    <div class="scard" style="padding:14px">
+      <div style="font-size:13px; line-height:1.5; margin-bottom:10px">
+        <strong>🔒 The Cockpit Lock:</strong> Long duty days immobilize your hips, turn off your glutes, and compress your lower lumbar line. FCF dynamically schedules structural hip and thoracic recovery models.
+      </div>
+      <div style="font-size:13px; line-height:1.5; margin-bottom:10px">
+        <strong>💧 Cabin Joint Dehydration:</strong> Pressurized dry high-altitude air drains synovial joint fluid, heavily increasing lifting friction risk. FCF provides built-in safety checkpoints.
+      </div>
+      <div style="font-size:13px; line-height:1.5">
+        <strong>💼 Crew Luggage Strain:</strong> Repeatedly wrestling heavy flight bags over shoulders causes chronic muscle imbalances. FCF targets core symmetry and grip mechanics.
+      </div>
+    </div>
+
+    <div class="shdr">DYNAMIC ENVIRONMENT ADAPTATION</div>
+    <div class="scard" style="padding:14px">
+      <p style="font-size:13px; line-height:1.5; color:var(--muted); margin-bottom:12px">
+        Your schedule changes constantly — your fitness tracking matrix should change with you. FCF morphs your selected training track program seamlessly based on where you land:
+      </p>
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; text-align:center">
+        <div style="background:var(--light); padding:10px 4px; border-radius:var(--rs); border:1px solid var(--border)">
+          <div style="font-size:18px">🏋️</div><div style="font-size:11px; font-weight:600; margin-top:2px; color:var(--navy)">Home Base</div><div style="font-size:9px; color:var(--muted)">Full Gym</div>
+        </div>
+        <div style="background:var(--light); padding:10px 4px; border-radius:var(--rs); border:1px solid var(--border)">
+          <div style="font-size:18px">🏨</div><div style="font-size:11px; font-weight:600; margin-top:2px; color:var(--navy)">Layover</div><div style="font-size:9px; color:var(--muted)">Hotel Dumbbells</div>
+        </div>
+        <div style="background:var(--light); padding:10px 4px; border-radius:var(--rs); border:1px solid var(--border)">
+          <div style="font-size:18px">🛌</div><div style="font-size:11px; font-weight:600; margin-top:2px; color:var(--navy)">Room Bound</div><div style="font-size:9px; color:var(--muted)">Bodyweight Only</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="shdr">INTELLIGENT RECOVERY SCALING</div>
+    <div class="scard" style="padding:14px">
+      <p style="font-size:13px; line-height:1.5; color:var(--muted)">
+        Flipped sleep schedules and late-night crew arrivals fatigue the central nervous system. FCF features an inline <strong>Fatigue Scale Toggle</strong> that instantly caps volume parameters to prevent structural breakdowns when you are running empty.
+      </p>
+    </div>
+
+    <button class="btn btn-p mt16" onclick="ST.page='auth'; render();" style="letter-spacing:0.04em">Clear Security Gate & Begin Track →</button>
+    
+    <div style="text-align:center; font-size:10px; color:var(--hint); margin-top:20px; line-height:1.4">
+      Built for Standalone PWA Deployment. Fully secure offline sync framework enabled.<br>
+      Flight Crew Fitness Tracker · Build v${APP_VERSION}
+    </div>
+  </div>`;
 }
 
 // ─── WORKOUT VIEW CARD GENERATION ──────────────────────────────────────────────
@@ -1543,7 +1668,6 @@ function renderProfile(page){
   const editing=ST.profEdit||!p;
   const goal=p?GOALS.find(g=>g.id===p.goal):null;
   
-  // Fetch latest telemetry to display inside profile view cleanly
   const latestWeight=ST.weights.length?ST.weights[ST.weights.length-1].weight:'—';
   const latestWaist=ST.weights.length&&ST.weights[ST.weights.length-1].waist?ST.weights[ST.weights.length-1].waist:'—';
 
@@ -1583,10 +1707,15 @@ function renderProfile(page){
     dz.innerHTML='<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.04em">Account Management</div>';
     const so=mk('button','btn btn-red btn-sm');so.textContent='Sign Out of Terminal';so.onclick=doSignOut;
     dz.appendChild(so);page.appendChild(dz);
+    
+    // Add small build identification footprint layout tag
+    const fTag=mk('div','');
+    fTag.style.cssText='text-align:center; font-size:10px; color:var(--hint); margin-top:24px; font-family:monospace;';
+    fTag.textContent=`Flight Crew Fitness v${APP_VERSION} (Offline Sync Shell Verified)`;
+    page.appendChild(fTag);
     return;
   }
 
-  // NOTE: FIXED weight and waist inputs completely removed here to prevent data historical corruption.
   const draft=ST.profDraft||(p?{...p}:{name:'',age:'',level:'intermediate',goal:'strength'});
   ST.profDraft=draft;
 
@@ -1628,7 +1757,6 @@ function renderProfile(page){
   });
   gc2.appendChild(gg2);page.appendChild(gc2);
 
-  // Disclaimer legal block
   const discBox=mk('div','card mt12');
   discBox.innerHTML=`<p class="disclaimer-text"><strong>Medical Liability Disclaimer & Release Waiver:</strong> Flight Crew Fitness acts strictly as a data-logging and training reference template. Consult an FAA Aviation Medical Examiner or occupational physical therapist prior to enacting tracking schedules. The creators, builders, and operators explicitly assume zero liability for physical injury, cardiovascular strain, structural regression, or complications sustained during movement execution.</p>`;
   page.appendChild(discBox);
@@ -1688,6 +1816,8 @@ function renderAuth(app){
     <div style="text-align:center;font-size:13px;color:var(--muted)">
       ${isUp?'Already cleared gate checkpoints?':'New crew rotation member?'}
       <button onclick="ST.authMode='${isUp?'signin':'signup'}';ST.authErr='';render();" style="background:none;border:none;color:var(--blue);font-size:13px;cursor:pointer;text-decoration:underline;font-family:'DM Sans',sans-serif">${isUp?'Sign in here':'Register track profile'}</button>
+      <br><br>
+      <button onclick="ST.page='landing'; render();" style="background:none; border:none; color:var(--hint); font-size:12px; cursor:pointer; text-decoration:underline">← Return to Product Highlights Tour</button>
     </div>
   </div>`;
 

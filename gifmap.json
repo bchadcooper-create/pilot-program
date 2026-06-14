@@ -1,0 +1,14 @@
+{
+  "squat":      {"gif":"https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Squats.gif/240px-Squats.gif","exrx":"https://exrx.net/WeightExercises/Quadriceps/BBSquat"},
+  "deadlift":   {"gif":null,"exrx":"https://exrx.net/WeightExercises/ErectorSpinae/BBDeadlift"},
+  "bench":      {"gif":"https://upload.wikimedia.org/wikipedia/commons/3/thirty/BenchPress.gif","exrx":"https://exrx.net/WeightExercises/PectoralSternal/BBBenchPress"},
+  "pullup":     {"gif":"https://upload.wikimedia.org/wikipedia/commons/thumb/e/ef/Pull_up_1.gif/240px-Pull_up_1.gif","exrx":"https://exrx.net/WeightExercises/LatissimusDorsi/BWPullup"},
+  "pushup":     {"gif":"https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/Push_up_1.gif/240px-Push_up_1.gif","exrx":"https://exrx.net/WeightExercises/PectoralSternal/BWPushup"},
+  "lunge":      {"gif":null,"exrx":"https://exrx.net/WeightExercises/Quadriceps/BWLunge"},
+  "ohp":        {"gif":null,"exrx":"https://exrx.net/WeightExercises/DeltoidAnterior/BBMilitaryPress"},
+  "latpd":      {"gif":null,"exrx":"https://exrx.net/WeightExercises/LatissimusDorsi/CBFrontPulldown"},
+  "cabrow":     {"gif":null,"exrx":"https://exrx.net/WeightExercises/BackGeneral/CBSeatedRow"},
+  "rdl":        {"gif":null,"exrx":"https://exrx.net/WeightExercises/OlympicLifts/RomanianDeadlift"},
+  "goblet":     {"gif":null,"exrx":"https://exrx.net/WeightExercises/Kettlebell/KBGobletSquat"},
+  "curl":       {"gif":null,"exrx":"https://exrx.net/WeightExercises/Biceps/BBCurl"}
+}

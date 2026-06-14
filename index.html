@@ -3,90 +3,324 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <!-- Version 1.1.1: Forces both Safari and Chrome to overwrite their internal token caches -->
-    <meta name="app-version" content="1.1.1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="FC Fitness">
+    <meta name="theme-color" content="#111827">
     <title>Flight Crew Fitness</title>
 
-    <script>
-        window.onerror = function (message, url, line, column, error) {
-            console.warn("[Telemetry Intercept] " + message + " at " + url + ":" + line + ":" + column);
-            if (line === 0 || message.toLowerCase().includes("script error")) {
-                return true;
-            }
-            return false; 
-        };
-    </script>
-
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" crossorigin="anonymous">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>✈️</text></svg>">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" crossorigin="anonymous">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            -webkit-tap-highlight-color: transparent;
-        }
+        /* Prevent pull-to-refresh on mobile apps to make it feel native */
+        body { overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; }
+        .hidden { display: none !important; }
+        .tab-active { color: #3b82f6; border-top: 2px solid #3b82f6; }
     </style>
 </head>
-<body class="bg-gray-900 text-gray-100 min-h-screen flex flex-col justify-between">
+<body class="bg-gray-900 text-gray-100 min-h-screen flex flex-col font-sans select-none">
 
-    <header class="border-b border-gray-800 bg-gray-900 sticky top-0 z-50 px-4 py-3">
-        <div class="max-w-md mx-auto flex items-center justify-between">
+    <div id="iosPrompt" class="hidden fixed bottom-0 left-0 right-0 bg-blue-900 text-white p-4 z-50 rounded-t-2xl shadow-2xl pb-8">
+        <div class="flex justify-between items-start">
+            <div>
+                <h3 class="font-bold text-lg mb-1">Install FC Fitness</h3>
+                <p class="text-sm text-blue-200">Tap the <span class="font-bold text-white">Share</span> icon below, then select <span class="font-bold text-white">"Add to Home Screen"</span> for offline access.</p>
+            </div>
+            <button onclick="document.getElementById('iosPrompt').classList.add('hidden')" class="text-blue-300 hover:text-white text-xl px-2">&times;</button>
+        </div>
+    </div>
+
+    <header class="bg-gray-800 border-b border-gray-700 p-4 sticky top-0 z-40">
+        <div class="flex items-center justify-between max-w-md mx-auto">
             <div class="flex items-center space-x-2">
                 <span class="text-2xl">✈️</span>
-                <h1 class="text-lg font-bold tracking-tight">Flight Crew Fitness</h1>
+                <h1 class="text-lg font-bold tracking-wider uppercase">Flight Crew Fitness</h1>
             </div>
-            <button id="shareAppBtn" class="p-2 text-gray-400 hover:text-white focus:outline-none" aria-label="Share App">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 10.742l4.632-2.316m0 0a3 3 0 102.686-2.316 3 3 0 00-2.686 2.316zm-4.632 2.74l4.632 2.316m0 0a3 3 0 102.686 2.316 3 3 0 00-2.686-2.316z" />
-                </svg>
-            </button>
+            <div class="w-8 h-8 rounded-full bg-gray-700 border border-gray-600 flex items-center justify-center text-xs">FC</div>
         </div>
     </header>
 
-    <main class="flex-grow p-4 max-w-md mx-auto w-full space-y-6">
-        <div class="bg-gray-800 border border-gray-700 rounded-xl p-5 shadow-lg space-y-3">
-            <div class="flex justify-between items-center">
-                <span class="text-xs font-semibold uppercase tracking-wider text-blue-400">Current Status</span>
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-900 text-green-200">Active</span>
+    <main class="flex-grow overflow-y-auto pb-20 p-4 max-w-md mx-auto w-full" id="mainContainer">
+        
+        <div id="view-dashboard" class="space-y-6">
+            <div class="bg-gray-800 rounded-xl p-5 border border-gray-700">
+                <h2 class="text-xs uppercase tracking-widest text-gray-400 mb-1">Systems Status</h2>
+                <div class="flex items-end justify-between">
+                    <p class="text-3xl font-bold text-green-400">Operational</p>
+                    <p class="text-sm text-gray-500">Ready for Duty</p>
+                </div>
             </div>
-            <p class="text-2xl font-bold">Systems Operational</p>
-            <p class="text-sm text-gray-400">Telemetry engine running cleanly across both WebKit and V8 browser targets.</p>
+            
+            <button onclick="switchTab('workout')" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg transition duration-200">
+                Initiate Takeoff Briefing (Start Session)
+            </button>
         </div>
+
+        <div id="view-workout" class="hidden space-y-6">
+            
+            <div id="takeoffBriefing" class="bg-gray-800 rounded-xl p-5 border border-gray-700 space-y-4">
+                <h2 class="text-lg font-bold border-b border-gray-700 pb-2 text-blue-400">Takeoff Briefing</h2>
+                
+                <div class="space-y-2 bg-gray-900 p-3 rounded-lg border border-gray-700">
+                    <label class="block text-sm text-gray-400 font-semibold uppercase">Scheduled Block Time (Hours)</label>
+                    <input type="number" id="blockHours" value="0" class="w-full bg-gray-800 text-white border border-gray-600 rounded p-2 focus:border-blue-500 focus:outline-none" oninput="calculateHydration()">
+                    
+                    <label class="block text-sm text-gray-400 font-semibold uppercase mt-3">Water Cleared Today (Liters)</label>
+                    <input type="number" id="waterCleared" value="0" step="0.5" class="w-full bg-gray-800 text-white border border-gray-600 rounded p-2 focus:border-blue-500 focus:outline-none" oninput="calculateHydration()">
+                    
+                    <div id="hydrationResult" class="mt-3 text-sm p-2 rounded bg-yellow-900 text-yellow-200 hidden"></div>
+                </div>
+
+                <div class="flex items-center justify-between bg-gray-900 p-3 rounded-lg border border-gray-700">
+                    <div>
+                        <p class="font-bold">In-Room / Fatigue Mode</p>
+                        <p class="text-xs text-gray-400">Bodyweight & mobility only</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="fatigueToggle" class="sr-only peer" onchange="generateWorkoutUI()">
+                        <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                </div>
+            </div>
+
+            <div id="activeWorkoutUI" class="space-y-6">
+                </div>
+
+            <button onclick="completeFlight()" id="completeFlightBtn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-4 rounded-xl shadow-lg mt-4 hidden">
+                Complete Flight (Save & Analyze)
+            </button>
+        </div>
+
+        <div id="view-export" class="hidden space-y-4">
+            <div class="bg-gray-800 rounded-xl p-5 border border-gray-700">
+                <h2 class="text-lg font-bold text-blue-400 mb-2">Route Review: AI Audit</h2>
+                <p class="text-sm text-gray-300 mb-4">Your body is an aircraft. By combining your workout data with your flight schedule and wearable data, an AI can uncover hidden patterns in your health.</p>
+                
+                <h3 class="font-semibold text-white mb-1">1. Export Telemetry</h3>
+                <button onclick="alert('Export logic will trigger Supabase download in Phase 2!')" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded border border-gray-500 mb-4">
+                    Download .JSON Data
+                </button>
+
+                <h3 class="font-semibold text-white mb-1">2. Copy AI Prompt</h3>
+                <div class="bg-gray-900 p-3 rounded text-xs text-gray-400 font-mono select-all mb-4 border border-gray-700">
+                    Act as an elite fitness and longevity coach specializing in commercial aviation physiology. I deal with chronic seated postures, systemic fatigue, pressurized cabins, and circadian disruption. I have attached my Fitness Data, Flight Schedule, and Wearable Data. Please analyze my allostatic load, trend analysis, and provide 3 actionable adjustments to improve my resilience on the line.
+                </div>
+            </div>
+        </div>
+
+        <div id="view-postflight" class="hidden space-y-4 text-center py-10">
+            <h2 class="text-3xl font-bold text-green-400">Flight Secured.</h2>
+            <p class="text-gray-400">Data recorded successfully.</p>
+            
+            <div class="grid grid-cols-2 gap-4 mt-6">
+                <div class="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                    <p class="text-xs text-gray-400 uppercase">Est. Caloric Burn</p>
+                    <p class="text-2xl font-bold text-white" id="postCal">0</p>
+                </div>
+                <div class="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                    <p class="text-xs text-gray-400 uppercase">Total Tonnage</p>
+                    <p class="text-2xl font-bold text-white" id="postTon">0 lbs</p>
+                </div>
+            </div>
+            
+            <button onclick="switchTab('dashboard')" class="w-full bg-blue-600 text-white font-bold py-3 rounded-xl shadow-lg mt-8">
+                Return to Dashboard
+            </button>
+        </div>
+
     </main>
 
-    <footer class="p-4 border-t border-gray-800 bg-gray-900 text-center text-xs text-gray-500">
-        <p>© 2026 Flight Crew Fitness • Build v1.1.1</p>
-    </footer>
-
-    <!-- Forced cache-bust query update -->
-    <script src="app.js?v=1.1.1" crossorigin="anonymous"></script>
+    <nav class="bg-gray-900 border-t border-gray-800 fixed bottom-0 w-full z-40 pb-safe">
+        <div class="max-w-md mx-auto flex justify-around text-xs font-semibold text-gray-500">
+            <button onclick="switchTab('dashboard')" id="tab-dashboard" class="flex-1 py-4 tab-active hover:text-white transition">Dashboard</button>
+            <button onclick="switchTab('workout')" id="tab-workout" class="flex-1 py-4 border-t-2 border-transparent hover:text-white transition">Workout</button>
+            <button onclick="switchTab('export')" id="tab-export" class="flex-1 py-4 border-t-2 border-transparent hover:text-white transition">Route Review</button>
+        </div>
+    </nav>
 
     <script>
-        document.getElementById('shareAppBtn').addEventListener('click', async () => {
-            if (navigator.share) {
-                try {
-                    await navigator.share({
-                        title: 'Flight Crew Fitness',
-                        text: 'Track real-time flight metrics, health progress, and recovery telemetry profiles.',
-                        url: window.location.origin + window.location.pathname + '?v=1.1.1'
-                    });
-                } catch (err) {
-                    if (err.name !== 'AbortError') {
-                        console.error('Share processing error:', err);
-                    }
-                }
+        // --- 1. Service Worker & Version Control ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').then(reg => {
+                    reg.onupdatefound = () => {
+                        const installingWorker = reg.installing;
+                        installingWorker.onstatechange = () => {
+                            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                if(confirm("New company update available. Reload systems?")) {
+                                    window.location.reload();
+                                }
+                            }
+                        };
+                    };
+                }).catch(err => console.error("SW Registration failed:", err));
+            });
+        }
+
+        // --- 2. iOS PWA Install Prompt Logic ---
+        const isIos = () => {
+            const userAgent = window.navigator.userAgent.toLowerCase();
+            return /iphone|ipad|ipod/.test(userAgent);
+        };
+        const isInStandaloneMode = () => ('standalone' in window.navigator) && (window.navigator.standalone);
+        
+        if (isIos() && !isInStandaloneMode()) {
+            document.getElementById('iosPrompt').classList.remove('hidden');
+        }
+
+        // --- 3. UI Tab Switching Logic ---
+        function switchTab(tabName) {
+            // Hide all views
+            ['dashboard', 'workout', 'export', 'postflight'].forEach(t => {
+                document.getElementById(`view-${t}`).classList.add('hidden');
+            });
+            // Reset tab styling
+            ['dashboard', 'workout', 'export'].forEach(t => {
+                document.getElementById(`tab-${t}`)?.classList.remove('tab-active', 'text-blue-500');
+                document.getElementById(`tab-${t}`)?.classList.add('border-transparent');
+            });
+
+            // Show selected
+            document.getElementById(`view-${tabName}`).classList.remove('hidden');
+            if(document.getElementById(`tab-${tabName}`)) {
+                document.getElementById(`tab-${tabName}`).classList.add('tab-active', 'text-blue-500');
+                document.getElementById(`tab-${tabName}`).classList.remove('border-transparent');
+            }
+            
+            // If opening workout, render the UI
+            if(tabName === 'workout') {
+                generateWorkoutUI();
+                document.getElementById('takeoffBriefing').classList.remove('hidden');
+            }
+        }
+
+        // --- 4. Hydration Payload Calculator ---
+        function calculateHydration() {
+            const hours = parseFloat(document.getElementById('blockHours').value) || 0;
+            const cleared = parseFloat(document.getElementById('waterCleared').value) || 0;
+            
+            // Formula: 3.0L base + 0.33L per flight hour
+            const target = 3.0 + (hours * 0.33);
+            const deficit = target - cleared;
+            
+            const resultBox = document.getElementById('hydrationResult');
+            resultBox.classList.remove('hidden', 'bg-yellow-900', 'bg-red-900', 'bg-green-900');
+            
+            if (deficit <= 0) {
+                resultBox.classList.add('bg-green-900', 'text-green-200');
+                resultBox.innerHTML = `✅ <b>Hydration Optimal.</b> Target: ${target.toFixed(1)}L. You are cleared for takeoff.`;
+            } else if (deficit > 2.0) {
+                resultBox.classList.add('bg-red-900', 'text-red-200');
+                resultBox.innerHTML = `⚠️ <b>Severe Deficit: ${deficit.toFixed(1)}L.</b> Target is ${target.toFixed(1)}L. Discs are compressing. Chug 1L before starting.`;
             } else {
-                try {
-                    await navigator.clipboard.writeText(window.location.origin + window.location.pathname);
-                    alert('App link copied to clipboard!');
-                } catch (clipErr) {
-                    console.error('Clipboard backup failure:', clipErr);
+                resultBox.classList.add('bg-yellow-900', 'text-yellow-200');
+                resultBox.innerHTML = `⚠️ <b>Deficit: ${deficit.toFixed(1)}L.</b> Target is ${target.toFixed(1)}L. Sip water between sets.`;
+            }
+        }
+
+        // --- 5. The Workout Engine (Pilot Protocol + Logic) ---
+        const pilotProtocolStretches = [
+            { name: "Kneeling Hip Flexor + Overhead Reach", reps: "60s per side", desc: "Opens psoas shortened by seated posture." },
+            { name: "Thoracic Book Openers", reps: "10 per side", desc: "Restores mid-back rotation." },
+            { name: "Glute Bridges (Pause at top)", reps: "15 reps", desc: "Fixes gluteal amnesia before lifting." }
+        ];
+
+        const descentStretches = [
+            { name: "Child’s Pose (Lat Bias)", reps: "2 mins", desc: "Decompresses lumbar spine." },
+            { name: "Doorway Pec Stretch", reps: "60s per side", desc: "Reverses cockpit internal shoulder rotation." },
+            { name: "90/90 Bed Breathing", reps: "3 mins", desc: "Legs on bed. Nasal breathing to power down CNS." }
+        ];
+
+        // Sample DB Exercises (To be expanded in Phase 2)
+        const exerciseLibrary = [
+            { id: "e1", name: "Goblet Squat", type: "weight", inRoom: false },
+            { id: "e2", name: "Dumbbell Bench Press", type: "weight", inRoom: false },
+            { id: "e3", name: "Standard Plank", type: "time", inRoom: true },
+            { id: "e4", name: "Bodyweight Deep Squat", type: "reps", inRoom: true },
+            { id: "e5", name: "Elevated Bed Pushups", type: "reps", inRoom: true },
+            { id: "e6", name: "Dead Bug Hold", type: "time", inRoom: true }
+        ];
+
+        function generateWorkoutUI() {
+            const isFatigueMode = document.getElementById('fatigueToggle').checked;
+            const container = document.getElementById('activeWorkoutUI');
+            container.innerHTML = ''; // Clear existing
+
+            // Render Preflight
+            let html = `<div class="bg-gray-800 rounded-xl p-5 border border-gray-700">
+                <h2 class="text-lg font-bold text-yellow-500 mb-3 border-b border-gray-700 pb-2">🛫 Preflight (Mobilization)</h2>`;
+            pilotProtocolStretches.forEach(ex => {
+                html += `<div class="mb-3"><p class="font-semibold text-white">${ex.name} <span class="text-gray-400 text-sm ml-2">${ex.reps}</span></p><p class="text-xs text-gray-500">${ex.desc}</p></div>`;
+            });
+            html += `</div>`;
+
+            // Render In-Flight (Main Block)
+            html += `<div class="bg-gray-800 rounded-xl p-5 border border-gray-700">
+                <h2 class="text-lg font-bold text-blue-500 mb-3 border-b border-gray-700 pb-2">✈️ In Flight (Main Block)</h2>`;
+            
+            const routine = isFatigueMode 
+                ? exerciseLibrary.filter(e => e.inRoom) 
+                : exerciseLibrary.filter(e => !e.inRoom).slice(0,2).concat(exerciseLibrary.find(e=>e.id==="e3")); // Mock logic
+            
+            routine.forEach((ex, i) => {
+                html += `
+                <div class="mb-4 bg-gray-900 p-3 rounded border border-gray-700">
+                    <p class="font-bold text-white mb-2">${ex.name}</p>
+                    <div class="flex space-x-2">
+                        <input type="number" id="weight_${i}" placeholder="${ex.type==='time'?'Seconds':'Weight'}" class="w-1/2 bg-gray-800 text-white rounded p-2 text-sm border border-gray-600 focus:border-blue-500 focus:outline-none">
+                        <input type="number" id="reps_${i}" placeholder="Reps/Sets" class="w-1/2 bg-gray-800 text-white rounded p-2 text-sm border border-gray-600 focus:border-blue-500 focus:outline-none">
+                    </div>
+                </div>`;
+            });
+            html += `</div>`;
+
+            // Render Descent
+            html += `<div class="bg-gray-800 rounded-xl p-5 border border-gray-700">
+                <h2 class="text-lg font-bold text-purple-500 mb-3 border-b border-gray-700 pb-2">🛬 Descent (Decompression)</h2>`;
+            descentStretches.forEach(ex => {
+                html += `<div class="mb-3"><p class="font-semibold text-white">${ex.name} <span class="text-gray-400 text-sm ml-2">${ex.reps}</span></p><p class="text-xs text-gray-500">${ex.desc}</p></div>`;
+            });
+            html += `</div>`;
+
+            container.innerHTML = html;
+            document.getElementById('completeFlightBtn').classList.remove('hidden');
+        }
+
+        // --- 6. Postflight Math (Calories & Tonnage) ---
+        function completeFlight() {
+            const isFatigueMode = document.getElementById('fatigueToggle').checked;
+            
+            // Mock Bodyweight (To be pulled from Supabase Profile later)
+            const bodyweightKg = 85; // ~187 lbs
+            const durationMinutes = 45; 
+            
+            // MET Math
+            const MET = isFatigueMode ? 3.5 : 5.0; 
+            const calories = Math.round(durationMinutes * (MET * 3.5 * bodyweightKg) / 200);
+            
+            // Mock Tonnage Calculation (Scanning inputs)
+            let tonnage = 0;
+            const weightInputs = document.querySelectorAll('input[id^="weight_"]');
+            const repInputs = document.querySelectorAll('input[id^="reps_"]');
+            
+            for(let i=0; i < weightInputs.length; i++) {
+                let w = parseFloat(weightInputs[i].value) || 0;
+                let r = parseFloat(repInputs[i].value) || 0;
+                if(!isFatigueMode && w > 0) {
+                    tonnage += (w * r);
                 }
             }
-        });
+
+            document.getElementById('postCal').innerText = calories;
+            document.getElementById('postTon').innerText = isFatigueMode ? "Bodyweight" : tonnage + " lbs";
+            
+            document.getElementById('takeoffBriefing').classList.add('hidden');
+            document.getElementById('completeFlightBtn').classList.add('hidden');
+            switchTab('postflight');
+        }
     </script>
 </body>
 </html>

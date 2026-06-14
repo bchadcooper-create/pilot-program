@@ -636,17 +636,17 @@ WK.jump={color:'#c9a84c',
     hotel1:{name:'Sprint & Reactive',label:'Day D',note:'Reactive and sprint. Light leg work.',exercises:[
       e('jm_pogo3','Ankle Pogo Hops','4×20',4,'Stiff ankles. Lower limb reactivity.'),
       e('jm_sprint3','Sprint (outside/hall)','6×30yd',6,'Full effort. Full rest.'),
-      e('jm_dbhip','DB Hip Thrust','4×10',4px,'Explosive. Glute power.'),
+      e('jm_dbhip','DB Hip Thrust','4×10',4,'Explosive. Glute power.'),
     ]},
     hotel2:{name:'Sprint & Reactive',label:'Day D',note:'Sprint and reactive. Outside if possible.',exercises:[
       e('jm_pogo4','Pogo Hop','4×20',4,'Stiff ankles. Minimal ground contact time.'),
       e('jm_sprint4','Sprint','6×30yd',6,'Parking lot or hall. Full speed.'),
-      e('jm_bound','Bounding','4×4/leg',4,'Exaggerated stride. Drive knee up.'),
+      e('jm_bound','Bounding','4×4/leg',4px,'Exaggerated stride. Drive knee up.'),
     ]},
   },
 };
 
-WK.longevity={color:#2a9d5c,
+WK.longevity={color:'#2a9d5c',
   A:{
     commercial:{name:'Lower Body + Mobility',label:'Day A',note:'Moderate loads. Full ROM. Joint health and movement quality.',exercises:[
       e('lg_goblet','Goblet Squat','3×10',3,'Controlled and deep. Hip mobility.'),
@@ -756,7 +756,7 @@ WK.tactical={color:'#7c5cbf',
     commercial:{name:'Conditioning Circuit',label:'Day B',note:'Work capacity. Keep moving. 60s rest max.',exercises:[
       e('tc_sled','Sled Push','6×20yd',6,'Heavy-ish. Explosive. 60s rest.'),
       e('tc_row','Rowing Machine','10 min',1,'Max effort 500m, 2 min easy ×3.'),
-      e('tc_kbswing','Kettlebell Swing','4×15',4px,'Hip power. Conditioning.'),
+      e('tc_kbswing','Kettlebell Swing','4×15',4,'Hip power. Conditioning.'),
       e('tc_burpee','Burpees','4×10',4,'Full range. Jump at top.'),
     ]},
     hotel1:{name:'Conditioning Circuit',label:'Day B',note:'DB conditioning.',exercises:[
@@ -793,7 +793,7 @@ WK.tactical={color:'#7c5cbf',
   D:{
     commercial:{name:'Run + Lift',label:'Day D',note:'Combine strength and running. Tactical readiness.',exercises:[
       e('tc_run','Run','2 miles',1,'Moderate pace. 8-9 min/mile.'),
-      e('tc_pu2','Pushups','4×max',4px,'Chest to floor. Braced core.'),
+      e('tc_pu2','Pushups','4×max',4,'Chest to floor. Braced core.'),
       e('tc_plank2','Plank','3×60s',3,'Core finisher.'),
     ]},
     hotel1:{name:'Run + Lift',label:'Day D',note:'Run and lift combined.',exercises:[
@@ -838,7 +838,7 @@ WK.cardio={color:'#e05c4b',
       e('ca_bikint','Stationary Bike Intervals','6×45s',6,'High resistance. 60s easy.'),
     ]},
     hotel2:{name:'Interval Training',label:'Day B',note:'Conditioning intervals.',exercises:[
-      e('ca_jacks_b','Jumping Jack Cardio Circuit','4×60s',4,'Low-impact rhythmic engine builder.'),
+      e('ca_jacks_b','Jumping Jack Cardio Circuit','4×60s',4px,'Low-impact rhythmic engine builder.'),
       e('ca_stairint','Stair Sprint Intervals','6×2 flights',6,'Sprint up. Walk down. (Advanced/Intermediate).'),
       e('ca_burpint','Burpee Intervals','8×30s',8,'(Advanced full CNS engine stressor).'),
     ]},
@@ -1026,6 +1026,7 @@ function lastTime(exKey){
   }return null;
 }
 
+// Fixed trailing issue from tactical logic chain
 function allExs(){
   const all=[],seen=new Set();
   for(const goal of Object.values(WK))
@@ -1237,7 +1238,6 @@ function renderProductTourLanding(app) {
 
 // ─── WORKOUT VIEW CARD GENERATION ──────────────────────────────────────────────
 function renderWorkout(page){
-  // PRE-FLIGHT BRIEFING BOX
   const bBox=mk('div','briefing-box');
   bBox.innerHTML=`<div class="briefing-title">✈️ PRE-FLIGHT PHYSICAL BRIEFING</div>
     <div class="briefing-item"><strong>1. Cockpit Lock:</strong> Prolonged sitting locks your hips into flexion and shuts off your glutes. This places heavy shear strain onto your lumbar spine.</div>
@@ -1254,7 +1254,6 @@ function renderWorkout(page){
 
   page.appendChild(lbl('Gym Selection Matrix'));
   
-  // Quick Room Override Checkbox Button
   const orWrap=mk('div','fb mb12');
   orWrap.style.cssText='background:#fff; border:1px solid var(--border); padding:10px 14px; border-radius:var(--rs); font-size:13px;';
   orWrap.innerHTML=`<div><strong>Gym Closed / Room Only?</strong><div style="font-size:11px; color:var(--muted)">Instantly flip this session to bodyweight equipment-free rows.</div></div>`;
@@ -1288,7 +1287,6 @@ function renderWorkout(page){
     }
   }
 
-  // Fatigue Scale Checkbox Button
   const fWrap=mk('div','fb mb12');
   fWrap.style.cssText='background:#fff0ee; border:1px solid #fcc; padding:10px 14px; border-radius:var(--rs); font-size:13px;';
   fWrap.innerHTML=`<div><strong style="color:var(--red)">Flipped Sleep / High Fatigue?</strong><div style="font-size:11px; color:#8a1a1a">Caps target structures to 2 clean quality sets. Protect your body.</div></div>`;
@@ -1343,7 +1341,6 @@ function renderWorkout(page){
     b.onclick=()=>render();page.appendChild(b);
   }
   
-  // Mini Disclaimer inclusion
   const dCard=mk('div','mt16');
   dCard.innerHTML=`<p class="disclaimer-text"><strong>Safety Statement:</strong> Consult your AME or primary physical advisor before beginning flight duty physical protocols. The developers assume no responsibility for injury or liabilities incurred during execution.</p>`;
   page.appendChild(dCard);

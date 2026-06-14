@@ -108,7 +108,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 .btn-p{background:var(--navy);color:var(--gold)}.btn-g{background:var(--gold);color:var(--navy)}
 .btn-grn{background:var(--green);color:white}.btn-o{background:transparent;border:1.5px solid var(--border);color:var(--text)}
 .btn-red{background:var(--red-bg);border:1.5px solid #fcc;color:var(--red)}
-.btn-sm{padding:7px 14px;font-size:12px;font-weight:600;width:auto;display:inline-block;border-radius:var(--rs)}
+.btn-safe{padding:7px 14px;font-size:12px;font-weight:600;width:auto;display:inline-block;border-radius:var(--rs)}
 .btn-i{background:transparent;border:1.5px solid var(--border);color:var(--blue);font-size:12px;padding:6px 10px;border-radius:6px;width:auto;display:inline-block}
 .mt8{margin-top:8px}.mt12{margin-top:12px}.mt16{margin-top:16px}.mb8{margin-bottom:8px}.mb12{margin-bottom:12px}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:200;display:flex;align-items:flex-end}
@@ -163,7 +163,6 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 .briefing-item strong{color:var(--navy)}
 .disclaimer-text{font-size:10px;line-height:1.4;color:var(--hint);text-align:justify}
 
-/* Update Banner Animation Styles */
 .update-banner {
   position: fixed;
   bottom: calc(16px + env(safe-area-inset-bottom, 0px));
@@ -585,7 +584,7 @@ WK.jump={color:'#c9a84c',
     hotel2:{name:'Lower Body Strength',label:'Day A',note:'Bodyweight strength. Slow tempo.',exercises:[
       e('jm_pistol','Pistol Squat Progression','4×5/leg',4,'Best bodyweight jump exercise.'),
       e('jm_bss3','Bulgarian Split Squat','4×10/leg',4,'Bodyweight. Deep and controlled.'),
-      e('jm_nordic','Nordic Hamstring Curl','3×5',3,'Feet anchored. Hamstring strength.'),
+      e('jm_nordic','Nordic Curl','3×5',3,'Feet anchored. Hamstring strength.'),
     ]},
   },
   B:{
@@ -632,12 +631,12 @@ WK.jump={color:'#c9a84c',
       e('jm_pogo_comm','Pogo Hops','4×20',4,'Ankle elasticity preparation matrix.'),
       e('jm_track','Track Sprint','8×40yd',8,'Full speed. Walk back. 2 min rest.'),
       e('jm_djump','Depth Jump','4×4',4,'Step off box, explode up. (Advanced only).'),
-      e('jm_hgknee','Hanging Knee Raise','3×12',3px,'Hip flexor strength.'),
+      e('jm_hgknee','Hanging Knee Raise','3×12',3,'Hip flexor strength.'),
     ]},
     hotel1:{name:'Sprint & Reactive',label:'Day D',note:'Reactive and sprint. Light leg work.',exercises:[
       e('jm_pogo3','Ankle Pogo Hops','4×20',4,'Stiff ankles. Lower limb reactivity.'),
       e('jm_sprint3','Sprint (outside/hall)','6×30yd',6,'Full effort. Full rest.'),
-      e('jm_dbhip','DB Hip Thrust','4×10',4,'Explosive. Glute power.'),
+      e('jm_dbhip','DB Hip Thrust','4×10',4px,'Explosive. Glute power.'),
     ]},
     hotel2:{name:'Sprint & Reactive',label:'Day D',note:'Sprint and reactive. Outside if possible.',exercises:[
       e('jm_pogo4','Pogo Hop','4×20',4,'Stiff ankles. Minimal ground contact time.'),
@@ -647,7 +646,7 @@ WK.jump={color:'#c9a84c',
   },
 };
 
-WK.longevity={color:'#2a9d5c',
+WK.longevity={color:#2a9d5c,
   A:{
     commercial:{name:'Lower Body + Mobility',label:'Day A',note:'Moderate loads. Full ROM. Joint health and movement quality.',exercises:[
       e('lg_goblet','Goblet Squat','3×10',3,'Controlled and deep. Hip mobility.'),
@@ -741,9 +740,9 @@ WK.tactical={color:'#7c5cbf',
       e('tc_farmer','Farmer Carry','4×40yd',4,'Heavy DBs. Grip and core.'),
     ]},
     hotel1:{name:'Strength Foundation',label:'Day A',note:'Heavy DB strength.',exercises:[
-      e('tc_dbdead','Elevated Sumo DB Deadlift','4×6',4,'Heaviest available. Protect layout line.'),
+      e('tc_dbdead','Elevated Sumo DB Deadlift','4×6',4px,'Heaviest available. Protect layout line.'),
       e('tc_dbpress','DB Press','4×6',4,'Heavy push focus. Full ROM.'),
-      e('tc_db_latrow','DB Lat ISO-Row','4×8',4,'Keep chest tall, pull deep to back pocket.'),
+      e('tc_db_latrow','DB Lat ISO-Row','4×8',4,'Keep tissue balanced, pull deep to back pocket.'),
       e('tc_wpull2','Weighted Pullups','4×5',4,'(Advanced benchmark block).'),
     ]},
     hotel2:{name:'Strength Foundation',label:'Day A',note:'Bodyweight strength.',exercises:[
@@ -757,7 +756,7 @@ WK.tactical={color:'#7c5cbf',
     commercial:{name:'Conditioning Circuit',label:'Day B',note:'Work capacity. Keep moving. 60s rest max.',exercises:[
       e('tc_sled','Sled Push','6×20yd',6,'Heavy-ish. Explosive. 60s rest.'),
       e('tc_row','Rowing Machine','10 min',1,'Max effort 500m, 2 min easy ×3.'),
-      e('tc_kbswing','Kettlebell Swing','4×15',4,'Hip power. Conditioning.'),
+      e('tc_kbswing','Kettlebell Swing','4×15',4px,'Hip power. Conditioning.'),
       e('tc_burpee','Burpees','4×10',4,'Full range. Jump at top.'),
     ]},
     hotel1:{name:'Conditioning Circuit',label:'Day B',note:'DB conditioning.',exercises:[
@@ -776,7 +775,7 @@ WK.tactical={color:'#7c5cbf',
   C:{
     commercial:{name:'Overhead + Carries',label:'Day C',note:'Functional strength. Upper dominant.',exercises:[
       e('tc_ohp','Standing Overhead Press','4×6',4,'Heavy. Full lockout.'),
-      e('tc_barrow','Barbell Row','4×6',4px,'Overhand. Heavy.'),
+      e('tc_barrow','Barbell Row','4×6',4,'Overhand. Heavy.'),
       e('tc_hfarmer','Heavy Farmer Carry','5×40yd',5,'Heaviest possible.'),
       e('tc_suit','Suitcase Carry','4×30yd/side',4,'Anti-lateral core.'),
     ]},
@@ -794,7 +793,7 @@ WK.tactical={color:'#7c5cbf',
   D:{
     commercial:{name:'Run + Lift',label:'Day D',note:'Combine strength and running. Tactical readiness.',exercises:[
       e('tc_run','Run','2 miles',1,'Moderate pace. 8-9 min/mile.'),
-      e('tc_pu2','Pushups','4×max',4,'Chest to floor. Braced core.'),
+      e('tc_pu2','Pushups','4×max',4px,'Chest to floor. Braced core.'),
       e('tc_plank2','Plank','3×60s',3,'Core finisher.'),
     ]},
     hotel1:{name:'Run + Lift',label:'Day D',note:'Run and lift combined.',exercises:[
@@ -931,15 +930,13 @@ let ST={
   fatigueScale:false,roomOverride:false
 };
 
-// PWA Update Automation Check Engine
 let registrationObject = null;
 async function init(){
   if('serviceWorker' in navigator){
     navigator.serviceWorker.register('/pilot-program/sw.js')
     .then(reg => {
       registrationObject = reg;
-      // Hook system update checker logic loop
-      setInterval(() => { reg.update(); }, 120000); // Check remote hashes every 2 minutes
+      setInterval(() => { reg.update(); }, 120000);
       
       if(reg.waiting) { showUpdateNotificationToast(); }
       reg.addEventListener('updatefound', () => {
@@ -1177,7 +1174,7 @@ function render(){
   }
 }
 
-// ─── NEW PRODUCT TOUR MARKETING LANDING VIEW ─────────────────────────────────
+// ─── PRODUCT TOUR MARKETING LANDING VIEW ─────────────────────────────────────
 function renderProductTourLanding(app) {
   app.innerHTML=`<div class="page" style="overflow-y:auto; padding:24px 20px calc(40px + var(--safe-bottom)); background:var(--bg); min-height:100vh">
     <div style="text-align:center; padding:32px 0 20px">
@@ -1557,7 +1554,7 @@ function renderBodyTrend(page){
       <div class="fld" style="margin-bottom:0"><label>Waist (in)</label>
         <input type="number" id="wst_inp" inputmode="decimal" placeholder="e.g. 34" value="${ST.newWaist||''}"></div>
     </div>
-    <button class="btn btn-g" onclick="logBodyMetrics()">Save Entry Point</button>`;
+    <div class="btn btn-g" onclick="logBodyMetrics()">Save Entry Point</div>`;
   logCard.querySelector('#wt_inp').oninput=e=>ST.newWt=e.target.value;
   logCard.querySelector('#wst_inp').oninput=e=>ST.newWaist=e.target.value;
   page.appendChild(logCard);
@@ -1708,7 +1705,6 @@ function renderProfile(page){
     const so=mk('button','btn btn-red btn-sm');so.textContent='Sign Out of Terminal';so.onclick=doSignOut;
     dz.appendChild(so);page.appendChild(dz);
     
-    // Add small build identification footprint layout tag
     const fTag=mk('div','');
     fTag.style.cssText='text-align:center; font-size:10px; color:var(--hint); margin-top:24px; font-family:monospace;';
     fTag.textContent=`Flight Crew Fitness v${APP_VERSION} (Offline Sync Shell Verified)`;

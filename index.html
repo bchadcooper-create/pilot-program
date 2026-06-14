@@ -14,6 +14,19 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+window.addEventListener('load',function(){
+  if(typeof supabase==='undefined'||typeof Chart==='undefined'){
+    document.getElementById('app').innerHTML=
+      '<div style="padding:40px 24px;font-family:sans-serif;text-align:center;color:#0d1b2a">'+
+      '<div style="font-size:32px;margin-bottom:16px">&#x2708;</div>'+
+      '<div style="font-size:20px;font-weight:700;margin-bottom:12px">Connection Required</div>'+
+      '<div style="font-size:14px;color:#666;line-height:1.6">Flight Crew Fitness needs internet on first load to download required scripts.<br><br>Once loaded it works offline. Please connect and refresh.</div>'+
+      '<button onclick="location.reload()" style="margin-top:24px;padding:14px 28px;background:#0d1b2a;color:#c9a84c;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Retry</button>'+
+      '</div>';
+  }
+});
+</script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -147,7 +160,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 <body>
 <div id="app"></div>
 <script>
-const SB_URL='https://bchadcooper-create.github.io/pilot-program', SB_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRueGt5ZHhieWloZ3NpY3Riemp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3ODk4MTEsImV4cCI6MjA5NjM2NTgxMX0.oLUGuorQkbQ_u679NpE8FGBVAUmVE1K_rxl8q4B0n7k';
+const SB_URL='YOUR_SUPABASE_URL', SB_ANON='YOUR_SUPABASE_ANON_KEY';
 
 // ── MEDIA MAP ─────────────────────────────────────────────────────────────────
 // gif = Wikimedia Commons CC-licensed (free to embed, loads in browser)
@@ -872,7 +885,10 @@ echo "Workout data written: $(wc -l < /home/claude/fcf/index.html) lines"
 let sb=null,sbUser=null;
 function initSB(){
   if(SB_URL==='YOUR_SUPABASE_URL')return false;
-  try{sb=supabase.createClient(SB_URL,SB_ANON);return true;}catch{return false;}
+  try{
+    if(typeof supabase==='undefined')return false;
+    sb=supabase.createClient(SB_URL,SB_ANON);return true;
+  }catch{return false;}
 }
 async function checkAuth(){if(!sb)return null;const{data:{session}}=await sb.auth.getSession();return session?.user||null;}
 async function doSignIn(e,p){const{data,error}=await sb.auth.signInWithPassword({email:e,password:p});if(error)throw error;return data.user;}
@@ -1699,7 +1715,23 @@ function renderAuth(app){
 function mk(tag,cls,html){const e=document.createElement(tag);if(cls)e.className=cls;if(html!==undefined)e.innerHTML=html;return e;}
 function lbl(txt){const e=mk('div','shdr');e.textContent=txt;return e;}
 
-init();
+window.onerror=function(msg,src,line,col,err){
+  var app=document.getElementById('app');
+  if(app) app.innerHTML='<div style="padding:40px 24px;font-family:sans-serif;color:#0d1b2a;text-align:center">'+
+    '<div style="font-size:28px;margin-bottom:12px">&#x2708;</div>'+
+    '<div style="font-size:16px;font-weight:600;margin-bottom:8px">Something went wrong</div>'+
+    '<div style="background:#fff0ee;border:1px solid #fcc;border-radius:8px;padding:12px;font-size:12px;color:#8a1a1a;margin:0 auto 20px;max-width:300px;text-align:left">'+
+    msg+'<br><small>'+src+' line '+line+'</small></div>'+
+    '<button onclick="location.reload()" style="padding:12px 24px;background:#0d1b2a;color:#c9a84c;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Reload</button></div>';
+  return false;
+};
+try{init();}catch(err){
+  document.getElementById('app').innerHTML='<div style="padding:40px 24px;font-family:sans-serif;color:#0d1b2a;text-align:center">'+
+    '<div style="font-size:28px;margin-bottom:12px">&#x2708;</div>'+
+    '<div style="font-size:16px;font-weight:600;margin-bottom:8px">Startup Error</div>'+
+    '<div style="font-size:13px;color:#666;margin-bottom:20px">'+err.message+'</div>'+
+    '<button onclick="location.reload()" style="padding:12px 24px;background:#0d1b2a;color:#c9a84c;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Reload</button></div>';
+}
 </script>
 </body>
 </html>

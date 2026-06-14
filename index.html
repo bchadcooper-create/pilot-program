@@ -65,7 +65,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
 .gbtn{border:2px solid var(--border);background:var(--card);border-radius:12px;padding:14px 8px 12px;cursor:pointer;text-align:center;transition:all 0.2s;-webkit-user-select:none}
 .gbtn:active{transform:scale(0.96)}.gbtn.sel{border-color:var(--gold);background:var(--gold-bg)}
-.gbtn .gi{font-size:22px;margin-bottom:4px}.gbtn .gl{font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:0.04em}
+.gbtn .gi{font-size:22px;margin-bottom:4px}.gbtn .gl animate{font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:0.04em}
 .gbtn .gs{font-size:10px;color:var(--muted);margin-top:2px}
 .wkbadge{display:inline-flex;align-items:center;font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:0.06em;padding:3px 10px;border-radius:20px;margin-bottom:8px}
 .wktitle{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:0.04em}
@@ -163,18 +163,16 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 const SB_URL='https://bchadcooper-create.github.io/pilot-program', SB_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRueGt5ZHhieWloZ3NpY3Riemp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3ODk4MTEsImV4cCI6MjA5NjM2NTgxMX0.oLUGuorQkbQ_u679NpE8FGBVAUmVE1K_rxl8q4B0n7k';
 
 // ── MEDIA MAP ─────────────────────────────────────────────────────────────────
-// gif = Wikimedia Commons CC-licensed (free to embed, loads in browser)
-// exrx = ExRx.net page link (opens new tab per their link policy)
 const MEDIA={
   squat:    {gif:'https://upload.wikimedia.org/wikipedia/commons/3/3a/Bodyweight_Squats.gif',  exrx:'https://exrx.net/WeightExercises/Quadriceps/BBSquat'},
   deadlift: {gif:'https://upload.wikimedia.org/wikipedia/commons/b/b4/Barbell-Deadlift.gif',  exrx:'https://exrx.net/WeightExercises/ErectorSpinae/BBDeadlift'},
   bench:    {gif:'https://upload.wikimedia.org/wikipedia/commons/2/25/Bench_press_1.gif',      exrx:'https://exrx.net/WeightExercises/PectoralSternal/BBBenchPress'},
   pullup:   {gif:'https://upload.wikimedia.org/wikipedia/commons/f/f6/Pull-up_exercise.gif',  exrx:'https://exrx.net/WeightExercises/LatissimusDorsi/BWPullup'},
-  pushup:   {gif:'https://upload.wikimedia.org/wikipedia/commons/f/f8/Push_up_1.gif',         exrx:'https://exrx.net/WeightExercises/PectoralSternal/BWPushup'},
+  pushup:   {gif:'https://upload.wikimedia.org/wikipedia/commons/f/f8/Push_up_1.gif',          exrx:'https://exrx.net/WeightExercises/PectoralSternal/BWPushup'},
   lunge:    {gif:'https://upload.wikimedia.org/wikipedia/commons/b/b8/Lunge_exercise.gif',    exrx:'https://exrx.net/WeightExercises/Quadriceps/BWLunge'},
   plank:    {gif:'https://upload.wikimedia.org/wikipedia/commons/3/3d/Plank_exercise.gif',    exrx:'https://exrx.net/WeightExercises/HipFlexors/BWPlank'},
   dip:      {gif:'https://upload.wikimedia.org/wikipedia/commons/a/a5/Dips_exercise.gif',     exrx:'https://exrx.net/WeightExercises/Triceps/BWDip'},
-  burpee:   {gif:'https://upload.wikimedia.org/wikipedia/commons/e/e5/Burpee_exercise.gif',   exrx:'https://exrx.net/Aerobic/Burpee'},
+  burpee:   {gif:'https://upload.wikimedia.org/wikipedia/commons/e/e5/Burpee_exercise.gif',    exrx:'https://exrx.net/Aerobic/Burpee'},
   rdl:      {gif:null,exrx:'https://exrx.net/WeightExercises/OlympicLifts/RomanianDeadlift'},
   bss:      {gif:null,exrx:'https://exrx.net/WeightExercises/Quadriceps/DBBulgarianSquat'},
   goblet:   {gif:null,exrx:'https://exrx.net/WeightExercises/Kettlebell/KBGobletSquat'},
@@ -244,18 +242,17 @@ function getMedia(id){
 
 // ── GOALS ─────────────────────────────────────────────────────────────────────
 const GOALS=[
-  {id:'fatloss',  icon:'🔥',label:'Fat Loss',     sub:'Body recomposition'},
-  {id:'muscle',   icon:'💪',label:'Muscle Gain',   sub:'Physique & size'},
-  {id:'strength', icon:'🏋️', label:'Strength',     sub:'Get strong'},
-  {id:'jump',     icon:'🏀',label:'Vertical Jump', sub:'Explosive athlete'},
-  {id:'longevity',icon:'🌿',label:'Longevity',     sub:'Healthy aging'},
-  {id:'tactical', icon:'⚡',label:'Tactical',      sub:'Ready for anything'},
-  {id:'cardio',   icon:'❤️', label:'Cardio',        sub:'Endurance & engine'},
+  {id:'fatloss',   icon:'🔥',label:'Fat Loss',      sub:'Body recomposition'},
+  {id:'muscle',    icon:'💪',label:'Muscle Gain',   sub:'Physique & size'},
+  {id:'strength', icon:'🏋️', label:'Strength',      sub:'Get strong'},
+  {id:'jump',      icon:'🏀',label:'Vertical Jump', sub:'Explosive athlete'},
+  {id:'longevity',icon:'🌿',label:'Longevity',      sub:'Healthy aging'},
+  {id:'tactical', icon:'⚡',label:'Tactical',       sub:'Ready for anything'},
+  {id:'cardio',    icon:'❤️', label:'Cardio',         sub:'Endurance & engine'},
 ];
 
 const LEVEL_LIMIT={beginner:3,intermediate:4,advanced:5};
 
-// Exercises where we record TIME (seconds) not reps+weight
 const TIMED_KEYS=[
   'plank','hold','wall_sit','wallsit','hollow','l-sit','lsit','dead_bug','deadbug',
   'bird_dog','birddog','carry','walk','run','treadmill','rower','row_machine',
@@ -269,15 +266,9 @@ function isTimed(id,name){
 }
 
 // ── WORKOUT DATA ──────────────────────────────────────────────────────────────
-// e(id, name, target, sets, ref)
 const e=(id,nm,tgt,sets,ref)=>({id,name:nm,target:tgt,sets,ref});
 const WK={};
 
-// ════════════════════════════════════════════════════════════
-// GOAL 1: FAT LOSS
-// FIXED ROTATION: A=Full Body Circuit → B=Upper Focus → C=Full Body Circuit 2 → D=Cardio/Conditioning
-// No two leg-heavy days in a row. A and C are full-body but separated by upper-only B.
-// ════════════════════════════════════════════════════════════
 WK.fatloss={color:'#e05c4b',
   A:{
     commercial:{name:'Full Body Circuit A',label:'Day A',note:'Legs + upper combined. 45-60s rest. Move fast.',exercises:[
@@ -301,12 +292,12 @@ WK.fatloss={color:'#e05c4b',
       e('fl_mtnclmb','Mountain Climbers','3×30s',3,'Hips level, fast feet.'),
     ]},
   },
-  B:{  // UPPER ONLY — no legs
+  B:{
     commercial:{name:'Upper Body Circuit',label:'Day B',note:'Upper body focus. 45-60s rest. Superset everything.',exercises:[
       e('fl_latpd','Lat Pulldown','3×12',3,'Full stretch. Superset with press.'),
       e('fl_dbpress3','DB Bench Press','3×12',3,'Moderate. Superset with pulldown.'),
       e('fl_cabrow','Cable Row','3×12',3,'Squeeze scapula. Superset with shoulder press.'),
-      e('fl_dbohp','DB Shoulder Press','3×12',3,'Full lockout. Superset with row.'),
+      e('fl_dbohp3','DB Shoulder Press','3×12',3,'Full lockout. Superset with row.'),
       e('fl_curl','EZ Bar Curl','3×12',3,'Superset with pressdown.'),
       e('fl_tpd','Tricep Pressdown','3×12',3,'Full extension. Superset with curl.'),
     ]},
@@ -324,7 +315,7 @@ WK.fatloss={color:'#e05c4b',
       e('fl_dips','Chair Dips','3×max',3,'Tricep focus.'),
     ]},
   },
-  C:{  // FULL BODY — legs + upper again, separated from A by upper-only B
+  C:{
     commercial:{name:'Full Body Circuit B',label:'Day C',note:'Legs + upper again. 60s rest max. Keep moving.',exercises:[
       e('fl_hack','Hack Squat','3×15',3,'Full ROM. Superset with pulldown.'),
       e('fl_latpd2','Lat Pulldown','3×12',3,'Full stretch. Superset with hack squat.'),
@@ -346,7 +337,7 @@ WK.fatloss={color:'#e05c4b',
       e('fl_pullup2','Pullups','3×max',3,'Every rep counts.'),
     ]},
   },
-  D:{  // CARDIO + CONDITIONING — minimal legs, primarily aerobic
+  D:{
     commercial:{name:'Cardio + Conditioning',label:'Day D',note:'Aerobic focus. Keep heart rate 130-150. Legs get rest after C.',exercises:[
       e('fl_bike','Assault Bike Intervals','15 min',1,'20s all-out / 40s easy ×10. Then 5 min easy.'),
       e('fl_incwalk','Incline Treadmill Walk','15 min',1,'10-12% incline. 3.5-4 mph. Steady state.'),
@@ -366,11 +357,6 @@ WK.fatloss={color:'#e05c4b',
   },
 };
 
-// ════════════════════════════════════════════════════════════
-// GOAL 2: MUSCLE GAIN
-// ROTATION: A=Legs → B=Chest+Tri → C=Back+Bi → D=Shoulders+Arms
-// Already correct — only one leg day per cycle.
-// ════════════════════════════════════════════════════════════
 WK.muscle={color:'#3b82f6',
   A:{
     commercial:{name:'Legs & Glutes',label:'Day A',note:'Volume legs. 2-3 min rest compounds, 90s isolation.',exercises:[
@@ -457,11 +443,6 @@ WK.muscle={color:'#3b82f6',
   },
 };
 
-// ════════════════════════════════════════════════════════════
-// GOAL 3: STRENGTH
-// FIXED ROTATION: A=Squat → B=Bench/Upper Push → C=Upper Pull (no legs!) → D=Deadlift
-// Original had A(squat) and C(deadlift) — both leg-dominant. Fixed by moving deadlift to D.
-// ════════════════════════════════════════════════════════════
 WK.strength={color:'#2a9d5c',
   A:{
     commercial:{name:'Squat Day',label:'Day A',note:'3-5 min rest. Heavy lower body.',exercises:[
@@ -503,7 +484,7 @@ WK.strength={color:'#2a9d5c',
       e('st_planche','Pseudo Planche Lean','3×20s',3,'Lean forward. Intense shoulder press.'),
     ]},
   },
-  C:{  // FIXED — upper pull only, no legs
+  C:{
     commercial:{name:'Upper Pull Day',label:'Day C',note:'Heavy pull. No legs — they recover from A, ready for D.',exercises:[
       e('st_barrow','Barbell Row','5×5',5,'Heavy. Overhand. 3 min rest.'),
       e('st_wpull','Weighted Pullups','4×5',4,'Add weight.'),
@@ -522,7 +503,7 @@ WK.strength={color:'#2a9d5c',
       e('st_trow','Table Row','3×12',3,'Under table, pull chest up.'),
     ]},
   },
-  D:{  // DEADLIFT — moved from C so legs get a day off between squat and deadlift
+  D:{
     commercial:{name:'Deadlift Day',label:'Day D',note:'King of strength days. Legs rested from A, ready to pull heavy.',exercises:[
       e('st_dead','Conventional Deadlift','5×3',5,'Work up to heavy triple.'),
       e('st_deficit','Deficit Deadlift','3×3',3,'2-inch deficit. Strength off floor.'),
@@ -542,12 +523,6 @@ WK.strength={color:'#2a9d5c',
   },
 };
 
-// ════════════════════════════════════════════════════════════
-// GOAL 4: VERTICAL JUMP
-// FIXED ROTATION: A=Lower Strength → B=Upper+Core → C=Power/Plyo → D=Sprint/Reactive
-// Original had A(legs) then B(power/plyo = legs). Fixed: upper+core on B, power on C.
-// This gives legs a full upper body day between strength and plyometric work.
-// ════════════════════════════════════════════════════════════
 WK.jump={color:'#c9a84c',
   A:{
     commercial:{name:'Lower Body Strength',label:'Day A',note:'Foundation. Heavy and patient. 3-4 min rest.',exercises:[
@@ -569,7 +544,7 @@ WK.jump={color:'#c9a84c',
       e('jm_nordic','Nordic Curl','3×5',3,'Feet anchored. Hamstring strength.'),
     ]},
   },
-  B:{  // FIXED — upper body + core, no legs. Gives legs a full day between A(strength) and C(plyo).
+  B:{
     commercial:{name:'Upper Body + Core',label:'Day B',note:'Upper body and core ONLY. Legs recover from A before power day C.',exercises:[
       e('jm_bench','Bench Press','4×6',4,'Arm swing power for jumping. Moderate-heavy.'),
       e('jm_ohp','Overhead Press','3×6',3,'Standing. Core drive. Full lockout.'),
@@ -590,7 +565,7 @@ WK.jump={color:'#c9a84c',
       e('jm_lsit','L-Sit Hold','3×15s',3,'Hip flexor strength.'),
     ]},
   },
-  C:{  // FIXED — Power/Plyo now on C, after upper rest on B
+  C:{
     commercial:{name:'Power / Plyometrics',label:'Day C',note:'⭐ MOST IMPORTANT. Legs fully rested. Full 3 min rest. Every rep max effort.',exercises:[
       e('jm_boxjump','Box Jump','5×3',5,'Max height. Full effort. Step down. 3 min rest.'),
       e('jm_broad','Broad Jump','5×3',5,'Horizontal power = vertical power. Stick landing.'),
@@ -611,7 +586,7 @@ WK.jump={color:'#c9a84c',
       e('jm_spring','Calf Spring','3×20',3,'Fast and bouncy. Achilles stiffness.'),
     ]},
   },
-  D:{  // Sprint and reactive — light on legs, technique focus
+  D:{
     commercial:{name:'Sprint & Reactive',label:'Day D',note:'Speed work. Low volume, high quality. Lighter than C.',exercises:[
       e('jm_track','Track Sprint','8×40yd',8,'Full speed. Walk back. 2 min rest.'),
       e('jm_djump','Depth Jump','4×4',4,'Step off box, land, immediately jump. Reactive.'),
@@ -631,12 +606,6 @@ WK.jump={color:'#c9a84c',
   },
 };
 
-// ════════════════════════════════════════════════════════════
-// GOAL 5: LONGEVITY
-// FIXED ROTATION: A=Lower+Mobility → B=Upper Pull → C=Upper Push+Core → D=Carries+Cardio
-// Original had C as Carries which still hit legs after A. Now C is pure upper push.
-// D gets carries and cardio — by then legs have had 2 days off since A.
-// ════════════════════════════════════════════════════════════
 WK.longevity={color:'#2a9d5c',
   A:{
     commercial:{name:'Lower Body + Mobility',label:'Day A',note:'Moderate loads. Full ROM. Joint health and movement quality.',exercises:[
@@ -680,1058 +649,5 @@ WK.longevity={color:'#2a9d5c',
       e('lg_neck','Neck Mobility','2×8/dir',2,'Gentle rotation. Pilot essential.'),
     ]},
   },
-  C:{  // FIXED — upper push + core only. No legs until D.
-    commercial:{name:'Upper Push + Core',label:'Day C',note:'Moderate push work and core. Legs rest after A.',exercises:[
-      e('lg_dbpress','DB Bench Press','3×10',3,'Moderate. Full ROM.'),
-      e('lg_incpress','Incline DB Press','3×10',3,'Upper chest. Not heavy.'),
-      e('lg_lm','Landmine Press','3×10/side',3,'Shoulder-friendly.'),
-      e('lg_latrise','Lateral Raise','3×15',3,'Light. Shoulder health.'),
-      e('lg_deadbug','Dead Bug','3×8/side',3,'Core stability. Lower back health.'),
-    ]},
-    hotel1:{name:'Upper Push + Core',label:'Day C',note:'DB press and core. No legs.',exercises:[
-      e('lg_ctrlpu','Controlled Pushup','3×12',3,'3s down. Joint-friendly.'),
-      e('lg_dbohp','DB Shoulder Press','3×10',3,'Moderate. Full lockout.'),
-      e('lg_dblat','DB Lateral Raise','3×15',3,'Light. Strict.'),
-      e('lg_dbug','Dead Bug','3×8/side',3,'Lower back and core.'),
-    ]},
-    hotel2:{name:'Upper Push + Core',label:'Day C',note:'Bodyweight push and core. No legs.',exercises:[
-      e('lg_slowpu','Slow Pushup','3×8',3,'4s down, 2s pause, press up.'),
-      e('lg_planku','Plank Up-Down','3×8',3,'Forearms to hands.'),
-      e('lg_dbug2','Dead Bug','3×10/side',3,'Slow and deliberate.'),
-      e('lg_hipflex','Hip Flexor Stretch','2×60s/side',2,'Kneeling lunge hold. Pilot essential.'),
-    ]},
-  },
-  D:{  // CARRIES + CARDIO — functional, not heavy leg work. Legs have had 2 days off.
-    commercial:{name:'Carries + Zone 2 Cardio',label:'Day D',note:'Functional carries and aerobic work. Legs used lightly after 2 days rest.',exercises:[
-      e('lg_farmer','Farmer Carry','4×40yd',4,'Heavy DBs. Tall spine. Grip and core.'),
-      e('lg_suit','Suitcase Carry','3×30yd/side',3,'Single DB. Anti-lateral-flexion.'),
-      e('lg_row','Rowing Machine','15 min',1,'Zone 2. Can speak in sentences.'),
-      e('lg_pallof','Pallof Press','3×10/side',3,'Anti-rotation core.'),
-    ]},
-    hotel1:{name:'Carries + Zone 2 Cardio',label:'Day D',note:'DB carries and light cardio.',exercises:[
-      e('lg_dbfarm','DB Farmer Carry','4×40yd',4,'Heaviest available.'),
-      e('lg_tread','Treadmill / Bike','15 min',1,'Zone 2. Moderate.'),
-      e('lg_pallof2','Pallof Press (band)','3×10/side',3,'Or cable anti-rotation.'),
-    ]},
-    hotel2:{name:'Carries + Zone 2 Cardio',label:'Day D',note:'Walk, carry, and breathe.',exercises:[
-      e('lg_walk','Brisk Walk (incline)','20 min',1,'Zone 2. Outside preferred.'),
-      e('lg_bkcarry','Backpack Carry','3×60s',3,'Loaded bag. Farmer carry substitute.'),
-      e('lg_plank','Plank Hold','3×45s',3,'Core health.'),
-    ]},
-  },
-};
-
-// ════════════════════════════════════════════════════════════
-// GOAL 6: TACTICAL
-// Already good. Keeping rotation: A=Strength → B=Conditioning → C=Overhead+Carries → D=Run+Lift
-// ════════════════════════════════════════════════════════════
-WK.tactical={color:'#7c5cbf',
-  A:{
-    commercial:{name:'Strength Foundation',label:'Day A',note:'Heavy base. 3 min rest on compounds.',exercises:[
-      e('tc_tbdl','Trap Bar Deadlift','4×5',4,'Heavy. Full extension. King of tactical lifts.'),
-      e('tc_bench','Bench Press','4×5',4,'Heavy. Strength base.'),
-      e('tc_wpull','Weighted Pullups','4×5',4,'Add weight. 3 min rest.'),
-      e('tc_farmer','Farmer Carry','4×40yd',4,'Heavy DBs. Grip and core.'),
-      e('tc_plank','Plank','3×60s',3,'Weighted if possible.'),
-    ]},
-    hotel1:{name:'Strength Foundation',label:'Day A',note:'Heavy DB strength.',exercises:[
-      e('tc_dbdead','DB Deadlift','4×6',4,'Heaviest available.'),
-      e('tc_wpull2','Weighted Pullups','4×5',4,'Add weight.'),
-      e('tc_dbpress','DB Press','4×6',4,'Heavy. Full ROM.'),
-      e('tc_dbfarm','DB Farmer Carry','4×40yd',4,'Grip and core.'),
-    ]},
-    hotel2:{name:'Strength Foundation',label:'Day A',note:'Bodyweight strength.',exercises:[
-      e('tc_pull','Pullups','5×max',5,'Every rep matters.'),
-      e('tc_pistol','Pistol Squat Progression','4×5/leg',4,'Unilateral leg strength.'),
-      e('tc_exppu','Explosive Pushups','4×8',4,'Power output.'),
-      e('tc_plankv','Plank Variations','3×60s',3,'Front, side, RKC — rotate.'),
-    ]},
-  },
-  B:{
-    commercial:{name:'Conditioning Circuit',label:'Day B',note:'Work capacity. Keep moving. 60s rest max.',exercises:[
-      e('tc_sled','Sled Push','6×20yd',6,'Heavy-ish. Explosive. 60s rest.'),
-      e('tc_row','Rowing Machine','10 min',1,'Max effort 500m, 2 min easy ×3.'),
-      e('tc_kbswing','Kettlebell Swing','4×15',4,'Hip power. Conditioning.'),
-      e('tc_burpee','Burpees','4×10',4,'Full range. Jump at top.'),
-      e('tc_carry','Sandbag / Bear Hug Carry','3×40yd',3,'Awkward load = functional.'),
-    ]},
-    hotel1:{name:'Conditioning Circuit',label:'Day B',note:'DB conditioning.',exercises:[
-      e('tc_thruster','DB Thruster','4×8',4,'Squat to press. Full body.'),
-      e('tc_rower','Rower / Bike','10 min',1,'30s hard, 30s easy ×10.'),
-      e('tc_dbcarry','DB Farmer Carry','4×40yd',4,'Heavy. Grip it.'),
-      e('tc_burpee2','Burpees','3×10',3,'Full range.'),
-    ]},
-    hotel2:{name:'Conditioning Circuit',label:'Day B',note:'Bodyweight conditioning.',exercises:[
-      e('tc_burp2','Burpees','4×12',4,'Full range. Steady pace.'),
-      e('tc_mtn','Mountain Climbers','4×30s',4,'Fast feet. Hips level.'),
-      e('tc_jlunge','Jump Lunges','4×10/leg',4,'Explosive alternating.'),
-      e('tc_stairspr','Stair Sprint','6×2 flights',6,'Full effort. Walk down.'),
-    ]},
-  },
   C:{
-    commercial:{name:'Overhead + Carries',label:'Day C',note:'Functional strength. Upper dominant.',exercises:[
-      e('tc_ohp','Standing Overhead Press','4×6',4,'Heavy. Full lockout.'),
-      e('tc_barrow','Barbell Row','4×6',4,'Overhand. Heavy.'),
-      e('tc_hfarmer','Heavy Farmer Carry','5×40yd',5,'Heaviest possible.'),
-      e('tc_suit','Suitcase Carry','4×30yd/side',4,'Anti-lateral core.'),
-      e('tc_goblet','Goblet Squat','3×10',3,'Hip and ankle mobility. Light.'),
-    ]},
-    hotel1:{name:'Overhead + Carries',label:'Day C',note:'DB overhead and carry.',exercises:[
-      e('tc_dbohp','DB Overhead Press','4×8',4,'Standing. Full lockout.'),
-      e('tc_dbrow2','DB Row','4×8/side',4,'Heavy.'),
-      e('tc_dbfarmc','DB Farmer Carry','5×40yd',5,'Heaviest available.'),
-    ]},
-    hotel2:{name:'Overhead + Carries',label:'Day C',note:'Bodyweight functional.',exercises:[
-      e('tc_pull2','Pullups','5×max',5,'Accumulate volume.'),
-      e('tc_pikepu','Pike Pushup','4×10',4,'Overhead strength pattern.'),
-      e('tc_bkcarry','Backpack Carry','3×60s',3,'Loaded. Farmer carry sub.'),
-    ]},
-  },
-  D:{
-    commercial:{name:'Run + Lift',label:'Day D',note:'Combine strength and running. Tactical readiness.',exercises:[
-      e('tc_run','Run','2 miles',1,'Moderate pace. 8-9 min/mile.'),
-      e('tc_pull3','Pullups','4×max',4,'After run. Grind.'),
-      e('tc_pu2','Pushups','4×max',4,'Superset with pullups.'),
-      e('tc_plank2','Plank','3×60s',3,'Core finisher.'),
-    ]},
-    hotel1:{name:'Run + Lift',label:'Day D',note:'Run and lift combined.',exercises:[
-      e('tc_run2','Treadmill Run','2 miles',1,'Moderate pace.'),
-      e('tc_pull4','Pullups','4×max',4,'Post-run.'),
-      e('tc_dbpress2','DB Press','3×10',3,'Upper body.'),
-    ]},
-    hotel2:{name:'Run + Lift',label:'Day D',note:'Run outside or stairs.',exercises:[
-      e('tc_run3','Run (outside/treadmill)','2 miles',1,'Core tactical fitness.'),
-      e('tc_pull5','Pullups','4×max',4,'Standard.'),
-      e('tc_pu3','Pushups','4×max',4,'Standard.'),
-    ]},
-  },
-};
-
-// ════════════════════════════════════════════════════════════
-// GOAL 7: CARDIO — no muscle group conflicts, all aerobic
-// ════════════════════════════════════════════════════════════
-WK.cardio={color:'#e05c4b',
-  A:{
-    commercial:{name:'Zone 2 Endurance',label:'Day A',note:'Conversational pace. 65-70% max HR. Build aerobic base.',exercises:[
-      e('ca_row','Rowing Machine','30 min',1,'Zone 2. 22-24 spm. This builds your engine.'),
-      e('ca_bike','Assault Bike','10 min',1,'Easy pace. 60-65% effort.'),
-      e('ca_step','Step-Up (light)','3×15/leg',3,'Active recovery strength. Light.'),
-      e('ca_plank','Plank','2×60s',2,'Core for running posture.'),
-    ]},
-    hotel1:{name:'Zone 2 Endurance',label:'Day A',note:'Hotel cardio.',exercises:[
-      e('ca_tread','Treadmill Run/Walk','30 min',1,'Zone 2. Incline walking counts.'),
-      e('ca_bike2','Stationary Bike','10 min',1,'Moderate. Zone 2.'),
-      e('ca_plank2','Plank','2×60s',2,'Core.'),
-    ]},
-    hotel2:{name:'Zone 2 Endurance',label:'Day A',note:'Outside or stairwell.',exercises:[
-      e('ca_walkrun','Walk/Jog Outside','30 min',1,'Zone 2. Duration over intensity.'),
-      e('ca_stair','Stair Climb','10 min',1,'Moderate and steady.'),
-    ]},
-  },
-  B:{
-    commercial:{name:'Interval Training',label:'Day B',note:'HIIT. Work 80-90% effort. Rest active recovery.',exercises:[
-      e('ca_rowint','Rowing Intervals','6×500m',6,'Hard effort. 90s rest. Record splits.'),
-      e('ca_bikeint','Assault Bike Intervals','8×30s',8,'All-out 30s, 60s easy.'),
-      e('ca_lgp','Leg Press (light)','2×20',2,'Active recovery. Keep legs moving.'),
-    ]},
-    hotel1:{name:'Interval Training',label:'Day B',note:'Hotel intervals.',exercises:[
-      e('ca_trint','Treadmill Intervals','8×1 min',8,'Hard 1 min, 90s walk. Record pace.'),
-      e('ca_bikint','Stationary Bike Intervals','6×45s',6,'High resistance. 60s easy.'),
-    ]},
-    hotel2:{name:'Interval Training',label:'Day B',note:'Bodyweight intervals.',exercises:[
-      e('ca_burpint','Burpee Intervals','8×30s',8,'Max in 30s. Rest 30s. Count reps.'),
-      e('ca_stairint','Stair Sprint Intervals','6×2 flights',6,'Sprint up. Walk down.'),
-    ]},
-  },
-  C:{
-    commercial:{name:'Long Steady State',label:'Day C',note:'Build aerobic volume. Conversational pace.',exercises:[
-      e('ca_run','Treadmill Run','40 min',1,'Zone 2. 5-6 mph or comfortable jog.'),
-      e('ca_rowfin','Row Finisher','10 min',1,'Easy row after run. Cool-down.'),
-      e('ca_stretch','Full Body Stretch','10 min',1,'Hamstrings, hip flexors, calves, shoulders.'),
-    ]},
-    hotel1:{name:'Long Steady State',label:'Day C',note:'Hotel long cardio.',exercises:[
-      e('ca_run2','Treadmill Run','40 min',1,'Zone 2. This is your long run.'),
-      e('ca_str2','Stretch','10 min',1,'Hip flexors critical for pilots.'),
-    ]},
-    hotel2:{name:'Long Steady State',label:'Day C',note:'Outside. Long effort.',exercises:[
-      e('ca_run3','Outdoor Run / Walk-Jog','40 min',1,'Zone 2. Best thing on a layover.'),
-      e('ca_str3','Stretch','10 min',1,'Full body cool-down.'),
-    ]},
-  },
-  D:{
-    commercial:{name:'Strength + Cardio',label:'Day D',note:'Light lifting to support endurance.',exercises:[
-      e('ca_goblet','Goblet Squat','3×12',3,'Light. Support leg strength for running.'),
-      e('ca_cabrow','Cable Row','3×12',3,'Posture for running.'),
-      e('ca_bike4','Assault Bike','20 min',1,'Zone 2. Leg recovery.'),
-      e('ca_calf','Calf Raise','3×15',3,'Injury prevention for runners.'),
-    ]},
-    hotel1:{name:'Strength + Cardio',label:'Day D',note:'Light DB + cardio.',exercises:[
-      e('ca_dbsq','DB Goblet Squat','3×12',3,'Light. Leg maintenance.'),
-      e('ca_tread2','Treadmill Easy Run','20 min',1,'Zone 2. Recovery day.'),
-      e('ca_calf2','Calf Raise','3×15',3,'Injury prevention.'),
-    ]},
-    hotel2:{name:'Strength + Cardio',label:'Day D',note:'Active recovery.',exercises:[
-      e('ca_bwsq','Bodyweight Squats','3×15',3,'Light. Active recovery.'),
-      e('ca_walk','Brisk Walk','20 min',1,'Zone 2. Outside preferred.'),
-      e('ca_str4','Stretch','10 min',1,'Full body.'),
-    ]},
-  },
-};
-
-const ROT=['A','B','C','D'];
-JSEOF
-echo "Workout data written: $(wc -l < /home/claude/fcf/index.html) lines"
-// ─── SUPABASE ─────────────────────────────────────────────────────────────────
-let sb=null,sbUser=null;
-function initSB(){
-  if(SB_URL==='YOUR_SUPABASE_URL')return false;
-  try{
-    if(typeof supabase==='undefined')return false;
-    sb=supabase.createClient(SB_URL,SB_ANON);return true;
-  }catch{return false;}
-}
-async function checkAuth(){if(!sb)return null;const{data:{session}}=await sb.auth.getSession();return session?.user||null;}
-async function doSignIn(e,p){const{data,error}=await sb.auth.signInWithPassword({email:e,password:p});if(error)throw error;return data.user;}
-async function doSignUp(e,p){const{data,error}=await sb.auth.signUp({email:e,password:p});if(error)throw error;return data.user;}
-async function doSignOut(){await sb.auth.signOut();sbUser=null;ST.sessions=[];ST.cur=null;ST.page='auth';render();}
-
-// ─── LOCAL STORAGE FALLBACK ───────────────────────────────────────────────────
-const LS={
-  get(k){try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch{return null;}},
-  set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}},
-  keys(p){try{return Object.keys(localStorage).filter(k=>k.startsWith(p));}catch{return[];}},
-};
-async function dbGetProfile(){if(!sb||!sbUser)return LS.get('fcf_profile');const{data}=await sb.from('user_profiles').select('*').eq('user_id',sbUser.id).maybeSingle();return data?.profile_data||null;}
-async function dbSetProfile(p){if(!sb||!sbUser){LS.set('fcf_profile',p);return;}await sb.from('user_profiles').upsert({user_id:sbUser.id,profile_data:p,updated_at:new Date().toISOString()},{onConflict:'user_id'});}
-async function dbGetCur(){if(!sb||!sbUser)return LS.get('fcf_cur');const{data}=await sb.from('current_workout').select('*').eq('user_id',sbUser.id).maybeSingle();return data?.workout_data||null;}
-async function dbSetCur(w){if(!sb||!sbUser){LS.set('fcf_cur',w);return;}await sb.from('current_workout').upsert({user_id:sbUser.id,workout_data:w,updated_at:new Date().toISOString()},{onConflict:'user_id'});}
-async function dbGetSessions(){if(!sb||!sbUser){return LS.keys('fcf_s:').map(k=>LS.get(k)).filter(Boolean).sort((a,b)=>a.started-b.started);}const{data}=await sb.from('workout_sessions').select('*').eq('user_id',sbUser.id).order('started_at',{ascending:true});return(data||[]).map(r=>r.session_data);}
-async function dbSaveSession(s){if(!sb||!sbUser){LS.set('fcf_s:'+s.started,s);return;}await sb.from('workout_sessions').upsert({user_id:sbUser.id,session_key:String(s.started),session_data:s,started_at:new Date(s.started).toISOString(),workout_key:s.key||'?'},{onConflict:'user_id,session_key'});}
-async function dbGetWeights(){if(!sb||!sbUser)return LS.get('fcf_wts')||[];const{data}=await sb.from('weight_log').select('*').eq('user_id',sbUser.id).order('logged_at',{ascending:true});return(data||[]).map(r=>({date:r.logged_at,weight:r.weight_lb,waist:r.waist_in}));}
-async function dbLogWeight(w,waist){if(!sb||!sbUser){const a=LS.get('fcf_wts')||[];a.push({date:new Date().toISOString(),weight:w,waist:waist||null});LS.set('fcf_wts',a);return;}await sb.from('weight_log').insert({user_id:sbUser.id,weight_lb:w,waist_in:waist||null,logged_at:new Date().toISOString()});}
-
-// ─── STATE ────────────────────────────────────────────────────────────────────
-let ST={
-  page:'workout',gymType:'commercial',hotelOpt:'hotel1',
-  cur:null,expanded:{},modal:null,
-  trendEx:null,trendMode:'exercise',
-  sessions:[],weights:[],profile:null,
-  loaded:false,authMode:'signin',authEmail:'',authPass:'',authErr:'',
-  profEdit:false,profDraft:null,newWt:'',newWaist:'',
-  showAddEx:false,
-};
-
-// ─── INIT ─────────────────────────────────────────────────────────────────────
-async function init(){
-  // Register service worker for offline support
-  if('serviceWorker' in navigator){
-    navigator.serviceWorker.register('/pilot-program/sw.js').catch(()=>{});
-  }
-  const ok=initSB();
-  if(ok) sbUser=await checkAuth();
-  if(!ok){ST.page='setup';ST.loaded=true;render();return;}
-  if(!sbUser){ST.page='auth';ST.loaded=true;render();return;}
-  await loadData();
-}
-
-async function loadData(){
-  [ST.profile,ST.sessions,ST.cur,ST.weights]=await Promise.all([dbGetProfile(),dbGetSessions(),dbGetCur(),dbGetWeights()]);
-  if(!ST.profile){ST.page='profile';ST.profEdit=true;}
-  else if(!ST.cur) await startNext();
-  ST.loaded=true;render();
-}
-
-async function startNext(){
-  const goal=ST.profile?.goal||'strength';
-  const done=ST.sessions.filter(s=>s.complete&&s.goal===goal);
-  let ri=0;if(done.length) ri=(done[done.length-1].rotIdx+1)%ROT.length;
-  ST.cur={rotIdx:ri,key:ROT[ri],goal,started:Date.now(),sets:{},customExercises:[],complete:false};
-  await dbSetCur(ST.cur);
-}
-
-async function completeWk(){
-  ST.cur.complete=true;ST.cur.completedAt=Date.now();
-  ST.cur.gymUsed=ST.gymType;ST.cur.hotelOpt=ST.hotelOpt;
-  await dbSaveSession({...ST.cur});
-  ST.sessions.push({...ST.cur});
-  await startNext();
-}
-async function saveCur(){await dbSetCur(ST.cur);}
-
-// ─── HELPERS ──────────────────────────────────────────────────────────────────
-function getGD(){return WK[ST.profile?.goal||'strength'];}
-function getGymKey(){return ST.gymType==='commercial'?'commercial':ST.hotelOpt;}
-function getWD(){
-  const gd=getGD();if(!gd||!ST.cur)return null;
-  const day=gd[ST.cur.key];if(!day)return null;
-  return day[getGymKey()]||day.commercial;
-}
-
-// Apply fitness level limit and return sliced exercises
-function getLevelExercises(exercises){
-  const limit=LEVEL_LIMIT[ST.profile?.level||'intermediate'];
-  return exercises.slice(0,limit);
-}
-
-function lastWt(exKey){
-  for(let i=ST.sessions.length-1;i>=0;i--){
-    const s=ST.sessions[i];if(!s.sets||!s.sets[exKey])continue;
-    const ws=s.sets[exKey].map(x=>parseFloat(x.weight)||0).filter(w=>w>0);
-    if(ws.length)return Math.max(...ws);
-  }return null;
-}
-function lastTime(exKey){
-  for(let i=ST.sessions.length-1;i>=0;i--){
-    const s=ST.sessions[i];if(!s.sets||!s.sets[exKey])continue;
-    const ts=s.sets[exKey].map(x=>parseFloat(x.seconds)||0).filter(t=>t>0);
-    if(ts.length)return Math.max(...ts);
-  }return null;
-}
-
-function allExs(){
-  const all=[],seen=new Set();
-  for(const goal of Object.values(WK))
-    for(const day of Object.values(goal))
-      if(day&&typeof day==='object')
-        for(const gym of Object.values(day))
-          if(gym?.exercises)
-            for(const ex of gym.exercises)
-              if(!seen.has(ex.id)){seen.add(ex.id);all.push(ex);}
-  return all;
-}
-function trendPts(exKey){
-  return ST.sessions
-    .filter(s=>s.sets&&s.sets[exKey]&&s.sets[exKey].some(x=>parseFloat(x.weight)>0||parseFloat(x.seconds)>0))
-    .map(s=>{
-      const sets=s.sets[exKey];
-      const ws=sets.map(x=>parseFloat(x.weight)||0).filter(w=>w>0);
-      const ts=sets.map(x=>parseFloat(x.seconds)||0).filter(t=>t>0);
-      const vol=sets.reduce((a,x)=>a+(parseFloat(x.weight)||0)*(parseFloat(x.reps)||0),0);
-      return{date:new Date(s.started),maxW:ws.length?Math.max(...ws):0,maxT:ts.length?Math.max(...ts):0,vol:Math.round(vol)};
-    });
-}
-function doneCount(){
-  const w=getWD();if(!w||!ST.cur)return 0;
-  const exs=getLevelExercises(w.exercises);
-  const std=exs.filter(ex=>{const s=ST.cur.sets[ex.id];return s&&s.some(x=>x.reps||x.weight||x.seconds);}).length;
-  const cust=(ST.cur.customExercises||[]).filter(ex=>{const s=ST.cur.sets['c_'+ex.id];return s&&s.some(x=>x.reps||x.weight||x.seconds);}).length;
-  return std+cust;
-}
-function totalCount(){
-  const w=getWD();if(!w)return 0;
-  return getLevelExercises(w.exercises).length+(ST.cur?.customExercises?.length||0);
-}
-function exportCSV(){
-  const exMap=Object.fromEntries(allExs().map(e=>[e.id,e.name]));
-  const rows=['Date,Goal,Workout,Gym,Exercise,Set,Reps,Weight(lb),Seconds'];
-  for(const s of ST.sessions){
-    if(!s.sets)continue;
-    const gd=WK[s.goal||'strength'];
-    const wDef=gd?.[s.key]?.[s.gymUsed==='commercial'?'commercial':s.hotelOpt||'hotel1'];
-    const wName=wDef?.name||(s.key||'?');
-    const date=new Date(s.started).toLocaleDateString('en-US');
-    for(const[exId,sets]of Object.entries(s.sets)){
-      const name=exMap[exId]||exId.replace('c_','[Custom] ');
-      sets.forEach((st,i)=>{
-        if(!st.reps&&!st.weight&&!st.seconds)return;
-        rows.push([date,s.goal||'',wName,s.gymUsed||'',name,i+1,st.reps||'',st.weight||'',st.seconds||''].join(','));
-      });
-    }
-  }
-  const blob=new Blob([rows.join('\n')],{type:'text/csv'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;a.download='flight_crew_fitness.csv';a.click();URL.revokeObjectURL(url);
-}
-
-// ─── RENDER ───────────────────────────────────────────────────────────────────
-let chartInst=null;
-function render(){
-  const app=document.getElementById('app');app.innerHTML='';
-  if(!ST.loaded){
-    app.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:\'Bebas Neue\',sans-serif;font-size:26px;color:#0d1b2a;letter-spacing:0.08em">✈ FLIGHT CREW FITNESS</div>';
-    return;
-  }
-  if(ST.page==='setup'){renderSetup(app);return;}
-  if(ST.page==='auth'){renderAuth(app);return;}
-
-  // NAV
-  const nav=mk('div','nav');
-  nav.innerHTML=`<div class="nav-inner">
-    <div><div class="nav-title">✈ FLIGHT CREW FITNESS</div><div class="nav-sub">POWERED BY PURPOSE</div></div>
-    <div class="nav-right">
-      <div class="sync-dot ${sb&&sbUser?'':'off'}" title="${sb&&sbUser?'Synced':'Local only'}"></div>
-      ${sbUser?`<span class="user-badge">${sbUser.email}</span>`:''}
-      ${sbUser?`<button class="btn-sm btn-o" onclick="doSignOut()" style="font-size:11px;padding:4px 8px;color:#8899aa;border-color:#2a4060">Out</button>`:''}
-    </div>
-  </div>`;
-  app.appendChild(nav);
-
-  const page=mk('div','page');
-  if(ST.page==='workout') renderWorkout(page);
-  else if(ST.page==='trends') renderTrends(page);
-  else if(ST.page==='export') renderExport(page);
-  else if(ST.page==='profile') renderProfile(page);
-  app.appendChild(page);
-
-  // TAB BAR
-  const tb=mk('div','tab-bar');
-  [{id:'workout',lbl:'Workout',svg:'<path d="M6 4v16M18 4v16M6 12h12M3 8h3M18 8h3M3 16h3M18 16h3"/>'},
-   {id:'trends', lbl:'Trends', svg:'<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>'},
-   {id:'export', lbl:'Export', svg:'<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'},
-   {id:'profile',lbl:'Profile',svg:'<path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>'},
-  ].forEach(t=>{
-    const b=document.createElement('button');
-    b.className='tab'+(ST.page===t.id?' active':'');
-    b.innerHTML=`<svg viewBox="0 0 24 24">${t.svg}</svg>${t.lbl}`;
-    b.onclick=()=>{ST.page=t.id;ST.expanded={};render();};
-    tb.appendChild(b);
-  });
-  app.appendChild(tb);
-
-  // MODAL
-  if(ST.modal){
-    const bg=mk('div','modal-bg');
-    bg.onclick=ev=>{if(ev.target===bg){ST.modal=null;render();}};
-    const sh=mk('div','modal-sh');
-    const media=getMedia(ST.modal.id||'');
-    let mediaHTML='';
-    if(media?.gif){
-      mediaHTML=`<div class="ex-media">
-        <img class="ex-gif" src="${media.gif}" alt="${ST.modal.name} demonstration"
-          onerror="this.parentElement.innerHTML='<div class=\\'ex-gif-err\\'>Tap the ExRx link below to view the exercise demo.</div>'">
-      </div>`;
-    } else {
-      mediaHTML=`<div class="ex-media" style="background:#f0ede8;padding:16px">
-        <div style="font-size:12px;color:var(--muted);text-align:center">Tap ExRx below for demonstration video</div>
-      </div>`;
-    }
-    sh.innerHTML=`<div class="mh"></div>
-      <div class="mtitle">${ST.modal.name}</div>
-      ${mediaHTML}
-      <div class="mbody">${ST.modal.ref}</div>
-      ${media?.exrx?`<a class="exrx-btn" href="${media.exrx}" target="_blank" rel="noopener">📹 View on ExRx.net →</a>`:''}
-      <button class="btn btn-o mt12" onclick="ST.modal=null;render()">Close</button>`;
-    bg.appendChild(sh);app.appendChild(bg);
-  }
-
-  if(ST.page==='trends'){
-    if(ST.trendMode==='exercise'&&ST.trendEx){
-      const td=trendPts(ST.trendEx);
-      if(td.length){
-        const useTime=td.every(d=>d.maxT>0&&d.maxW===0);
-        setTimeout(()=>drawChart('tc',
-          td.map(d=>d.date.toLocaleDateString('en-US',{month:'short',day:'numeric'})),
-          td.map(d=>useTime?d.maxT:d.maxW),
-          useTime?'Best Time (sec)':'Max Weight (lb)'),10);
-      }
-    }
-    if(ST.trendMode==='body'){
-      if(ST.weights.some(w=>w.weight)) setTimeout(()=>drawChart('wc',
-        ST.weights.map(d=>new Date(d.date).toLocaleDateString('en-US',{month:'short',day:'numeric'})),
-        ST.weights.map(d=>d.weight),'Body Weight (lb)'),10);
-      if(ST.weights.some(w=>w.waist)) setTimeout(()=>drawChart('wc2',
-        ST.weights.filter(d=>d.waist).map(d=>new Date(d.date).toLocaleDateString('en-US',{month:'short',day:'numeric'})),
-        ST.weights.filter(d=>d.waist).map(d=>d.waist),'Waist (in)'),20);
-    }
-  }
-}
-
-// ─── WORKOUT PAGE ─────────────────────────────────────────────────────────────
-function renderWorkout(page){
-  const goalDef=GOALS.find(g=>g.id===(ST.profile?.goal||'strength'));
-  const gd=getGD();
-
-  page.appendChild(lbl('Gym Type'));
-  const gg=mk('div','g2');
-  [{id:'commercial',icon:'🏋️',label:'Commercial',sub:'Full gym'},
-   {id:'hotel',icon:'🏨',label:'Hotel Gym',sub:'Layover'}].forEach(g=>{
-    const b=mk('div','gbtn'+(ST.gymType===g.id?' sel':''));
-    b.innerHTML=`<div class="gi">${g.icon}</div><div class="gl">${g.label}</div><div class="gs">${g.sub}</div>`;
-    b.onclick=()=>{ST.gymType=g.id;render();};
-    gg.appendChild(b);
-  });
-  page.appendChild(gg);
-
-  if(ST.gymType==='hotel'){
-    const hg=mk('div','g2');
-    [{id:'hotel1',icon:'🏨',label:'Good Hotel',sub:'DBs + cardio'},
-     {id:'hotel2',icon:'🏃',label:'Minimal',sub:'Bodyweight only'}].forEach(o=>{
-      const b=mk('div','gbtn'+(ST.hotelOpt===o.id?' sel':''));
-      b.innerHTML=`<div class="gi">${o.icon}</div><div class="gl">${o.label}</div><div class="gs">${o.sub}</div>`;
-      b.onclick=()=>{ST.hotelOpt=o.id;render();};
-      hg.appendChild(b);
-    });
-    page.appendChild(hg);
-  }
-
-  if(!ST.cur||!gd){
-    const n=mk('div','note red mt8');
-    n.innerHTML='Set up your profile first. <button onclick="ST.page=\'profile\';ST.profEdit=true;render();" style="background:none;border:none;color:var(--red);text-decoration:underline;cursor:pointer;font-size:12px">Go to Profile →</button>';
-    page.appendChild(n);return;
-  }
-
-  const wDef=getWD();if(!wDef)return;
-  const levelLimit=LEVEL_LIMIT[ST.profile?.level||'intermediate'];
-  const levelLabel={beginner:'Beginner',intermediate:'Intermediate',advanced:'Advanced'}[ST.profile?.level||'intermediate'];
-
-  page.appendChild(lbl('Current Workout'));
-
-  if(ST.cur.complete){
-    const cb=mk('div','cbanner');
-    cb.innerHTML='<div style="font-size:32px;margin-bottom:6px">🎉</div><h2 style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;letter-spacing:0.06em">Workout Complete!</h2><p style="font-size:13px;opacity:0.85;margin-top:4px">Next workout queued</p>';
-    page.appendChild(cb);
-  }
-
-  const cc=doneCount(),tot=totalCount(),pct=Math.min(100,Math.round(cc/tot*100));
-  const wCard=mk('div','card');
-  wCard.style.borderLeft=`4px solid ${gd.color}`;
-  wCard.innerHTML=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
-    <div class="wkbadge" style="background:${gd.color}22;color:${gd.color};border:1px solid ${gd.color}44">${wDef.label}</div>
-    ${goalDef?`<span style="font-size:12px;color:var(--muted)">${goalDef.icon} ${goalDef.label}</span>`:''}
-    <span style="font-size:11px;background:var(--navy);color:var(--gold);padding:2px 8px;border-radius:10px;font-weight:600">${levelLabel} — ${levelLimit} exercises</span>
-  </div>
-  <div class="wktitle">${wDef.name}</div>
-  <div class="wksub">${wDef.note||''}</div>
-  <div class="pw"><div class="pf" style="width:${pct}%"></div></div>
-  <div class="pl">${cc} of ${tot} exercises logged</div>`;
-  page.appendChild(wCard);
-
-  // Rotation callout
-  const rotNote=mk('div','note gld');
-  const rotMap={
-    fatloss: ['Legs + Upper','Upper Only','Legs + Upper','Cardio'],
-    muscle:  ['Legs','Chest+Tri','Back+Bi','Shoulders+Arms'],
-    strength:['Squat (Legs)','Bench (Upper)','Pull (Upper)','Deadlift (Legs)'],
-    jump:    ['Lower Strength','Upper + Core','Power/Plyo','Sprint/Reactive'],
-    longevity:['Lower + Mobility','Upper Pull','Upper Push + Core','Carries + Cardio'],
-    tactical:['Strength','Conditioning','Overhead + Carries','Run + Lift'],
-    cardio:  ['Zone 2','Intervals','Long Run','Strength + Cardio'],
-  };
-  const goal=ST.profile?.goal||'strength';
-  const days=rotMap[goal]||[];
-  const dayLabels=ROT.map((d,i)=>`<span style="font-weight:${d===ST.cur.key?'700':'400'};color:${d===ST.cur.key?'var(--navy)':'var(--muted)'}">${d}: ${days[i]||d}</span>`).join(' · ');
-  rotNote.innerHTML=`<div style="font-size:10px;font-weight:600;letter-spacing:0.06em;margin-bottom:4px;color:var(--muted)">ROTATION</div>${dayLabels}`;
-  page.appendChild(rotNote);
-
-  // Standard exercises (level-limited)
-  getLevelExercises(wDef.exercises).forEach(ex=>page.appendChild(renderExercise(ex,false)));
-
-  // Custom exercises
-  (ST.cur.customExercises||[]).forEach(ex=>page.appendChild(renderExercise(ex,true)));
-
-  // Add custom exercise
-  page.appendChild(renderAddEx());
-
-  const gap=mk('div','');gap.style.height='12px';page.appendChild(gap);
-  if(!ST.cur.complete){
-    const b=mk('button','btn btn-grn');b.textContent='Workout Complete ✓';
-    b.onclick=async()=>{await completeWk();render();};page.appendChild(b);
-  } else {
-    const b=mk('button','btn btn-p mt8');b.textContent='Start Next Workout →';
-    b.onclick=()=>render();page.appendChild(b);
-  }
-}
-
-function renderExercise(ex,isCustom){
-  const exKey=isCustom?'c_'+ex.id:ex.id;
-  const isOpen=!!ST.expanded[exKey];
-  const timed=isTimed(ex.id,ex.name);
-
-  if(!ST.cur.sets[exKey]){
-    if(timed){
-      ST.cur.sets[exKey]=[{seconds:''}];
-    } else {
-      ST.cur.sets[exKey]=Array.from({length:ex.sets},()=>({reps:'',weight:''}));
-    }
-  }
-  const sets=ST.cur.sets[exKey];
-  if(!timed) while(sets.length<ex.sets) sets.push({reps:'',weight:''});
-
-  const hasData=timed?sets.some(s=>s.seconds):sets.some(s=>s.reps||s.weight);
-  const card=mk('div','exc');
-  const hdr=mk('div','exh');
-  hdr.innerHTML=`<div style="flex:1">
-    <div class="exn">${ex.name}${isCustom?'<span class="ctag">CUSTOM</span>':''}</div>
-    <div class="ext">${ex.target}${timed?' · <span style="color:var(--blue);font-weight:600">⏱ timed</span>':''}</div>
-  </div>
-  <div class="exr">
-    ${!isCustom?`<button class="btn-i" data-info="${exKey}">ℹ Guide</button>`:''}
-    ${isCustom?`<button class="delx" data-del="${ex.id}">✕</button>`:''}
-    <div class="exck ${hasData?'done':''}">${hasData?'✓':''}</div>
-    <div class="excv ${isOpen?'open':''}">⌄</div>
-  </div>`;
-
-  if(!isCustom){
-    hdr.querySelector('[data-info]').onclick=ev=>{
-      ev.stopPropagation();
-      ST.modal={id:ex.id,name:ex.name,ref:ex.ref};render();
-    };
-  } else {
-    hdr.querySelector('[data-del]').onclick=ev=>{
-      ev.stopPropagation();
-      if(!confirm(`Remove "${ex.name}"?`))return;
-      ST.cur.customExercises=ST.cur.customExercises.filter(x=>x.id!==ex.id);
-      delete ST.cur.sets['c_'+ex.id];
-      saveCur();render();
-    };
-  }
-  hdr.onclick=ev=>{
-    if(ev.target.closest('[data-info],[data-del]'))return;
-    ST.expanded[exKey]=!ST.expanded[exKey];render();
-  };
-  card.appendChild(hdr);
-
-  if(isOpen){
-    const body=mk('div','exb');
-
-    if(timed){
-      // Single time input
-      const lw=lastTime(exKey);
-      if(lw) {const r=mk('div','rw');r.innerHTML=`⏱ Last best: <strong>${lw}s</strong> — try to beat it`;body.appendChild(r);}
-      const box=mk('div','timed-box'+(sets[0]?.seconds?' ok':''));
-      box.innerHTML=`<div class="timed-lbl">Total Time</div>`;
-      const inp=document.createElement('input');
-      inp.type='number';inp.className='timed-inp';inp.placeholder='0';
-      inp.value=sets[0]?.seconds||'';inp.setAttribute('inputmode','numeric');
-      inp.onchange=inp.onblur=()=>{
-        sets[0]={seconds:inp.value};
-        box.className='timed-box'+(inp.value?' ok':'');
-        saveCur();
-      };
-      const hint=mk('div','timed-hint');hint.textContent='seconds';
-      box.appendChild(inp);box.appendChild(hint);body.appendChild(box);
-    } else {
-      // Reps + weight sets
-      const lw=lastWt(exKey);
-      if(lw!==null){const r=mk('div','rw');r.innerHTML=`📊 Last max: <strong>${lw} lb</strong> — match or beat it`;body.appendChild(r);}
-      const scroll=mk('div','ss');
-      sets.forEach((s,i)=>{
-        const tile=mk('div','st'+(s.reps||s.weight?' ok':''));
-        tile.innerHTML=`<div class="sl">Set ${i+1}</div>`;
-        const ri=document.createElement('input');
-        ri.type='number';ri.className='si';ri.placeholder='Reps';ri.value=s.reps||'';ri.setAttribute('inputmode','numeric');
-        ri.onchange=ri.onblur=()=>{sets[i].reps=ri.value;tile.className='st'+(ri.value||sets[i].weight?' ok':'');saveCur();};
-        const wi=document.createElement('input');
-        wi.type='number';wi.className='si';wi.placeholder='lb';wi.value=s.weight||'';wi.setAttribute('inputmode','decimal');
-        wi.onchange=wi.onblur=()=>{sets[i].weight=wi.value;tile.className='st'+(sets[i].reps||wi.value?' ok':'');saveCur();};
-        const hint=mk('div','sh');hint.textContent='reps / lb';
-        tile.appendChild(ri);tile.appendChild(wi);tile.appendChild(hint);
-        scroll.appendChild(tile);
-      });
-      body.appendChild(scroll);
-      const hint2=mk('div','ssh');hint2.textContent='← swipe for all sets';body.appendChild(hint2);
-    }
-    card.appendChild(body);
-  }
-  return card;
-}
-
-function renderAddEx(){
-  const wrap=mk('div','add-ex-wrap');
-  const top=mk('div','fb');
-  top.innerHTML=`<div style="font-size:13px;font-weight:600;color:var(--muted)">+ Add Custom Exercise</div>`;
-  const tb=mk('button','btn-i btn-sm');tb.textContent=ST.showAddEx?'Cancel':'Add';
-  tb.onclick=()=>{ST.showAddEx=!ST.showAddEx;render();};
-  top.appendChild(tb);wrap.appendChild(top);
-  if(ST.showAddEx){
-    const f=mk('div','');f.style.marginTop='10px';
-    const ni=document.createElement('input');
-    ni.className='aei';ni.placeholder='Exercise name (e.g. Hip Thrust)';ni.type='text';ni.id='cex_n';
-    const row=mk('div','aer');
-    const ti=document.createElement('input');
-    ti.className='aei';ti.placeholder='Target (e.g. 3×10)';ti.type='text';ti.id='cex_t';ti.style.marginBottom='0';
-    const si=document.createElement('input');
-    si.className='aei';si.placeholder='# Sets';si.type='number';si.id='cex_s';si.setAttribute('inputmode','numeric');si.min='1';si.max='10';si.style.marginBottom='0';
-    row.appendChild(ti);row.appendChild(si);
-    const noteI=document.createElement('input');
-    noteI.className='aei';noteI.placeholder='Notes / form cue (optional)';noteI.type='text';noteI.id='cex_note';
-    const ab=mk('button','btn btn-p');ab.textContent='Add to Workout';ab.style.marginTop='6px';
-    ab.onclick=()=>{
-      const name=document.getElementById('cex_n')?.value?.trim();
-      const tgt=document.getElementById('cex_t')?.value?.trim()||'—';
-      const setsN=parseInt(document.getElementById('cex_s')?.value)||3;
-      const note=document.getElementById('cex_note')?.value?.trim()||'Custom exercise';
-      if(!name){alert('Enter an exercise name.');return;}
-      if(!ST.cur.customExercises)ST.cur.customExercises=[];
-      const uid=''+Date.now();
-      ST.cur.customExercises.push({id:uid,name,target:tgt,sets:setsN,ref:note,custom:true});
-      ST.cur.sets['c_'+uid]=Array.from({length:setsN},()=>({reps:'',weight:''}));
-      ST.showAddEx=false;saveCur();render();
-    };
-    f.appendChild(ni);f.appendChild(row);f.appendChild(noteI);f.appendChild(ab);
-    wrap.appendChild(f);
-  }
-  return wrap;
-}
-
-// ─── TRENDS PAGE ─────────────────────────────────────────────────────────────
-function renderTrends(page){
-  const total=ST.sessions.length;
-  const comm=ST.sessions.filter(s=>s.gymUsed==='commercial').length;
-  const hotel=total-comm;
-  const strip=mk('div','sstrip');
-  strip.innerHTML=`<div class="sbox"><div class="sv">${total}</div><div class="slb">Sessions</div></div>
-    <div class="sbox"><div class="sv">${comm}</div><div class="slb">Home</div></div>
-    <div class="sbox"><div class="sv">${hotel}</div><div class="slb">Hotel</div></div>`;
-  page.appendChild(strip);
-
-  // Mode toggle
-  const tg=mk('div','g3');
-  [{id:'exercise',label:'💪 Exercise'},{id:'body',label:'⚖️ Body'},{id:'history',label:'📋 Log'}].forEach(m=>{
-    const b=mk('div','gbtn'+(ST.trendMode===m.id?' sel':''));
-    b.innerHTML=`<div class="gl" style="font-size:12px">${m.label}</div>`;
-    b.onclick=()=>{ST.trendMode=m.id;render();};
-    tg.appendChild(b);
-  });
-  page.appendChild(tg);
-
-  if(ST.trendMode==='exercise') renderExTrend(page);
-  else if(ST.trendMode==='body') renderBodyTrend(page);
-  else renderHistory(page);
-}
-
-function renderExTrend(page){
-  if(!ST.sessions.length){
-    const e=mk('div','empty');e.innerHTML='<div style="font-size:44px;margin-bottom:12px">📈</div><div style="font-size:16px;font-weight:600;margin-bottom:6px">No data yet</div>';
-    page.appendChild(e);return;
-  }
-  page.appendChild(lbl('Select Exercise'));
-  const pills=mk('div','pills');let any=false;
-  for(const ex of allExs()){
-    const td=trendPts(ex.id);if(!td.length)continue;any=true;
-    const p=mk('div','pill'+(ST.trendEx===ex.id?' active':''));
-    p.textContent=ex.name;p.onclick=()=>{ST.trendEx=ex.id;render();};pills.appendChild(p);
-  }
-  if(any) page.appendChild(pills);
-  if(ST.trendEx){
-    const td=trendPts(ST.trendEx);
-    if(td.length){
-      const ex=allExs().find(e=>e.id===ST.trendEx);
-      const useTime=td.every(d=>d.maxT>0&&d.maxW===0);
-      const latest=td[td.length-1],first=td[0];
-      const val=useTime?'maxT':'maxW';
-      const gain=Math.round(latest[val]-first[val]);
-      const gd=getGD();
-      const cc=mk('div','card');
-      cc.innerHTML=`<div class="fb mb8">
-        <div style="font-weight:600;font-size:15px">${ex?.name||ST.trendEx}</div>
-        ${gain!==0?`<div style="font-size:13px;font-weight:600;color:${gain>0?'var(--green)':'var(--red)'}">${gain>0?'+':''}${gain}${useTime?'s':' lb'}</div>`:''}
-      </div>
-      <div class="cw"><canvas id="tc"></canvas></div>
-      <div class="sstrip" style="margin-top:12px;margin-bottom:0">
-        <div class="sbox"><div class="sv">${latest[val]}</div><div class="slb">${useTime?'Best Secs':'Max lb'}</div></div>
-        <div class="sbox"><div class="sv">${td.length}</div><div class="slb">Sessions</div></div>
-        <div class="sbox"><div class="sv">${latest.vol||'—'}</div><div class="slb">Last Volume</div></div>
-      </div>`;
-      page.appendChild(cc);
-    }
-  }
-}
-
-function renderBodyTrend(page){
-  // Log form
-  const logCard=mk('div','card mb8');
-  logCard.innerHTML=`<div style="font-weight:600;font-size:14px;margin-bottom:12px">Log Body Metrics</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-      <div class="fld" style="margin-bottom:0"><label>Weight (lb)</label>
-        <input type="number" id="wt_inp" inputmode="decimal" placeholder="232" value="${ST.newWt||''}"></div>
-      <div class="fld" style="margin-bottom:0"><label>Waist (in)</label>
-        <input type="number" id="wst_inp" inputmode="decimal" placeholder="38.5" value="${ST.newWaist||''}"></div>
-    </div>
-    <button class="btn btn-g" onclick="logBodyMetrics()">Log</button>`;
-  logCard.querySelector('#wt_inp').oninput=e=>ST.newWt=e.target.value;
-  logCard.querySelector('#wst_inp').oninput=e=>ST.newWaist=e.target.value;
-  page.appendChild(logCard);
-
-  if(!ST.weights.length){
-    const e=mk('div','empty');e.innerHTML='<div style="font-size:44px;margin-bottom:12px">⚖️</div><div style="font-size:16px;font-weight:600;margin-bottom:6px">No metrics logged yet</div>';
-    page.appendChild(e);return;
-  }
-
-  const latest=ST.weights[ST.weights.length-1];
-  const first=ST.weights[0];
-
-  // Weight chart
-  if(ST.weights.some(w=>w.weight)){
-    const dW=Math.round((latest.weight-first.weight)*10)/10;
-    const wc=mk('div','card mb8');
-    wc.innerHTML=`<div class="fb mb8">
-      <div style="font-weight:600;font-size:15px">Body Weight</div>
-      ${dW!==0?`<div style="font-size:13px;font-weight:600;color:${dW<0?'var(--green)':'var(--red)'}">${dW>0?'+':''}${dW} lb</div>`:''}
-    </div>
-    <div class="cw"><canvas id="wc"></canvas></div>
-    <div class="sstrip" style="margin-top:12px;margin-bottom:0">
-      <div class="sbox"><div class="sv">${latest.weight||'—'}</div><div class="slb">Current lb</div></div>
-      <div class="sbox"><div class="sv">${first.weight||'—'}</div><div class="slb">Start lb</div></div>
-      <div class="sbox"><div class="sv">${ST.weights.length}</div><div class="slb">Entries</div></div>
-    </div>`;
-    page.appendChild(wc);
-  }
-
-  // Waist chart
-  const waistData=ST.weights.filter(w=>w.waist);
-  if(waistData.length>0){
-    const lW=waistData[waistData.length-1];const fW=waistData[0];
-    const dWaist=Math.round((lW.waist-fW.waist)*10)/10;
-    const wc2=mk('div','card');
-    wc2.innerHTML=`<div class="fb mb8">
-      <div style="font-weight:600;font-size:15px">Waist Measurement</div>
-      ${dWaist!==0?`<div style="font-size:13px;font-weight:600;color:${dWaist<0?'var(--green)':'var(--red)'}">${dWaist>0?'+':''}${dWaist} in</div>`:''}
-    </div>
-    <div class="cw"><canvas id="wc2"></canvas></div>
-    <div class="sstrip" style="margin-top:12px;margin-bottom:0">
-      <div class="sbox"><div class="sv">${lW.waist||'—'}</div><div class="slb">Current in</div></div>
-      <div class="sbox"><div class="sv">${fW.waist||'—'}</div><div class="slb">Start in</div></div>
-      <div class="sbox"><div class="sv">${waistData.length}</div><div class="slb">Entries</div></div>
-    </div>`;
-    page.appendChild(wc2);
-  }
-}
-
-async function logBodyMetrics(){
-  const wt=parseFloat(ST.newWt);
-  const waist=parseFloat(ST.newWaist)||null;
-  if(!wt||wt<50||wt>500){alert('Enter a valid weight.');return;}
-  await dbLogWeight(wt,waist);
-  ST.weights=await dbGetWeights();
-  ST.newWt='';ST.newWaist='';render();
-}
-
-function renderHistory(page){
-  if(!ST.sessions.length){
-    const e=mk('div','empty');e.innerHTML='<div style="font-size:44px;margin-bottom:12px">📋</div><div style="font-size:16px;font-weight:600;margin-bottom:6px">No sessions yet</div>';
-    page.appendChild(e);return;
-  }
-  page.appendChild(lbl('Recent Sessions'));
-  [...ST.sessions].reverse().slice(0,25).forEach(s=>{
-    const gd=WK[s.goal||'strength'];
-    const color=gd?.color||'#2f6eb5';
-    const wDef=gd?.[s.key]?.[s.gymUsed==='commercial'?'commercial':s.hotelOpt||'hotel1'];
-    const wName=wDef?.name||s.key;
-    const date=new Date(s.started).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-    const exCnt=Object.values(s.sets||{}).filter(sets=>sets.some(x=>x.reps||x.weight||x.seconds)).length;
-    const it=mk('div','hi');
-    it.innerHTML=`<div>
-      <div style="font-weight:600;font-size:14px;border-left:3px solid ${color};padding-left:8px">${wName}</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:2px">${date} · ${exCnt} exercises · ${s.gymUsed==='commercial'?'Commercial':'Hotel'}</div>
-    </div>
-    <div class="hbg" style="background:${color}22;color:${color}">${s.key||'?'}</div>`;
-    page.appendChild(it);
-  });
-}
-
-function drawChart(id,labels,data,yLabel){
-  const canvas=document.getElementById(id);if(!canvas)return;
-  if(id==='tc'){if(chartInst){chartInst.destroy();chartInst=null;}}
-  const inst=new Chart(canvas.getContext('2d'),{
-    type:'line',
-    data:{labels,datasets:[{label:yLabel,data,borderColor:'#c9a84c',backgroundColor:'rgba(201,168,76,0.12)',tension:0.35,fill:true,pointBackgroundColor:'#c9a84c',pointRadius:5,pointHoverRadius:7}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-      scales:{x:{grid:{display:false},ticks:{font:{size:10},color:'#888',maxRotation:45}},
-              y:{grid:{color:'#f0ede8'},ticks:{font:{size:10},color:'#888'}}}},
-  });
-  if(id==='tc') chartInst=inst;
-}
-
-// ─── EXPORT PAGE ─────────────────────────────────────────────────────────────
-function renderExport(page){
-  const hero=mk('div','');
-  hero.style.cssText='background:var(--navy);border-radius:var(--r);padding:24px;text-align:center;margin-bottom:16px';
-  hero.innerHTML=`<div style="font-size:40px;margin-bottom:8px">📊</div>
-    <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--gold);letter-spacing:0.06em">Export Data</div>
-    <div style="font-size:13px;color:#8899aa;margin-top:4px">${ST.sessions.length} sessions logged</div>`;
-  page.appendChild(hero);
-  const dl=mk('button','btn btn-g mb8');dl.textContent='Download CSV';dl.onclick=exportCSV;page.appendChild(dl);
-  const n=mk('div','note');n.textContent='Includes date, goal, workout, gym, exercise, set, reps, weight, and seconds. Opens in Excel, Numbers, or Google Sheets.';page.appendChild(n);
-}
-
-// ─── PROFILE PAGE ─────────────────────────────────────────────────────────────
-function renderProfile(page){
-  const p=ST.profile;
-  const editing=ST.profEdit||!p;
-  const goal=p?GOALS.find(g=>g.id===p.goal):null;
-
-  if(!editing&&p){
-    const hero=mk('div','phero');
-    hero.innerHTML=`<div style="font-size:44px;margin-bottom:8px">${goal?.icon||'✈'}</div>
-      <div style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--gold);letter-spacing:0.06em">${p.name||'Flight Crew'}</div>
-      <div style="font-size:12px;color:#8899aa;margin-top:3px">Age ${p.age||'—'} · ${p.weight||'—'} lb · Waist ${p.waist||'—'}" · ${p.level||'Intermediate'}</div>`;
-    page.appendChild(hero);
-
-    const gc=mk('div','card');
-    gc.innerHTML=`<div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.04em">Goal</div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <div style="font-size:32px">${goal?.icon||'🏋️'}</div>
-        <div>
-          <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:0.04em">${goal?.label||'—'}</div>
-          <div style="font-size:12px;color:var(--muted)">${goal?.sub||''}</div>
-        </div>
-      </div>`;
-    page.appendChild(gc);
-
-    const ss=mk('div','sstrip');
-    ss.innerHTML=`<div class="sbox"><div class="sv">${p.age||'—'}</div><div class="slb">Age</div></div>
-      <div class="sbox"><div class="sv">${p.weight||'—'}</div><div class="slb">Weight lb</div></div>
-      <div class="sbox"><div class="sv">${ST.sessions.length}</div><div class="slb">Sessions</div></div>`;
-    page.appendChild(ss);
-
-    const lvlNote=mk('div','note gld');
-    const ll=LEVEL_LIMIT[p.level||'intermediate'];
-    lvlNote.innerHTML=`<strong>${p.level||'Intermediate'}</strong> level — you'll see ${ll} exercises per workout. Change anytime in Edit Profile.`;
-    page.appendChild(lvlNote);
-
-    const eb=mk('button','btn btn-o mt8');eb.textContent='Edit Profile';
-    eb.onclick=()=>{ST.profEdit=true;render();};page.appendChild(eb);
-
-    const dz=mk('div','card mt16');
-    dz.innerHTML='<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.04em">Account</div>';
-    const so=mk('button','btn btn-red btn-sm');so.textContent='Sign Out';so.onclick=doSignOut;
-    dz.appendChild(so);page.appendChild(dz);
-    return;
-  }
-
-  const draft=ST.profDraft||(p?{...p}:{name:'',age:'',weight:'',waist:'',level:'intermediate',goal:'strength'});
-  ST.profDraft=draft;
-
-  if(!p){
-    const wc=mk('div','card mb8');
-    wc.innerHTML=`<div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--navy);letter-spacing:0.04em;margin-bottom:4px">Welcome, Flight Crew</div>
-      <div style="font-size:13px;color:var(--muted);line-height:1.5">Set up your profile to get a personalized workout plan. Takes 60 seconds.</div>`;
-    page.appendChild(wc);
-  }
-
-  const ic=mk('div','card');
-  ic.innerHTML=`<div class="shdr" style="margin-top:0">About You</div>
-    <div class="fld"><label>Name / Callsign (optional)</label><input type="text" id="p_name" value="${draft.name||''}" placeholder="Name or callsign"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="fld"><label>Age</label><input type="number" id="p_age" inputmode="numeric" value="${draft.age||''}" placeholder="e.g. 42"></div>
-      <div class="fld"><label>Weight (lb)</label><input type="number" id="p_wt" inputmode="decimal" value="${draft.weight||''}" placeholder="e.g. 185"></div>
-    </div>
-    <div class="fld"><label>Waist (inches)</label><input type="number" id="p_waist" inputmode="decimal" value="${draft.waist||''}" placeholder="e.g. 36.5"></div>`;
-  page.appendChild(ic);
-  ic.querySelector('#p_name').oninput=e=>draft.name=e.target.value;
-  ic.querySelector('#p_age').oninput=e=>draft.age=e.target.value;
-  ic.querySelector('#p_wt').oninput=e=>draft.weight=e.target.value;
-  ic.querySelector('#p_waist').oninput=e=>draft.waist=e.target.value;
-
-  const lvc=mk('div','card');
-  lvc.innerHTML='<div class="shdr" style="margin-top:0">Fitness Level</div><div style="font-size:12px;color:var(--muted);margin-bottom:10px">Controls how many exercises you see per workout: Beginner=3, Intermediate=4, Advanced=5</div>';
-  const lvg=mk('div','g3');
-  [{id:'beginner',l:'Beginner'},{id:'intermediate',l:'Intermediate'},{id:'advanced',l:'Advanced'}].forEach(lv=>{
-    const b=mk('div','lvl'+(draft.level===lv.id?' sel':''));
-    b.textContent=lv.l;
-    b.onclick=()=>{draft.level=lv.id;document.querySelectorAll('.lvl').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');};
-    lvg.appendChild(b);
-  });
-  lvc.appendChild(lvg);page.appendChild(lvc);
-
-  const gc2=mk('div','card');
-  gc2.innerHTML='<div class="shdr" style="margin-top:0">Training Goal</div>';
-  const gg2=mk('div','');gg2.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px';
-  GOALS.forEach(g=>{
-    const b=mk('div','gcrd'+(draft.goal===g.id?' sel':''));
-    b.innerHTML=`<div class="gi">${g.icon}</div><div class="gl">${g.label}</div><div class="gs">${g.sub}</div>`;
-    b.onclick=()=>{draft.goal=g.id;document.querySelectorAll('.gcrd').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');};
-    gg2.appendChild(b);
-  });
-  gc2.appendChild(gg2);page.appendChild(gc2);
-
-  const sv=mk('button','btn btn-g mt8');
-  sv.textContent=p?'Save Changes':'Build My Program →';
-  sv.onclick=async()=>{
-    if(!draft.goal){alert('Please select a training goal.');return;}
-    ST.profile={...draft};
-    await dbSetProfile(ST.profile);
-    if(draft.weight&&parseFloat(draft.weight)>0)
-      if(!p||draft.weight!==p.weight||draft.waist!==p.waist)
-        await dbLogWeight(parseFloat(draft.weight),parseFloat(draft.waist)||null);
-    ST.profEdit=false;ST.profDraft=null;
-    if(p?.goal!==draft.goal){ST.cur=null;await startNext();}
-    render();
-  };
-  page.appendChild(sv);
-  if(p){const cn=mk('button','btn btn-o mt8');cn.textContent='Cancel';cn.onclick=()=>{ST.profEdit=false;ST.profDraft=null;render();};page.appendChild(cn);}
-}
-
-// ─── SETUP & AUTH ─────────────────────────────────────────────────────────────
-function renderSetup(app){
-  app.innerHTML=`<div class="page" style="overflow-y:auto;height:100dvh;padding-bottom:40px">
-    <div style="text-align:center;padding:32px 0 24px">
-      <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;color:var(--navy);letter-spacing:0.08em">✈ FLIGHT CREW FITNESS</div>
-      <div style="font-size:14px;color:var(--muted);margin-top:4px">One-time setup — ~10 minutes</div>
-    </div>
-    <div class="scard"><h3>Step 1 — Supabase Database</h3>
-      <div class="sstep"><div class="snum">1</div><div>Go to <a style="color:var(--blue)" href="https://supabase.com" target="_blank">supabase.com</a> → free account → new project</div></div>
-      <div class="sstep"><div class="snum">2</div><div>Project Settings → API → copy Project URL and anon key</div></div>
-      <div class="sstep"><div class="snum">3</div><div>SQL Editor → run the full SQL from README.md</div></div>
-    </div>
-    <div class="scard"><h3>Step 2 — Edit index.html</h3>
-      <div class="sstep"><div class="snum">1</div><div>Find the two <code style="background:#f0ede8;padding:2px 5px;border-radius:4px">YOUR_SUPABASE_...</code> lines near the top</div></div>
-      <div class="sstep"><div class="snum">2</div><div>Paste in your actual URL and anon key. Save the file.</div></div>
-    </div>
-    <div class="scard"><h3>Step 3 — GitHub Pages + iPhone</h3>
-      <div class="sstep"><div class="snum">1</div><div>Upload index.html, manifest.json, and sw.js to your pilot-program GitHub repo</div></div>
-      <div class="sstep"><div class="snum">2</div><div>Settings → Pages → deploy from main → wait 2 min</div></div>
-      <div class="sstep"><div class="snum">3</div><div>Open in Safari → Share → Add to Home Screen</div></div>
-    </div>
-    <div class="note gld">See README.md for the full SQL and waist column migration.</div>
-  </div>`;
-}
-
-function renderAuth(app){
-  const isUp=ST.authMode==='signup';
-  app.innerHTML=`<div class="page" style="display:flex;flex-direction:column;justify-content:center;min-height:100dvh">
-    <div style="text-align:center;padding:0 0 32px">
-      <div style="font-family:'Bebas Neue',sans-serif;font-size:34px;color:var(--navy);letter-spacing:0.08em">✈ FLIGHT CREW FITNESS</div>
-      <div style="font-size:14px;color:var(--muted);margin-top:4px">Your training starts here</div>
-    </div>
-    <div class="scard">
-      <h3>${isUp?'Create Account':'Sign In'}</h3>
-      <div class="fld"><label>Email</label><input type="email" id="ae" value="${ST.authEmail}" placeholder="your@email.com" autocomplete="email"></div>
-      <div class="fld"><label>Password</label><input type="password" id="ap" value="${ST.authPass}" placeholder="${isUp?'Choose a password':'Password'}" autocomplete="${isUp?'new-password':'current-password'}"></div>
-      <div class="emsg${ST.authErr?' on':''}">${ST.authErr}</div>
-      <button class="btn btn-p mt12" id="asub">${isUp?'Create Account':'Sign In'}</button>
-    </div>
-    <div style="text-align:center;font-size:13px;color:var(--muted)">
-      ${isUp?'Already have an account?':'New here?'}
-      <button onclick="ST.authMode='${isUp?'signin':'signup'}';ST.authErr='';render();" style="background:none;border:none;color:var(--blue);font-size:13px;cursor:pointer;text-decoration:underline;font-family:'DM Sans',sans-serif">${isUp?'Sign in':'Sign up'}</button>
-    </div>
-  </div>`;
-  document.getElementById('ae').oninput=ev=>ST.authEmail=ev.target.value;
-  document.getElementById('ap').oninput=ev=>ST.authPass=ev.target.value;
-  document.getElementById('asub').onclick=async()=>{
-    const email=document.getElementById('ae').value.trim();
-    const pass=document.getElementById('ap').value;
-    const btn=document.getElementById('asub');btn.textContent='...';btn.disabled=true;
-    try{
-      sbUser=isUp?await doSignUp(email,pass):await doSignIn(email,pass);
-      if(sbUser){ST.page='workout';await loadData();}
-      else{ST.authErr='Check your email to confirm, then sign in.';render();}
-    }catch(ev){ST.authErr=ev.message||'Authentication failed';render();}
-  };
-}
-
-// ─── UTILS ────────────────────────────────────────────────────────────────────
-function mk(tag,cls,html){const e=document.createElement(tag);if(cls)e.className=cls;if(html!==undefined)e.innerHTML=html;return e;}
-function lbl(txt){const e=mk('div','shdr');e.textContent=txt;return e;}
-
-window.onerror=function(msg,src,line,col,err){
-  var app=document.getElementById('app');
-  if(app) app.innerHTML='<div style="padding:40px 24px;font-family:sans-serif;color:#0d1b2a;text-align:center">'+
-    '<div style="font-size:28px;margin-bottom:12px">&#x2708;</div>'+
-    '<div style="font-size:16px;font-weight:600;margin-bottom:8px">Something went wrong</div>'+
-    '<div style="background:#fff0ee;border:1px solid #fcc;border-radius:8px;padding:12px;font-size:12px;color:#8a1a1a;margin:0 auto 20px;max-width:300px;text-align:left">'+
-    msg+'<br><small>'+src+' line '+line+'</small></div>'+
-    '<button onclick="location.reload()" style="padding:12px 24px;background:#0d1b2a;color:#c9a84c;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Reload</button></div>';
-  return false;
-};
-try{init();}catch(err){
-  document.getElementById('app').innerHTML='<div style="padding:40px 24px;font-family:sans-serif;color:#0d1b2a;text-align:center">'+
-    '<div style="font-size:28px;margin-bottom:12px">&#x2708;</div>'+
-    '<div style="font-size:16px;font-weight:600;margin-bottom:8px">Startup Error</div>'+
-    '<div style="font-size:13px;color:#666;margin-bottom:20px">'+err.message+'</div>'+
-    '<button onclick="location.reload()" style="padding:12px 24px;background:#0d1b2a;color:#c9a84c;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Reload</button></div>';
-}
-</script>
-</body>
-</html>
+    commercial:{name:'Upper Push + Core',label:'Day C',note:'Moderate push work and core. Legs rest after A.',exercises:

@@ -134,7 +134,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 .phero{background:linear-gradient(135deg,var(--navy),var(--navy2));border-radius:var(--r);padding:20px;margin-bottom:16px;text-align:center}
 .gcrd{border:2px solid var(--border);background:var(--card);border-radius:12px;padding:12px 8px;cursor:pointer;text-align:center;transition:all 0.2s;-webkit-user-select:none}
 .gcrd:active{transform:scale(0.96)}.gcrd.sel{border-color:var(--gold);background:var(--gold-bg)}
-.gcrd .gi{font-size:20px;margin-bottom:4px}.gcrd .gl{font-family:'Bebas Neue',sans-serif;font-size:11px;letter-spacing:0.04em;line-height:1.2}
+.gcrd .gi{font-size:20px;margin-bottom:4px}.gcrd .gl nudge{font-family:'Bebas Neue',sans-serif;font-size:11px;letter-spacing:0.04em;line-height:1.2}
 .gcrd .gs{font-size:9px;color:var(--muted);margin-top:2px}
 .fld{margin-bottom:12px}
 .fld label{display:block;font-size:11px;font-weight:600;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em}
@@ -156,6 +156,11 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 .empty{text-align:center;padding:48px 20px;color:var(--muted)}
 .fb{display:flex;justify-content:space-between;align-items:center}
 .scode{background:#0d1b2a;color:#c9a84c;border-radius:8px;padding:12px;font-family:monospace;font-size:10px;line-height:1.6;overflow-x:auto;margin:8px 0;white-space:pre}
+.briefing-box{background:var(--light);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:14px}
+.briefing-title{font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:0.04em;color:var(--navy);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.briefing-item{font-size:12px;line-height:1.5;margin-bottom:8px;color:var(--text)}
+.briefing-item strong{color:var(--navy)}
+.disclaimer-text{font-size:10px;line-height:1.4;color:var(--hint);text-align:justify}
 </style>
 </head>
 <body>
@@ -309,9 +314,9 @@ WK.fatloss={color:'#e05c4b',
       e('fl_dbcurl','DB Curl','3×12',3,'Superset with tricep.'),
       e('fl_dbtri','DB Tricep Overhead','3×12',3,'Full stretch.'),
     ]},
-    hotel2:{name:'Upper Body Circuit',label:'Day B',note:'Pushup and pullup focus. No legs.',exercises:[
-      e('fl_pullup','Pullups','3×max',3,'Dead hang to chin over bar.'),
-      e('fl_pushup2','Pushups','3×15',3,'Superset with pullups.'),
+    hotel2:{name:'Upper Body Circuit',label:'Day B',note:'Pushup and row focus. No legs.',exercises:[
+      e('fl_invrow','Inverted Row (Table)','3×max',3,'Under table edge. Scale depth to adjust load.'),
+      e('fl_pushup2','Pushups','3×15',3,'Chest to floor. Keep abs braced.'),
       e('fl_pike','Pike Pushups','3×10',3,'Hips high. Shoulder focus.'),
       e('fl_dips','Chair Dips','3×max',3,'Tricep focus.'),
     ]},
@@ -333,9 +338,9 @@ WK.fatloss={color:'#e05c4b',
     ]},
     hotel2:{name:'Full Body Circuit B',label:'Day C',note:'Bodyweight. Legs + upper alternated.',exercises:[
       e('fl_bss','Bulgarian Split Squat','3×12/leg',3,'Bed or chair.'),
-      e('fl_pushvar','Pushup Variations','3×12',3,'Wide, close, explosive.'),
+      e('fl_pushvar','Pushup Variations','3×12',3,'Wide, close, or incline.'),
+      e('fl_invrow2','Inverted Row (Table)','3×max',3,'Keep spine straight, pull to ribcage.'),
       e('fl_jumplunge','Jump Lunges','3×10/leg',3,'Explosive alternating.'),
-      e('fl_pullup2','Pullups','3×max',3,'Every rep counts.'),
     ]},
   },
   D:{
@@ -378,7 +383,7 @@ WK.muscle={color:'#3b82f6',
       e('mu_slowsq','Slow Squats','4×15',4,'3s down, 1s pause, explode up.'),
       e('mu_bss2','Bulgarian Split Squat','4×12/leg',4,'Bed or chair. Deep.'),
       e('mu_gbrid','Glute Bridge','4×20',4,'Drive through heels. Squeeze hard.'),
-      e('mu_calf2','Calf Raise','4×20',4,'Step edge. Full ROM.'),
+      e('mu_calf2','Calf Raise','4×20',4px,'Step edge. Full ROM.'),
     ]},
   },
   B:{
@@ -386,7 +391,7 @@ WK.muscle={color:'#3b82f6',
       e('mu_bench','Flat Barbell Bench','4×8',4,'Heavy-ish. 2-3 min rest.'),
       e('mu_incdb','Incline DB Press','3×10',3,'Upper chest emphasis.'),
       e('mu_cfly','Cable Fly / Pec Deck','3×12',3,'Stretch at bottom, squeeze at top.'),
-      e('mu_wdips','Weighted Dips','3×10',3,'Forward lean for chest.'),
+      e('mu_wdips','Weighted Dips','3×10',3,'Forward lean for chest. (Advanced only).'),
       e('mu_skull','Skull Crusher','3×12',3,'EZ bar. Full extension.'),
     ]},
     hotel1:{name:'Chest & Triceps',label:'Day B',note:'DB-focused. Upper only.',exercises:[
@@ -404,22 +409,23 @@ WK.muscle={color:'#3b82f6',
   },
   C:{
     commercial:{name:'Back & Biceps',label:'Day C',note:'Pull volume. 2 min rest compounds. Upper only.',exercises:[
-      e('mu_dead','Conventional Deadlift','4×6',4,'Heavy. Back thickness.'),
-      e('mu_barrow','Barbell Row','4×8',4,'Overhand. Strict.'),
-      e('mu_latpd','Lat Pulldown','3×12',3,'Full stretch.'),
-      e('mu_cabrow','Cable Row','3×12',3,'Squeeze scapula.'),
+      e('mu_latpd','Lat Pulldown','4×10',4,'Precision loading. Vertical pulling developer.'),
+      e('mu_barrow','Barbell Row','4×8',4,'Overhand. Strict spine angle.'),
+      e('mu_cabrow','Cable Row','3×12',3,'Squeeze scapula. Back thickness.'),
+      e('mu_dead','Conventional Deadlift','4×6',4,'Heavy floor pull. (Advanced focus).'),
       e('mu_inccurl','Incline DB Curl','3×12',3,'Great long head stretch.'),
     ]},
-    hotel1:{name:'Back & Biceps',label:'Day C',note:'DB and pullup based. Upper only.',exercises:[
-      e('mu_pullup','Weighted Pullups','4×6',4,'Add weight. Full ROM.'),
+    hotel1:{name:'Back & Biceps',label:'Day C',note:'DB and pulling based. Upper only.',exercises:[
+      e('mu_latpd_db','Lat Pulldown (Cable/DB)','4×10',4,'Focus on structural shoulder retraction.'),
       e('mu_dbrow','DB Row','4×10/side',4,'Heavy. Full retraction.'),
+      e('mu_pullup','Pullups','4×6',4,'Dead hang to full layout. (Advanced/Intermediate only).'),
       e('mu_dbcurl','DB Curl','3×12',3,'Slow eccentric.'),
       e('mu_conc','Concentration Curl','3×12/side',3,'Peak squeeze.'),
     ]},
-    hotel2:{name:'Back & Biceps',label:'Day C',note:'Pullup focused. Upper only.',exercises:[
-      e('mu_pull2','Pullups','5×max',5,'Near-failure every set.'),
-      e('mu_chin','Chinups','3×max',3,'Supinated. Bicep emphasis.'),
-      e('mu_invrow','Inverted Row (table)','3×12',3,'Pull chest to table edge.'),
+    hotel2:{name:'Back & Biceps',label:'Day C',note:'Inverted row focus. Upper only.',exercises:[
+      e('mu_invrow3','Inverted Row (Table)','4×max',4,'Safe vertical/horizontal compound substitution.'),
+      e('mu_doorrow','Door Frame Row','3×15',3,'Lean back, hook frame, squeeze mid-back.'),
+      e('mu_chin','Chinups','3×max',3,'Supinated. (Advanced/Intermediate path).'),
     ]},
   },
   D:{
@@ -487,38 +493,40 @@ WK.strength={color:'#2a9d5c',
   },
   C:{
     commercial:{name:'Upper Pull Day',label:'Day C',note:'Heavy pull. No legs — they recover from A, ready for D.',exercises:[
+      e('st_latpd','Lat Pulldown','5×5',5,'Precision alternative to dead-hang lines for clean loading.'),
       e('st_barrow','Barbell Row','5×5',5,'Heavy. Overhand. 3 min rest.'),
-      e('st_wpull','Weighted Pullups','4×5',4,'Add weight.'),
-      e('st_latpd','Lat Pulldown','3×8',3,'Full stretch.'),
-      e('st_wplank','Weighted Plank','3×30s',3,'Plate on back. Core for big lifts.'),
       e('st_dbrow','DB Row','3×8/side',3,'Heavy. Full retraction.'),
+      e('st_wpull','Weighted Pullups','4×5',4,'Add load. (Advanced axis).'),
+      e('st_wplank','Weighted Plank','3×30s',3,'Plate on back. Core builder.'),
     ]},
     hotel1:{name:'Upper Pull Day',label:'Day C',note:'Pull strength. No legs.',exercises:[
-      e('st_wpull2','Weighted Pullups','5×5',5,'Add weight. Every rep matters.'),
-      e('st_dbrow2','DB Row','4×6/side',4,'Heavy. Full retraction.'),
+      e('st_dbrow2','DB Row','5×5/side',5,'Heaviest available. Dead stop reps.'),
+      e('st_db_latpd','DB Lat ISO-Row','4×8',4,'Hinge forwards, pull weights into pockets.'),
       e('st_wplank2','Plank','3×45s',3,'Core strength for deadlift.'),
+      e('st_wpull2','Weighted Pullups','4×5',4,'(Advanced threshold only).'),
     ]},
     hotel2:{name:'Upper Pull Day',label:'Day C',note:'Pullup strength. No legs.',exercises:[
-      e('st_pull3','Pullups','6×max',6,'Volume and strength.'),
-      e('st_hollow','Hollow Body Hold','3×30s',3,'Core compression.'),
+      e('st_invrow4','Inverted Row (Table)','5×max',5,'Excellent low-impact pulling tool.'),
+      e('st_hollow','Hollow Body Hold','3×30s',3,'Core compression stability.'),
       e('st_trow','Table Row','3×12',3,'Under table, pull chest up.'),
+      e('st_pull3','Pullups','4×max',4,'(Advanced threshold).'),
     ]},
   },
   D:{
     commercial:{name:'Deadlift Day',label:'Day D',note:'King of strength days. Legs rested from A, ready to pull heavy.',exercises:[
-      e('st_dead','Conventional Deadlift','5×3',5,'Work up to heavy triple.'),
+      e('st_tbdl_comm','Trap Bar Deadlift','5×3',5,'Elevated starting height preserves spinal safety post-flight.'),
+      e('st_dead','Conventional Deadlift','5×3',5,'Work up to heavy triple. (Advanced path).'),
       e('st_deficit','Deficit Deadlift','3×3',3,'2-inch deficit. Strength off floor.'),
       e('st_hipt','Hip Thrust','3×8',3,'Heavy barbell. Explosive hip extension.'),
-      e('st_ohp','Standing Overhead Press','3×5',3,'Upper body accessory. Not a leg day.'),
     ]},
     hotel1:{name:'Deadlift Day',label:'Day D',note:'DB hinge heavy. Legs ready after rest.',exercises:[
-      e('st_dbdead','DB Deadlift','5×5',5,'Heaviest available. Full lockout.'),
+      e('st_dbdead','Elevated DB Sumo Deadlift','5×5',5,'Wide stance. Stand on blocks if extra ROM needed.'),
       e('st_dbrdl2','DB RDL','4×6',4,'Heavy. Slow eccentric.'),
       e('st_dbohp2','DB Overhead Press','3×6',3,'Accessory press.'),
     ]},
     hotel2:{name:'Deadlift Day',label:'Day D',note:'Hip hinge and core. Bodyweight.',exercises:[
+      e('st_slrdl','Single-Leg RDL','4×8/leg',4,'Balance + hip hinge. High spinal safety.'),
       e('st_nordic2','Nordic Curl','4×4',4,'Slowest eccentric possible.'),
-      e('st_slrdl','Single-Leg RDL','4×8/leg',4,'Balance + hip hinge.'),
       e('st_hspu','Handstand Pushup Progression','3×5',3,'Wall-assisted. Overhead strength.'),
     ]},
   },
@@ -531,7 +539,7 @@ WK.jump={color:'#c9a84c',
       e('jm_rdl','Romanian Deadlift','4×6',4,'Hip hinge. Heavy. Hamstrings = major jump muscle.'),
       e('jm_bss','Bulgarian Split Squat','3×8/leg',3,'Rear foot elevated. Best jump exercise.'),
       e('jm_lgpress','Leg Press','3×12',3,'Supplemental volume.'),
-      e('jm_calf','Standing Calf Raise','4×12',4,'Full ROM. Load it. Calves matter for jumping.'),
+      e('jm_calf','Standing Calf Raise','4×12',4,'Full ROM. Loaded.'),
     ]},
     hotel1:{name:'Lower Body Strength',label:'Day A',note:'Heavy DB. Build the engine.',exercises:[
       e('jm_goblet','Heavy Goblet Squat','4×8',4,'Heaviest available. 3 min rest.'),
@@ -542,66 +550,63 @@ WK.jump={color:'#c9a84c',
     hotel2:{name:'Lower Body Strength',label:'Day A',note:'Bodyweight strength. Slow tempo.',exercises:[
       e('jm_pistol','Pistol Squat Progression','4×5/leg',4,'Best bodyweight jump exercise.'),
       e('jm_bss3','Bulgarian Split Squat','4×10/leg',4,'Bodyweight. Deep and controlled.'),
-      e('jm_nordic','Nordic Curl','3×5',3,'Feet anchored. Hamstring strength.'),
+      e('jm_nordic','Nordic Hamstring Curl','3×5',3,'Feet anchored. Hamstring strength.'),
     ]},
   },
   B:{
     commercial:{name:'Upper Body + Core',label:'Day B',note:'Upper body and core ONLY. Legs recover from A before power day C.',exercises:[
+      e('jm_latpd','Lat Pulldown','4×8',4,'Safe option to build arm swing mechanics.'),
       e('jm_bench','Bench Press','4×6',4,'Arm swing power for jumping. Moderate-heavy.'),
       e('jm_ohp','Overhead Press','3×6',3,'Standing. Core drive. Full lockout.'),
-      e('jm_wpull','Weighted Pullups','4×6',4,'Lat strength for jump mechanics.'),
-      e('jm_cabrow','Cable Row','3×10',3,'Upper back strength.'),
       e('jm_plyopu','Plyometric Pushup','4×5',4,'Hands leave ground. Upper body power.'),
     ]},
     hotel1:{name:'Upper Body + Core',label:'Day B',note:'DB upper body only. Legs rest.',exercises:[
       e('jm_dbpress','DB Press','4×8',4,'Moderate. Full ROM.'),
-      e('jm_pull2','Pullups','4×max',4,'Every rep with intention.'),
-      e('jm_dbrow','DB Row','3×10/side',3,'Upper back.'),
+      e('jm_dbrow','DB Row','3×10/side',3,'Upper back build.'),
       e('jm_dbohp','DB Overhead Press','3×8',3,'Standing. Core and shoulder.'),
+      e('jm_pull2','Pullups','4×max',4,'(Advanced threshold entry).'),
     ]},
     hotel2:{name:'Upper Body + Core',label:'Day B',note:'Upper body only. Legs rest before power day.',exercises:[
-      e('jm_pull3','Pullups','4×max',4,'Volume.'),
+      e('jm_invrow5','Inverted Row (Table)','4×max',4,'Safe structural pulling base.'),
       e('jm_exppu','Explosive Pushups','4×6',4,'Hands leave floor.'),
       e('jm_hollow','Hollow Body Hold','3×30s',3,'Core compression for jump efficiency.'),
-      e('jm_lsit','L-Sit Hold','3×15s',3,'Hip flexor strength.'),
     ]},
   },
   C:{
     commercial:{name:'Power / Plyometrics',label:'Day C',note:'⭐ MOST IMPORTANT. Legs fully rested. Full 3 min rest. Every rep max effort.',exercises:[
-      e('jm_boxjump','Box Jump','5×3',5,'Max height. Full effort. Step down. 3 min rest.'),
-      e('jm_broad','Broad Jump','5×3',5,'Horizontal power = vertical power. Stick landing.'),
+      e('jm_sqjump_bw','Squat Jumps (Bodyweight)','5×4',5,'Focus on soft, quiet, sound landings.'),
+      e('jm_boxjump','Box Jump','5×3',5,'Max height. Step down. 3 min rest. (Advanced/Intermediate).'),
+      e('jm_broad','Broad Jump','5×3',5,'Horizontal power axis. Stick landing.'),
       e('jm_tbdl','Trap Bar Deadlift','5×3',5,'HEAVY and FAST. 3-4 min rest.'),
-      e('jm_lunge','Walking Lunge','3×10/leg',3,'Hip flexor training. Takeoff mechanics.'),
-      e('jm_sprint','Sprint 40yd','6×40yd',6,'Full speed. Walk back. 90s rest.'),
     ]},
     hotel1:{name:'Power / Plyometrics',label:'Day C',note:'⭐ Priority. Legs rested. Max effort every rep.',exercises:[
-      e('jm_bjump','Bench/Box Jump','5×3',5,'Highest stable surface. Full effort. 3 min rest.'),
+      e('jm_pogo_h1','Pogo Hops (Ankle Stiffness)','5×20',5,'Spring strictly from ankles. Minimal knee bend.'),
+      e('jm_bjump','Bench/Box Jump','5×3',5,'Highest stable surface. Full effort. (Advanced/Intermediate).'),
       e('jm_broad2','Broad Jump','5×3',5,'Max horizontal. Stick landing.'),
-      e('jm_dbjsq','DB Jump Squat','4×4',4,'Light DBs. Explosive. Land soft.'),
-      e('jm_sprint2','Sprint (hall/outside)','4×20yd',4,'Full speed. Full rest.'),
+      e('jm_dbjsq','DB Jump Squat','4×4',4px,'Light DBs. Explosive. Land soft.'),
     ]},
     hotel2:{name:'Power / Plyometrics',label:'Day C',note:'⭐ Most critical layover workout. Legs rested from B.',exercises:[
-      e('jm_bjump2','Bench/Chair Jump','5×3',5,'Any stable surface. Max jump. 3 min rest.'),
+      e('jm_pogo_h2','Pogo Hops','5×20',5,'Stiff ankles. Springy, rhythmic rhythm.'),
+      e('jm_bjump2','Bench/Chair Jump','5×3',5,'Any stable surface. Max jump. (Advanced/Intermediate).'),
       e('jm_broad3','Broad Jump','5×3',5,'Hallway. Max effort.'),
-      e('jm_sqjump','Squat Jump','4×5',4,'Bodyweight. Explode. Land soft.'),
-      e('jm_spring','Calf Spring','3×20',3,'Fast and bouncy. Achilles stiffness.'),
+      e('jm_spring','Calf Spring','3×20',3,'Fast and bouncy. Achilles health.'),
     ]},
   },
   D:{
     commercial:{name:'Sprint & Reactive',label:'Day D',note:'Speed work. Low volume, high quality. Lighter than C.',exercises:[
+      e('jm_pogo_comm','Pogo Hops','4×20',4,'Ankle elasticity preparation matrix.'),
       e('jm_track','Track Sprint','8×40yd',8,'Full speed. Walk back. 2 min rest.'),
-      e('jm_djump','Depth Jump','4×4',4,'Step off box, land, immediately jump. Reactive.'),
-      e('jm_ankhop','Ankle Hop','3×15',3,'Minimal knee bend. Achilles stiffness.'),
+      e('jm_djump','Depth Jump','4×4',4,'Step off box, explode up. (Advanced only).'),
       e('jm_hgknee','Hanging Knee Raise','3×12',3,'Hip flexor strength.'),
     ]},
     hotel1:{name:'Sprint & Reactive',label:'Day D',note:'Reactive and sprint. Light leg work.',exercises:[
+      e('jm_pogo3','Ankle Pogo Hops','4×20',4,'Stiff ankles. Lower limb reactivity.'),
       e('jm_sprint3','Sprint (outside/hall)','6×30yd',6,'Full effort. Full rest.'),
-      e('jm_pogo','Pogo Hop','4×15',4,'Stiff ankles. Spring-like.'),
       e('jm_dbhip','DB Hip Thrust','4×10',4,'Explosive. Glute power.'),
     ]},
     hotel2:{name:'Sprint & Reactive',label:'Day D',note:'Sprint and reactive. Outside if possible.',exercises:[
+      e('jm_pogo4','Pogo Hop','4×20',4,'Stiff ankles. Minimal ground contact time.'),
       e('jm_sprint4','Sprint','6×30yd',6,'Parking lot or hall. Full speed.'),
-      e('jm_pogo2','Pogo Hop','4×20',4,'Stiff ankles. Springy.'),
       e('jm_bound','Bounding','4×4/leg',4,'Exaggerated stride. Drive knee up.'),
     ]},
   },
@@ -638,16 +643,16 @@ WK.longevity={color:'#2a9d5c',
       e('lg_thorac','Thoracic Rotation Drill','2×10/side',2,'Mid-back mobility.'),
     ]},
     hotel1:{name:'Upper Pull + Posture',label:'Day B',note:'DB and pullup. Back and shoulder health.',exercises:[
-      e('lg_pull','Pullups','3×8',3,'Full stretch. Decompress spine.'),
-      e('lg_dbrow','DB Row','3×12/side',3,'Full retraction.'),
+      e('lg_dbrow','DB Row','3×12/side',3,'Full retraction. Core anti-rotation.'),
       e('lg_dbfp','DB Face Pull (bent over)','3×15',3,'Light. External rotation.'),
       e('lg_wallsl','Wall Slide','2×10',2,'Forearms on wall, slide up and down.'),
+      e('lg_pull','Pullups','3×8',3,'Full layout spinal decompression. (Advanced entry).'),
     ]},
     hotel2:{name:'Upper Pull + Posture',label:'Day B',note:'Bodyweight pull and mobility.',exercises:[
-      e('lg_pull2','Pullups','3×max',3,'Stop 2 reps short of failure.'),
-      e('lg_drow','Door Frame Row','3×12',3,'Hold frame, lean back, pull chest up.'),
+      e('lg_drow','Door Frame Row','3×15',3,'Hold frame, lean back, pull chest up.'),
       e('lg_child','Child Pose + Reach','2×60s',2,'Thoracic and shoulder mobility.'),
       e('lg_neck','Neck Mobility','2×8/dir',2,'Gentle rotation. Pilot essential.'),
+      e('lg_pull2','Pullups','3×max',3,'(Advanced tier benchmark).'),
     ]},
   },
   C:{
@@ -694,23 +699,23 @@ WK.longevity={color:'#2a9d5c',
 WK.tactical={color:'#7c5cbf',
   A:{
     commercial:{name:'Strength Foundation',label:'Day A',note:'Heavy base. 3 min rest on compounds.',exercises:[
-      e('tc_tbdl','Trap Bar Deadlift','4×5',4,'Heavy. Full extension. King of tactical lifts.'),
+      e('tc_tbdl','Trap Bar Deadlift','4×5',4,'Heavy base. Structural spinal safety post-flight.'),
       e('tc_bench','Bench Press','4×5',4,'Heavy. Strength base.'),
-      e('tc_wpull','Weighted Pullups','4×5',4,'Add weight. 3 min rest.'),
+      e('tc_latpd','Lat Pulldown','4×6',4,'Precision controlled vertical pulling power.'),
+      e('tc_wpull','Weighted Pullups','4×5',4,'(Advanced threshold loading).'),
       e('tc_farmer','Farmer Carry','4×40yd',4,'Heavy DBs. Grip and core.'),
-      e('tc_plank','Plank','3×60s',3,'Weighted if possible.'),
     ]},
     hotel1:{name:'Strength Foundation',label:'Day A',note:'Heavy DB strength.',exercises:[
-      e('tc_dbdead','DB Deadlift','4×6',4,'Heaviest available.'),
-      e('tc_wpull2','Weighted Pullups','4×5',4,'Add weight.'),
-      e('tc_dbpress','DB Press','4×6',4,'Heavy. Full ROM.'),
-      e('tc_dbfarm','DB Farmer Carry','4×40yd',4,'Grip and core.'),
+      e('tc_dbdead','Elevated Sumo DB Deadlift','4×6',4,'Heaviest available. Protect layout line.'),
+      e('tc_dbpress','DB Press','4×6',4,'Heavy push focus. Full ROM.'),
+      e('tc_db_latrow','DB Lat ISO-Row','4×8',4,'Keep chest tall, pull deep to back pocket.'),
+      e('tc_wpull2','Weighted Pullups','4×5',4,'(Advanced benchmark block).'),
     ]},
     hotel2:{name:'Strength Foundation',label:'Day A',note:'Bodyweight strength.',exercises:[
-      e('tc_pull','Pullups','5×max',5,'Every rep matters.'),
+      e('tc_invrow_b','Inverted Row (Table)','4×max',4,'Safe horizontal/vertical combo pulling.'),
       e('tc_pistol','Pistol Squat Progression','4×5/leg',4,'Unilateral leg strength.'),
-      e('tc_exppu','Explosive Pushups','4×8',4,'Power output.'),
-      e('tc_plankv','Plank Variations','3×60s',3,'Front, side, RKC — rotate.'),
+      e('tc_exppu','Explosive Pushups','4×8',4,'Power output matrix.'),
+      e('tc_pull','Pullups','5×max',5,'(Advanced structural block).'),
     ]},
   },
   B:{
@@ -719,19 +724,18 @@ WK.tactical={color:'#7c5cbf',
       e('tc_row','Rowing Machine','10 min',1,'Max effort 500m, 2 min easy ×3.'),
       e('tc_kbswing','Kettlebell Swing','4×15',4,'Hip power. Conditioning.'),
       e('tc_burpee','Burpees','4×10',4,'Full range. Jump at top.'),
-      e('tc_carry','Sandbag / Bear Hug Carry','3×40yd',3,'Awkward load = functional.'),
     ]},
     hotel1:{name:'Conditioning Circuit',label:'Day B',note:'DB conditioning.',exercises:[
-      e('tc_thruster','DB Thruster','4×8',4,'Squat to press. Full body.'),
+      e('tc_thruster','DB Thruster','4×8',4,'Squat to press. Full body compound.'),
       e('tc_rower','Rower / Bike','10 min',1,'30s hard, 30s easy ×10.'),
-      e('tc_dbcarry','DB Farmer Carry','4×40yd',4,'Heavy. Grip it.'),
-      e('tc_burpee2','Burpees','3×10',3,'Full range.'),
+      e('tc_dbcarry','DB Farmer Carry','4×40yd',4,'Heavy. Grip maintenance.'),
+      e('tc_burpee2','Burpees','3×10',3,'Paced continuous movement.'),
     ]},
     hotel2:{name:'Conditioning Circuit',label:'Day B',note:'Bodyweight conditioning.',exercises:[
-      e('tc_burp2','Burpees','4×12',4,'Full range. Steady pace.'),
+      e('tc_rev_lunge','Alternating Reverse Lunges','4px×12/leg',4,'Joint-friendly alignment alternative to explosive jumps.'),
       e('tc_mtn','Mountain Climbers','4×30s',4,'Fast feet. Hips level.'),
-      e('tc_jlunge','Jump Lunges','4×10/leg',4,'Explosive alternating.'),
-      e('tc_stairspr','Stair Sprint','6×2 flights',6,'Full effort. Walk down.'),
+      e('tc_burp2','Burpees','4×10',4,'Keep structural control. Do not hit absolute failure.'),
+      e('tc_jlunge','Jump Lunges','4×10/leg',4,'(Advanced/Intermediate target).'),
     ]},
   },
   C:{
@@ -740,35 +744,33 @@ WK.tactical={color:'#7c5cbf',
       e('tc_barrow','Barbell Row','4×6',4,'Overhand. Heavy.'),
       e('tc_hfarmer','Heavy Farmer Carry','5×40yd',5,'Heaviest possible.'),
       e('tc_suit','Suitcase Carry','4×30yd/side',4,'Anti-lateral core.'),
-      e('tc_goblet','Goblet Squat','3×10',3,'Hip and ankle mobility. Light.'),
     ]},
     hotel1:{name:'Overhead + Carries',label:'Day C',note:'DB overhead and carry.',exercises:[
       e('tc_dbohp','DB Overhead Press','4×8',4,'Standing. Full lockout.'),
-      e('tc_dbrow2','DB Row','4×8/side',4,'Heavy.'),
+      e('tc_dbrow2','DB Row','4×8/side',4,'Heavy row pattern.'),
       e('tc_dbfarmc','DB Farmer Carry','5×40yd',5,'Heaviest available.'),
     ]},
     hotel2:{name:'Overhead + Carries',label:'Day C',note:'Bodyweight functional.',exercises:[
-      e('tc_pull2','Pullups','5×max',5,'Accumulate volume.'),
-      e('tc_pikepu','Pike Pushup','4×10',4,'Overhead strength pattern.'),
+      e('tc_invrow_c','Inverted Row (Table)','4×max',4,'Structural back build.'),
+      e('tc_pikepu','Pike Pushup','4×10',4,'Overhead strength alignment.'),
       e('tc_bkcarry','Backpack Carry','3×60s',3,'Loaded. Farmer carry sub.'),
     ]},
   },
   D:{
     commercial:{name:'Run + Lift',label:'Day D',note:'Combine strength and running. Tactical readiness.',exercises:[
       e('tc_run','Run','2 miles',1,'Moderate pace. 8-9 min/mile.'),
-      e('tc_pull3','Pullups','4×max',4,'After run. Grind.'),
-      e('tc_pu2','Pushups','4×max',4,'Superset with pullups.'),
+      e('tc_pu2','Pushups','4×max',4,'Chest to floor. Braced core.'),
       e('tc_plank2','Plank','3×60s',3,'Core finisher.'),
     ]},
     hotel1:{name:'Run + Lift',label:'Day D',note:'Run and lift combined.',exercises:[
       e('tc_run2','Treadmill Run','2 miles',1,'Moderate pace.'),
-      e('tc_pull4','Pullups','4×max',4,'Post-run.'),
-      e('tc_dbpress2','DB Press','3×10',3,'Upper body.'),
+      e('tc_dbpress2','DB Press','3×10',3,'Upper body alignment.'),
+      e('tc_h1_plank','Plank Hold','3×60s',3,'Anti-extension core axis.'),
     ]},
     hotel2:{name:'Run + Lift',label:'Day D',note:'Run outside or stairs.',exercises:[
       e('tc_run3','Run (outside/treadmill)','2 miles',1,'Core tactical fitness.'),
-      e('tc_pull5','Pullups','4×max',4,'Standard.'),
-      e('tc_pu3','Pushups','4×max',4,'Standard.'),
+      e('tc_pu3','Pushups','4×max',4,'Standard layout.'),
+      e('tc_h2_plank','Plank Hold','3×60s',3,'Static trunk stability.'),
     ]},
   },
 };
@@ -801,9 +803,10 @@ WK.cardio={color:'#e05c4b',
       e('ca_trint','Treadmill Intervals','8×1 min',8,'Hard 1 min, 90s walk. Record pace.'),
       e('ca_bikint','Stationary Bike Intervals','6×45s',6,'High resistance. 60s easy.'),
     ]},
-    hotel2:{name:'Interval Training',label:'Day B',note:'Bodyweight intervals.',exercises:[
-      e('ca_burpint','Burpee Intervals','8×30s',8,'Max in 30s. Rest 30s. Count reps.'),
-      e('ca_stairint','Stair Sprint Intervals','6×2 flights',6,'Sprint up. Walk down.'),
+    hotel2:{name:'Interval Training',label:'Day B',note:'Conditioning intervals.',exercises:[
+      e('ca_jacks_b','Jumping Jack Cardio Circuit','4×60s',4,'Low-impact rhythmic engine builder.'),
+      e('ca_stairint','Stair Sprint Intervals','6×2 flights',6,'Sprint up. Walk down. (Advanced/Intermediate).'),
+      e('ca_burpint','Burpee Intervals','8×30s',8,'(Advanced full CNS engine stressor).'),
     ]},
   },
   C:{
@@ -890,6 +893,7 @@ let ST={
   loaded:false,authMode:'signin',authEmail:'',authPass:'',authErr:'',
   profEdit:false,profDraft:null,newWt:'',newWaist:'',
   showAddEx:false,
+  fatigueScale:false,roomOverride:false
 };
 
 // ─── LIFECYCLE INITIALIZATION ─────────────────────────────────────────────────
@@ -921,16 +925,21 @@ async function startNext(){
 
 async function completeWk(){
   ST.cur.complete=true;ST.cur.completedAt=Date.now();
-  ST.cur.gymUsed=ST.gymType;ST.cur.hotelOpt=ST.hotelOpt;
+  ST.cur.gymUsed=ST.roomOverride?'hotel2':ST.gymType;ST.cur.hotelOpt=ST.hotelOpt;
+  ST.cur.fatigueScaleApplied=ST.fatigueScale;
   await dbSaveSession({...ST.cur});
   ST.sessions.push({...ST.cur});
+  ST.fatigueScale=false;ST.roomOverride=false;
   await startNext();
 }
 async function saveCur(){await dbSetCur(ST.cur);}
 
 // ─── CALCULATED PROPERTY HELPERS ──────────────────────────────────────────────
 function getGD(){return WK[ST.profile?.goal||'strength'];}
-function getGymKey(){return ST.gymType==='commercial'?'commercial':ST.hotelOpt;}
+function getGymKey(){
+  if(ST.roomOverride) return 'hotel2';
+  return ST.gymType==='commercial'?'commercial':ST.hotelOpt;
+}
 function getWD(){
   const gd=getGD();if(!gd||!ST.cur)return null;
   const day=gd[ST.cur.key];if(!day)return null;
@@ -1106,31 +1115,66 @@ function render(){
 
 // ─── WORKOUT VIEW CARD GENERATION ──────────────────────────────────────────────
 function renderWorkout(page){
+  // PRE-FLIGHT BRIEFING BOX
+  const bBox=mk('div','briefing-box');
+  bBox.innerHTML=`<div class="briefing-title">✈️ PRE-FLIGHT PHYSICAL BRIEFING</div>
+    <div class="briefing-item"><strong>1. Cockpit Lock:</strong> Prolonged sitting locks your hips into flexion and shuts off your glutes. This places heavy shear strain onto your lumbar spine.</div>
+    <div class="briefing-item"><strong>2. Joint Dehydration:</strong> Pressurized cabins lack baseline humidity, drying out deep spinal and structural joint fluids before you lift. Drink 16oz of water before your training.</div>
+    <div class="briefing-item"><strong>3. Dynamic Prep Requirement:</strong> Going from a 6-hour static flight layout straight into high-power movements causes intense muscle pulling. Always dynamic stretch (arm circles, cat-cows) first.</div>
+    <div class="note gld" style="margin:6px 0 0 0; padding:6px 10px; font-size:11px;">
+      <strong>Pre-Workout Dynamic Prep:</strong> 3 mins leg swings, light squats, arm rotations to restore circulation.<br>
+      <strong>Post-Workout Static Decompression:</strong> 5 mins static structural hold (kneeling hip flexor stretch, doorway chest expander) to re-lengthen tightened fibers and decompress the spine.
+    </div>`;
+  page.appendChild(bBox);
+
   const goalDef=GOALS.find(g=>g.id===(ST.profile?.goal||'strength'));
   const gd=getGD();
 
-  page.appendChild(lbl('Gym Type'));
-  const gg=mk('div','g2');
-  [{id:'commercial',icon:'🏋️',label:'Commercial',sub:'Full gym'},
-   {id:'hotel',icon:'🏨',label:'Hotel Gym',sub:'Layover'}].forEach(g=>{
-    const b=mk('div','gbtn'+(ST.gymType===g.id?' sel':''));
-    b.innerHTML=`<div class="gi">${g.icon}</div><div class="gl">${g.label}</div><div class="gs">${g.sub}</div>`;
-    b.onclick=()=>{ST.gymType=g.id;render();};
-    gg.appendChild(b);
-  });
-  page.appendChild(gg);
+  page.appendChild(lbl('Gym Selection Matrix'));
+  
+  // Quick Room Override Checkbox Button
+  const orWrap=mk('div','fb mb12');
+  orWrap.style.cssText='background:#fff; border:1px solid var(--border); padding:10px 14px; border-radius:var(--rs); font-size:13px;';
+  orWrap.innerHTML=`<div><strong>Gym Closed / Room Only?</strong><div style="font-size:11px; color:var(--muted)">Instantly flip this session to bodyweight equipment-free rows.</div></div>`;
+  const tBtn=mk('button','btn-sm '+(ST.roomOverride?'btn-p':'btn-o'));
+  tBtn.textContent=ST.roomOverride?'Room Active':'Use Room';
+  tBtn.onclick=()=>{ST.roomOverride=!ST.roomOverride;render();};
+  orWrap.appendChild(tBtn);
+  page.appendChild(orWrap);
 
-  if(ST.gymType==='hotel'){
-    const hg=mk('div','g2');
-    [{id:'hotel1',icon:'🏨',label:'Good Hotel',sub:'DBs + cardio'},
-     {id:'hotel2',icon:'🏃',label:'Minimal',sub:'Bodyweight only'}].forEach(o=>{
-      const b=mk('div','gbtn'+(ST.hotelOpt===o.id?' sel':''));
-      b.innerHTML=`<div class="gi">${o.icon}</div><div class="gl">${o.label}</div><div class="gs">${o.sub}</div>`;
-      b.onclick=()=>{ST.hotelOpt=o.id;render();};
-      hg.appendChild(b);
+  if(!ST.roomOverride) {
+    const gg=mk('div','g2');
+    [{id:'commercial',icon:'🏋️',label:'Commercial',sub:'Full gym'},
+     {id:'hotel',icon:'🏨',label:'Hotel Gym',sub:'Layover Layout'}].forEach(g=>{
+      const b=mk('div','gbtn'+(ST.gymType===g.id?' sel':''));
+      b.innerHTML=`<div class="gi">${g.icon}</div><div class="gl">${g.label}</div><div class="gs">${g.sub}</div>`;
+      b.onclick=()=>{ST.gymType=g.id;render();};
+      gg.appendChild(b);
     });
-    page.appendChild(hg);
+    page.appendChild(gg);
+
+    if(ST.gymType==='hotel'){
+      const hg=mk('div','g2');
+      [{id:'hotel1',icon:'🏨',label:'Good Hotel Gym',sub:'Dumbbells + cardio'},
+       {id:'hotel2',icon:'🏃',label:'Minimal Facility',sub:'Pure bodyweight only'}].forEach(o=>{
+        const b=mk('div','gbtn'+(ST.hotelOpt===o.id?' sel':''));
+        b.innerHTML=`<div class="gi">${o.icon}</div><div class="gl">${o.label}</div><div class="gs">${o.sub}</div>`;
+        b.onclick=()=>{ST.hotelOpt=o.id;render();};
+        hg.appendChild(b);
+      });
+      page.appendChild(hg);
+    }
   }
+
+  // Fatigue Scale Checkbox Button
+  const fWrap=mk('div','fb mb12');
+  fWrap.style.cssText='background:#fff0ee; border:1px solid #fcc; padding:10px 14px; border-radius:var(--rs); font-size:13px;';
+  fWrap.innerHTML=`<div><strong style="color:var(--red)">Flipped Sleep / High Fatigue?</strong><div style="font-size:11px; color:#8a1a1a">Caps target structures to 2 clean quality sets. Protect your body.</div></div>`;
+  const fBtn=mk('button','btn-sm '+(ST.fatigueScale?'btn-red':'btn-o'));
+  fBtn.textContent=ST.fatigueScale?'Scaling On':'Scale Down';
+  fBtn.onclick=()=>{ST.fatigueScale=!ST.fatigueScale;render();};
+  fWrap.appendChild(fBtn);
+  page.appendChild(fWrap);
 
   if(!ST.cur||!gd){
     const n=mk('div','note red mt8');
@@ -1140,13 +1184,13 @@ function renderWorkout(page){
 
   const wDef=getWD();if(!wDef)return;
   const levelLimit=LEVEL_LIMIT[ST.profile?.level||'intermediate'];
-  const levelLabel={beginner:'Beginner',intermediate:'Intermediate',advanced:'Advanced'}[ST.profile?.level||'intermediate'];
+  const levelLabel={beginner:'Beginner Plan',intermediate:'Intermediate Plan',advanced:'Advanced Plan'}[ST.profile?.level||'intermediate'];
 
-  page.appendChild(lbl('Current Workout'));
+  page.appendChild(lbl('Current Flight Strategy'));
 
   if(ST.cur.complete){
     const cb=mk('div','cbanner');
-    cb.innerHTML='<div style="font-size:32px;margin-bottom:6px">🎉</div><h2 style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;letter-spacing:0.06em">Workout Complete!</h2><p style="font-size:13px;opacity:0.85;margin-top:4px">Next workout queued</p>';
+    cb.innerHTML='<div style="font-size:32px;margin-bottom:6px">🎉</div><h2 style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;letter-spacing:0.06em">Session Captured!</h2><p style="font-size:13px;opacity:0.85;margin-top:4px">Next structural block loaded inside queue</p>';
     page.appendChild(cb);
   }
 
@@ -1154,31 +1198,15 @@ function renderWorkout(page){
   const wCard=mk('div','card');
   wCard.style.borderLeft=`4px solid ${gd.color}`;
   wCard.innerHTML=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
-    <div class="wkbadge" style="background:${gd.color}22;color:${gd.color};border:1px solid ${gd.color}44">${wDef.label}</div>
+    <div class="wkbadge" style="background:${gd.color}22;color:${gd.color};border:1px solid ${gd.color}44">${ST.roomOverride?'ROOM BOUND':wDef.label}</div>
     ${goalDef?`<span style="font-size:12px;color:var(--muted)">${goalDef.icon} ${goalDef.label}</span>`:''}
-    <span style="font-size:11px;background:var(--navy);color:var(--gold);padding:2px 8px;border-radius:10px;font-weight:600">${levelLabel} — ${levelLimit} exercises</span>
+    <span style="font-size:11px;background:var(--navy);color:var(--gold);padding:2px 8px;border-radius:10px;font-weight:600">${levelLabel} — ${levelLimit} moves</span>
   </div>
   <div class="wktitle">${wDef.name}</div>
-  <div class="wksub">${wDef.note||''}</div>
+  <div class="wksub">${ST.fatigueScale?'⚠️ FATIGUE MITIGATION ACTIVE — Target caps to 2 sets max.<br>':''}${wDef.note||''}</div>
   <div class="pw"><div class="pf" style="width:${pct}%"></div></div>
-  <div class="pl">${cc} of ${tot} exercises logged</div>`;
+  <div class="pl">${cc} of ${tot} exercises completed</div>`;
   page.appendChild(wCard);
-
-  const rotNote=mk('div','note gld');
-  const rotMap={
-    fatloss: ['Legs + Upper','Upper Only','Legs + Upper','Cardio'],
-    muscle:  ['Legs','Chest+Tri','Back+Bi','Shoulders+Arms'],
-    strength:['Squat (Legs)','Bench (Upper)','Pull (Upper)','Deadlift (Legs)'],
-    jump:    ['Lower Strength','Upper + Core','Power/Plyo','Sprint/Reactive'],
-    longevity:['Lower + Mobility','Upper Pull','Upper Push + Core','Carries + Cardio'],
-    tactical:['Strength','Conditioning','Overhead + Carries','Run + Lift'],
-    cardio:  ['Zone 2','Intervals','Long Run','Strength + Cardio'],
-  };
-  const goal=ST.profile?.goal||'strength';
-  const days=rotMap[goal]||[];
-  const dayLabels=ROT.map((d,i)=>`<span style="font-weight:${d===ST.cur.key?'700':'400'};color:${d===ST.cur.key?'var(--navy)':'var(--muted)'}">${d}: ${days[i]||d}</span>`).join(' · ');
-  rotNote.innerHTML=`<div style="font-size:10px;font-weight:600;letter-spacing:0.06em;margin-bottom:4px;color:var(--muted)">ROTATION</div>${dayLabels}`;
-  page.appendChild(rotNote);
 
   getLevelExercises(wDef.exercises).forEach(ex=>page.appendChild(renderExercise(ex,false)));
   (ST.cur.customExercises||[]).forEach(ex=>page.appendChild(renderExercise(ex,true)));
@@ -1186,35 +1214,44 @@ function renderWorkout(page){
 
   const gap=mk('div','');gap.style.height='12px';page.appendChild(gap);
   if(!ST.cur.complete){
-    const b=mk('button','btn btn-grn');b.textContent='Workout Complete ✓';
+    const b=mk('button','btn btn-grn');b.textContent='Log Complete Workout ✓';
     b.onclick=async()=>{await completeWk();render();};page.appendChild(b);
   } else {
-    const b=mk('button','btn btn-p mt8');b.textContent='Start Next Workout →';
+    const b=mk('button','btn btn-p mt8');b.textContent='Start Next Rotation Step →';
     b.onclick=()=>render();page.appendChild(b);
   }
+  
+  // Mini Disclaimer inclusion
+  const dCard=mk('div','mt16');
+  dCard.innerHTML=`<p class="disclaimer-text"><strong>Safety Statement:</strong> Consult your AME or primary physical advisor before beginning flight duty physical protocols. The developers assume no responsibility for injury or liabilities incurred during execution.</p>`;
+  page.appendChild(dCard);
 }
 
 function renderExercise(ex,isCustom){
   const exKey=isCustom?'c_'+ex.id:ex.id;
   const isOpen=!!ST.expanded[exKey];
   const timed=isTimed(ex.id,ex.name);
+  const totalSets=ST.fatigueScale?2:ex.sets;
 
   if(!ST.cur.sets[exKey]){
     if(timed){
       ST.cur.sets[exKey]=[{seconds:''}];
     } else {
-      ST.cur.sets[exKey]=Array.from({length:ex.sets},()=>({reps:'',weight:''}));
+      ST.cur.sets[exKey]=Array.from({length:totalSets},()=>({reps:'',weight:''}));
     }
   }
   const sets=ST.cur.sets[exKey];
-  if(!timed) while(sets.length<ex.sets) sets.push({reps:'',weight:''});
+  if(!timed) {
+    if(sets.length>totalSets) sets.length=totalSets;
+    while(sets.length<totalSets) sets.push({reps:'',weight:''});
+  }
 
   const hasData=timed?sets.some(s=>s.seconds):sets.some(s=>s.reps||s.weight);
   const card=mk('div','exc');
   const hdr=mk('div','exh');
   hdr.innerHTML=`<div style="flex:1">
     <div class="exn">${ex.name}${isCustom?'<span class="ctag">CUSTOM</span>':''}</div>
-    <div class="ext">${ex.target}${timed?' · <span style="color:var(--blue);font-weight:600">⏱ timed</span>':''}</div>
+    <div class="ext">${ST.fatigueScale?'2 sets (Fatigue Scale)':ex.target}${timed?' · <span style="color:var(--blue);font-weight:600">⏱ timed</span>':''}</div>
   </div>
   <div class="exr">
     ${!isCustom?`<button class="btn-i" data-info="${exKey}">ℹ Guide</button>`:''}
@@ -1248,9 +1285,9 @@ function renderExercise(ex,isCustom){
 
     if(timed){
       const lw=lastTime(exKey);
-      if(lw) {const r=mk('div','rw');r.innerHTML=`⏱ Last best: <strong>${lw}s</strong> — try to beat it`;body.appendChild(r);}
+      if(lw) {const r=mk('div','rw');r.innerHTML=`⏱ Last best: <strong>${lw}s</strong> — challenge posture line`;body.appendChild(r);}
       const box=mk('div','timed-box'+(sets[0]?.seconds?' ok':''));
-      box.innerHTML=`<div class="timed-lbl">Total Time</div>`;
+      box.innerHTML=`<div class="timed-lbl">Total Duration</div>`;
       const inp=document.createElement('input');
       inp.type='number';inp.className='timed-inp';inp.placeholder='0';
       inp.value=sets[0]?.seconds||'';inp.setAttribute('inputmode','numeric');
@@ -1263,7 +1300,7 @@ function renderExercise(ex,isCustom){
       box.appendChild(inp);box.appendChild(hint);body.appendChild(box);
     } else {
       const lw=lastWt(exKey);
-      if(lw!==null){const r=mk('div','rw');r.innerHTML=`📊 Last max: <strong>${lw} lb</strong> — match or beat it`;body.appendChild(r);}
+      if(lw!==null){const r=mk('div','rw');r.innerHTML=`📊 Last baseline: <strong>${lw} lb</strong> — match safely`;body.appendChild(r);}
       const scroll=mk('div','ss');
       sets.forEach((s,i)=>{
         const tile=mk('div','st'+(s.reps||s.weight?' ok':''));
@@ -1279,7 +1316,7 @@ function renderExercise(ex,isCustom){
         scroll.appendChild(tile);
       });
       body.appendChild(scroll);
-      const hint2=mk('div','ssh');hint2.textContent='← swipe for all sets';body.appendChild(hint2);
+      const hint2=mk('div','ssh');hint2.textContent='← swipe horizontal for sets';body.appendChild(hint2);
     }
     card.appendChild(body);
   }
@@ -1289,14 +1326,14 @@ function renderExercise(ex,isCustom){
 function renderAddEx(){
   const wrap=mk('div','add-ex-wrap');
   const top=mk('div','fb');
-  top.innerHTML=`<div style="font-size:13px;font-weight:600;color:var(--muted)">+ Add Custom Exercise</div>`;
+  top.innerHTML=`<div style="font-size:13px;font-weight:600;color:var(--muted)">+ Inject Custom Tracking Exercise</div>`;
   const tb=mk('button','btn-i btn-sm');tb.textContent=ST.showAddEx?'Cancel':'Add';
   tb.onclick=()=>{ST.showAddEx=!ST.showAddEx;render();};
   top.appendChild(tb);wrap.appendChild(top);
   if(ST.showAddEx){
     const f=mk('div','');f.style.marginTop='10px';
     const ni=document.createElement('input');
-    ni.className='aei';ni.placeholder='Exercise name (e.g. Hip Thrust)';ni.type='text';ni.id='cex_n';
+    ni.className='aei';ni.placeholder='Exercise name (e.g. Kettlebell Carry)';ni.type='text';ni.id='cex_n';
     const row=mk('div','aer');
     const ti=document.createElement('input');
     ti.className='aei';ti.placeholder='Target (e.g. 3×10)';ti.type='text';ti.id='cex_t';ti.style.marginBottom='0';
@@ -1304,14 +1341,14 @@ function renderAddEx(){
     si.className='aei';si.placeholder='# Sets';si.type='number';si.id='cex_s';si.setAttribute('inputmode','numeric');si.min='1';si.max='10';si.style.marginBottom='0';
     row.appendChild(ti);row.appendChild(si);
     const noteI=document.createElement('input');
-    noteI.className='aei';noteI.placeholder='Notes / form cue (optional)';noteI.type='text';noteI.id='cex_note';
-    const ab=mk('button','btn btn-p');ab.textContent='Add to Workout';ab.style.marginTop='6px';
+    noteI.className='aei';noteI.placeholder='Form cues';noteI.type='text';noteI.id='cex_note';
+    const ab=mk('button','btn btn-p');ab.textContent='Add to Layout';ab.style.marginTop='6px';
     ab.onclick=()=>{
       const name=document.getElementById('cex_n')?.value?.trim();
       const tgt=document.getElementById('cex_t')?.value?.trim()||'—';
       const setsN=parseInt(document.getElementById('cex_s')?.value)||3;
-      const note=document.getElementById('cex_note')?.value?.trim()||'Custom exercise';
-      if(!name){alert('Enter an exercise name.');return;}
+      const note=document.getElementById('cex_note')?.value?.trim()||'Custom tracking addition';
+      if(!name){alert('Please supply name entry.');return;}
       if(!ST.cur.customExercises)ST.cur.customExercises=[];
       const uid=''+Date.now();
       ST.cur.customExercises.push({id:uid,name,target:tgt,sets:setsN,ref:note,custom:true});
@@ -1331,12 +1368,12 @@ function renderTrends(page){
   const hotel=total-comm;
   const strip=mk('div','sstrip');
   strip.innerHTML=`<div class="sbox"><div class="sv">${total}</div><div class="slb">Sessions</div></div>
-    <div class="sbox"><div class="sv">${comm}</div><div class="slb">Home</div></div>
-    <div class="sbox"><div class="sv">${hotel}</div><div class="slb">Hotel</div></div>`;
+    <div class="sbox"><div class="sv">${comm}</div><div class="slb">Home Base</div></div>
+    <div class="sbox"><div class="sv">${hotel}</div><div class="slb">Layovers</div></div>`;
   page.appendChild(strip);
 
   const tg=mk('div','g3');
-  [{id:'exercise',label:'💪 Exercise'},{id:'body',label:'⚖️ Body'},{id:'history',label:'📋 Log'}].forEach(m=>{
+  [{id:'exercise',label:'💪 Moves'},{id:'body',label:'⚖️ Metrics'},{id:'history',label:'📋 History'}].forEach(m=>{
     const b=mk('div','gbtn'+(ST.trendMode===m.id?' sel':''));
     b.innerHTML=`<div class="gl" style="font-size:12px">${m.label}</div>`;
     b.onclick=()=>{ST.trendMode=m.id;render();};
@@ -1351,10 +1388,10 @@ function renderTrends(page){
 
 function renderExTrend(page){
   if(!ST.sessions.length){
-    const e=mk('div','empty');e.innerHTML='<div style="font-size:44px;margin-bottom:12px">📈</div><div style="font-size:16px;font-weight:600;margin-bottom:6px">No data yet</div>';
+    const e=mk('div','empty');e.innerHTML='<div style="font-size:44px;margin-bottom:12px">📈</div><div style="font-size:14px;font-weight:600;margin-bottom:6px">No logged parameters captured yet</div>';
     page.appendChild(e);return;
   }
-  page.appendChild(lbl('Select Exercise'));
+  page.appendChild(lbl('Select Metric Target'));
   const pills=mk('div','pills');let any=false;
   for(const ex of allExs()){
     const td=trendPts(ex.id);if(!td.length)continue;any=true;
@@ -1378,8 +1415,8 @@ function renderExTrend(page){
       <div class="cw"><canvas id="tc"></canvas></div>
       <div class="sstrip" style="margin-top:12px;margin-bottom:0">
         <div class="sbox"><div class="sv">${latest[val]}</div><div class="slb">${useTime?'Best Secs':'Max lb'}</div></div>
-        <div class="sbox"><div class="sv">${td.length}</div><div class="slb">Sessions</div></div>
-        <div class="sbox"><div class="sv">${latest.vol||'—'}</div><div class="slb">Last Volume</div></div>
+        <div class="sbox"><div class="sv">${td.length}</div><div class="slb">Points</div></div>
+        <div class="sbox"><div class="sv">${latest.vol||'—'}</div><div class="slb">Vol Output</div></div>
       </div>`;
       page.appendChild(cc);
     }
@@ -1388,20 +1425,20 @@ function renderExTrend(page){
 
 function renderBodyTrend(page){
   const logCard=mk('div','card mb8');
-  logCard.innerHTML=`<div style="font-weight:600;font-size:14px;margin-bottom:12px">Log Body Metrics</div>
+  logCard.innerHTML=`<div style="font-weight:600;font-size:14px;margin-bottom:12px">Log Historical Tracking Parameters</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
       <div class="fld" style="margin-bottom:0"><label>Weight (lb)</label>
-        <input type="number" id="wt_inp" inputmode="decimal" placeholder="232" value="${ST.newWt||''}"></div>
+        <input type="number" id="wt_inp" inputmode="decimal" placeholder="e.g. 195" value="${ST.newWt||''}"></div>
       <div class="fld" style="margin-bottom:0"><label>Waist (in)</label>
-        <input type="number" id="wst_inp" inputmode="decimal" placeholder="38.5" value="${ST.newWaist||''}"></div>
+        <input type="number" id="wst_inp" inputmode="decimal" placeholder="e.g. 34" value="${ST.newWaist||''}"></div>
     </div>
-    <button class="btn btn-g" onclick="logBodyMetrics()">Log</button>`;
+    <button class="btn btn-g" onclick="logBodyMetrics()">Save Entry Point</button>`;
   logCard.querySelector('#wt_inp').oninput=e=>ST.newWt=e.target.value;
   logCard.querySelector('#wst_inp').oninput=e=>ST.newWaist=e.target.value;
   page.appendChild(logCard);
 
   if(!ST.weights.length){
-    const e=mk('div','empty');e.innerHTML='<div style="font-size:44px;margin-bottom:12px">⚖️</div><div style="font-size:16px;font-weight:600;margin-bottom:6px">No metrics logged yet</div>';
+    const e=mk('div','empty');e.innerHTML='<div style="font-size:44px;margin-bottom:12px">⚖️</div><div style="font-size:14px;font-weight:600;margin-bottom:6px">No telemetry points recorded. Log above.</div>';
     page.appendChild(e);return;
   }
 
@@ -1412,14 +1449,14 @@ function renderBodyTrend(page){
     const dW=Math.round((latest.weight-first.weight)*10)/10;
     const wc=mk('div','card mb8');
     wc.innerHTML=`<div class="fb mb8">
-      <div style="font-weight:600;font-size:15px">Body Weight</div>
+      <div style="font-weight:600;font-size:15px">Body Weight Tracking Delta</div>
       ${dW!==0?`<div style="font-size:13px;font-weight:600;color:${dW<0?'var(--green)':'var(--red)'}">${dW>0?'+':''}${dW} lb</div>`:''}
     </div>
     <div class="cw"><canvas id="wc"></canvas></div>
     <div class="sstrip" style="margin-top:12px;margin-bottom:0">
-      <div class="sbox"><div class="sv">${latest.weight||'—'}</div><div class="slb">Current lb</div></div>
+      <div class="sbox"><div class="sv">${latest.weight||'—'}</div><div class="slb">Latest lb</div></div>
       <div class="sbox"><div class="sv">${first.weight||'—'}</div><div class="slb">Start lb</div></div>
-      <div class="sbox"><div class="sv">${ST.weights.length}</div><div class="slb">Entries</div></div>
+      <div class="sbox"><div class="sv">${ST.weights.length}</div><div class="slb">Logs</div></div>
     </div>`;
     page.appendChild(wc);
   }
@@ -1430,14 +1467,14 @@ function renderBodyTrend(page){
     const dWaist=Math.round((lW.waist-fW.waist)*10)/10;
     const wc2=mk('div','card');
     wc2.innerHTML=`<div class="fb mb8">
-      <div style="font-weight:600;font-size:15px">Waist Measurement</div>
+      <div style="font-weight:600;font-size:15px">Waist Circumference Tracking</div>
       ${dWaist!==0?`<div style="font-size:13px;font-weight:600;color:${dWaist<0?'var(--green)':'var(--red)'}">${dWaist>0?'+':''}${dWaist} in</div>`:''}
     </div>
     <div class="cw"><canvas id="wc2"></canvas></div>
     <div class="sstrip" style="margin-top:12px;margin-bottom:0">
-      <div class="sbox"><div class="sv">${lW.waist||'—'}</div><div class="slb">Current in</div></div>
+      <div class="sbox"><div class="sv">${lW.waist||'—'}</div><div class="slb">Latest in</div></div>
       <div class="sbox"><div class="sv">${fW.waist||'—'}</div><div class="slb">Start in</div></div>
-      <div class="sbox"><div class="sv">${waistData.length}</div><div class="slb">Entries</div></div>
+      <div class="sbox"><div class="sv">${waistData.length}</div><div class="slb">Logs</div></div>
     </div>`;
     page.appendChild(wc2);
   }
@@ -1446,7 +1483,7 @@ function renderBodyTrend(page){
 async function logBodyMetrics(){
   const wt=parseFloat(ST.newWt);
   const waist=parseFloat(ST.newWaist)||null;
-  if(!wt||wt<50||wt>500){alert('Enter a valid weight.');return;}
+  if(!wt||wt<50||wt>500){alert('Please input real structural data.');return;}
   await dbLogWeight(wt,waist);
   ST.weights=await dbGetWeights();
   ST.newWt='';ST.newWaist='';render();
@@ -1454,10 +1491,10 @@ async function logBodyMetrics(){
 
 function renderHistory(page){
   if(!ST.sessions.length){
-    const e=mk('div','empty');e.innerHTML='<div style="font-size:44px;margin-bottom:12px">📋</div><div style="font-size:16px;font-weight:600;margin-bottom:6px">No sessions yet</div>';
+    const e=mk('div','empty');e.innerHTML='<div style="font-size:44px;margin-bottom:12px">📋</div><div style="font-size:14px;font-weight:600;margin-bottom:6px">No flights logged inside ledger</div>';
     page.appendChild(e);return;
   }
-  page.appendChild(lbl('Recent Sessions'));
+  page.appendChild(lbl('Flight Log History'));
   [...ST.sessions].reverse().slice(0,25).forEach(s=>{
     const gd=WK[s.goal||'strength'];
     const color=gd?.color||'#2f6eb5';
@@ -1467,8 +1504,8 @@ function renderHistory(page){
     const exCnt=Object.values(s.sets||{}).filter(sets=>sets.some(x=>x.reps||x.weight||x.seconds)).length;
     const it=mk('div','hi');
     it.innerHTML=`<div>
-      <div style="font-weight:600;font-size:14px;border-left:3px solid ${color};padding-left:8px">${wName}</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:2px">${date} · ${exCnt} exercises · ${s.gymUsed==='commercial'?'Commercial':'Hotel'}</div>
+      <div style="font-weight:600;font-size:14px;border-left:3px solid ${color};padding-left:8px">${wName} ${s.fatigueScaleApplied?'<span style="color:var(--red); font-size:11px;">[Scaled]</span>':''}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">${date} · ${exCnt} tracked moves · ${s.gymUsed==='commercial'?'Home Base':'Layover'}</div>
     </div>
     <div class="hbg" style="background:${color}22;color:${color}">${s.key||'?'}</div>`;
     page.appendChild(it);
@@ -1493,11 +1530,11 @@ function renderExport(page){
   const hero=mk('div','');
   hero.style.cssText='background:var(--navy);border-radius:var(--r);padding:24px;text-align:center;margin-bottom:16px';
   hero.innerHTML=`<div style="font-size:40px;margin-bottom:8px">📊</div>
-    <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--gold);letter-spacing:0.06em">Export Data</div>
-    <div style="font-size:13px;color:#8899aa;margin-top:4px">${ST.sessions.length} sessions logged</div>`;
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--gold);letter-spacing:0.06em">Telemetry Dump</div>
+    <div style="font-size:13px;color:#8899aa;margin-top:4px">${ST.sessions.length} rotations captured</div>`;
   page.appendChild(hero);
-  const dl=mk('button','btn btn-g mb8');dl.textContent='Download CSV';dl.onclick=exportCSV;page.appendChild(dl);
-  const n=mk('div','note');n.textContent='Includes date, goal, workout, gym, exercise, set, reps, weight, and seconds. Opens in Excel, Numbers, or Google Sheets.';page.appendChild(n);
+  const dl=mk('button','btn btn-g mb8');dl.textContent='Download System CSV File';dl.onclick=exportCSV;page.appendChild(dl);
+  const n=mk('div','note');n.textContent='Generates structured data for Excel, Sheets, or custom tracking platforms.';page.appendChild(n);
 }
 
 // ─── USER DATA PROFILE SETTINGS ───────────────────────────────────────────────
@@ -1505,16 +1542,20 @@ function renderProfile(page){
   const p=ST.profile;
   const editing=ST.profEdit||!p;
   const goal=p?GOALS.find(g=>g.id===p.goal):null;
+  
+  // Fetch latest telemetry to display inside profile view cleanly
+  const latestWeight=ST.weights.length?ST.weights[ST.weights.length-1].weight:'—';
+  const latestWaist=ST.weights.length&&ST.weights[ST.weights.length-1].waist?ST.weights[ST.weights.length-1].waist:'—';
 
   if(!editing&&p){
     const hero=mk('div','phero');
     hero.innerHTML=`<div style="font-size:44px;margin-bottom:8px">${goal?.icon||'✈'}</div>
       <div style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--gold);letter-spacing:0.06em">${p.name||'Flight Crew'}</div>
-      <div style="font-size:12px;color:#8899aa;margin-top:3px">Age ${p.age||'—'} · ${p.weight||'—'} lb · Waist ${p.waist||'—'}" · ${p.level||'Intermediate'}</div>`;
+      <div style="font-size:12px;color:#8899aa;margin-top:3px">Age ${p.age||'—'} · Current Weight: ${latestWeight} lb · Current Waist: ${latestWaist}" · Level: ${p.level||'Intermediate'}</div>`;
     page.appendChild(hero);
 
     const gc=mk('div','card');
-    gc.innerHTML=`<div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.04em">Goal</div>
+    gc.innerHTML=`<div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.04em">Aviation Mission Strategy Goal</div>
       <div style="display:flex;align-items:center;gap:10px">
         <div style="font-size:32px">${goal?.icon||'🏋️'}</div>
         <div>
@@ -1525,52 +1566,48 @@ function renderProfile(page){
     page.appendChild(gc);
 
     const ss=mk('div','sstrip');
-    ss.innerHTML=`<div class="sbox"><div class="sv">${p.age||'—'}</div><div class="slb">Age</div></div>
-      <div class="sbox"><div class="sv">${p.weight||'—'}</div><div class="slb">Weight lb</div></div>
-      <div class="sbox"><div class="sv">${ST.sessions.length}</div><div class="slb">Sessions</div></div>`;
+    ss.innerHTML=`<div class="sbox"><div class="sv">${p.age||'—'}</div><div class="slb">Age Axis</div></div>
+      <div class="sbox"><div class="sv">${latestWeight}</div><div class="slb">Telemetry lb</div></div>
+      <div class="sbox"><div class="sv">${ST.sessions.length}</div><div class="slb">Logged Blocks</div></div>`;
     page.appendChild(ss);
 
     const lvlNote=mk('div','note gld');
     const ll=LEVEL_LIMIT[p.level||'intermediate'];
-    lvlNote.innerHTML=`<strong>${p.level||'Intermediate'}</strong> level — you'll see ${ll} exercises per workout. Change anytime in Edit Profile.`;
+    lvlNote.innerHTML=`<strong>${p.level||'Intermediate Plan'}</strong> path mapped — displaying ${ll} priority moves per flight slot. Modify inside configurations text loop.`;
     page.appendChild(lvlNote);
 
-    const eb=mk('button','btn btn-o mt8');eb.textContent='Edit Profile';
+    const eb=mk('button','btn btn-o mt8');eb.textContent='Edit Profile Settings';
     eb.onclick=()=>{ST.profEdit=true;render();};page.appendChild(eb);
 
     const dz=mk('div','card mt16');
-    dz.innerHTML='<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.04em">Account</div>';
-    const so=mk('button','btn btn-red btn-sm');so.textContent='Sign Out';so.onclick=doSignOut;
+    dz.innerHTML='<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.04em">Account Management</div>';
+    const so=mk('button','btn btn-red btn-sm');so.textContent='Sign Out of Terminal';so.onclick=doSignOut;
     dz.appendChild(so);page.appendChild(dz);
     return;
   }
 
-  const draft=ST.profDraft||(p?{...p}:{name:'',age:'',weight:'',waist:'',level:'intermediate',goal:'strength'});
+  // NOTE: FIXED weight and waist inputs completely removed here to prevent data historical corruption.
+  const draft=ST.profDraft||(p?{...p}:{name:'',age:'',level:'intermediate',goal:'strength'});
   ST.profDraft=draft;
 
   if(!p){
     const wc=mk('div','card mb8');
-    wc.innerHTML=`<div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--navy);letter-spacing:0.04em;margin-bottom:4px">Welcome, Flight Crew</div>
-      <div style="font-size:13px;color:var(--muted);line-height:1.5">Set up your profile to get a personalized workout plan. Takes 60 seconds.</div>`;
+    wc.innerHTML=`<div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--navy);letter-spacing:0.04em;margin-bottom:4px">Pre-Flight Onboarding Checklist</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.5">Configure your structural parameters to build an engine track. Initial deployment takes 45 seconds.</div>`;
     page.appendChild(wc);
   }
 
   const ic=mk('div','card');
-  ic.innerHTML=`<div class="shdr" style="margin-top:0">About You</div>
-    <div class="fld"><label>Name / Callsign (optional)</label><input type="text" id="p_name" value="${draft.name||''}" placeholder="Name or callsign"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="fld"><label>Age</label><input type="number" id="p_age" inputmode="numeric" value="${draft.age||''}" placeholder="e.g. 42"></div>
-      <div class="fld"><label>Weight (lb)</label><input type="number" id="p_wt" inputmode="decimal" value="${draft.weight||''}" placeholder="e.g. 185"></div>
-    </div>
-    <div class="fld"><label>Waist (inches)</label><input type="number" id="p_waist" inputmode="decimal" value="${draft.waist||''}" placeholder="e.g. 36.5"></div>`;
+  ic.innerHTML=`<div class="shdr" style="margin-top:0">Identity Vector</div>
+    <div class="fld"><label>Callsign / Name</label><input type="text" id="p_name" value="${draft.name||''}" placeholder="e.g. Captain Cooper"></div>
+    <div class="fld"><label>Age</label><input type="number" id="p_age" inputmode="numeric" value="${draft.age||''}" placeholder="e.g. 49"></div>
+    <div style="font-size:11px; color:var(--hint); padding-top:4px;">💡 Note: Weight and waist tracking metrics have been centralized under the <strong>Metrics (Trends)</strong> tab to support charting deltas safely without rewriting initial baseline parameters.</div>`;
   page.appendChild(ic);
   ic.querySelector('#p_name').oninput=e=>draft.name=e.target.value;
   ic.querySelector('#p_age').oninput=e=>draft.age=e.target.value;
-  ic.querySelector('#p_wt').oninput=e=>draft.weight=e.target.value;
-  ic.querySelector('#p_waist').oninput=e=>draft.waist=e.target.value;
 
   const lvc=mk('div','card');
-  lvc.innerHTML='<div class="shdr" style="margin-top:0">Fitness Level</div><div style="font-size:12px;color:var(--muted);margin-bottom:10px">Controls how many exercises you see per workout: Beginner=3, Intermediate=4, Advanced=5</div>';
+  lvc.innerHTML='<div class="shdr" style="margin-top:0">Fitness Matrix Level</div><div style="font-size:12px;color:var(--muted);margin-bottom:10px">Controls exercise visibility threshold density: Beginner=3 moves, Intermediate=4 moves, Advanced=5 moves.</div>';
   const lvg=mk('div','g3');
   [{id:'beginner',l:'Beginner'},{id:'intermediate',l:'Intermediate'},{id:'advanced',l:'Advanced'}].forEach(lv=>{
     const b=mk('div','lvl'+(draft.level===lv.id?' sel':''));
@@ -1581,7 +1618,7 @@ function renderProfile(page){
   lvc.appendChild(lvg);page.appendChild(lvc);
 
   const gc2=mk('div','card');
-  gc2.innerHTML='<div class="shdr" style="margin-top:0">Training Goal</div>';
+  gc2.innerHTML='<div class="shdr" style="margin-top:0">Training Goal Parameter Focus</div>';
   const gg2=mk('div','');gg2.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px';
   GOALS.forEach(g=>{
     const b=mk('div','gcrd'+(draft.goal===g.id?' sel':''));
@@ -1591,15 +1628,17 @@ function renderProfile(page){
   });
   gc2.appendChild(gg2);page.appendChild(gc2);
 
+  // Disclaimer legal block
+  const discBox=mk('div','card mt12');
+  discBox.innerHTML=`<p class="disclaimer-text"><strong>Medical Liability Disclaimer & Release Waiver:</strong> Flight Crew Fitness acts strictly as a data-logging and training reference template. Consult an FAA Aviation Medical Examiner or occupational physical therapist prior to enacting tracking schedules. The creators, builders, and operators explicitly assume zero liability for physical injury, cardiovascular strain, structural regression, or complications sustained during movement execution.</p>`;
+  page.appendChild(discBox);
+
   const sv=mk('button','btn btn-g mt8');
-  sv.textContent=p?'Save Changes':'Build My Program →';
+  sv.textContent=p?'Commit System Changes':'Build Flight Track Plan →';
   sv.onclick=async()=>{
-    if(!draft.goal){alert('Please select a training goal.');return;}
+    if(!draft.goal){alert('Goal target mapping is required.');return;}
     ST.profile={...draft};
     await dbSetProfile(ST.profile);
-    if(draft.weight&&parseFloat(draft.weight)>0)
-      if(!p||draft.weight!==p.weight||draft.waist!==p.waist)
-        await dbLogWeight(parseFloat(draft.weight),parseFloat(draft.waist)||null);
     ST.profEdit=false;ST.profDraft=null;
     if(p?.goal!==draft.goal){ST.cur=null;await startNext();}
     render();
@@ -1613,23 +1652,22 @@ function renderSetup(app){
   app.innerHTML=`<div class="page" style="overflow-y:auto;height:100dvh;padding-bottom:40px">
     <div style="text-align:center;padding:32px 0 24px">
       <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;color:var(--navy);letter-spacing:0.08em">✈ FLIGHT CREW FITNESS</div>
-      <div style="font-size:14px;color:var(--muted);margin-top:4px">One-time setup — ~10 minutes</div>
+      <div style="font-size:14px;color:var(--muted);margin-top:4px">System initialization checklist loop</div>
     </div>
     <div class="scard"><h3>Step 1 — Supabase Database</h3>
-      <div class="sstep"><div class="snum">1</div><div>Go to <a style="color:var(--blue)" href="https://supabase.com" target="_blank">supabase.com</a> → free account → new project</div></div>
-      <div class="sstep"><div class="snum">2</div><div>Project Settings → API → copy Project URL and anon key</div></div>
-      <div class="sstep"><div class="snum">3</div><div>SQL Editor → run the full SQL from README.md</div></div>
+      <div class="sstep"><div class="snum">1</div><div>Go to <a style="color:var(--blue)" href="https://supabase.com" target="_blank">supabase.com</a> → build free instance</div></div>
+      <div class="sstep"><div class="snum">2</div><div>Project Settings → API → copy tokens loop parameters</div></div>
+      <div class="sstep"><div class="snum">3</div><div>SQL Editor → execute schema code matrix arrays</div></div>
     </div>
-    <div class="scard"><h3>Step 2 — Edit index.html</h3>
-      <div class="sstep"><div class="snum">1</div><div>Find the two <code style="background:#f0ede8;padding:2px 5px;border-radius:4px">YOUR_SUPABASE_...</code> lines near the top</div></div>
-      <div class="sstep"><div class="snum">2</div><div>Paste in your actual URL and anon key. Save the file.</div></div>
+    <div class="scard"><h3>Step 2 — Inject API Key Telemetry</h3>
+      <div class="sstep"><div class="snum">1</div><div>Locate variable tracking boundaries near top line limits</div></div>
+      <div class="sstep"><div class="snum">2</div><div>Save actual tokens strings and hit file sync save boundaries.</div></div>
     </div>
-    <div class="scard"><h3>Step 3 — GitHub Pages + iPhone</h3>
-      <div class="sstep"><div class="snum">1</div><div>Upload index.html, manifest.json, and sw.js to your pilot-program GitHub repo</div></div>
-      <div class="sstep"><div class="snum">2</div><div>Settings → Pages → deploy from main → wait 2 min</div></div>
-      <div class="sstep"><div class="snum">3</div><div>Open in Safari → Share → Add to Home Screen</div></div>
+    <div class="scard"><h3>Step 3 — Deploy Standalone UI PWA</h3>
+      <div class="sstep"><div class="snum">1</div><div>Commit files array directly to your repository main directory structure</div></div>
+      <div class="sstep"><div class="snum">2</div><div>Settings → Pages → deploy from main tracking link slot</div></div>
+      <div class="sstep"><div class="snum">3</div><div>Open Safari/Chrome inside mobile client and select Add to Home Screen standalone frame hook</div></div>
     </div>
-    <div class="note gld">See README.md for the full SQL and waist column migration.</div>
   </div>`;
 }
 
@@ -1638,18 +1676,18 @@ function renderAuth(app){
   app.innerHTML=`<div class="page" style="display:flex;flex-direction:column;justify-content:center;min-height:100dvh">
     <div style="text-align:center;padding:0 0 32px">
       <div style="font-family:'Bebas Neue',sans-serif;font-size:34px;color:var(--navy);letter-spacing:0.08em">✈ FLIGHT CREW FITNESS</div>
-      <div style="font-size:14px;color:var(--muted);margin-top:4px">Your training starts here</div>
+      <div style="font-size:14px;color:var(--muted);margin-top:4px">Pre-Flight Gate Clearance</div>
     </div>
     <div class="scard">
-      <h3>${isUp?'Create Account':'Sign In'}</h3>
-      <div class="fld"><label>Email</label><input type="email" id="ae" value="${ST.authEmail}" placeholder="your@email.com" autocomplete="email"></div>
-      <div class="fld"><label>Password</label><input type="password" id="ap" value="${ST.authPass}" placeholder="${isUp?'Choose a password':'Password'}" autocomplete="${isUp?'new-password':'current-password'}"></div>
+      <h3>${isUp?'Register Crew Profile':'Clear Security Gate'}</h3>
+      <div class="fld"><label>Email Terminal Address</label><input type="email" id="ae" value="${ST.authEmail}" placeholder="crew@airline.com" autocomplete="email"></div>
+      <div class="fld"><label>Security Access Code / Pass</label><input type="password" id="ap" value="${ST.authPass}" placeholder="Access boundary token" autocomplete="${isUp?'new-password':'current-password'}"></div>
       <div class="emsg${ST.authErr?' on':''}">${ST.authErr}</div>
-      <button class="btn btn-p mt12" id="asub">${isUp?'Create Account':'Sign In'}</button>
+      <button class="btn btn-p mt12" id="asub">${isUp?'Initialize Profile':'Clear Gate Check'}</button>
     </div>
     <div style="text-align:center;font-size:13px;color:var(--muted)">
-      ${isUp?'Already have an account?':'New here?'}
-      <button onclick="ST.authMode='${isUp?'signin':'signup'}';ST.authErr='';render();" style="background:none;border:none;color:var(--blue);font-size:13px;cursor:pointer;text-decoration:underline;font-family:'DM Sans',sans-serif">${isUp?'Sign in':'Sign up'}</button>
+      ${isUp?'Already cleared gate checkpoints?':'New crew rotation member?'}
+      <button onclick="ST.authMode='${isUp?'signin':'signup'}';ST.authErr='';render();" style="background:none;border:none;color:var(--blue);font-size:13px;cursor:pointer;text-decoration:underline;font-family:'DM Sans',sans-serif">${isUp?'Sign in here':'Register track profile'}</button>
     </div>
   </div>`;
 
@@ -1665,7 +1703,7 @@ function renderAuth(app){
       asubBtn.onclick = async () => {
         const email = aeInput ? aeInput.value.trim() : '';
         const pass = apInput ? apInput.value : '';
-        asubBtn.textContent = '...';
+        asubBtn.textContent = 'Clearing...';
         asubBtn.disabled = true;
         try {
           sbUser = isUp ? await doSignUp(email, pass) : await doSignIn(email, pass);
@@ -1673,11 +1711,11 @@ function renderAuth(app){
             ST.page = 'workout';
             await loadData();
           } else {
-            ST.authErr = 'Check your email to confirm, then sign in.';
+            ST.authErr = 'Verification loop dispatched. Confirm email link to clear security.';
             render();
           }
         } catch (err) {
-          ST.authErr = err.message || 'Authentication failed';
+          ST.authErr = err.message || 'Gate clearance rejected. Re-verify crew input coordinates.';
           render();
         }
       };
@@ -1693,18 +1731,18 @@ window.onerror=function(msg,src,line,col,err){
   var app=document.getElementById('app');
   if(app) app.innerHTML='<div style="padding:40px 24px;font-family:sans-serif;color:#0d1b2a;text-align:center">'+
     '<div style="font-size:28px;margin-bottom:12px">&#x2708;</div>'+
-    '<div style="font-size:16px;font-weight:600;margin-bottom:8px">Something went wrong</div>'+
+    '<div style="font-size:16px;font-weight:600;margin-bottom:8px">Runtime Telemetry Disrupted</div>'+
     '<div style="background:#fff0ee;border:1px solid #fcc;border-radius:8px;padding:12px;font-size:12px;color:#8a1a1a;margin:0 auto 20px;max-width:300px;text-align:left">'+
     msg+'<br><small>'+src+' line '+line+'</small></div>'+
-    '<button onclick="location.reload()" style="padding:12px 24px;background:#0d1b2a;color:#c9a84c;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Reload</button></div>';
+    '<button onclick="location.reload()" style="padding:12px 24px;background:#0d1b2a;color:#c9a84c;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Force System Restart</button></div>';
   return false;
 };
 try{init();}catch(err){
   document.getElementById('app').innerHTML='<div style="padding:40px 24px;font-family:sans-serif;color:#0d1b2a;text-align:center">'+
     '<div style="font-size:28px;margin-bottom:12px">&#x2708;</div>'+
-    '<div style="font-size:16px;font-weight:600;margin-bottom:8px">Startup Error</div>'+
+    '<div style="font-size:16px;font-weight:600;margin-bottom:8px">Core Handshake Failure</div>'+
     '<div style="font-size:13px;color:#666;margin-bottom:20px">'+err.message+'</div>'+
-    '<button onclick="location.reload()" style="padding:12px 24px;background:#0d1b2a;color:#c9a84c;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Reload</button></div>';
+    '<button onclick="location.reload()" style="padding:12px 24px;background:#0d1b2a;color:#c9a84c;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Re-Engage System</button></div>';
 }
 </script>
 </body>

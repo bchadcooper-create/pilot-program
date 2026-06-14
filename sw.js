@@ -52,6 +52,9 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
+  // FIX: Instantly reject Chrome Extensions or non-web schemas from cache routing
+  if (!e.request.url.startsWith('http')) return;
+
   if (url.hostname.includes('supabase.co')) {
     e.respondWith(
       fetch(e.request).catch(() => new Response('{}', { 

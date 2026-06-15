@@ -1,21 +1,28 @@
 /**
  * Flight Crew Fitness - Core Engine
- * Manages UI rendering, hydration, workout logic, and Supabase persistence.
+ * Final Production Version
  */
 
 // --- 1. Supabase Initialization ---
-const SUPABASE_URL = 'https://dnxkydxbyihgsictbzjz.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRueGt5ZHhieWloZ3NpY3Riemp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3ODk4MTEsImV4cCI6MjA5NjM2NTgxMX0.oLUGuorQkbQ_u679NpE8FGBVAUmVE1K_rxl8q4B0n7k';
+// We check if it exists to avoid redeclaration errors
+if (typeof window.supabase === 'undefined') {
+    const SUPABASE_URL = 'https://dnxkydxbyihgsictbzjz.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRueGt5ZHhieWloZ3NpY3Riemp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3ODk4MTEsImV4cCI6MjA5NjM2NTgxMX0.oLUGuorQkbQ_u679NpE8FGBVAUmVE1K_rxl8q4B0n7k';
+    window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+}
 
-const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-// --- 2. Global Initialization ---
+// --- 2. Global Initialization (Called by index.html) ---
 window.init = function() {
     console.log("FCF Engine Initialized.");
     setupEventListeners();
     generateWorkoutUI();
+    
+    // Update Dashboard UI
+    const status = document.querySelector('.text-3xl.font-bold');
+    if (status) status.innerText = "Operational";
 };
 
+// --- 3. Event Listeners ---
 function setupEventListeners() {
     const hoursInput = document.getElementById('blockHours');
     const waterInput = document.getElementById('waterCleared');
@@ -26,7 +33,7 @@ function setupEventListeners() {
     if (fatigueToggle) fatigueToggle.addEventListener('change', generateWorkoutUI);
 }
 
-// --- 3. Hydration Logic ---
+// --- 4. Hydration Logic ---
 function calculateHydration() {
     const hours = parseFloat(document.getElementById('blockHours')?.value) || 0;
     const cleared = parseFloat(document.getElementById('waterCleared')?.value) || 0;
@@ -49,7 +56,7 @@ function calculateHydration() {
     }
 }
 
-// --- 4. Workout Engine ---
+// --- 5. Workout Engine ---
 const pilotProtocolStretches = [
     { name: "Kneeling Hip Flexor + Reach", reps: "60s/side" },
     { name: "Thoracic Book Openers", reps: "10/side" },
@@ -94,11 +101,10 @@ function generateWorkoutUI() {
     container.innerHTML = html;
 }
 
-// --- 5. Data Persistence Engine ---
+// --- 6. Persistence Engine ---
 async function completeFlight() {
     const isFatigueMode = document.getElementById('fatigueToggle').checked;
     
-    // Calculate Metrics
     const bodyweightKg = 85; 
     const MET = isFatigueMode ? 3.5 : 5.0; 
     const calories = Math.round(45 * (MET * 3.5 * bodyweightKg) / 200);
@@ -109,13 +115,11 @@ async function completeFlight() {
         tonnage += (parseFloat(wIn.value) || 0) * (parseFloat(rIn?.value) || 0);
     });
 
-    // Update UI Summary
     document.getElementById('postCal').innerText = calories;
     document.getElementById('postTon').innerText = isFatigueMode ? "Bodyweight" : tonnage + " lbs";
 
-    // Push to Supabase
     try {
-        await supabase.from('workout_sessions').insert([{
+        await window.supabase.from('workout_sessions').insert([{
             session_data: { calories, tonnage, fatigueMode: isFatigueMode, date: new Date().toISOString() },
             workout_key: 'session_' + Date.now()
         }]);
@@ -126,5 +130,5 @@ async function completeFlight() {
 
     document.getElementById('takeoffBriefing').classList.add('hidden');
     document.getElementById('completeFlightBtn').classList.add('hidden');
-    switchTab('postflight');
+    window.switchTab('postflight');
 }

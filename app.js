@@ -1,9 +1,25 @@
-console.log("app.js has successfully loaded!");
-
 /**
  * Flight Crew Fitness - Core Engine
  * Manages UI rendering, hydration, and workout logic.
  */
+
+/**
+ * Flight Crew Fitness - Core Engine
+ */
+
+// Define init globally so index.html can find it
+window.init = function() {
+    console.log("FCF Engine Initialized.");
+    // This connects to the <div id="app"> in your index.html
+    const app = document.getElementById('app');
+    if (app) {
+        app.innerHTML = '<h1>Flight Crew Fitness</h1><p>System Operational.</p>';
+        // Here you would call your UI rendering functions
+    }
+};
+
+// Ensure app.js logic is fully loaded
+console.log("app.js loaded successfully.");
 
 // --- 1. Initialization ---
 function init() {

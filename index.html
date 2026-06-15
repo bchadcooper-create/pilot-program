@@ -3,21 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <title>Flight Crew Fitness | Professional SOP</title>
+    <title>Flight Crew Fitness | SOP</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <style>
         .hidden { display: none !important; }
         .tab-active { color: #3b82f6; border-top: 2px solid #3b82f6; }
-        body { padding-bottom: constant(safe-area-inset-bottom); padding-bottom: env(safe-area-inset-bottom); }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen font-sans">
     <main id="app" class="p-4 max-w-md mx-auto mb-24">
         <div id="view-dashboard">
             <h1 class="text-2xl font-bold mb-6 text-blue-400">Preflight Briefing</h1>
-            <label class="block text-xs uppercase text-gray-500 mb-1">Gym Environment</label>
+            <label class="block text-xs uppercase text-gray-500 mb-1">Mission Environment</label>
             <select id="gymEnv" class="w-full bg-gray-800 p-3 rounded mb-4 border border-gray-700">
                 <option value="room">Hotel Room (Minimal)</option>
                 <option value="hotel">Hotel Gym (Variable)</option>
@@ -58,12 +57,11 @@
     </main>
 
     <nav class="fixed bottom-0 w-full bg-gray-900 border-t border-gray-800 flex justify-around py-4 z-50">
-        <button onclick="window.switchTab('dashboard')" id="tab-dashboard" class="text-xs">Preflight</button>
-        <button onclick="window.switchTab('workout')" id="tab-workout" class="text-xs">Flight</button>
-        <button onclick="window.switchTab('export')" id="tab-export" class="text-xs">Trends</button>
-        <button onclick="window.switchTab('wisdom')" id="tab-wisdom" class="text-xs">Wisdom</button>
+        <button onclick="window.switchTab('dashboard')" class="text-xs">Preflight</button>
+        <button onclick="window.switchTab('workout')" class="text-xs">Flight</button>
+        <button onclick="window.switchTab('export')" class="text-xs">Trends</button>
+        <button onclick="window.switchTab('wisdom')" class="text-xs">Wisdom</button>
     </nav>
-
     <script src="/pilot-program/app.js"></script>
 </body>
 </html>

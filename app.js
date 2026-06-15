@@ -4,26 +4,49 @@
  */
 
 // --- 1. Supabase Initialization ---
-// We check if it exists to avoid redeclaration errors
 if (typeof window.supabase === 'undefined') {
     const SUPABASE_URL = 'https://dnxkydxbyihgsictbzjz.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRueGt5ZHhieWloZ3NpY3Riemp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3ODk4MTEsImV4cCI6MjA5NjM2NTgxMX0.oLUGuorQkbQ_u679NpE8FGBVAUmVE1K_rxl8q4B0n7k';
     window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 }
 
-// --- 2. Global Initialization (Called by index.html) ---
-window.init = function() {
-    console.log("FCF Engine Initialized.");
-    setupEventListeners();
-    generateWorkoutUI();
+// --- 2. Global Navigation Logic ---
+window.switchTab = function(tabName) {
+    // Hide all views
+    ['dashboard', 'workout', 'export', 'postflight'].forEach(t => {
+        const view = document.getElementById(`view-${t}`);
+        if (view) view.classList.add('hidden');
+    });
+    // Reset tab styling
+    ['dashboard', 'workout', 'export'].forEach(t => {
+        const tab = document.getElementById(`tab-${t}`);
+        if (tab) {
+            tab.classList.remove('tab-active', 'text-blue-500');
+            tab.classList.add('border-transparent');
+        }
+    });
+
+    // Show selected
+    const selectedView = document.getElementById(`view-${tabName}`);
+    if (selectedView) selectedView.classList.remove('hidden');
+    const selectedTab = document.getElementById(`tab-${tabName}`);
+    if (selectedTab) {
+        selectedTab.classList.add('tab-active', 'text-blue-500');
+        selectedTab.classList.remove('border-transparent');
+    }
     
-    // Update Dashboard UI
-    const status = document.querySelector('.text-3xl.font-bold');
-    if (status) status.innerText = "Operational";
+    if (tabName === 'workout') {
+        generateWorkoutUI();
+        const briefing = document.getElementById('takeoffBriefing');
+        if (briefing) briefing.classList.remove('hidden');
+    }
 };
 
-// --- 3. Event Listeners ---
-function setupEventListeners() {
+// --- 3. Global Initialization ---
+window.init = function() {
+    console.log("FCF Engine Initialized.");
+    
+    // Bind listeners
     const hoursInput = document.getElementById('blockHours');
     const waterInput = document.getElementById('waterCleared');
     const fatigueToggle = document.getElementById('fatigueToggle');
@@ -31,7 +54,9 @@ function setupEventListeners() {
     if (hoursInput) hoursInput.addEventListener('input', calculateHydration);
     if (waterInput) waterInput.addEventListener('input', calculateHydration);
     if (fatigueToggle) fatigueToggle.addEventListener('change', generateWorkoutUI);
-}
+    
+    generateWorkoutUI();
+};
 
 // --- 4. Hydration Logic ---
 function calculateHydration() {
@@ -46,7 +71,7 @@ function calculateHydration() {
     resultBox.classList.remove('hidden', 'bg-yellow-900', 'bg-red-900', 'bg-green-900');
     if (deficit <= 0) {
         resultBox.classList.add('bg-green-900', 'text-green-200');
-        resultBox.innerHTML = `✅ <b>Hydration Optimal.</b> Ready for duty.`;
+        resultBox.innerHTML = `✅ <b>Hydration Optimal.</b> Target: ${target.toFixed(1)}L. Ready for duty.`;
     } else if (deficit > 2.0) {
         resultBox.classList.add('bg-red-900', 'text-red-200');
         resultBox.innerHTML = `⚠️ <b>Deficit: ${deficit.toFixed(1)}L.</b> Chug 1L before starting.`;
@@ -92,8 +117,8 @@ function generateWorkoutUI() {
     routine.forEach((ex, i) => {
         html += `<div class="mb-3">
             <p class="font-bold text-white">${ex.name}</p>
-            <input type="number" id="weight_${i}" placeholder="Weight" class="w-full bg-gray-900 p-2 rounded border border-gray-600 text-sm mb-1">
-            <input type="number" id="reps_${i}" placeholder="Reps" class="w-full bg-gray-900 p-2 rounded border border-gray-600 text-sm">
+            <input type="number" id="weight_${i}" placeholder="Weight/Time" class="w-full bg-gray-900 p-2 rounded border border-gray-600 text-sm mb-1">
+            <input type="number" id="reps_${i}" placeholder="Reps/Sets" class="w-full bg-gray-900 p-2 rounded border border-gray-600 text-sm">
         </div>`;
     });
     html += `</div>`;
@@ -101,10 +126,9 @@ function generateWorkoutUI() {
     container.innerHTML = html;
 }
 
-// --- 6. Persistence Engine ---
-async function completeFlight() {
+// --- 6. Data Persistence Engine ---
+window.completeFlight = async function() {
     const isFatigueMode = document.getElementById('fatigueToggle').checked;
-    
     const bodyweightKg = 85; 
     const MET = isFatigueMode ? 3.5 : 5.0; 
     const calories = Math.round(45 * (MET * 3.5 * bodyweightKg) / 200);
@@ -131,37 +155,4 @@ async function completeFlight() {
     document.getElementById('takeoffBriefing').classList.add('hidden');
     document.getElementById('completeFlightBtn').classList.add('hidden');
     window.switchTab('postflight');
-}
-// Add this to the very bottom of app.js
-window.switchTab = function(tabName) {
-    // Hide all views
-    ['dashboard', 'workout', 'export', 'postflight'].forEach(t => {
-        const view = document.getElementById(`view-${t}`);
-        if (view) view.classList.add('hidden');
-    });
-    
-    // Reset tab styling
-    ['dashboard', 'workout', 'export'].forEach(t => {
-        const tab = document.getElementById(`tab-${t}`);
-        if (tab) {
-            tab.classList.remove('tab-active', 'text-blue-500');
-            tab.classList.add('border-transparent');
-        }
-    });
-
-    // Show selected
-    const selectedView = document.getElementById(`view-${tabName}`);
-    if (selectedView) selectedView.classList.remove('hidden');
-    
-    const selectedTab = document.getElementById(`tab-${tabName}`);
-    if (selectedTab) {
-        selectedTab.classList.add('tab-active', 'text-blue-500');
-        selectedTab.classList.remove('border-transparent');
-    }
-    
-    if (tabName === 'workout') {
-        generateWorkoutUI();
-        const briefing = document.getElementById('takeoffBriefing');
-        if (briefing) briefing.classList.remove('hidden');
-    }
 };

@@ -1,3 +1,5 @@
+console.log("app.js has successfully loaded!");
+
 /**
  * Flight Crew Fitness - Core Engine
  * Manages UI rendering, hydration, and workout logic.

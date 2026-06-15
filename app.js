@@ -1,45 +1,35 @@
 /**
  * Flight Crew Fitness - Core Engine
- * Manages UI rendering, hydration, and workout logic.
+ * Unified and Cleaned for Production
  */
 
-/**
- * Flight Crew Fitness - Core Engine
- */
-
-// Define init globally so index.html can find it
+// Global Init Function - This is what your index.html calls
 window.init = function() {
-    console.log("FCF Engine Initialized.");
-    // This connects to the <div id="app"> in your index.html
-    const app = document.getElementById('app');
-    if (app) {
-        app.innerHTML = '<h1>Flight Crew Fitness</h1><p>System Operational.</p>';
-        // Here you would call your UI rendering functions
-    }
+    console.log("FCF Engine Initializing...");
+    
+    // 1. Setup Listeners
+    setupEventListeners();
+    
+    // 2. Initial UI Render
+    generateWorkoutUI();
+    
+    console.log("FCF Engine Fully Operational.");
 };
 
-// Ensure app.js logic is fully loaded
-console.log("app.js loaded successfully.");
-
-// --- 1. Initialization ---
-function init() {
-    console.log("FCF Engine Initializing...");
-    // Bind event listeners
-    setupEventListeners();
-    // Default render
-    generateWorkoutUI();
-}
-
-// --- 2. Event Listeners ---
+// --- Event Listeners ---
 function setupEventListeners() {
-    // Listen for hydration inputs
     const hoursInput = document.getElementById('blockHours');
     const waterInput = document.getElementById('waterCleared');
+    
+    // Use optional chaining/null checks so we don't crash if elements are missing
     if (hoursInput) hoursInput.addEventListener('input', calculateHydration);
     if (waterInput) waterInput.addEventListener('input', calculateHydration);
+    
+    const fatigueToggle = document.getElementById('fatigueToggle');
+    if (fatigueToggle) fatigueToggle.addEventListener('change', generateWorkoutUI);
 }
 
-// --- 3. Hydration Logic ---
+// --- Hydration Logic ---
 function calculateHydration() {
     const hours = parseFloat(document.getElementById('blockHours')?.value) || 0;
     const cleared = parseFloat(document.getElementById('waterCleared')?.value) || 0;
@@ -62,43 +52,33 @@ function calculateHydration() {
     }
 }
 
-// --- 4. Pilot Protocol Data ---
+// --- Workout Engine ---
 const pilotProtocolStretches = [
-    { name: "Kneeling Hip Flexor + Overhead Reach", reps: "60s/side", desc: "Opens psoas." },
-    { name: "Thoracic Book Openers", reps: "10/side", desc: "Restores rotation." },
-    { name: "Glute Bridges", reps: "15 reps", desc: "Activates glutes." }
-];
-
-const descentStretches = [
-    { name: "Child’s Pose (Lat Bias)", reps: "2m", desc: "Lumbar decompression." },
-    { name: "Doorway Pec Stretch", reps: "60s/side", desc: "Reverses cockpit posture." },
-    { name: "90/90 Bed Breathing", reps: "3m", desc: "CNS down-regulation." }
+    { name: "Kneeling Hip Flexor + Reach", reps: "60s/side" },
+    { name: "Thoracic Book Openers", reps: "10/side" },
+    { name: "Glute Bridges", reps: "15 reps" }
 ];
 
 const exerciseLibrary = [
     { id: "e1", name: "Goblet Squat", type: "weight", inRoom: false },
     { id: "e2", name: "DB Bench Press", type: "weight", inRoom: false },
     { id: "e3", name: "Standard Plank", type: "time", inRoom: true },
-    { id: "e4", name: "Bodyweight Squat", type: "reps", inRoom: true },
-    { id: "e5", name: "Elevated Pushups", type: "reps", inRoom: true },
-    { id: "e6", name: "Dead Bug", type: "time", inRoom: true }
+    { id: "e4", name: "Bodyweight Squat", type: "reps", inRoom: true }
 ];
 
-// --- 5. Workout UI Engine ---
 function generateWorkoutUI() {
     const fatigueToggle = document.getElementById('fatigueToggle');
     const isFatigueMode = fatigueToggle ? fatigueToggle.checked : false;
     const container = document.getElementById('activeWorkoutUI');
     if (!container) return;
 
-    let html = `<div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
+    let html = `<div class="bg-gray-800 p-5 rounded-xl border border-gray-700 mb-4">
         <h2 class="text-yellow-500 font-bold mb-2">🛫 Preflight</h2>`;
     pilotProtocolStretches.forEach(ex => {
         html += `<p class="text-sm text-white">${ex.name} <span class="text-gray-400">(${ex.reps})</span></p>`;
     });
     html += `</div>`;
 
-    // Main Block
     html += `<div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
         <h2 class="text-blue-500 font-bold mb-2">✈️ In Flight</h2>`;
     const routine = isFatigueMode 
@@ -114,10 +94,4 @@ function generateWorkoutUI() {
     html += `</div>`;
 
     container.innerHTML = html;
-}
-
-// --- 6. Postflight ---
-function completeFlight() {
-    // Logic for calorie/tonnage calc remains here
-    alert("Flight Data Recorded.");
 }

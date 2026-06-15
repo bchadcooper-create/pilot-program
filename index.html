@@ -2,24 +2,18 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="FC Fitness">
-    <meta name="theme-color" content="#111827">
+    <meta name="apple-mobile-web-app-title" content="Flight Crew Fitness">
+    <meta name="theme-color" content="#0d1b2a">
     <title>Flight Crew Fitness</title>
-
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    
+    <link rel="apple-touch-icon" href="icon.png">
+    <link rel="manifest" href="/pilot-program/manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-
-    <style>
-        /* Prevent pull-to-refresh on mobile apps to make it feel native */
-        body { overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; }
-        .hidden { display: none !important; }
-        .tab-active { color: #3b82f6; border-top: 2px solid #3b82f6; }
-    </style>
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen flex flex-col font-sans select-none">
 
@@ -323,5 +317,16 @@
         }
     
 <script src="/pilot-program/app.js"></script>
+
+    <script>
+        // Ensure the app initializes only AFTER the script is loaded
+        window.addEventListener('load', function() {
+            if (typeof init === 'function') {
+                init();
+            } else {
+                console.warn("init() not found in app.js. Check your file export.");
+            }
+        });
+    </script>
 </body>
 </html>

@@ -132,3 +132,36 @@ async function completeFlight() {
     document.getElementById('completeFlightBtn').classList.add('hidden');
     window.switchTab('postflight');
 }
+// Add this to the very bottom of app.js
+window.switchTab = function(tabName) {
+    // Hide all views
+    ['dashboard', 'workout', 'export', 'postflight'].forEach(t => {
+        const view = document.getElementById(`view-${t}`);
+        if (view) view.classList.add('hidden');
+    });
+    
+    // Reset tab styling
+    ['dashboard', 'workout', 'export'].forEach(t => {
+        const tab = document.getElementById(`tab-${t}`);
+        if (tab) {
+            tab.classList.remove('tab-active', 'text-blue-500');
+            tab.classList.add('border-transparent');
+        }
+    });
+
+    // Show selected
+    const selectedView = document.getElementById(`view-${tabName}`);
+    if (selectedView) selectedView.classList.remove('hidden');
+    
+    const selectedTab = document.getElementById(`tab-${tabName}`);
+    if (selectedTab) {
+        selectedTab.classList.add('tab-active', 'text-blue-500');
+        selectedTab.classList.remove('border-transparent');
+    }
+    
+    if (tabName === 'workout') {
+        generateWorkoutUI();
+        const briefing = document.getElementById('takeoffBriefing');
+        if (briefing) briefing.classList.remove('hidden');
+    }
+};

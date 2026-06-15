@@ -1,34 +1,48 @@
 /**
- * Flight Crew Fitness - Full Production Engine
+ * Flight Crew Fitness - Master SOP Engine
  */
 
-window.supabase = supabase.createClient('https://dnxkydxbyihgsictbzjz.supabase.co', 'YOUR_SUPABASE_KEY');
+window.supabase = supabase.createClient('https://dnxkydxbyihgsictbzjz.supabase.co', 'YOUR_KEY_HERE');
 
+// 50-Card Wisdom Library
 const wisdomCards = [
-    { title: "Hydration Standard", text: "0.3L per hour of flight time is your baseline.", link: "#" },
-    { title: "Seated Correction", text: "Perform a standing glute squeeze every 60 mins.", link: "#" },
-    { title: "BP Technique", text: "Wait 5 mins in total quiet before taking your measurement.", link: "#" },
-    { title: "Glucose Baseline", text: "Measure fasting glucose upon waking.", link: "#" },
-    { title: "Tactical Breathing", text: "Use 4-7-8 breathing during descent to manage cortisol.", link: "#" }
-    // Add remaining 45 items here
+    { title: "Hydration SOP", text: "0.3L/hr flight time baseline.", link: "#" },
+    { title: "Seated Correction", text: "Glute squeeze every 60 mins.", link: "#" },
+    { title: "Landing Prep", text: "Use 4-7-8 breathing on approach.", link: "#" },
+    // Expand to 50 entries here...
 ];
 
-const exerciseLibrary = [
-    { id: "e1", name: "Goblet Squat", type: "weight", env: "comm", cue: "Spread the floor with your feet.", why: "Anti-Kyphosis." },
-    { id: "e2", name: "Dead Bug", type: "time", env: "room", cue: "Keep lower back glued to floor.", why: "Core stability." }
-];
+let currentWisdom = 0;
 
-window.switchTab = function(tabName) {
+window.switchTab = (tab) => {
     document.querySelectorAll('[id^="view-"]').forEach(v => v.classList.add('hidden'));
-    document.getElementById(`view-${tabName}`).classList.remove('hidden');
+    document.getElementById(`view-${tab}`).classList.remove('hidden');
+    if(tab === 'wisdom') window.showWisdom(0);
 };
 
-window.showWisdom = function(dir) {
-    // Logic to cycle wisdomCards
+window.showWisdom = (dir) => {
+    currentWisdom = (currentWisdom + dir + wisdomCards.length) % wisdomCards.length;
+    const card = wisdomCards[currentWisdom];
+    document.getElementById('wisdomDisplay').innerHTML = `
+        <h3 class="font-bold text-blue-400">${card.title}</h3>
+        <p class="text-sm mt-3">${card.text}</p>
+        <a href="${card.link}" class="text-xs text-gray-500 mt-4 block underline">Deep Dive</a>
+    `;
 };
 
-window.generateWorkoutUI = function() {
+window.startMission = () => {
     const env = document.getElementById('gymEnv').value;
     const container = document.getElementById('activeWorkoutUI');
-    // Filter by env and render prescribed sets/reps
+    container.innerHTML = ''; // Reset
+    
+    // Logic: filter exercises by env, then generate UI
+    window.switchTab('workout');
 };
+
+window.saveBiometrics = async () => {
+    const weight = document.getElementById('weightLog').value;
+    await window.supabase.from('weight_log').insert([{ weight_lb: weight }]);
+    alert("Biometrics Recorded.");
+};
+
+window.onload = () => window.showWisdom(0);

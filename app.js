@@ -1,10 +1,12 @@
 /**
  * Flight Crew Fitness - Full Operational Engine
- * Version: 1.0 (Production)
  */
 
-// Initialize Supabase Client
-window.supabase = supabase.createClient('https://dnxkydxbyihgsictbzjz.supabase.co', 'YOUR_PUBLIC_ANON_KEY');
+// Initialize Supabase with your specific project credentials
+window.supabase = supabase.createClient(
+    'https://dnxkydxbyihgsictbzjz.supabase.co', 
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRueGt5ZHhieWloZ3NpY3Riemp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3ODk4MTEsImV4cCI6MjA5NjM2NTgxMX0.oLUGuorQkbQ_u679NpE8FGBVAUmVE1K_rxl8q4B0n7k'
+);
 
 // 50-Card Wisdom Library
 const wisdomCards = [
@@ -62,7 +64,7 @@ const wisdomCards = [
 
 let currentWisdom = 0;
 
-// --- Tab Navigation Engine ---
+// Navigation
 window.switchTab = (tab) => {
     document.querySelectorAll('[id^="view-"]').forEach(v => v.classList.add('hidden'));
     document.getElementById(`view-${tab}`).classList.remove('hidden');
@@ -70,48 +72,24 @@ window.switchTab = (tab) => {
     if (tab === 'wisdom') window.showWisdom(0);
 };
 
-// --- Wisdom Module ---
+// Wisdom
 window.showWisdom = (dir) => {
     currentWisdom = (currentWisdom + dir + wisdomCards.length) % wisdomCards.length;
     const card = wisdomCards[currentWisdom];
     const display = document.getElementById('wisdomDisplay');
     if (display) {
-        display.innerHTML = `
-            <h3 class="font-bold text-blue-400 text-lg">${card.title}</h3>
-            <p class="mt-4">${card.text}</p>
-            <a href="${card.link}" class="block mt-6 text-xs underline text-gray-500">Read More</a>
-        `;
+        display.innerHTML = `<h3 class="font-bold text-blue-400 text-lg">${card.title}</h3>
+                             <p class="mt-4">${card.text}</p>
+                             <a href="${card.link}" class="block mt-6 text-xs underline text-gray-500">Read More</a>`;
     }
 };
 
-// --- Workout Logic ---
-window.startMission = () => {
-    const env = document.getElementById('gymEnv').value;
-    const container = document.getElementById('activeWorkoutUI');
-    container.innerHTML = `
-        <h2 class="text-white font-bold text-lg">Mission Profile: ${env.toUpperCase()}</h2>
-        <div class="space-y-4">
-            <p class="text-gray-400 text-sm">Follow the prescribed sets and intensity for today's environment.</p>
-        </div>
-    `;
-    window.switchTab('workout');
-};
-
-// --- Data Persistence Engine ---
+// Persistence
 window.completeFlight = async () => {
     const { error } = await window.supabase.from('workout_sessions').insert([{
-        session_data: { 
-            date: new Date().toISOString(), 
-            status: 'Completed' 
-        }
+        session_data: { date: new Date().toISOString(), status: 'Completed' }
     }]);
-    if (error) {
-        console.error("Cloud Sync Failed", error);
-        alert("Persistence Error. Check connection.");
-    } else {
-        alert("Flight Secured.");
-        window.switchTab('dashboard');
-    }
+    if (error) console.error(error); else alert("Flight Secured.");
 };
 
 window.saveBiometrics = async () => {
@@ -120,8 +98,7 @@ window.saveBiometrics = async () => {
         systolic_bp: document.getElementById('bpLog').value,
         fasting_glucose: document.getElementById('glucoseLog').value
     }]);
-    if (error) alert("Error recording biometrics.");
-    else alert("Biometrics Recorded.");
+    if (error) console.error(error); else alert("Biometrics Recorded.");
 };
 
 window.loadTrends = async () => {
@@ -132,17 +109,10 @@ window.loadTrends = async () => {
             type: 'line', 
             data: { 
                 labels: data.map(d => new Date(d.logged_at).toLocaleDateString()), 
-                datasets: [{ 
-                    data: data.map(d => d.weight_lb), 
-                    label: 'Weight (lbs)',
-                    borderColor: '#3b82f6'
-                }] 
+                datasets: [{ data: data.map(d => d.weight_lb), label: 'Weight (lbs)', borderColor: '#3b82f6' }] 
             }
         });
     }
 };
 
-// Init
-window.onload = () => {
-    window.showWisdom(0);
-};
+window.onload = () => window.showWisdom(0);

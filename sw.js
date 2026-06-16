@@ -1,79 +1,50 @@
-// Flight Crew Fitness — Service Worker
-// Version Tracking Token: 1.1.0
-// Caches the app shell for full offline support
-
-const CACHE = 'fcf-v1.1.0';
-const ASSETS = [
+// Flight Crew Fitness — Service Worker v2
+const CACHE = 'fcf-v2';
+const CORE = [
   '/pilot-program/',
   '/pilot-program/index.html',
+  '/pilot-program/app.js',
   '/pilot-program/manifest.json',
-  'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap',
-  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
-  'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
 ];
 
-// Install: cache all assets safely
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(async cache => {
-      console.log('Caching app shell...');
-      
-      const downloadPromises = ASSETS.map(async url => {
-        try {
-          const isRemote = url.startsWith('http');
-          const response = await fetch(url, isRemote ? { mode: 'cors' } : {});
-          
-          if (response.status === 200 || response.status === 0) {
-            await cache.put(url, response);
-          } else {
-            console.warn(`Failed to cache ${url} - Status: ${response.status}`);
-          }
-        } catch (err) {
-          console.error(`Error fetching asset for cache: ${url}`, err);
-        }
-      });
-      
-      await Promise.all(downloadPromises);
-      console.log('App shell caching cycle completed.');
+    caches.open(CACHE).then(c => {
+      return Promise.allSettled(CORE.map(url => c.add(url)));
     }).then(() => self.skipWaiting())
   );
 });
 
-// Activate: clean up old versions instantly
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys => 
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
-// Fetch: cache-first for app shell, network-first for API calls
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
-  // FIX: Instantly reject Chrome Extensions or non-web schemas from cache routing
-  if (!e.request.url.startsWith('http')) return;
-
-  if (url.hostname.includes('supabase.co')) {
+  // Always network-first for Supabase
+  if (url.hostname.includes('supabase.co') || url.hostname.includes('googleapis.com') || url.hostname.includes('jsdelivr.net')) {
     e.respondWith(
-      fetch(e.request).catch(() => new Response('{}', { 
-        headers: { 'Content-Type': 'application/json' } 
-      }))
+      fetch(e.request).catch(() =>
+        caches.match(e.request).then(r => r || new Response('', { status: 503 }))
+      )
     );
     return;
   }
 
+  // Cache-first for app shell
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
-
-      return fetch(e.request).then(response => {
-        if (e.request.method === 'GET' && (response.status === 200 || response.status === 0)) {
-          const clone = response.clone();
-          caches.open(CACHE).then(cache => cache.put(e.request, clone));
+      return fetch(e.request).then(res => {
+        if (e.request.method === 'GET' && res.status === 200) {
+          caches.open(CACHE).then(c => c.put(e.request, res.clone()));
         }
-        return response;
+        return res;
       }).catch(() => {
         if (e.request.mode === 'navigate') {
           return caches.match('/pilot-program/index.html');
@@ -81,11 +52,4 @@ self.addEventListener('fetch', e => {
       });
     })
   );
-});
-
-// Message listener to handle direct client skipWaiting overrides
-self.addEventListener('message', e => {
-  if (e.data === 'skipWaiting') {
-    self.skipWaiting();
-  }
 });

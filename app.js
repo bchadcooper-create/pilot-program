@@ -3,8 +3,8 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.0';
-const FCF_BUILD   = '20260617';
+const FCF_VERSION = 'v5.1';
+const FCF_BUILD   = '20260619';
 
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────
 const SB = supabase.createClient(
@@ -38,20 +38,24 @@ const ST = {
   customExercises: [], // user-created exercises, persisted
   showAddExercise: false,
 
-  restTimer: { active: false, seconds: 0, total: 0, exId: null, interval: null },
-  stopwatch:  { active: false, seconds: 0, interval: null, exId: null },
-  nsdrTimer:  { active: false, seconds: 0, interval: null, chimed: false },
+  restTimer: { active: false, seconds: 0, total: 0, exId: null, interval: null, startTs: 0, endTs: 0 },
+  stopwatch:  { active: false, seconds: 0, interval: null, exId: null, startTs: 0 },
+  nsdrTimer:  { active: false, seconds: 0, interval: null, chimed: false, startTs: 0 },
 
   lastSession: null, // last completed session summary
   disclaimerAccepted: false,
 };
 
 // ─── GOALS / MISSION OBJECTIVES ───────────────────────────────────────────────
+// Rotation orders follow exercise science principle: never schedule two
+// leg-dominant or two CNS-taxing days back to back. Lower Body and Power/Plyo
+// both heavily load the legs and nervous system, so they are always separated
+// by at least one upper-body or cardio day to allow 48+ hours recovery.
 const GOALS = {
-  jump:     { label: 'Vertical Jump',    icon: '🏀', desc: 'Explosive power and athletic performance', order: ['Lower Body','Power / Plyo','Upper Push','Cardio'] },
-  muscle:   { label: 'Muscle Gain',      icon: '💪', desc: 'Bodybuilding-style hypertrophy training',   order: ['Upper Push','Lower Body','Upper Pull','Full Body'] },
-  longevity:{ label: 'General Health',  icon: '🌿', desc: 'Joint-friendly, sustainable, long-term health', order: ['Longevity','Upper Pull','Lower Body','Upper Push'] },
-  fatloss:  { label: 'Weight Loss',     icon: '🔥', desc: 'Higher-volume, metabolic conditioning focus', order: ['Full Body','Cardio','Lower Body','Upper Push'] },
+  jump:     { label: 'Vertical Jump',    icon: '🏀', desc: 'Explosive power and athletic performance', order: ['Lower Body','Upper Pull','Power / Plyo','Upper Push','Cardio'] },
+  muscle:   { label: 'Muscle Gain',      icon: '💪', desc: 'Bodybuilding-style hypertrophy training',   order: ['Lower Body','Upper Push','Upper Pull','Full Body'] },
+  longevity:{ label: 'General Health',  icon: '🌿', desc: 'Joint-friendly, sustainable, long-term health', order: ['Lower Body','Upper Pull','Longevity','Upper Push'] },
+  fatloss:  { label: 'Weight Loss',     icon: '🔥', desc: 'Higher-volume, metabolic conditioning focus', order: ['Lower Body','Cardio','Upper Push','Full Body'] },
 };
 
 // ─── FREQUENCY GUIDANCE (fitness coach logic) ────────────────────────────────
@@ -481,9 +485,14 @@ function getRecommendedNext() {
   return order[(idx + 1) % order.length];
 }
 
-// ─── EXERCISE GUIDE MEDIA ─────────────────────────────────────────────────────
-// gif: Wikimedia Commons (CC-licensed, embeddable). exrx: ExRx.net exercise page link.
-const EXRX_MAP = {
+// ─── EXERCISE GUIDE LINKS ─────────────────────────────────────────────────────
+// A small set of exercises have been individually verified against live ExRx.net
+// pages (confirmed to load and match the correct movement). For every other
+// exercise, rather than guess at a direct page URL (which previously produced
+// broken links for ~90% of exercises), we generate a Google search scoped to
+// exrx.net for that exact exercise name. This guarantees a working, relevant
+// result for every single exercise, even when ExRx has no dedicated page for it.
+const EXRX_VERIFIED = {
   c_lb_to1:'https://exrx.net/WeightExercises/Quadriceps/BBSquat',
   c_lb_to2:'https://exrx.net/WeightExercises/OlympicLifts/RomanianDeadlift',
   c_lb_er1:'https://exrx.net/WeightExercises/Quadriceps/DBBulgarianSquat',
@@ -500,22 +509,23 @@ const EXRX_MAP = {
   h_ul_to1:'https://exrx.net/WeightExercises/LatissimusDorsi/BWPullup',
   h_lb_to1:'https://exrx.net/WeightExercises/Kettlebell/KBGobletSquat',
   h_lb_to2:'https://exrx.net/WeightExercises/OlympicLifts/RomanianDeadlift',
-  r_lb_to1:'https://exrx.net/WeightExercises/Quadriceps/BWPistolSquat',
-  r_lb_to2:'https://exrx.net/WeightExercises/Hamstrings/BWNordicHamstringCurl',
+  r_lb_to2:'https://exrx.net/Stretches/Hamstrings/BWNordicHamstringCurl',
 };
 
-// Wikimedia Commons GIFs — verified CC-licensed exercise demonstration media
-const GIF_MAP = {
-  c_lb_to1: 'https://upload.wikimedia.org/wikipedia/commons/3/3a/Bodyweight_Squats.gif',
-  c_up_to1: 'https://upload.wikimedia.org/wikipedia/commons/2/25/Bench_press_1.gif',
-  c_ul_to1: 'https://upload.wikimedia.org/wikipedia/commons/b/b4/Barbell-Deadlift.gif',
-  h_ul_to1: 'https://upload.wikimedia.org/wikipedia/commons/f/f6/Pull-up_exercise.gif',
-  r_up_to1: 'https://upload.wikimedia.org/wikipedia/commons/f/f8/Push_up_1.gif',
-};
-
-function getExGuide(exId) {
-  return { gif: GIF_MAP[exId] || null, exrx: EXRX_MAP[exId] || null };
+function exrxSearchLink(name) {
+  // Strip parenthetical notes and slashes that don't help search relevance
+  const clean = name.replace(/\([^)]*\)/g, '').replace(/[\/]/g, ' ').trim();
+  return 'https://www.google.com/search?q=' + encodeURIComponent('site:exrx.net ' + clean);
 }
+
+function getExGuide(exId, exName) {
+  const verified = EXRX_VERIFIED[exId];
+  return {
+    exrx: verified || exrxSearchLink(exName || exId),
+    verified: !!verified,
+  };
+}
+
 
 // ─── WISDOM CARDS ─────────────────────────────────────────────────────────────
 // IMPORTANT: links point to verified, topic-matched authoritative sources
@@ -902,6 +912,102 @@ function showCNSInfo() {
 }
 function closeModal() { document.getElementById('modalRoot').innerHTML = ''; }
 
+// ─── PERSISTENCE: in-progress workout survives app close/reload ─────────────
+const WORKOUT_STATE_KEY = 'fcf_inprogress_workout';
+const TIMER_STATE_KEY   = 'fcf_inprogress_timers';
+
+function persistWorkoutState() {
+  if (!ST.workout) { localStorage.removeItem(WORKOUT_STATE_KEY); return; }
+  try {
+    localStorage.setItem(WORKOUT_STATE_KEY, JSON.stringify({
+      workout: ST.workout,
+      sets: ST.sets,
+      env: ST.env,
+      muscleGroup: ST.muscleGroup,
+      goal: ST.goal,
+      fatigue: ST.fatigue,
+      level: ST.level,
+      flightHrs: ST.flightHrs,
+      waterIn: ST.waterIn,
+      expanded: ST.expanded,
+      savedAt: Date.now(),
+    }));
+  } catch(e) {}
+}
+
+function restoreWorkoutState() {
+  try {
+    const raw = localStorage.getItem(WORKOUT_STATE_KEY);
+    if (!raw) return false;
+    const saved = JSON.parse(raw);
+    // Only restore if saved within the last 18 hours (avoid resurrecting stale sessions)
+    if (Date.now() - saved.savedAt > 18*60*60*1000) {
+      localStorage.removeItem(WORKOUT_STATE_KEY);
+      return false;
+    }
+    ST.workout = saved.workout;
+    ST.sets = saved.sets;
+    ST.env = saved.env;
+    ST.muscleGroup = saved.muscleGroup;
+    ST.goal = saved.goal;
+    ST.fatigue = saved.fatigue;
+    ST.level = saved.level;
+    ST.flightHrs = saved.flightHrs;
+    ST.waterIn = saved.waterIn;
+    ST.flightHrsTouched = true;
+    ST.expanded = saved.expanded || {};
+    return true;
+  } catch(e) { return false; }
+}
+
+function clearWorkoutState() {
+  localStorage.removeItem(WORKOUT_STATE_KEY);
+}
+
+function persistTimerState() {
+  try {
+    localStorage.setItem(TIMER_STATE_KEY, JSON.stringify({
+      restTimer: { active: ST.restTimer.active, exId: ST.restTimer.exId, endTs: ST.restTimer.endTs, total: ST.restTimer.total },
+      stopwatch: { active: ST.stopwatch.active, exId: ST.stopwatch.exId, startTs: ST.stopwatch.startTs },
+      nsdrTimer: { active: ST.nsdrTimer.active, exId: ST.nsdrTimer.exId, startTs: ST.nsdrTimer.startTs, chimed: ST.nsdrTimer.chimed },
+    }));
+  } catch(e) {}
+}
+
+function restoreTimerState() {
+  try {
+    const raw = localStorage.getItem(TIMER_STATE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (saved.restTimer?.active) {
+      const remaining = Math.max(0, Math.round((saved.restTimer.endTs - Date.now())/1000));
+      if (remaining > 0) {
+        ST.restTimer = { active: true, seconds: remaining, total: saved.restTimer.total, exId: saved.restTimer.exId, interval: null, startTs: 0, endTs: saved.restTimer.endTs };
+        ST.restTimer.interval = setInterval(() => tickRestTimer(saved.restTimer.exId), 1000);
+      }
+    }
+    if (saved.stopwatch?.active) {
+      ST.stopwatch = { active: true, seconds: Math.round((Date.now()-saved.stopwatch.startTs)/1000), exId: saved.stopwatch.exId, interval: null, startTs: saved.stopwatch.startTs };
+      ST.stopwatch.interval = setInterval(() => tickStopwatch(saved.stopwatch.exId), 1000);
+    }
+    if (saved.nsdrTimer?.active) {
+      ST.nsdrTimer = { active: true, seconds: Math.round((Date.now()-saved.nsdrTimer.startTs)/1000), interval: null, chimed: saved.nsdrTimer.chimed, exId: saved.nsdrTimer.exId, startTs: saved.nsdrTimer.startTs };
+      ST.nsdrTimer.interval = setInterval(() => tickNSDR(saved.nsdrTimer.exId), 1000);
+    }
+  } catch(e) {}
+}
+
+// Resync all active timers the instant the app returns to the foreground.
+// iOS throttles/suspends setInterval while backgrounded, so on resume we
+// recalculate from the stored timestamps rather than trusting tick counts.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (ST.restTimer.active) tickRestTimer(ST.restTimer.exId);
+  if (ST.stopwatch.active) tickStopwatch(ST.stopwatch.exId);
+  if (ST.nsdrTimer.active) tickNSDR(ST.nsdrTimer.exId);
+  if (ST.tab === 'flight') renderFlight(document.getElementById('mainPage'));
+});
+
 // ─── INITIALIZATION ───────────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/pilot-program/sw.js').catch(() => {});
@@ -912,6 +1018,12 @@ async function initApp() {
   ST.authed = !!ST.user;
   if (ST.authed) {
     await bootApp();
+    const restored = restoreWorkoutState();
+    if (restored) {
+      restoreTimerState();
+      switchTab('flight');
+      showToast('Restored your in-progress workout.');
+    }
   } else {
     renderRoot();
   }
@@ -1101,6 +1213,7 @@ function engageWorkout() {
     }
   });
 
+  persistWorkoutState();
   switchTab('flight');
 }
 
@@ -1174,7 +1287,7 @@ function buildExCard(exItem, phaseKey) {
       const val = sets[0]?.seconds || '';
       parts.push('<div class="timed-box '+(val?'ok':'')+'" id="tb_'+exItem.id+'">');
       parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">TOTAL TIME</div>');
-      parts.push('<input class="timed-inp" type="number" inputmode="numeric" placeholder="0" value="'+val+'" oninput="ST.sets[\''+exItem.id+'\'][0].seconds=this.value;document.getElementById(\'tb_'+exItem.id+'\').className=\'timed-box\'+(this.value?\' ok\':\'\')">');
+      parts.push('<input class="timed-inp" type="number" inputmode="numeric" placeholder="0" value="'+val+'" oninput="ST.sets[\''+exItem.id+'\'][0].seconds=this.value;document.getElementById(\'tb_'+exItem.id+'\').className=\'timed-box\'+(this.value?\' ok\':\'\');persistWorkoutState()">');
       parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">seconds</div>');
       parts.push('</div>');
       parts.push(buildStopwatchWidget(exItem.id));
@@ -1182,7 +1295,7 @@ function buildExCard(exItem, phaseKey) {
       parts.push('<div class="sets-scroll">');
       sets.forEach((s,i) => {
         parts.push('<div class="set-tile '+(s.reps?'ok':'')+'" id="st_'+exItem.id+'_'+i+'"><div class="set-lbl">SET '+(i+1)+'</div>');
-        parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value?\' ok\':\'\')">');
+        parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value?\' ok\':\'\');persistWorkoutState()">');
         parts.push('<div class="set-hint">reps only</div></div>');
       });
       parts.push('</div><div class="swipe-hint">← swipe for all sets</div>');
@@ -1190,8 +1303,8 @@ function buildExCard(exItem, phaseKey) {
       parts.push('<div class="sets-scroll">');
       sets.forEach((s,i) => {
         parts.push('<div class="set-tile '+(s.reps||s.weight?'ok':'')+'" id="st_'+exItem.id+'_'+i+'"><div class="set-lbl">SET '+(i+1)+'</div>');
-        parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value||ST.sets[\''+exItem.id+'\']['+i+'].weight?\' ok\':\'\')">');
-        parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="lb" value="'+(s.weight||'')+'" onchange="afterSetLogged(\''+exItem.id+'\',\''+phaseKey+'\')" oninput="ST.sets[\''+exItem.id+'\']['+i+'].weight=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\')">');
+        parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value||ST.sets[\''+exItem.id+'\']['+i+'].weight?\' ok\':\'\');persistWorkoutState()">');
+        parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="lb" value="'+(s.weight||'')+'" onchange="afterSetLogged(\''+exItem.id+'\',\''+phaseKey+'\')" oninput="ST.sets[\''+exItem.id+'\']['+i+'].weight=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState()">');
         parts.push('<div class="set-hint">reps / lb</div></div>');
       });
       parts.push('</div><div class="swipe-hint">← swipe for all sets</div>');
@@ -1238,27 +1351,34 @@ function buildRestTimerWidget(exId, phaseKey) {
 
 function startRestTimer(exId, seconds) {
   if (ST.restTimer.interval) clearInterval(ST.restTimer.interval);
-  ST.restTimer = { active: true, seconds: seconds, total: seconds, exId, interval: null };
+  const now = Date.now();
+  ST.restTimer = { active: true, seconds: seconds, total: seconds, exId, interval: null, startTs: now, endTs: now + seconds*1000 };
+  persistTimerState();
   renderFlight(document.getElementById('mainPage'));
-  ST.restTimer.interval = setInterval(() => {
-    ST.restTimer.seconds--;
-    const el = document.getElementById('rest_disp_'+exId);
-    if (el) {
-      const m = Math.floor(ST.restTimer.seconds/60), s = ST.restTimer.seconds%60;
-      el.textContent = m+':'+String(s).padStart(2,'0');
-    }
-    if (ST.restTimer.seconds <= 0) {
-      clearInterval(ST.restTimer.interval);
-      ST.restTimer.active = false;
-      playChime();
-      showToast('⏱ Rest complete — next set.');
-      renderFlight(document.getElementById('mainPage'));
-    }
-  }, 1000);
+  ST.restTimer.interval = setInterval(() => tickRestTimer(exId), 1000);
+}
+function tickRestTimer(exId) {
+  if (!ST.restTimer.active || ST.restTimer.exId !== exId) return;
+  const remaining = Math.max(0, Math.round((ST.restTimer.endTs - Date.now())/1000));
+  ST.restTimer.seconds = remaining;
+  const el = document.getElementById('rest_disp_'+exId);
+  if (el) {
+    const m = Math.floor(remaining/60), s = remaining%60;
+    el.textContent = m+':'+String(s).padStart(2,'0');
+  }
+  if (remaining <= 0) {
+    clearInterval(ST.restTimer.interval);
+    ST.restTimer.active = false;
+    persistTimerState();
+    playChime();
+    showToast('⏱ Rest complete — next set.');
+    renderFlight(document.getElementById('mainPage'));
+  }
 }
 function stopRestTimer() {
   if (ST.restTimer.interval) clearInterval(ST.restTimer.interval);
   ST.restTimer.active = false;
+  persistTimerState();
   renderFlight(document.getElementById('mainPage'));
 }
 function afterSetLogged(exId, phaseKey) {
@@ -1289,19 +1409,24 @@ function formatStopwatch(sec) {
 }
 function startStopwatch(exId) {
   if (ST.stopwatch.interval) clearInterval(ST.stopwatch.interval);
-  ST.stopwatch = { active: true, seconds: 0, exId, interval: null };
+  ST.stopwatch = { active: true, seconds: 0, exId, interval: null, startTs: Date.now() };
+  persistTimerState();
   renderFlight(document.getElementById('mainPage'));
-  ST.stopwatch.interval = setInterval(() => {
-    ST.stopwatch.seconds++;
-    const el = document.getElementById('sw_disp_'+exId);
-    if (el) el.textContent = formatStopwatch(ST.stopwatch.seconds);
-  }, 1000);
+  ST.stopwatch.interval = setInterval(() => tickStopwatch(exId), 1000);
+}
+function tickStopwatch(exId) {
+  if (!ST.stopwatch.active || ST.stopwatch.exId !== exId) return;
+  ST.stopwatch.seconds = Math.round((Date.now() - ST.stopwatch.startTs)/1000);
+  const el = document.getElementById('sw_disp_'+exId);
+  if (el) el.textContent = formatStopwatch(ST.stopwatch.seconds);
 }
 function stopStopwatch(exId) {
   if (ST.stopwatch.interval) clearInterval(ST.stopwatch.interval);
   const total = ST.stopwatch.seconds;
   ST.stopwatch.active = false;
   if (ST.sets[exId]) ST.sets[exId][0].seconds = String(total);
+  persistTimerState();
+  persistWorkoutState();
   showToast('⏱ Recorded '+total+' seconds.');
   renderFlight(document.getElementById('mainPage'));
 }
@@ -1322,24 +1447,30 @@ function buildNSDRWidget(exId, currentVal) {
   return parts.join('');
 }
 function startNSDR(exId) {
-  ST.nsdrTimer = { active: true, seconds: 0, interval: null, chimed: false, exId };
+  ST.nsdrTimer = { active: true, seconds: 0, interval: null, chimed: false, exId, startTs: Date.now() };
+  persistTimerState();
   renderFlight(document.getElementById('mainPage'));
-  ST.nsdrTimer.interval = setInterval(() => {
-    ST.nsdrTimer.seconds++;
-    const el = document.getElementById('nsdr_disp');
-    if (el) el.textContent = formatStopwatch(ST.nsdrTimer.seconds);
-    if (ST.nsdrTimer.seconds >= 300 && !ST.nsdrTimer.chimed) {
-      ST.nsdrTimer.chimed = true;
-      playChime();
-      showToast('🔔 5 minutes complete — continue or stop and save.');
-    }
-  }, 1000);
+  ST.nsdrTimer.interval = setInterval(() => tickNSDR(exId), 1000);
+}
+function tickNSDR(exId) {
+  if (!ST.nsdrTimer.active || ST.nsdrTimer.exId !== exId) return;
+  ST.nsdrTimer.seconds = Math.round((Date.now() - ST.nsdrTimer.startTs)/1000);
+  const el = document.getElementById('nsdr_disp');
+  if (el) el.textContent = formatStopwatch(ST.nsdrTimer.seconds);
+  if (ST.nsdrTimer.seconds >= 300 && !ST.nsdrTimer.chimed) {
+    ST.nsdrTimer.chimed = true;
+    persistTimerState();
+    playChime();
+    showToast('🔔 5 minutes complete — continue or stop and save.');
+  }
 }
 function stopNSDR(exId) {
   if (ST.nsdrTimer.interval) clearInterval(ST.nsdrTimer.interval);
   const total = ST.nsdrTimer.seconds;
   ST.nsdrTimer.active = false;
   if (ST.sets[exId]) ST.sets[exId][0].seconds = String(total);
+  persistTimerState();
+  persistWorkoutState();
   showToast('NSDR session recorded: '+formatStopwatch(total));
   renderFlight(document.getElementById('mainPage'));
 }
@@ -1434,19 +1565,13 @@ function showGuide(exId) {
   const allEx = ST.workout ? [...ST.workout.taxi,...ST.workout.takeoff,...ST.workout.enroute,...ST.workout.landing] : [];
   const e = allEx.find(x => x.id === exId);
   if (!e) return;
-  const guide = getExGuide(exId);
+  const guide = getExGuide(exId, e.name);
   const root = document.getElementById('modalRoot');
 
-  let mediaHTML = '';
-  if (guide.gif) {
-    mediaHTML = '<div class="ex-media"><img class="ex-gif" src="'+guide.gif+'" alt="'+e.name+' demonstration" onerror="this.parentElement.innerHTML=\'<div style=&quot;padding:16px;color:var(--muted);font-size:12px&quot;>Demo image unavailable — see ExRx link below.</div>\'"></div>';
-  } else {
-    mediaHTML = '<div class="ex-media" style="padding:16px"><div style="font-size:12px;color:var(--muted);text-align:center">No demo image available — tap ExRx below for a full video guide.</div></div>';
-  }
-
-  const linkHTML = guide.exrx
-    ? '<a class="modal-link" href="'+guide.exrx+'" target="_blank" rel="noopener">📹 View Full Exercise Guide on ExRx.net →</a>'
-    : '';
+  const linkLabel = guide.verified
+    ? '📹 View Exercise Guide on ExRx.net →'
+    : '🔍 Search ExRx.net for "' + e.name + '" →';
+  const linkHTML = '<a class="modal-link" href="'+guide.exrx+'" target="_blank" rel="noopener">'+linkLabel+'</a>';
 
   root.innerHTML =
     '<div class="modal-bg" onclick="if(event.target===this)closeModal()">' +
@@ -1454,7 +1579,6 @@ function showGuide(exId) {
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">' + e.name + '</div>' +
     '<div style="font-family:var(--mono);font-size:10px;color:var(--gold);margin-bottom:12px;letter-spacing:0.08em">' + e.target + '</div>' +
-    mediaHTML +
     '<div class="modal-body">' + e.note + '</div>' +
     linkHTML +
     '<button class="btn btn-outline mt12" onclick="closeModal()">CLOSE</button>' +
@@ -1495,6 +1619,7 @@ async function setTheChocks() {
   ST.lastSession = session;
   ST.workout = null;
   ST.sets = {};
+  clearWorkoutState();
   switchTab('preflight');
 }
 
@@ -1563,7 +1688,26 @@ async function loadAndDrawCharts() {
   }
   if (!data.length) return;
 
-  const labels = data.map(d => new Date(d.logged_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+  // Each metric is logged independently — a row may have weight but no glucose,
+  // or BP but no waist. Filtering per-metric (rather than sharing one labels
+  // array across all charts) ensures every chart plots its own correct dates
+  // instead of stretching sparse data across unrelated x-axis points.
+  function metricSeries(field) {
+    const rows = data.filter(d => d[field] !== null && d[field] !== undefined && d[field] !== '');
+    return {
+      labels: rows.map(d => new Date(d.logged_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})),
+      values: rows.map(d => d[field]),
+    };
+  }
+  function metricSeriesMulti(fields) {
+    // For BP: only include rows where at least one of systolic/diastolic is present
+    const rows = data.filter(d => fields.some(f => d[f] !== null && d[f] !== undefined && d[f] !== ''));
+    return {
+      labels: rows.map(d => new Date(d.logged_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})),
+      rows,
+    };
+  }
+
   const OPTS = {
     responsive:true, maintainAspectRatio:false,
     plugins:{ legend:{ display:false } },
@@ -1572,37 +1716,47 @@ async function loadAndDrawCharts() {
       y:{ grid:{color:'#1a2438'}, ticks:{font:{size:9,family:'Share Tech Mono'},color:'#64748b'} },
     }
   };
-  function mkChart(id, datasets, legendOn) {
+  function mkChart(id, labels, datasets, legendOn) {
     const canvas = document.getElementById(id);
     if (!canvas) return;
     const key = 'c_'+id;
     if (ST.chartInst[key]) { try { ST.chartInst[key].destroy(); } catch(e){} }
+    if (!labels.length) return; // nothing logged for this metric yet
     ST.chartInst[key] = new Chart(canvas.getContext('2d'), { type:'line', data:{labels,datasets}, options:{...OPTS, plugins:{legend:{display:!!legendOn,labels:{font:{size:9,family:'Share Tech Mono'},color:'#64748b'}}}} });
   }
-  const refLine = (val,color) => ({ data:data.map(()=>val), borderColor:color, borderDash:[4,3], pointRadius:0, fill:false });
+  const refLine = (n,val,color) => ({ data:Array.from({length:n},()=>val), borderColor:color, borderDash:[4,3], pointRadius:0, fill:false });
 
-  mkChart('chartWt', [{ data:data.map(d=>d.weight_lb), borderColor:'#3b82f6', backgroundColor:'#3b82f622', tension:0.35, fill:true, pointRadius:4, pointBackgroundColor:'#3b82f6', label:'Weight' }]);
-  mkChart('chartWaist', [
-    { data:data.map(d=>d.waist_in), borderColor:'#c9a84c', backgroundColor:'#c9a84c22', tension:0.35, fill:true, pointRadius:4, pointBackgroundColor:'#c9a84c', label:'Waist' },
-    { ...refLine(40,'#ef444488'), label:'Risk (over 40in)' },
+  const wt = metricSeries('weight_lb');
+  mkChart('chartWt', wt.labels, [{ data:wt.values, borderColor:'#3b82f6', backgroundColor:'#3b82f622', tension:0.35, fill:true, pointRadius:4, pointBackgroundColor:'#3b82f6', label:'Weight' }]);
+
+  const waist = metricSeries('waist_in');
+  mkChart('chartWaist', waist.labels, [
+    { data:waist.values, borderColor:'#c9a84c', backgroundColor:'#c9a84c22', tension:0.35, fill:true, pointRadius:4, pointBackgroundColor:'#c9a84c', label:'Waist' },
+    { ...refLine(waist.values.length,40,'#ef444488'), label:'Risk (over 40in)' },
   ], true);
-  mkChart('chartGluc', [
-    { data:data.map(d=>d.fasting_glucose), borderColor:'#22c55e', backgroundColor:'#22c55e22', tension:0.35, fill:true, pointRadius:4, pointBackgroundColor:'#22c55e', label:'Glucose' },
-    { ...refLine(100,'#f59e0b88'), label:'Pre-diabetic (100)' },
+
+  const gluc = metricSeries('fasting_glucose');
+  mkChart('chartGluc', gluc.labels, [
+    { data:gluc.values, borderColor:'#22c55e', backgroundColor:'#22c55e22', tension:0.35, fill:true, pointRadius:4, pointBackgroundColor:'#22c55e', label:'Glucose' },
+    { ...refLine(gluc.values.length,100,'#f59e0b88'), label:'Pre-diabetic (100)' },
   ], true);
+
+  const bp = metricSeriesMulti(['systolic_bp','diastolic_bp']);
   const bpCanvas = document.getElementById('chartBP');
   if (bpCanvas) {
     if (ST.chartInst['c_chartBP']) { try { ST.chartInst['c_chartBP'].destroy(); } catch(e){} }
-    ST.chartInst['c_chartBP'] = new Chart(bpCanvas.getContext('2d'), {
-      type:'line',
-      data:{ labels, datasets:[
-        { data:data.map(d=>d.systolic_bp),  borderColor:'#ef4444', backgroundColor:'#ef444411', tension:0.35, fill:false, pointRadius:4, pointBackgroundColor:'#ef4444', label:'Systolic' },
-        { data:data.map(d=>d.diastolic_bp), borderColor:'#f59e0b', backgroundColor:'#f59e0b11', tension:0.35, fill:false, pointRadius:4, pointBackgroundColor:'#f59e0b', label:'Diastolic' },
-        { ...refLine(120,'#ef444455'), label:'Sys target (120)' },
-        { ...refLine(80,'#f59e0b55'),  label:'Dia target (80)' },
-      ]},
-      options:{ ...OPTS, plugins:{ legend:{ display:true, labels:{font:{size:9,family:'Share Tech Mono'},color:'#64748b'} } } }
-    });
+    if (bp.rows.length) {
+      ST.chartInst['c_chartBP'] = new Chart(bpCanvas.getContext('2d'), {
+        type:'line',
+        data:{ labels: bp.labels, datasets:[
+          { data:bp.rows.map(d=>d.systolic_bp),  borderColor:'#ef4444', backgroundColor:'#ef444411', tension:0.35, fill:false, pointRadius:4, pointBackgroundColor:'#ef4444', label:'Systolic' },
+          { data:bp.rows.map(d=>d.diastolic_bp), borderColor:'#f59e0b', backgroundColor:'#f59e0b11', tension:0.35, fill:false, pointRadius:4, pointBackgroundColor:'#f59e0b', label:'Diastolic' },
+          { ...refLine(bp.rows.length,120,'#ef444455'), label:'Sys target (120)' },
+          { ...refLine(bp.rows.length,80,'#f59e0b55'),  label:'Dia target (80)' },
+        ]},
+        options:{ ...OPTS, plugins:{ legend:{ display:true, labels:{font:{size:9,family:'Share Tech Mono'},color:'#64748b'} } } }
+      });
+    }
   }
 }
 

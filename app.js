@@ -3,8 +3,8 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.1';
-const FCF_BUILD   = '20260619';
+const FCF_VERSION = 'v5.2';
+const FCF_BUILD   = '20260620';
 
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────
 const SB = supabase.createClient(
@@ -43,7 +43,12 @@ const ST = {
   nsdrTimer:  { active: false, seconds: 0, interval: null, chimed: false, startTs: 0 },
 
   lastSession: null, // last completed session summary
+  lastDebrief: null,
+  workoutStartedAt: null,
   disclaimerAccepted: false,
+  calendarWeekOffset: 0,
+  calendarSessions: {},
+  selectedCalendarDay: null,
 };
 
 // ─── GOALS / MISSION OBJECTIVES ───────────────────────────────────────────────
@@ -632,6 +637,22 @@ async function dbGetCustomExercises() {
   return p?.customExercises || [];
 }
 
+async function dbGetRecentSessions(days) {
+  days = days || 7;
+  const since = new Date(Date.now() - days*24*60*60*1000).toISOString();
+  try {
+    const filter = ST.user ? SB.from('workout_sessions').select('*').eq('user_id', ST.user.id) : SB.from('workout_sessions').select('*');
+    const { data, error } = await filter.gte('started_at', since).order('started_at', { ascending: true });
+    if (error) throw error;
+    return (data||[]).map(r => r.session_data).filter(Boolean);
+  } catch(e) {
+    const keys = Object.keys(localStorage).filter(k => k.startsWith('fcf_session_'));
+    const sessions = keys.map(k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } }).filter(Boolean);
+    const sinceTs = Date.now() - days*24*60*60*1000;
+    return sessions.filter(s => new Date(s.date).getTime() >= sinceTs).sort((a,b) => new Date(a.date)-new Date(b.date));
+  }
+}
+
 async function dbGetLastSession() {
   try {
     const filter = ST.user ? SB.from('workout_sessions').select('*').eq('user_id', ST.user.id) : SB.from('workout_sessions').select('*');
@@ -834,6 +855,8 @@ function renderRoot() {
 function switchTab(tab) {
   ST.tab = tab;
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  const tabbar = document.getElementById('tabbar');
+  if (tabbar) tabbar.style.display = (tab === 'debrief') ? 'none' : 'flex';
   renderPage();
 }
 
@@ -846,6 +869,7 @@ function renderPage() {
   else if (ST.tab === 'trends')    renderTrends(p);
   else if (ST.tab === 'wisdom')    renderWisdom(p);
   else if (ST.tab === 'profile')   renderProfile(p);
+  else if (ST.tab === 'debrief')   renderDebrief(p);
 }
 
 // ─── BOOT SEQUENCE ────────────────────────────────────────────────────────────
@@ -930,6 +954,7 @@ function persistWorkoutState() {
       flightHrs: ST.flightHrs,
       waterIn: ST.waterIn,
       expanded: ST.expanded,
+      workoutStartedAt: ST.workoutStartedAt,
       savedAt: Date.now(),
     }));
   } catch(e) {}
@@ -956,6 +981,7 @@ function restoreWorkoutState() {
     ST.waterIn = saved.waterIn;
     ST.flightHrsTouched = true;
     ST.expanded = saved.expanded || {};
+    ST.workoutStartedAt = saved.workoutStartedAt || saved.savedAt;
     return true;
   } catch(e) { return false; }
 }
@@ -1034,8 +1060,117 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
   setTimeout(initApp, 0);
 }
 
+// ─── COMPACT ROLLING CALENDAR ─────────────────────────────────────────────────
+async function loadCalendarWeek(weekOffset) {
+  const cacheKey = String(weekOffset);
+  if (ST.calendarSessions[cacheKey]) return ST.calendarSessions[cacheKey];
+
+  const today = new Date();
+  today.setHours(23,59,59,999);
+  const windowEnd = new Date(today.getTime() - weekOffset*7*24*60*60*1000);
+  const windowStart = new Date(windowEnd.getTime() - 6*24*60*60*1000);
+  windowStart.setHours(0,0,0,0);
+
+  try {
+    const filter = ST.user ? SB.from('workout_sessions').select('*').eq('user_id', ST.user.id) : SB.from('workout_sessions').select('*');
+    const { data, error } = await filter
+      .gte('started_at', windowStart.toISOString())
+      .lte('started_at', windowEnd.toISOString())
+      .order('started_at', { ascending: true });
+    if (error) throw error;
+    const sessions = (data||[]).map(r => r.session_data).filter(Boolean);
+    ST.calendarSessions[cacheKey] = { sessions, windowStart, windowEnd };
+    return ST.calendarSessions[cacheKey];
+  } catch(e) {
+    const keys = Object.keys(localStorage).filter(k => k.startsWith('fcf_session_'));
+    const all = keys.map(k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } }).filter(Boolean);
+    const sessions = all.filter(s => {
+      const t = new Date(s.date).getTime();
+      return t >= windowStart.getTime() && t <= windowEnd.getTime();
+    });
+    const result = { sessions, windowStart, windowEnd };
+    ST.calendarSessions[cacheKey] = result;
+    return result;
+  }
+}
+
+function buildCalendarHTML(weekData) {
+  const { sessions, windowStart } = weekData;
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(windowStart.getTime() + i*24*60*60*1000);
+    const dayStr = d.toDateString();
+    const daySession = sessions.find(s => new Date(s.date).toDateString() === dayStr);
+    days.push({ date: d, session: daySession });
+  }
+
+  const parts = [];
+  parts.push('<div class="card mb12">');
+  parts.push('<div class="fb mb8">');
+  parts.push('<button class="btn-ghost" onclick="shiftCalendarWeek(1)">← Earlier</button>');
+  parts.push('<div class="section-label" style="margin:0">TRAINING CALENDAR</div>');
+  parts.push('<button class="btn-ghost" onclick="shiftCalendarWeek(-1)" '+(ST.calendarWeekOffset===0?'style="visibility:hidden"':'')+'>Later →</button>');
+  parts.push('</div>');
+  parts.push('<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">');
+  days.forEach(day => {
+    const isToday = day.date.toDateString() === new Date().toDateString();
+    const dow = day.date.toLocaleDateString('en-US',{weekday:'short'}).charAt(0);
+    const dateNum = day.date.getDate();
+    const hasWorkout = !!day.session;
+    const cellStyle = isToday ? 'border-color:var(--gold)' : '';
+    const bg = hasWorkout ? 'background:rgba(34,197,94,0.12);border-color:rgba(34,197,94,0.4)' : '';
+    parts.push('<div style="text-align:center;border:1.5px solid var(--border);border-radius:8px;padding:6px 2px;cursor:'+(hasWorkout?'pointer':'default')+';'+cellStyle+';'+bg+'" '+(hasWorkout?'onclick="showCalendarDay(\''+day.date.toISOString()+'\')"':'')+'>');
+    parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted)">'+dow+'</div>');
+    parts.push('<div style="font-size:13px;font-weight:600;margin-top:2px">'+dateNum+'</div>');
+    if (hasWorkout) {
+      const icon = {'Lower Body':'🦵','Upper Push':'💪','Upper Pull':'🎯','Power / Plyo':'⚡','Full Body':'🔥','Longevity':'🌿','Cardio':'❤️'}[day.session.muscle_group] || '✓';
+      parts.push('<div style="font-size:13px;margin-top:2px">'+icon+'</div>');
+    } else {
+      parts.push('<div style="font-size:10px;color:var(--muted);margin-top:4px">—</div>');
+    }
+    parts.push('</div>');
+  });
+  parts.push('</div></div>');
+  return parts.join('');
+}
+
+async function shiftCalendarWeek(delta) {
+  ST.calendarWeekOffset = Math.max(0, ST.calendarWeekOffset + delta);
+  renderPage();
+}
+
+async function showCalendarDay(isoDate) {
+  const weekData = await loadCalendarWeek(ST.calendarWeekOffset);
+  const session = weekData.sessions.find(s => new Date(s.date).toDateString() === new Date(isoDate).toDateString());
+  if (!session) return;
+
+  const profile = await dbGetProfile();
+  const recentSessions = await dbGetRecentSessions(7);
+  const allEx = session.workoutSnapshot
+    ? [...session.workoutSnapshot.taxi,...session.workoutSnapshot.takeoff,...session.workoutSnapshot.enroute,...session.workoutSnapshot.landing]
+    : Object.keys(session.sets||{}).map(id => ({id, name:id}));
+  const summary = buildWorkoutSummary(session, allEx, recentSessions, profile?.lastWeight);
+
+  const root = document.getElementById('modalRoot');
+  const parts = [];
+  parts.push('<div class="modal-bg" onclick="if(event.target===this)closeModal()">');
+  parts.push('<div class="modal-sheet">');
+  parts.push('<div class="modal-handle"></div>');
+  parts.push('<div class="modal-title">'+session.muscle_group+'</div>');
+  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:14px">'+new Date(session.date).toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+'</div>');
+  parts.push('<div class="stat-row">');
+  parts.push('<div class="stat-box"><div class="stat-val">'+(session.durationMinutes||'—')+'</div><div class="stat-lbl">Minutes</div></div>');
+  parts.push('<div class="stat-box"><div class="stat-val">'+summary.totalSets+'</div><div class="stat-lbl">Sets</div></div>');
+  parts.push('<div class="stat-box"><div class="stat-val">'+summary.estCalories+'</div><div class="stat-lbl">Calories</div></div>');
+  parts.push('</div>');
+  parts.push('<div class="modal-body">Environment: '+session.env+' · Condition: '+(session.fatigue||'go')+'</div>');
+  parts.push('<button class="btn btn-outline mt12" onclick="closeModal()">CLOSE</button>');
+  parts.push('</div></div>');
+  root.innerHTML = parts.join('');
+}
+
 // ─── PREFLIGHT TAB ────────────────────────────────────────────────────────────
-function renderPreflight(p) {
+async function renderPreflight(p) {
   const hs    = hydroStatus();
   const pct   = hydroPct();
   const adv   = hydroAdvice();
@@ -1060,14 +1195,9 @@ function renderPreflight(p) {
     parts.push('</div>');
   }
 
-  // Readiness checklist
-  parts.push('<div class="card card-dark mb12">');
-  parts.push('<div class="section-label" style="margin-top:0">READINESS CHECK</div>');
-  parts.push('<div class="check-item"><div class="check-icon">✅</div><div class="check-text">Flight hours logged today</div><div class="check-status status-ok">'+(ST.flightHrs>0?ST.flightHrs+' HRS':'0 (NO-FLY)')+'</div></div>');
-  parts.push('<div class="check-item"><div class="check-icon">'+(pct>=1?'✅':pct>=0.6?'⚠️':'🚨')+'</div><div class="check-text">Hydration status</div><div class="check-status '+hs.cls+'">'+hs.label+'</div></div>');
-  parts.push('<div class="check-item"><div class="check-icon">'+(rawWk?'✅':'⬜')+'</div><div class="check-text">Mission profile selected</div><div class="check-status '+(rawWk?'status-ok':'status-warn')+'">'+ST.muscleGroup.toUpperCase()+'</div></div>');
-  parts.push('<div class="check-item" style="border-bottom:none"><div class="check-icon">'+(ST.fatigue==='go'?'✅':ST.fatigue==='marginal'?'⚠️':'🔴')+'</div><div class="check-text">Pilot condition</div><div class="check-status '+(ST.fatigue==='go'?'status-ok':ST.fatigue==='marginal'?'status-warn':'status-no')+'">'+fatigueLabel+'</div></div>');
-  parts.push('</div>');
+  // Training calendar (rolling 7-day window, scrollable)
+  const weekData = await loadCalendarWeek(ST.calendarWeekOffset);
+  parts.push(buildCalendarHTML(weekData));
 
   // Goal / Mission Objective
   parts.push('<div class="section-label">MISSION OBJECTIVE</div>');
@@ -1148,6 +1278,15 @@ function renderPreflight(p) {
   });
   parts.push('</div>');
 
+  // Readiness checklist — placed last, right before engaging the workout
+  parts.push('<div class="card card-dark mb12">');
+  parts.push('<div class="section-label" style="margin-top:0">READINESS CHECK</div>');
+  parts.push('<div class="check-item"><div class="check-icon">✅</div><div class="check-text">Flight hours logged today</div><div class="check-status status-ok">'+(ST.flightHrs>0?ST.flightHrs+' HRS':'0 (NO-FLY)')+'</div></div>');
+  parts.push('<div class="check-item"><div class="check-icon">'+(pct>=1?'✅':pct>=0.6?'⚠️':'🚨')+'</div><div class="check-text">Hydration status</div><div class="check-status '+hs.cls+'">'+hs.label+'</div></div>');
+  parts.push('<div class="check-item"><div class="check-icon">'+(rawWk?'✅':'⬜')+'</div><div class="check-text">Mission profile selected</div><div class="check-status '+(rawWk?'status-ok':'status-warn')+'">'+ST.muscleGroup.toUpperCase()+'</div></div>');
+  parts.push('<div class="check-item" style="border-bottom:none"><div class="check-icon">'+(ST.fatigue==='go'?'✅':ST.fatigue==='marginal'?'⚠️':'🔴')+'</div><div class="check-text">Pilot condition</div><div class="check-status '+(ST.fatigue==='go'?'status-ok':ST.fatigue==='marginal'?'status-warn':'status-no')+'">'+fatigueLabel+'</div></div>');
+  parts.push('</div>');
+
   // Flight plan preview
   if (wk) {
     parts.push('<div class="section-label">FLIGHT PLAN PREVIEW — '+totalEx+' EXERCISES ('+levelLabel+(ST.fatigue!=='go'?' / '+fatigueLabel:'')+')</div>');
@@ -1213,6 +1352,8 @@ function engageWorkout() {
     }
   });
 
+  persistWorkoutState();
+  ST.workoutStartedAt = Date.now();
   persistWorkoutState();
   switchTab('flight');
 }
@@ -1585,6 +1726,113 @@ function showGuide(exId) {
     '</div></div>';
 }
 
+// ─── MET VALUES FOR CALORIE ESTIMATION ───────────────────────────────────────
+const MET_VALUES = {
+  taxi: 2.5, takeoff: 6.0, enroute: 5.0, landing: 2.0,
+};
+
+function estimateCalories(wk, bodyWeightLb, durationMinutes) {
+  const bwKg = (bodyWeightLb || 180) * 0.4536;
+  const phaseMinutes = { taxi: 5, takeoff: 15, enroute: 15, landing: 5 };
+  let totalCal = 0, totalMin = 0;
+  ['taxi','takeoff','enroute','landing'].forEach(phase => {
+    if (wk[phase] && wk[phase].length) {
+      const mins = phaseMinutes[phase] || 5;
+      totalCal += MET_VALUES[phase] * bwKg * (mins/60);
+      totalMin += mins;
+    }
+  });
+  if (durationMinutes && totalMin > 0) totalCal = totalCal * (durationMinutes/totalMin);
+  return Math.round(totalCal);
+}
+
+// ─── WORKOUT SUMMARY / DEBRIEF ────────────────────────────────────────────────
+function buildWorkoutSummary(session, allExDefs, weeklySessions, bodyWeightLb) {
+  const sets = session.sets || {};
+  const exIds = Object.keys(sets);
+  let totalSets = 0, totalReps = 0, totalVolume = 0, completedExCount = 0;
+  let prHits = [];
+
+  exIds.forEach(id => {
+    const setArr = sets[id];
+    const loggedSets = setArr.filter(s => s.reps || s.weight || s.seconds);
+    if (loggedSets.length) completedExCount++;
+    loggedSets.forEach(s => {
+      totalSets++;
+      if (s.reps) totalReps += parseInt(s.reps)||0;
+      if (s.reps && s.weight) totalVolume += (parseInt(s.reps)||0) * (parseFloat(s.weight)||0);
+    });
+  });
+
+  const totalPlanned = allExDefs.length;
+  const completionPct = totalPlanned ? Math.round(completedExCount/totalPlanned*100) : 0;
+
+  exIds.forEach(id => {
+    const todaySets = sets[id].filter(s => s.weight);
+    if (!todaySets.length) return;
+    const todayMax = Math.max(...todaySets.map(s => parseFloat(s.weight)||0));
+    let priorMax = 0;
+    weeklySessions.forEach(s => {
+      if (s === session) return;
+      const priorSets = (s.sets?.[id]||[]).filter(x => x.weight);
+      priorSets.forEach(x => { priorMax = Math.max(priorMax, parseFloat(x.weight)||0); });
+    });
+    if (todayMax > priorMax && priorMax > 0) {
+      const exDef = allExDefs.find(e => e.id === id);
+      prHits.push({ name: exDef?.name || id, weight: todayMax });
+    }
+  });
+
+  const sessionsThisWeek = weeklySessions.filter(s => {
+    const days = (Date.now() - new Date(s.date).getTime()) / 86400000;
+    return days <= 7;
+  }).length;
+  const targetDays = parseInt((FREQUENCY_GUIDE[session.level||'intermediate'].days||'3').split('-')[0]);
+
+  const landingIds = (session.workoutSnapshot?.landing || []).map(e => e.id);
+  const landingLogged = landingIds.length ? landingIds.some(id => (sets[id]||[]).some(s => s.reps||s.weight||s.seconds)) : null;
+
+  const estCalories = estimateCalories(session.workoutSnapshot || {taxi:[],takeoff:[],enroute:[],landing:[]}, bodyWeightLb, session.durationMinutes);
+
+  return {
+    totalSets, totalReps, totalVolume: Math.round(totalVolume),
+    completedExCount, totalPlanned, completionPct,
+    prHits, sessionsThisWeek, targetDays,
+    landingLogged, estCalories,
+    durationMinutes: session.durationMinutes || null,
+  };
+}
+
+function buildDebriefMessages(summary) {
+  const msgs = [];
+  if (summary.completionPct === 100) {
+    msgs.push({ type:'ok', icon:'🎯', text:'Full mission complete — every exercise logged. That\'s the standard.' });
+  } else if (summary.completionPct >= 70) {
+    msgs.push({ type:'info', icon:'👍', text:'Solid session — '+summary.completionPct+'% of planned exercises logged.' });
+  } else {
+    msgs.push({ type:'warn', icon:'📋', text:'Partial session ('+summary.completionPct+'% complete). Any movement counts, but try to close out all phases next time.' });
+  }
+
+  if (summary.prHits.length) {
+    summary.prHits.forEach(pr => {
+      msgs.push({ type:'ok', icon:'🏆', text:'New PR: '+pr.name+' at '+pr.weight+' lb — nice work.' });
+    });
+  }
+
+  if (summary.sessionsThisWeek >= summary.targetDays) {
+    msgs.push({ type:'ok', icon:'🔥', text:summary.sessionsThisWeek+' sessions this week — you\'ve hit your '+summary.targetDays+'-day target. Consistency is what actually drives results.' });
+  } else {
+    const remaining = summary.targetDays - summary.sessionsThisWeek;
+    msgs.push({ type:'info', icon:'📅', text:summary.sessionsThisWeek+' of '+summary.targetDays+' sessions this week — '+remaining+' more to hit your target.' });
+  }
+
+  if (summary.landingLogged === false) {
+    msgs.push({ type:'warn', icon:'🛬', text:'You skipped the Landing phase. Decompression and CNS down-regulation is what actually starts the recovery process — don\'t treat it as optional.' });
+  }
+
+  return msgs;
+}
+
 // ─── SET THE CHOCKS (formerly "Secure Flight") ───────────────────────────────
 async function setTheChocks() {
   const wk = ST.workout;
@@ -1592,6 +1840,9 @@ async function setTheChocks() {
   const allEx = [...wk.taxi,...wk.takeoff,...wk.enroute,...wk.landing];
   const logged = allEx.filter(exItem => ST.sets[exItem.id]?.some(s => s.reps||s.weight||s.seconds));
   if (logged.length === 0) { showToast('Log at least one exercise before setting the chocks.'); return; }
+
+  const startedAt = ST.workoutStartedAt || Date.now();
+  const durationMinutes = Math.max(1, Math.round((Date.now() - startedAt) / 60000));
 
   const session = {
     date: new Date().toISOString(),
@@ -1603,12 +1854,16 @@ async function setTheChocks() {
     sets: ST.sets,
     flight_hrs: ST.flightHrs,
     water_in: ST.waterIn,
+    durationMinutes: durationMinutes,
+    workoutSnapshot: wk,
   };
   try {
     const { error } = await SB.from('workout_sessions').insert([{
+      user_id: ST.user?.id || null,
       session_key: String(Date.now()),
       session_data: session,
       workout_key: ST.muscleGroup,
+      started_at: session.date,
     }]);
     if (error) throw error;
     showToast('✅ Chocks set. Data synced.');
@@ -1616,11 +1871,21 @@ async function setTheChocks() {
     showToast('⚠️ Saved locally — will sync when online.');
     localStorage.setItem('fcf_session_' + Date.now(), JSON.stringify(session));
   }
+
+  const recentSessions = await dbGetRecentSessions(7);
+  const profile = await dbGetProfile();
+  const bodyWeight = profile?.lastWeight || null;
+  const summary = buildWorkoutSummary(session, allEx, [...recentSessions, session], bodyWeight);
+  const debriefMsgs = buildDebriefMessages(summary);
+
   ST.lastSession = session;
+  ST.lastDebrief = { summary, messages: debriefMsgs, session };
   ST.workout = null;
   ST.sets = {};
+  ST.workoutStartedAt = null;
   clearWorkoutState();
-  switchTab('preflight');
+  ST.tab = 'debrief';
+  renderPage();
 }
 
 // ─── TRENDS TAB ───────────────────────────────────────────────────────────────
@@ -1662,7 +1927,7 @@ async function saveBio() {
   const gluc  = parseInt(document.getElementById('inp_gluc')?.value)||null;
   if (!wt && !waist && !sys && !dia && !gluc) { showToast('Enter at least one value to log.'); return; }
 
-  const row = { weight_lb:wt, waist_in:waist, systolic_bp:sys, diastolic_bp:dia, fasting_glucose:gluc };
+  const row = { user_id: ST.user?.id || null, weight_lb:wt, waist_in:waist, systolic_bp:sys, diastolic_bp:dia, fasting_glucose:gluc, logged_at: new Date().toISOString() };
   try {
     const { error } = await SB.from('weight_log').insert([row]);
     if (error) throw error;
@@ -1672,6 +1937,11 @@ async function saveBio() {
     const local = JSON.parse(localStorage.getItem('fcf_bio')||'[]');
     local.push({ ...row, logged_at: new Date().toISOString() });
     localStorage.setItem('fcf_bio', JSON.stringify(local));
+  }
+  if (wt) {
+    const profile = (await dbGetProfile()) || {};
+    profile.lastWeight = wt;
+    await dbSetProfile(profile);
   }
   setTimeout(() => loadAndDrawCharts(), 100);
 }
@@ -1783,6 +2053,42 @@ function renderWisdom(p) {
 function prevWisdom() { ST.wisdomIdx=(ST.wisdomIdx-1+WISDOM.length)%WISDOM.length; renderWisdom(document.getElementById('mainPage')); }
 function nextWisdom() { ST.wisdomIdx=(ST.wisdomIdx+1)%WISDOM.length; renderWisdom(document.getElementById('mainPage')); }
 function jumpWisdom(i) { ST.wisdomIdx=i; renderWisdom(document.getElementById('mainPage')); }
+
+// ─── DEBRIEF SCREEN (post-flight summary) ────────────────────────────────────
+function renderDebrief(p) {
+  const d = ST.lastDebrief;
+  if (!d) { switchTab('preflight'); return; }
+  const s = d.summary;
+  const session = d.session;
+
+  const parts = [];
+  parts.push('<div class="section-label">POST-FLIGHT DEBRIEF</div>');
+  parts.push('<div class="card card-dark mb12" style="text-align:center;padding:24px 16px">');
+  parts.push('<div style="font-size:36px;margin-bottom:8px">'+(s.completionPct===100?'🎯':'✈️')+'</div>');
+  parts.push('<div style="font-family:var(--mono);font-size:18px;color:var(--gold);letter-spacing:0.04em">'+ST.muscleGroup.toUpperCase()+' COMPLETE</div>');
+  parts.push('<div style="font-size:11px;color:var(--muted);margin-top:4px">'+new Date(session.date).toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+'</div>');
+  parts.push('</div>');
+
+  parts.push('<div class="stat-row">');
+  parts.push('<div class="stat-box"><div class="stat-val">'+(s.durationMinutes||'—')+'</div><div class="stat-lbl">Minutes</div></div>');
+  parts.push('<div class="stat-box"><div class="stat-val">'+s.totalSets+'</div><div class="stat-lbl">Sets Logged</div></div>');
+  parts.push('<div class="stat-box"><div class="stat-val">'+s.estCalories+'</div><div class="stat-lbl">Est. Calories</div></div>');
+  parts.push('</div>');
+  parts.push('<div class="stat-row">');
+  parts.push('<div class="stat-box"><div class="stat-val">'+s.totalReps+'</div><div class="stat-lbl">Total Reps</div></div>');
+  parts.push('<div class="stat-box"><div class="stat-val">'+s.totalVolume.toLocaleString()+'</div><div class="stat-lbl">Volume (lb)</div></div>');
+  parts.push('<div class="stat-box"><div class="stat-val">'+s.completionPct+'%</div><div class="stat-lbl">Completion</div></div>');
+  parts.push('</div>');
+
+  parts.push('<div class="section-label">DEBRIEF NOTES</div>');
+  d.messages.forEach(m => {
+    const cls = m.type==='ok'?'alert-ok':m.type==='warn'?'alert-warn':'alert-info';
+    parts.push('<div class="alert '+cls+'"><div class="alert-icon">'+m.icon+'</div><div>'+m.text+'</div></div>');
+  });
+
+  parts.push('<button class="btn btn-gold mt16" onclick="ST.lastDebrief=null;switchTab(\'preflight\')">Continue to Preflight</button>');
+  p.innerHTML = parts.join('');
+}
 
 // ─── PROFILE TAB ──────────────────────────────────────────────────────────────
 function renderProfile(p) {

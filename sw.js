@@ -1,6 +1,6 @@
 // Flight Crew Fitness — Service Worker
 // Version: 5.0 | Forces fresh fetch on every new deploy
-const CACHE = 'fcf-v5-2';
+const CACHE = 'fcf-v5-3';
 const CORE = [
   '/pilot-program/',
   '/pilot-program/index.html',

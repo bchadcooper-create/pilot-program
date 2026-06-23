@@ -3,8 +3,8 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.2';
-const FCF_BUILD   = '20260620';
+const FCF_VERSION = 'v5.3';
+const FCF_BUILD   = '20260622';
 
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────
 const SB = supabase.createClient(
@@ -32,7 +32,7 @@ const ST = {
   workout: null,
   sets: {},
   expanded: {},
-  wisdomIdx: 0,
+  wisdomIdx: null, // null = use today's auto-rotated card; set by Next/Prev/jump for manual browsing
   chartInst: {},
 
   customExercises: [], // user-created exercises, persisted
@@ -118,14 +118,14 @@ WORKOUTS.comm['Lower Body'] = {
   taxi: [
     ex('c_lb_t1','Hip 90/90 Stretch','60s/side',1,'Sit on floor, both legs at 90°. Rotate slowly between internal and external hip rotation. Critical for pilots who sit compressed all day.',true,'timed'),
     ex('c_lb_t2','Ankle Circles + Dorsiflexion','20 reps',1,'Rotate each ankle 10x each direction, then pull toes to shin. Ankle mobility directly affects squat depth.',false,'reps_only'),
-    ex('c_lb_t3','Goblet Squat Warmup','2×10',2,'Light KB or DB at chest. Slow descent, pause at the bottom. Own the position before loading.'),
+    ex('c_lb_t3','Kettlebell Goblet Squat (Warmup)','2×10',2,'Light KB or DB at chest. Slow descent, pause at the bottom. Own the position before loading.'),
   ],
   takeoff: [
     ex('c_lb_to1','Back Squat','5×5',5,'Work up to a challenging set of 5. Bar on traps, break parallel, drive through heels. This is your primary compound.'),
     ex('c_lb_to2','Romanian Deadlift','4×6',4,'Hip hinge. Moderate-heavy. Bar stays close to legs. Deep hamstring stretch at the bottom.'),
   ],
   enroute: [
-    ex('c_lb_er1','Bulgarian Split Squat','3×8/leg',3,'Rear foot elevated on bench. Drive through front heel. High transfer to strength and jump performance.'),
+    ex('c_lb_er1','Single Leg Split Squat','3×8/leg',3,'Rear foot elevated on bench. Drive through front heel. High transfer to strength and jump performance.',false,'reps_only'),
     ex('c_lb_er2','Leg Press','3×12',3,'Moderate weight. Full ROM — don\'t lock knees.'),
     ex('c_lb_er3','Standing Calf Raise','4×12',4,'Full ROM — stretch at bottom, pause at top.'),
     ex('c_lb_er4','Lateral Band Walk','2×15/side',2,'Band above knees. Stay low. Activates glute med.',false,'reps_only'),
@@ -163,7 +163,7 @@ WORKOUTS.comm['Upper Push'] = {
 WORKOUTS.comm['Upper Pull'] = {
   taxi: [
     ex('c_ul_t1','Arm Circles (progressive)','10/direction',1,'Small to large, both directions. Warms rotator cuff before pulling loads.',false,'reps_only'),
-    ex('c_ul_t2','Scapular Pullup','2×10',2,'Hang from bar. Without bending elbows, depress and retract scapulae.'),
+    ex('c_ul_t2','Scapular Pullup','2×10',2,'Hang from bar. Without bending elbows, depress and retract scapulae.',false,'reps_only'),
     ex('c_ul_t3','Prone Y-T-W Raises','2×10',2,'Lying face-down on bench. Light plates. Raise in Y, T, W shapes.'),
   ],
   takeoff: [
@@ -186,18 +186,18 @@ WORKOUTS.comm['Upper Pull'] = {
 WORKOUTS.comm['Power / Plyo'] = {
   taxi: [
     ex('c_pp_t1','Jump Rope / Ankle Bouncing','3 min',1,'Moderate pace. Warms Achilles and prepares the elastic system.',true,'timed'),
-    ex('c_pp_t2','Light Squat Jumps','2×5',2,'Bodyweight only. Focus on arm swing mechanics and soft landing.'),
+    ex('c_pp_t2','Light Squat Jumps','2×5',2,'Bodyweight only. Focus on arm swing mechanics and soft landing.',false,'reps_only'),
     ex('c_pp_t3','Hip Flexor Lunge Stretch','60s/side',1,'Kneeling lunge, hands overhead, lean forward.',true,'timed'),
   ],
   takeoff: [
-    ex('c_pp_to1','Box Jump','5×3',5,'FULL 3-minute rest between sets. Every rep is maximum effort.'),
+    ex('c_pp_to1','Box Jump','5×3',5,'FULL 3-minute rest between sets. Every rep is maximum effort.',false,'reps_only'),
     ex('c_pp_to2','Trap Bar Deadlift','5×3',5,'Heavy and FAST. The concentric must be explosive.'),
   ],
   enroute: [
-    ex('c_pp_er1','Broad Jump','5×3',5,'Horizontal power transfers to vertical. Max effort.'),
-    ex('c_pp_er2','Walking Lunge','3×10/leg',3,'Light-moderate. Hip flexor strength critical for takeoff mechanics.'),
-    ex('c_pp_er3','Sprint 40yd','6 reps',6,'Full speed. Walk back. Log time or distance in the notes.'),
-    ex('c_pp_er4','Ankle Hop','3×20',3,'Minimal knee bend. Fast and springy.'),
+    ex('c_pp_er1','Broad Jump','5×3',5,'Horizontal power transfers to vertical. Max effort.',false,'reps_only'),
+    ex('c_pp_er2','Lunge (Walking)','3×10/leg',3,'Light-moderate. Hip flexor strength critical for takeoff mechanics.',false,'reps_only'),
+    ex('c_pp_er3','Sprint 40yd','6 reps',6,'Full speed. Walk back. Log time or distance in the notes.',false,'reps_only'),
+    ex('c_pp_er4','Ankle Hop','3×20',3,'Minimal knee bend. Fast and springy.',false,'reps_only'),
   ],
   landing: [
     ex('c_pp_l1','Achilles / Calf Stretch','90s/side',1,'Step on step edge, drop heel slowly.',true,'timed'),
@@ -219,7 +219,7 @@ WORKOUTS.comm['Full Body'] = {
     ex('c_fb_er1','Deadlift','3×3',3,'Heavy triple. Maximum posterior chain.'),
     ex('c_fb_er2','Weighted Pullups','3×6',3,'Add weight if bodyweight is easy.'),
     ex('c_fb_er3','Overhead Press','3×8',3,'Moderate. Standing.'),
-    ex('c_fb_er4','Bulgarian Split Squat','3×8/leg',3,'Unilateral leg accessory.'),
+    ex('c_fb_er4','Single Leg Split Squat','3×8/leg',3,'Unilateral leg accessory.',false,'reps_only'),
   ],
   landing: [
     ex('c_fb_l1','Full Body Stretch Circuit','5 min',1,'Child\'s pose → pigeon each side → lat hang → chest doorframe.',true,'timed'),
@@ -234,14 +234,14 @@ WORKOUTS.comm['Longevity'] = {
     ex('c_lg_t3','Hip 90/90','60s/side',1,'Slow rotation between internal and external hip position.',true,'timed'),
   ],
   takeoff: [
-    ex('c_lg_to1','Goblet Squat','3×10',3,'Moderate weight. Full depth. Most joint-friendly lower body compound.'),
+    ex('c_lg_to1','Kettlebell Goblet Squat','3×10',3,'Moderate weight. Full depth. Most joint-friendly lower body compound.'),
     ex('c_lg_to2','Cable Row','3×12',3,'Back health and posture. Full retraction.'),
   ],
   enroute: [
     ex('c_lg_er1','Farmer Carry','3×40yd',3,'Heaviest DB you can hold with perfect posture.'),
     ex('c_lg_er2','Face Pull','3×20',3,'Essential shoulder health.'),
     ex('c_lg_er3','Pallof Press','3×10/side',3,'Cable or band. Anti-rotation core stability.'),
-    ex('c_lg_er4','Split Squat','3×10/leg',3,'Both feet on floor. Controlled descent.'),
+    ex('c_lg_er4','Split Squat','3×10/leg',3,'Both feet on floor. Controlled descent.',false,'reps_only'),
   ],
   landing: [
     ex('c_lg_l1','Hip 90/90 Rotation Drill','90s/side',1,'Your most important mobility work as a pilot.',true,'timed'),
@@ -260,7 +260,7 @@ WORKOUTS.comm['Cardio'] = {
   ],
   enroute: [
     ex('c_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace — speak in full sentences.',true,'timed'),
-    ex('c_ca_er2','Step-Up (light)','3×15/leg',3,'Active recovery strength.'),
+    ex('c_ca_er2','Step-Up','3×15/leg',3,'Active recovery strength.'),
   ],
   landing: [
     ex('c_ca_l1','Cool-Down Walk','5 min',1,'Slow your pace gradually.',true,'timed'),
@@ -272,14 +272,14 @@ WORKOUTS.hotel = {};
 WORKOUTS.hotel['Lower Body'] = {
   taxi: WORKOUTS.comm['Lower Body'].taxi.slice(0,3),
   takeoff: [
-    ex('h_lb_to1','Heavy Goblet Squat','5×6',5,'Heaviest DB available. Full depth.'),
+    ex('h_lb_to1','Kettlebell Goblet Squat (Heavy)','5×6',5,'Heaviest DB available. Full depth.'),
     ex('h_lb_to2','DB Romanian Deadlift','4×8',4,'Hip hinge. Feel the hamstring stretch.'),
   ],
   enroute: [
-    ex('h_lb_er1','Bulgarian Split Squat','3×10/leg',3,'Use a bench. Bodyweight or light DBs.'),
-    ex('h_lb_er2','Weighted Step-Up','3×12/leg',3,'Drive through the working heel.'),
-    ex('h_lb_er3','Single-Leg Calf Raise','3×15',3,'Step edge for full ROM.'),
-    ex('h_lb_er4','DB Lateral Lunge','3×10/side',3,'Step to side, sit into the hip.'),
+    ex('h_lb_er1','Single Leg Split Squat','3×10/leg',3,'Use a bench. Bodyweight or light DBs.',false,'reps_only'),
+    ex('h_lb_er2','Step-Up (Weighted)','3×12/leg',3,'Drive through the working heel.'),
+    ex('h_lb_er3','Single-Leg Calf Raise','3×15',3,'Step edge for full ROM.',false,'reps_only'),
+    ex('h_lb_er4','Dumbbell Lateral Lunge','3×10/side',3,'Step to side, sit into the hip.'),
   ],
   landing: WORKOUTS.comm['Lower Body'].landing,
 };
@@ -300,11 +300,11 @@ WORKOUTS.hotel['Upper Push'] = {
 WORKOUTS.hotel['Upper Pull'] = {
   taxi: WORKOUTS.comm['Upper Pull'].taxi.slice(0,2),
   takeoff: [
-    ex('h_ul_to1','Pullups','5×max',5,'Every set near-failure.'),
+    ex('h_ul_to1','Pullups','5×max',5,'Every set near-failure.',false,'reps_only'),
     ex('h_ul_to2','DB Row','4×10/side',4,'Chest on bench. Heavy.'),
   ],
   enroute: [
-    ex('h_ul_er1','Chinups','3×max',3,'Supinated grip.'),
+    ex('h_ul_er1','Chinups','3×max',3,'Supinated grip.',false,'reps_only'),
     ex('h_ul_er2','DB Curl','3×12',3,'Controlled eccentric.'),
     ex('h_ul_er3','Bent-Over DB Face Pull','3×15',3,'Light DBs.'),
     ex('h_ul_er4','DB Hammer Curl','3×12',3,'Neutral grip.'),
@@ -314,13 +314,13 @@ WORKOUTS.hotel['Upper Pull'] = {
 WORKOUTS.hotel['Power / Plyo'] = {
   taxi: WORKOUTS.comm['Power / Plyo'].taxi,
   takeoff: [
-    ex('h_pp_to1','Bench/Box Jump','5×3',5,'Highest stable surface. Max effort.'),
-    ex('h_pp_to2','Broad Jump','5×3',5,'Max horizontal distance.'),
+    ex('h_pp_to1','Bench/Box Jump','5×3',5,'Highest stable surface. Max effort.',false,'reps_only'),
+    ex('h_pp_to2','Broad Jump','5×3',5,'Max horizontal distance.',false,'reps_only'),
   ],
   enroute: [
     ex('h_pp_er1','DB Jump Squat','4×5',4,'Light DBs. Explosive concentric.'),
-    ex('h_pp_er2','Sprint (hall/outside)','6×20yd',6,'Full speed. Walk back.'),
-    ex('h_pp_er3','Split Jump','3×6',3,'Lunge position, jump and switch.'),
+    ex('h_pp_er2','Sprint (hall/outside)','6×20yd',6,'Full speed. Walk back.',false,'reps_only'),
+    ex('h_pp_er3','Split Jump','3×6',3,'Lunge position, jump and switch.',false,'reps_only'),
     ex('h_pp_er4','Depth Drop','3×5',3,'Step off low bench, land softly, absorb.'),
   ],
   landing: WORKOUTS.comm['Power / Plyo'].landing,
@@ -328,13 +328,13 @@ WORKOUTS.hotel['Power / Plyo'] = {
 WORKOUTS.hotel['Full Body'] = {
   taxi: [ex('h_fb_t1','Full Mobility Circuit','1 round',1,'5 hip 90/90 each side → 10 arm circles → 10 thoracic extensions → 10 goblet squats.',true,'timed')],
   takeoff: [
-    ex('h_fb_to1','Heavy Goblet Squat','4×6',4,'Heaviest DB. Full depth.'),
+    ex('h_fb_to1','Kettlebell Goblet Squat (Heavy)','4×6',4,'Heaviest DB. Full depth.'),
     ex('h_fb_to2','DB Bench Press','4×6',4,'Heavy.'),
   ],
   enroute: [
-    ex('h_fb_er1','Pullups','3×max',3,'Upper pull.'),
+    ex('h_fb_er1','Pullups','3×max',3,'Upper pull.',false,'reps_only'),
     ex('h_fb_er2','DB Overhead Press','3×8',3,'Standing.'),
-    ex('h_fb_er3','Bulgarian Split Squat','3×8/leg',3,'Unilateral leg.'),
+    ex('h_fb_er3','Single Leg Split Squat','3×8/leg',3,'Unilateral leg.',false,'reps_only'),
     ex('h_fb_er4','DB Row','3×10/side',3,'Back.'),
   ],
   landing: [
@@ -351,7 +351,7 @@ WORKOUTS.hotel['Cardio'] = {
   ],
   enroute: [
     ex('h_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace.',true,'timed'),
-    ex('h_ca_er2','Step-Up (light)','3×15/leg',3,'Active recovery strength.'),
+    ex('h_ca_er2','Step-Up','3×15/leg',3,'Active recovery strength.'),
   ],
   landing: WORKOUTS.comm['Cardio'].landing,
 };
@@ -360,27 +360,27 @@ WORKOUTS.room = {};
 WORKOUTS.room['Lower Body'] = {
   taxi: WORKOUTS.comm['Lower Body'].taxi.slice(0,3),
   takeoff: [
-    ex('r_lb_to1','Pistol Squat Progression','4×5/leg',4,'Assisted or full. Best bodyweight lower body exercise.'),
-    ex('r_lb_to2','Nordic Hamstring Curl','3×5',3,'Feet anchored under bed or door. Lower as slowly as possible.'),
+    ex('r_lb_to1','Single Leg Squat (Pistol)','4×5/leg',4,'Assisted or full. Best bodyweight lower body exercise.',false,'reps_only'),
+    ex('r_lb_to2','Hamstring Raise (Nordic Curl)','3×5',3,'Feet anchored under bed or door. Lower as slowly as possible.',false,'reps_only'),
   ],
   enroute: [
-    ex('r_lb_er1','Bulgarian Split Squat','4×12/leg',4,'Rear foot on bed. Bodyweight.'),
-    ex('r_lb_er2','Single-Leg Glute Bridge','3×15/leg',3,'Drive through heel.'),
-    ex('r_lb_er3','Calf Raise (step)','4×20',4,'Use a stair or book stack.'),
-    ex('r_lb_er4','Reverse Lunge','3×12/leg',3,'Step back, drive through front heel.'),
+    ex('r_lb_er1','Single Leg Split Squat','4×12/leg',4,'Rear foot on bed. Bodyweight.',false,'reps_only'),
+    ex('r_lb_er2','Single-Leg Glute Bridge','3×15/leg',3,'Drive through heel.',false,'reps_only'),
+    ex('r_lb_er3','Calf Raise (step)','4×20',4,'Use a stair or book stack.',false,'reps_only'),
+    ex('r_lb_er4','Reverse Lunge','3×12/leg',3,'Step back, drive through front heel.',false,'reps_only'),
   ],
   landing: WORKOUTS.comm['Lower Body'].landing,
 };
 WORKOUTS.room['Upper Push'] = {
   taxi: WORKOUTS.comm['Upper Push'].taxi.slice(0,2),
   takeoff: [
-    ex('r_up_to1','Archer Pushup','4×5/side',4,'One arm supports, one extends.'),
-    ex('r_up_to2','Pike Pushup','4×10',4,'Hips high, head toward floor.'),
+    ex('r_up_to1','Archer Pushup','4×5/side',4,'One arm supports, one extends.',false,'reps_only'),
+    ex('r_up_to2','Pike Pushup','4×10',4,'Hips high, head toward floor.',false,'reps_only'),
   ],
   enroute: [
-    ex('r_up_er1','Pushup Variations','3×15',3,'Wide, close, explosive.'),
-    ex('r_up_er2','Chair Dips','3×max',3,'Tricep focus.'),
-    ex('r_up_er3','Decline Pushup','3×12',3,'Feet on bed.'),
+    ex('r_up_er1','Pushup Variations','3×15',3,'Wide, close, explosive.',false,'reps_only'),
+    ex('r_up_er2','Chair Dips','3×max',3,'Tricep focus.',false,'reps_only'),
+    ex('r_up_er3','Decline Pushup','3×12',3,'Feet on bed.',false,'reps_only'),
     ex('r_up_er4','Plank','3×60s',3,'Straight line head to heels.',true,'timed'),
   ],
   landing: WORKOUTS.comm['Upper Push'].landing,
@@ -388,11 +388,11 @@ WORKOUTS.room['Upper Push'] = {
 WORKOUTS.room['Upper Pull'] = {
   taxi: WORKOUTS.comm['Upper Pull'].taxi.slice(0,2),
   takeoff: [
-    ex('r_ul_to1','Pullups (bar if available)','5×max',5,'Every rep near-failure.'),
+    ex('r_ul_to1','Pullups (bar if available)','5×max',5,'Every rep near-failure.',false,'reps_only'),
     ex('r_ul_to2','Table / Inverted Row','4×12',4,'Heels on floor under table, pull chest to edge.'),
   ],
   enroute: [
-    ex('r_ul_er1','Chinups','3×max',3,'Supinated.'),
+    ex('r_ul_er1','Chinups','3×max',3,'Supinated.',false,'reps_only'),
     ex('r_ul_er2','Towel Curl','3×15',3,'Towel looped over door handle.'),
     ex('r_ul_er3','Door Frame Row','3×12',3,'Hold frame, lean back, pull chest to hands.'),
     ex('r_ul_er4','Superman Hold','3×30s',3,'Lie face down, extend arms and legs, hold.',true,'timed'),
@@ -402,27 +402,27 @@ WORKOUTS.room['Upper Pull'] = {
 WORKOUTS.room['Power / Plyo'] = {
   taxi: WORKOUTS.comm['Power / Plyo'].taxi,
   takeoff: [
-    ex('r_pp_to1','Bed/Chair Jump','5×3',5,'Any stable surface. Max jump every rep.'),
-    ex('r_pp_to2','Broad Jump','5×3',5,'Hallway. Max effort.'),
+    ex('r_pp_to1','Bed/Chair Jump','5×3',5,'Any stable surface. Max jump every rep.',false,'reps_only'),
+    ex('r_pp_to2','Broad Jump','5×3',5,'Hallway. Max effort.',false,'reps_only'),
   ],
   enroute: [
-    ex('r_pp_er1','Squat Jump','4×5',4,'Bodyweight. Explode every rep.'),
-    ex('r_pp_er2','Split Jump','3×6',3,'Lunge position, jump and switch.'),
-    ex('r_pp_er3','Explosive Pushup','4×5',4,'Hands leave floor.'),
-    ex('r_pp_er4','Pogo Hop','3×20',3,'Stiff ankles.'),
+    ex('r_pp_er1','Squat Jump','4×5',4,'Bodyweight. Explode every rep.',false,'reps_only'),
+    ex('r_pp_er2','Split Jump','3×6',3,'Lunge position, jump and switch.',false,'reps_only'),
+    ex('r_pp_er3','Explosive Pushup','4×5',4,'Hands leave floor.',false,'reps_only'),
+    ex('r_pp_er4','Pogo Hop','3×20',3,'Stiff ankles.',false,'reps_only'),
   ],
   landing: WORKOUTS.comm['Power / Plyo'].landing,
 };
 WORKOUTS.room['Full Body'] = {
   taxi: [ex('r_fb_t1','Full Mobility Circuit','1 round',1,'5 hip 90/90 each side → 10 arm circles → 10 thoracic extensions → 10 bodyweight squats.',true,'timed')],
   takeoff: [
-    ex('r_fb_to1','Pistol Squat Progression','3×5/leg',3,'Primary lower.'),
-    ex('r_fb_to2','Pullups / Table Row','3×max',3,'Primary upper pull.'),
+    ex('r_fb_to1','Single Leg Squat (Pistol)','3×5/leg',3,'Primary lower.',false,'reps_only'),
+    ex('r_fb_to2','Pullups / Table Row','3×max',3,'Primary upper pull.',false,'reps_only'),
   ],
   enroute: [
-    ex('r_fb_er1','Archer Pushup','3×5/side',3,'Upper push.'),
-    ex('r_fb_er2','Bulgarian Split Squat','3×10/leg',3,'Unilateral leg.'),
-    ex('r_fb_er3','Pike Pushup','3×10',3,'Overhead push pattern.'),
+    ex('r_fb_er1','Archer Pushup','3×5/side',3,'Upper push.',false,'reps_only'),
+    ex('r_fb_er2','Single Leg Split Squat','3×10/leg',3,'Unilateral leg.',false,'reps_only'),
+    ex('r_fb_er3','Pike Pushup','3×10',3,'Overhead push pattern.',false,'reps_only'),
     ex('r_fb_er4','Superman Hold','3×30s',3,'Posterior chain and back.',true,'timed'),
   ],
   landing: [
@@ -433,12 +433,12 @@ WORKOUTS.room['Full Body'] = {
 WORKOUTS.room['Longevity'] = {
   taxi: WORKOUTS.comm['Longevity'].taxi,
   takeoff: [
-    ex('r_lg_to1','Slow Bodyweight Squat','3×12',3,'3s down, 1s pause, controlled up.'),
+    ex('r_lg_to1','Slow Bodyweight Squat','3×12',3,'3s down, 1s pause, controlled up.',false,'reps_only'),
     ex('r_lg_to2','Inverted Row / Door Row','3×12',3,'Full retraction.'),
   ],
   enroute: [
-    ex('r_lg_er1','Reverse Lunge','3×10/leg',3,'Controlled.'),
-    ex('r_lg_er2','Slow Pushup','3×8',3,'4s down, 2s pause.'),
+    ex('r_lg_er1','Reverse Lunge','3×10/leg',3,'Controlled.',false,'reps_only'),
+    ex('r_lg_er2','Slow Pushup','3×8',3,'4s down, 2s pause.',false,'reps_only'),
     ex('r_lg_er3','Dead Bug','3×8/side',3,'Core stability.',false,'reps_only'),
     ex('r_lg_er4','Bird Dog','3×10/side',3,'Opposite arm-leg.',false,'reps_only'),
   ],
@@ -447,11 +447,11 @@ WORKOUTS.room['Longevity'] = {
 WORKOUTS.room['Cardio'] = {
   taxi: WORKOUTS.comm['Cardio'].taxi,
   takeoff: [
-    ex('r_ca_to1','Burpee Intervals','8×30s',8,'Max burpees in 30s.'),
-    ex('r_ca_to2','Stair Sprint Intervals','6×2 flights',6,'Full sprint up. Walk down.'),
+    ex('r_ca_to1','Burpee Intervals','8×30s',8,'Max burpees in 30s.',false,'reps_only'),
+    ex('r_ca_to2','Stair Sprint Intervals','6×2 flights',6,'Full sprint up. Walk down.',false,'reps_only'),
   ],
   enroute: [
-    ex('r_ca_er1','Jump Lunge','4×10/leg',4,'Explosive alternating.'),
+    ex('r_ca_er1','Jump Lunge','4×10/leg',4,'Explosive alternating.',false,'reps_only'),
     ex('r_ca_er2','Mountain Climbers','4×30s',4,'Fast feet.',true,'timed'),
   ],
   landing: WORKOUTS.comm['Cardio'].landing,
@@ -491,16 +491,17 @@ function getRecommendedNext() {
 }
 
 // ─── EXERCISE GUIDE LINKS ─────────────────────────────────────────────────────
-// A small set of exercises have been individually verified against live ExRx.net
-// pages (confirmed to load and match the correct movement). For every other
-// exercise, rather than guess at a direct page URL (which previously produced
-// broken links for ~90% of exercises), we generate a Google search scoped to
-// exrx.net for that exact exercise name. This guarantees a working, relevant
-// result for every single exercise, even when ExRx has no dedicated page for it.
+// Every URL below was individually verified against live ExRx.net search results
+// during this session — confirmed to load and match the correct movement and
+// terminology. ExRx often uses different names than common gym usage (e.g. our
+// "Pistol Squat" is ExRx's "Single Leg Squat"); names were corrected to match.
+// For every exercise without a confirmed direct page, we generate a Google
+// search scoped to exrx.net for that exact name — this guarantees a working,
+// relevant result even when ExRx has no dedicated page for a movement.
 const EXRX_VERIFIED = {
   c_lb_to1:'https://exrx.net/WeightExercises/Quadriceps/BBSquat',
   c_lb_to2:'https://exrx.net/WeightExercises/OlympicLifts/RomanianDeadlift',
-  c_lb_er1:'https://exrx.net/WeightExercises/Quadriceps/DBBulgarianSquat',
+  c_lb_er1:'https://exrx.net/WeightExercises/Quadriceps/BWSingleLegSplitSquat',
   c_lb_er2:'https://exrx.net/WeightExercises/Quadriceps/LVLegPress',
   c_up_to1:'https://exrx.net/WeightExercises/PectoralSternal/BBBenchPress',
   c_up_to2:'https://exrx.net/WeightExercises/DeltoidAnterior/BBMilitaryPress',
@@ -511,10 +512,17 @@ const EXRX_VERIFIED = {
   c_ul_er3:'https://exrx.net/WeightExercises/DeltoidPosterior/CBFacePull',
   c_pp_to1:'https://exrx.net/Plyometrics/BoxJump',
   c_pp_to2:'https://exrx.net/WeightExercises/GluteusMaximus/TBDeadlift',
+  c_pp_er1:'https://exrx.net/Plyometrics/BroadJump',
   h_ul_to1:'https://exrx.net/WeightExercises/LatissimusDorsi/BWPullup',
   h_lb_to1:'https://exrx.net/WeightExercises/Kettlebell/KBGobletSquat',
   h_lb_to2:'https://exrx.net/WeightExercises/OlympicLifts/RomanianDeadlift',
-  r_lb_to2:'https://exrx.net/Stretches/Hamstrings/BWNordicHamstringCurl',
+  h_pp_to1:'https://exrx.net/Plyometrics/BoxJump',
+  h_pp_to2:'https://exrx.net/Plyometrics/BroadJump',
+  r_lb_to1:'https://exrx.net/WeightExercises/Quadriceps/BWSingleLegSquat',
+  r_lb_to2:'https://exrx.net/WeightExercises/Hamstrings/ASHamstringRaiseSelfFloor',
+  r_lb_er1:'https://exrx.net/WeightExercises/Quadriceps/BWSingleLegSplitSquat',
+  r_pp_to1:'https://exrx.net/Plyometrics/BoxJump',
+  r_pp_to2:'https://exrx.net/Plyometrics/BroadJump',
 };
 
 function exrxSearchLink(name) {
@@ -588,6 +596,58 @@ const WISDOM = [
   { title:'Track Your Weights', text:'Without tracking, it is easy to believe you are progressing when you have actually plateaued. Logging sets, reps, and weight — as this app does — is the most direct way to confirm real progress and catch stalls early.', link:'https://www.acefitness.org/resources/everyone/blog/6470/the-truth-about-squats/' },
   { title:'Resting Heart Rate as a Metric', text:'A resting heart rate noticeably higher than your personal baseline can be an early signal of inadequate recovery, illness, or excessive training stress — useful information for deciding whether to push or pull back on a given day.', link:'https://www.heart.org/en/healthy-living/fitness/fitness-basics/target-heart-rates' },
   { title:'The Long Game', text:'Consistency over many months outperforms any short, intense burst of effort. A sustainable training rhythm you can maintain for a year will produce better outcomes than an unsustainable one you abandon after a few weeks.', link:'https://www.heart.org/en/healthy-living/fitness/fitness-basics/aha-recs-for-physical-activity-in-adults' },
+  { title:'Delayed Onset Muscle Soreness', text:'Soreness that peaks 24-48 hours after a new or harder-than-usual session is a normal adaptive response, not necessarily a sign of damage. Light movement, hydration, and protein support recovery; soreness lasting more than 4-5 days or accompanied by severe swelling warrants medical attention.', link:'https://www.acsm.org/education-resources/trending-topics-resources/dynamic-stretching' },
+  { title:'Grip Strength as a Health Marker', text:'Grip strength is one of the most studied simple measures linked to overall health outcomes in research populations. Farmer carries, dead hangs, and heavy rows all build grip incidentally — useful general training, not just a niche skill.', link:'https://www.heart.org/en/healthy-living/fitness/fitness-basics/aha-recs-for-physical-activity-in-adults' },
+  { title:'Jet Lag and Training Timing', text:'Training in late afternoon or early evening at your destination can help shift your circadian clock faster than training right after arrival when your body still expects to be asleep. Light exposure timing matters more than the workout itself for adjustment speed.', link:'https://www.sleepfoundation.org/jet-lag' },
+  { title:'Static vs Dynamic Stretching Timing', text:'Static stretches (held for 20-60 seconds without movement) are best done after training or on rest days, when tissue is warm and the goal is mobility rather than power output. Doing them cold, before lifting, can temporarily reduce strength and power.', link:'https://www.acsm.org/education-resources/trending-topics-resources/dynamic-stretching' },
+  { title:'Electrolytes Beyond Water', text:'On long flights or hot layovers, water alone may not fully replace what is lost through sweat. Sodium, potassium, and magnesium support muscle function and fluid balance — a pinch of salt or an electrolyte tablet is reasonable after heavy sweating, not just plain water.', link:'https://www.mayoclinic.org/healthy-lifestyle/nutrition-and-healthy-eating/in-depth/water/art-20044256' },
+  { title:'The Knee-Over-Toe Myth', text:'Older coaching cues warned against letting the knee travel past the toe in a squat or lunge. Current biomechanics research shows this movement is normal and safe for most people with adequate ankle mobility — restricting it artificially can actually increase strain elsewhere.', link:'https://www.acefitness.org/resources/everyone/blog/6470/the-truth-about-squats/' },
+  { title:'Warm-Up Specificity', text:'A general warm-up raises heart rate and tissue temperature, but a few lighter sets of the actual exercise you are about to perform (rehearsal sets) prepare the specific movement pattern and joint angles better than generic cardio alone.', link:'https://www.acsm.org/education-resources/trending-topics-resources/dynamic-stretching' },
+  { title:'Sleep Debt Does Not Fully Repay', text:'Sleeping in on days off helps somewhat, but research suggests chronic short sleep during the work week is not fully offset by weekend catch-up. Protecting sleep on duty days matters more than trying to recover it afterward.', link:'https://www.sleepfoundation.org/sleep-deprivation' },
+  { title:'Training Around a Minor Injury', text:'A minor strain in one area does not require stopping all training. Working unaffected muscle groups (sometimes called the "minimal effective dose" approach) maintains fitness and can even support healing through circulation — but always within pain-free range and ideally with medical guidance for anything beyond mild discomfort.', link:'https://www.acsm.org/education-resources/trending-topics-resources/dynamic-stretching' },
+  { title:'The Talk Test for Cardio Intensity', text:'A practical way to gauge Zone 2 effort without a heart rate monitor: you should be able to hold a conversation, but not comfortably sing. If you cannot speak in full sentences, you have drifted into a harder zone than intended for base-building cardio.', link:'https://www.heart.org/en/healthy-living/fitness/fitness-basics/aha-recs-for-physical-activity-in-adults' },
+  { title:'Why Tendons Take Longer Than Muscle', text:'Muscle tissue can show measurable strength adaptation in 1-2 weeks, but tendons and ligaments adapt over months due to slower blood supply and collagen turnover. This is part of why progressing load too quickly increases tendon injury risk even when muscles feel ready.', link:'https://www.acefitness.org/resources/everyone/blog/6470/the-truth-about-squats/' },
+  { title:'Hydration and Altitude', text:'Cabin pressurization simulates an altitude of roughly 6,000-8,000 feet, which increases respiratory water loss compared to sea level even without physical exertion. This is part of why pilots and frequent flyers need more deliberate hydration than ground-based schedules suggest.', link:'https://www.cdc.gov/healthy-weight-growth/water-healthy-drinks/index.html' },
+  { title:'Protein Timing Is Less Critical Than Total', text:'While post-workout protein timing gets a lot of attention, total daily protein intake matters more for muscle maintenance and growth than the exact hour you consume it — useful to know when travel schedules make precise meal timing unrealistic.', link:'https://www.hsph.harvard.edu/nutritionsource/what-should-you-eat/protein/' },
+  { title:'The Vestibular System and Balance Training', text:'Single-leg exercises and balance work train the vestibular and proprioceptive systems, which naturally decline with age and inactivity. This has practical relevance for fall prevention later in life and for general movement confidence now.', link:'https://www.acefitness.org/resources/everyone/blog/6470/the-truth-about-squats/' },
+  { title:'Cortisol and Chronic Stress', text:'Persistently elevated cortisol from chronic stress (including irregular schedules) is associated with increased abdominal fat storage, disrupted sleep, and impaired recovery from training. Stress management is not separate from fitness — it is a determinant of how well your training actually works.', link:'https://www.health.harvard.edu/staying-healthy/understanding-the-stress-response' },
+  { title:'Deload Weeks', text:'Periodically reducing training volume or intensity for a week (a "deload") allows accumulated fatigue to dissipate and is associated with better long-term progress than continuous, unbroken intensity. Roughly every 4-8 weeks is a common guideline, adjusted to how you are recovering.', link:'https://www.acsm.org/education-resources/trending-topics-resources/dynamic-stretching' },
+  { title:'Air Travel and Blood Clot Risk', text:'Prolonged sitting on long flights is associated with increased risk of deep vein thrombosis. Calf raises, ankle circles, and brief walks through the cabin when possible help maintain circulation. This applies to frequent flyers and crew, not just passengers on the longest routes.', link:'https://www.cdc.gov/travel/page/dvt' },
+  { title:'The Plateau Is Information, Not Failure', text:'A training plateau usually signals that one input — sleep, nutrition, recovery, or programming — needs to change, not that effort was wasted. Reviewing logged data (which this app captures automatically) helps identify which variable has stalled before assuming you need to simply work harder.', link:'https://www.acefitness.org/resources/everyone/blog/6470/the-truth-about-squats/' },
+  { title:'Omega-3s and Inflammation', text:'Omega-3 fatty acids (found in fatty fish, walnuts, flaxseed) are associated with modestly reduced inflammatory markers and may support joint comfort and recovery in people training regularly. They are a reasonable dietary target rather than a required supplement for most people.', link:'https://ods.od.nih.gov/factsheets/Omega3FattyAcids-Consumer/' },
+  { title:'Why Soreness Is Not a Progress Metric', text:'Feeling sore after a workout does not reliably indicate how effective that session was for strength or muscle gains — some highly effective sessions produce little soreness, and some unproductive ones produce a lot. Logged performance data is a far more reliable signal than how you feel the next day.', link:'https://www.acefitness.org/resources/everyone/blog/6470/the-truth-about-squats/' },
+  { title:'Compression Garments on Long Flights', text:'Graduated compression socks may help reduce leg swelling and discomfort on long-haul flights by supporting venous return. They are not a substitute for movement and hydration, but a reasonable addition for very long duty days.', link:'https://www.cdc.gov/travel/page/dvt' },
+  { title:'The Difference Between Tired and Fatigued', text:'Feeling sleepy is different from accumulated training fatigue — you can be well-rested and still carrying unresolved muscular or nervous system fatigue from recent hard sessions. The Pilot Condition toggle in this app is meant to capture that distinction, not just whether you slept well.', link:'https://www.acsm.org/education-resources/trending-topics-resources/dynamic-stretching' },
+  { title:'Resistance Training and Bone Density', text:'Mechanical loading from resistance training, particularly compound lower-body lifts, stimulates bone remodeling and is one of the most effective non-pharmacological interventions for maintaining bone density as you age — relevant well before osteoporosis becomes a concern.', link:'https://www.nia.nih.gov/health/exercise-and-physical-activity/four-types-exercise-can-improve-your-health-and-physical' },
+  { title:'Why Single-Joint and Multi-Joint Exercises Both Matter', text:'Compound lifts (squat, deadlift, press) build the most overall strength efficiently, but isolation exercises (lateral raises, curls, face pulls) address specific weak points and joint health that compounds alone do not fully cover. A well-rounded program needs both, not one or the other.', link:'https://www.acefitness.org/resources/everyone/blog/6470/the-truth-about-squats/' },
+  { title:'The Cephalic Phase of Digestion', text:'Simply seeing or smelling food triggers digestive hormone release before you take a bite. This is part of why eating mindfully — without screens, slowly — tends to produce better satiety signals than eating distracted, which matters when travel makes rushed meals common.', link:'https://www.hsph.harvard.edu/nutritionsource/what-should-you-eat/protein/' },
+  { title:'Why Warmup Sets Should Not Be Skipped', text:'Working up to a heavy top set through 2-3 progressively heavier warm-up sets primes the nervous system and reduces injury risk compared to loading the working weight cold. This is built into every Takeoff phase exercise in this app for that reason.', link:'https://www.acsm.org/education-resources/trending-topics-resources/dynamic-stretching' },
+  { title:'Sodium Is Not Universally Bad', text:'While excess sodium is linked to high blood pressure in sodium-sensitive individuals, very low sodium combined with heavy sweating (long flights, hot layovers, hard training) can also cause problems. The right amount depends on your individual health status and activity level — context matters more than a blanket rule.', link:'https://www.heart.org/en/health-topics/high-blood-pressure/changes-you-can-make-to-manage-high-blood-pressure' },
+  { title:'The Overload Principle Applies to Mobility Too', text:'Just as muscles need progressive load to get stronger, joints need progressively deeper or longer-held stretches over time to improve range of motion. Holding the same easy stretch for months will maintain — but not improve — flexibility.', link:'https://www.acsm.org/education-resources/trending-topics-resources/dynamic-stretching' },
+  { title:'Hotel Gym Programming Reality', text:'Limited equipment does not mean limited results. Dumbbells alone can effectively train every major movement pattern — squat, hinge, push, pull, carry — with appropriate exercise selection, which is exactly why this app builds full hotel-gym and hotel-room programs rather than treating them as compromises.', link:'https://www.acefitness.org/resources/everyone/blog/6470/the-truth-about-squats/' },
+  { title:'Caffeine and Performance', text:'Moderate caffeine intake (roughly 3-6mg per kg of bodyweight) 30-60 minutes before training is associated with modest improvements in strength and endurance performance for many people. Individual tolerance varies widely, and the sleep cost of late-day use generally outweighs any performance benefit from afternoon or evening caffeine.', link:'https://www.sleepfoundation.org/nutrition/caffeine-and-sleep' },
+  { title:'The Difference Between Pain and Discomfort', text:'Muscular burning and breathlessness during hard effort are expected discomfort. Sharp, localized, or joint pain is a different signal that warrants stopping and reassessing — learning this distinction is one of the most valuable skills in long-term training longevity.', link:'https://www.acsm.org/education-resources/trending-topics-resources/dynamic-stretching' },
+  { title:'Magnesium and Sleep Quality', text:'Magnesium is involved in regulating the nervous system pathways related to sleep, and some research associates adequate intake with improved sleep quality. Leafy greens, nuts, and seeds are good dietary sources; supplementation is reasonable for those who do not get enough through food.', link:'https://ods.od.nih.gov/factsheets/Magnesium-Consumer/' },
+  { title:'Recovery Nutrition on Travel Days', text:'Travel days without training still deplete the body through dehydration, irregular meals, and disrupted sleep. Treating a travel day with the same nutritional care as a hard training day — adequate protein, hydration, and sleep hygiene — supports faster bounce-back when you do train next.', link:'https://www.hsph.harvard.edu/nutritionsource/what-should-you-eat/protein/' },
+  { title:'Why Rep Ranges Are a Spectrum, Not Strict Categories', text:'Traditional guidance assigns strength to low reps (1-5), hypertrophy to moderate reps (6-12), and endurance to high reps (15+), but research shows meaningful overlap across all these ranges when training is taken close to fatigue. Range matters less than most people assume — consistency and effort matter more.', link:'https://www.acefitness.org/resources/everyone/blog/6470/the-truth-about-squats/' },
+  { title:'The Value of a Training Log Beyond Weights', text:'Recording how a session felt — energy, sleep the night before, stress level — alongside the numbers can reveal patterns that explain performance swings better than the numbers alone. Several fields in this app capture exactly that context for this reason.', link:'https://www.acefitness.org/resources/everyone/blog/6470/the-truth-about-squats/' },
+  { title:'Cold and Flu Risk After Hard Training', text:'A single bout of very intense or prolonged exercise can temporarily suppress immune markers for several hours afterward — sometimes called the "open window." Adequate sleep and nutrition around hard sessions, and being mindful of contagious exposure during this window, are reasonable precautions, especially for crew moving through airports.', link:'https://www.acsm.org/education-resources/trending-topics-resources/dynamic-stretching' },
+  { title:'Why Hip Mobility Affects the Whole Body', text:'Restricted hip mobility commonly causes the lower back or knees to compensate during squatting, lunging, and even walking. This is why hip-focused mobility work appears so often across every mission profile in this app rather than being treated as an isolated stretch.', link:'https://www.spine-health.com/wellness/exercise/thoracic-spine-stretches-and-exercises' },
+  { title:'The Role of Carbohydrates Around Training', text:'Carbohydrates are the primary fuel for higher-intensity training. Restricting them too aggressively around hard sessions can reduce performance and recovery quality, even for people otherwise managing weight through reduced carbohydrate intake at other times of day.', link:'https://www.hsph.harvard.edu/nutritionsource/carbohydrates/' },
+  { title:'Why Form Cues Matter More Than Load Early On', text:'Adding weight before movement quality is consistent increases injury risk and often reinforces poor mechanics that are harder to correct later. Mastering the pattern first, then adding load, is slower initially but more durable long-term — this is the logic behind the Taxi phase rehearsal sets before heavier work.', link:'https://www.acefitness.org/resources/everyone/blog/6470/the-truth-about-squats/' },
+  { title:'Sleep Architecture and Travel', text:'Crossing time zones disrupts not just total sleep time but the proportion of deep and REM sleep within each cycle, which affects both physical recovery and cognitive sharpness independent of how many hours you slept. This is why jet lag can feel worse than the hour count alone would suggest.', link:'https://www.sleepfoundation.org/jet-lag' },
+  { title:'The Case for Unilateral Training', text:'Single-leg and single-arm exercises expose and correct side-to-side strength imbalances that bilateral lifts can mask, and they train core stability and balance simultaneously. This is part of why split squats, step-ups, and single-arm rows appear throughout this program rather than only bilateral lifts.', link:'https://www.acefitness.org/resources/everyone/blog/6470/the-truth-about-squats/' },
+  { title:'Why Breathing Mechanics Affect Lifting', text:'Bracing the core with a controlled breath (sometimes called the Valsalva maneuver for very heavy lifts) increases intra-abdominal pressure and spinal stability during heavy compound lifts. This is a learnable skill, not an innate one, and is worth deliberate practice on lighter sets before applying it under heavy load.', link:'https://www.spine-health.com/wellness/exercise/core-exercises-low-back-pain' },
+  { title:'Why You Should Not Compare Your Program to Someone Else\'s', text:'Training history, recovery capacity, joint structure, and goals all vary enormously between individuals. A program perfectly suited to a 25-year-old bodybuilder is often inappropriate for a 45-year-old pilot prioritizing longevity — this is the entire reason this app offers goal-specific tracks rather than one universal program.', link:'https://www.acefitness.org/resources/everyone/blog/6470/the-truth-about-squats/' },
+  { title:'The Importance of Tracking Trends, Not Just Totals', text:'A single high or low reading in weight, blood pressure, or glucose is far less meaningful than the trend across several weeks. This app\'s charts are designed to surface the trend line precisely because individual data points are noisy and easy to overreact to.', link:'https://www.cdc.gov/diabetes/diabetes-testing/index.html' },
+  { title:'Why Stretching Alone Will Not Fix Tightness Caused by Weakness', text:'Muscles that feel chronically tight are sometimes compensating for weakness elsewhere, not actually short. In these cases, strengthening the underactive muscle resolves the tightness better than stretching the tight one — a common pattern in hip flexors compensating for weak glutes.', link:'https://www.spine-health.com/wellness/exercise/core-exercises-low-back-pain' },
+  { title:'Hydration Needs Scale With Body Size and Climate', text:'Hydration guidelines are a reasonable baseline, but actual needs scale up with body size, heat, humidity, and sweat rate. Someone training in a hot, humid layover city needs meaningfully more than the baseline recommendation — use the app\'s targets as a floor, not a ceiling, when conditions demand more.', link:'https://www.cdc.gov/healthy-weight-growth/water-healthy-drinks/index.html' },
+  { title:'The Connection Between Gut Health and Energy', text:'Digestive discomfort from poor airport food choices or irregular eating can affect energy levels and training quality the same day. Prioritizing fiber, hydration, and consistent meal timing when possible supports both digestion and the training performance that depends on feeling well.', link:'https://www.hsph.harvard.edu/nutritionsource/carbohydrates/fiber/' },
+  { title:'Why "Functional Training" Is Not a Separate Category', text:'All resistance training that improves strength, balance, and movement quality is functional in the sense that it transfers to daily activities and reduces injury risk — there is no meaningful separate category of magic "functional" exercises distinct from well-programmed traditional strength training.', link:'https://www.acefitness.org/resources/everyone/blog/6470/the-truth-about-squats/' },
+  { title:'Bodyweight Training Has a Real Ceiling — And That\'s Fine', text:'Pure bodyweight training (relevant in hotel rooms with no equipment) eventually plateaus in strength gains once movements become easy, but it remains highly effective for maintaining muscle, mobility, and conditioning during travel-limited periods. It is a legitimate maintenance tool, not just a poor substitute for weights.', link:'https://www.acefitness.org/resources/everyone/blog/6470/the-truth-about-squats/' },
+  { title:'The Value of a Pre-Sleep Routine', text:'A consistent sequence of low-stimulation activities before bed (dimming lights, light reading, stretching) cues the brain that sleep is approaching, similar to how athletes use pre-performance routines to cue focus. This conditioning effect builds over weeks of consistent repetition.', link:'https://www.sleepfoundation.org/sleep-hygiene' },
+  { title:'Why This App Tracks Waist Alongside Weight', text:'Body weight alone cannot distinguish between fat loss and muscle loss, or fat gain and muscle gain. Waist circumference, tracked alongside weight, gives a clearer picture of body composition trends over time without requiring expensive body-fat testing equipment.', link:'https://www.nhlbi.nih.gov/health/educational/lose_wt/risk.htm' },
+  { title:'Final Briefing: Build the Habit Before the Optimization', text:'A consistent, "good enough" training habit sustained for a year will outperform a perfectly optimized program abandoned after a month. Get the habit locked in first — proper timing, ideal rep ranges, and supplement protocols are refinements that matter far less than simply showing up consistently.', link:'https://www.heart.org/en/healthy-living/fitness/fitness-basics/aha-recs-for-physical-activity-in-adults' },
 ];
 
 // ─── CNS DOWN-REGULATION EXPLAINER (referenced from Landing phase + Wisdom) ──
@@ -882,6 +942,9 @@ async function bootApp() {
     ST.customExercises = profile.customExercises || [];
   }
   ST.lastSession = await dbGetLastSession();
+  // Auto-select the recommended next mission profile so Preflight opens
+  // pre-loaded with the right choice rather than always defaulting to Lower Body.
+  ST.muscleGroup = getRecommendedNext();
   renderRoot();
   checkDB();
 }
@@ -1206,14 +1269,14 @@ async function renderPreflight(p) {
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
   Object.keys(GOALS).forEach(gid => {
     const g = GOALS[gid];
-    parts.push('<div class="env-btn '+(ST.goal===gid?'sel':'')+'" onclick="ST.goal=\''+gid+'\';saveGoalLevel();renderPage()">');
+    parts.push('<div class="env-btn '+(ST.goal===gid?'sel':'')+'" onclick="ST.goal=\''+gid+'\';ST.muscleGroup=getRecommendedNext();saveGoalLevel();renderPage()">');
     parts.push('<div class="ei">'+g.icon+'</div><div class="el">'+g.label+'</div>');
     parts.push('<div style="font-size:9px;color:var(--muted);margin-top:3px;line-height:1.3">'+g.desc+'</div>');
     parts.push('</div>');
   });
   parts.push('</div>');
   const freq = FREQUENCY_GUIDE[ST.level];
-  parts.push('<div class="alert alert-info mt12"><div class="alert-icon">📅</div><div><strong>'+freq.days+' days/week</strong> recommended at your level — '+freq.split+'. '+freq.note+'</div></div>');
+  parts.push('<div class="alert alert-info mt12"><div class="alert-icon">🎯</div><div><strong>'+freq.days+' days/week</strong> recommended at your level — '+freq.split+'. '+freq.note+'</div></div>');
   parts.push('</div>');
 
   // Pilot condition
@@ -1883,6 +1946,8 @@ async function setTheChocks() {
   ST.workout = null;
   ST.sets = {};
   ST.workoutStartedAt = null;
+  ST.calendarSessions = {}; // invalidate calendar cache so today's workout shows immediately
+  ST.muscleGroup = getRecommendedNext(); // pre-select tomorrow's recommended profile
   clearWorkoutState();
   ST.tab = 'debrief';
   renderPage();
@@ -2031,27 +2096,52 @@ async function loadAndDrawCharts() {
 }
 
 // ─── WISDOM TAB ───────────────────────────────────────────────────────────────
+// Returns the day-of-year (1-366), used to auto-rotate the wisdom card daily
+// so every user sees a new card each calendar day without needing to tap Next.
+function dayOfYear() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 0);
+  const diff = now - start;
+  return Math.floor(diff / 86400000);
+}
+function todaysWisdomIdx() {
+  return dayOfYear() % WISDOM.length;
+}
+
 function renderWisdom(p) {
-  const card = WISDOM[ST.wisdomIdx];
-  const num  = String(ST.wisdomIdx+1).padStart(2,'0');
+  const isAutoRotated = ST.wisdomIdx === null;
+  const activeIdx = isAutoRotated ? todaysWisdomIdx() : ST.wisdomIdx;
+  const card = WISDOM[activeIdx];
+  const num  = String(activeIdx+1).padStart(2,'0');
   const parts = [];
-  parts.push('<div class="section-label">FLIGHT DECK WISDOM</div>');
+  parts.push('<div class="section-label">FLIGHT DECK WISDOM'+(isAutoRotated?' · TODAY\'S BRIEFING':'')+'</div>');
   parts.push('<div class="wisdom-card"><div>');
   parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--gold);letter-spacing:0.1em;margin-bottom:12px">BRIEFING '+num+' / '+WISDOM.length+'</div>');
   parts.push('<div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:14px">'+card.title+'</div>');
   parts.push('<div style="font-size:13px;line-height:1.8;color:#94a3b8">'+card.text+'</div>');
   parts.push('</div><div><a class="modal-link" href="'+card.link+'" target="_blank" rel="noopener">📖 Read more →</a></div></div>');
-  parts.push('<div class="wisdom-counter">'+(ST.wisdomIdx+1)+' of '+WISDOM.length+'</div>');
+  parts.push('<div class="wisdom-counter">'+(activeIdx+1)+' of '+WISDOM.length+(isAutoRotated?' · rotates daily':'')+'</div>');
   parts.push('<div class="wisdom-nav"><button class="btn btn-outline" onclick="prevWisdom()">← PREV</button><button class="btn btn-outline" onclick="nextWisdom()">NEXT →</button></div>');
+  if (!isAutoRotated) {
+    parts.push('<button class="btn-ghost mt8" style="display:block;width:100%;text-align:center" onclick="ST.wisdomIdx=null;renderWisdom(document.getElementById(\'mainPage\'))">↻ Back to Today\'s Briefing</button>');
+  }
   parts.push('<div style="margin-top:16px"><div class="section-label">JUMP TO TOPIC</div><div class="mg-wrap">');
   WISDOM.forEach((w,i) => {
-    parts.push('<div class="'+(i===ST.wisdomIdx?'mg-pill sel':'mg-pill')+'" onclick="jumpWisdom('+i+')" style="font-size:11px">'+w.title+'</div>');
+    parts.push('<div class="'+(i===activeIdx?'mg-pill sel':'mg-pill')+'" onclick="jumpWisdom('+i+')" style="font-size:11px">'+w.title+'</div>');
   });
   parts.push('</div></div>');
   p.innerHTML = parts.join('');
 }
-function prevWisdom() { ST.wisdomIdx=(ST.wisdomIdx-1+WISDOM.length)%WISDOM.length; renderWisdom(document.getElementById('mainPage')); }
-function nextWisdom() { ST.wisdomIdx=(ST.wisdomIdx+1)%WISDOM.length; renderWisdom(document.getElementById('mainPage')); }
+function prevWisdom() {
+  const cur = ST.wisdomIdx === null ? todaysWisdomIdx() : ST.wisdomIdx;
+  ST.wisdomIdx = (cur-1+WISDOM.length)%WISDOM.length;
+  renderWisdom(document.getElementById('mainPage'));
+}
+function nextWisdom() {
+  const cur = ST.wisdomIdx === null ? todaysWisdomIdx() : ST.wisdomIdx;
+  ST.wisdomIdx = (cur+1)%WISDOM.length;
+  renderWisdom(document.getElementById('mainPage'));
+}
 function jumpWisdom(i) { ST.wisdomIdx=i; renderWisdom(document.getElementById('mainPage')); }
 
 // ─── DEBRIEF SCREEN (post-flight summary) ────────────────────────────────────

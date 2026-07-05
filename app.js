@@ -4,7 +4,7 @@
  */
 
 const FCF_VERSION = 'v5.3';
-const FCF_BUILD   = '20260622';
+const FCF_BUILD   = '20260705';
 
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────
 const SB = supabase.createClient(
@@ -19,6 +19,11 @@ const ST = {
   showLanding: true,
   authMode: 'signin', // 'signin' | 'signup'
   authErr: '',
+  authInfo: '',
+  ouraToken: '',
+  ouraScore: null,
+  photoTimeline: [],
+  authInfo: '',
 
   tab: 'preflight',
   env: 'comm',
@@ -816,20 +821,17 @@ function renderAuth(root) {
   parts.push('<div class="auth-wrap">');
   parts.push('<div style="text-align:center;margin-bottom:24px"><div class="landing-logo">✈ FLIGHT CREW FITNESS</div></div>');
   parts.push('<div class="auth-tabs">');
-  parts.push('<div class="auth-tab '+(!isSignup?'active':'')+'" onclick="ST.authMode=\'signin\';ST.authErr=\'\';renderRoot()">Sign In</div>');
-  parts.push('<div class="auth-tab '+(isSignup?'active':'')+'" onclick="ST.authMode=\'signup\';ST.authErr=\'\';renderRoot()">Sign Up</div>');
+  parts.push('<div class="auth-tab '+(!isSignup?'active':'')+'" onclick="ST.authMode=\'signin\';ST.authErr=\'\';ST.authInfo=\'\';renderRoot()">Sign In</div>');
+  parts.push('<div class="auth-tab '+(isSignup?'active':'')+'" onclick="ST.authMode=\'signup\';ST.authErr=\'\';ST.authInfo=\'\';renderRoot()">Sign Up</div>');
   parts.push('</div>');
-
-  if (ST.authErr) {
-    parts.push('<div class="alert alert-danger"><div class="alert-icon">⚠️</div><div>'+ST.authErr+'</div></div>');
-  }
-
+  if (ST.authInfo) parts.push('<div class="alert alert-ok mt8"><div class="alert-icon">✅</div><div>'+ST.authInfo+'</div></div>');
+  if (ST.authErr)  parts.push('<div class="alert alert-danger mt8"><div class="alert-icon">⚠️</div><div>'+ST.authErr+'</div></div>');
   parts.push('<div class="field"><label>Email</label><input type="email" id="auth_email" placeholder="you@example.com" autocomplete="email"></div>');
-  parts.push('<div class="field"><label>Password</label><input type="password" id="auth_pass" placeholder="••••••••" autocomplete="'+(isSignup?'new-password':'current-password')+'"></div>');
-  parts.push('<button class="btn btn-gold mt8" onclick="handleAuthSubmit()">'+(isSignup?'Create Account':'Sign In')+'</button>');
-  parts.push('<button class="btn-ghost mt16" style="display:block;width:100%;text-align:center" onclick="ST.showLanding=true;renderRoot()">← Back</button>');
-  parts.push('</div>');
-  parts.push('</div>');
+  parts.push('<div class="field"><label>Password</label><input type="password" id="auth_pass" placeholder="'+(isSignup?'Choose a password (min 6 chars)':'Your password')+'" autocomplete="'+(isSignup?'new-password':'current-password')+'"></div>');
+  if (isSignup) parts.push('<div class="field"><label>Confirm Password</label><input type="password" id="auth_pass2" placeholder="Re-enter your password" autocomplete="new-password"></div>');
+  parts.push('<button class="btn btn-gold mt8" onclick="handleAuthSubmit()">'+(isSignup?'Create Account →':'Sign In →')+'</button>');
+  parts.push('<button class="btn-ghost mt12" style="display:block;width:100%;text-align:center" onclick="ST.showLanding=true;renderRoot()">← Back</button>');
+  parts.push('</div></div>');
   root.innerHTML = parts.join('');
 }
 
@@ -837,22 +839,27 @@ async function handleAuthSubmit() {
   const email = document.getElementById('auth_email')?.value?.trim();
   const pass  = document.getElementById('auth_pass')?.value;
   if (!email || !pass) { ST.authErr = 'Enter both email and password.'; renderRoot(); return; }
+  if (!email.includes('@')) { ST.authErr = 'Enter a valid email address.'; renderRoot(); return; }
+  if (ST.authMode === 'signup') {
+    if (pass.length < 6) { ST.authErr = 'Password must be at least 6 characters.'; renderRoot(); return; }
+    const pass2 = document.getElementById('auth_pass2')?.value;
+    if (pass !== pass2) { ST.authErr = 'Passwords do not match — please re-enter.'; renderRoot(); return; }
+  }
   try {
     const user = ST.authMode === 'signup' ? await doSignUp(email, pass) : await doSignIn(email, pass);
-    if (!user) {
-      ST.authErr = 'Check your email to confirm your account, then sign in.';
-      renderRoot();
-      return;
-    }
-    ST.user = user;
-    ST.authed = true;
-    ST.authErr = '';
+    if (!user) { ST.authErr = 'Sign in failed. Check your email and password.'; renderRoot(); return; }
+    ST.user = user; ST.authed = true; ST.authErr = ''; ST.authInfo = '';
     await bootApp();
   } catch(e) {
-    ST.authErr = e.message || 'Authentication failed.';
-    renderRoot();
+    let msg = e.message || 'Authentication failed.';
+    if (msg.includes('Invalid login') || msg.includes('invalid_credentials')) msg = 'Incorrect email or password.';
+    if (msg.includes('User already registered')) msg = 'An account with this email already exists — try signing in.';
+    if (msg.includes('Password should be')) msg = 'Password must be at least 6 characters.';
+    ST.authErr = msg; renderRoot();
   }
 }
+
+
 
 // ─── SAFETY DISCLAIMER ────────────────────────────────────────────────────────
 function renderDisclaimerGate(root) {
@@ -940,11 +947,13 @@ async function bootApp() {
     ST.level = profile.level || ST.level;
     ST.goal  = profile.goal  || ST.goal;
     ST.customExercises = profile.customExercises || [];
+    ST.ouraToken = profile.ouraToken || '';
   }
   ST.lastSession = await dbGetLastSession();
   // Auto-select the recommended next mission profile so Preflight opens
   // pre-loaded with the right choice rather than always defaulting to Lower Body.
   ST.muscleGroup = getRecommendedNext();
+  await loadSessionCache();
   renderRoot();
   checkDB();
 }
@@ -966,16 +975,26 @@ async function checkDB() {
 }
 
 // ─── TOAST ────────────────────────────────────────────────────────────────────
-function showToast(msg) {
-  const old = document.getElementById('fcf-toast');
+function showBigToast(msg, type) {
+  const old = document.getElementById('fcf-big-toast');
   if (old) old.remove();
+  const bg2 = document.getElementById('fcf-big-toast-bg');
+  if (bg2) bg2.remove();
+  const color = type === 'ok' ? '#22c55e' : type === 'warn' ? '#f59e0b' : '#3b82f6';
+  const icon  = type === 'ok' ? '✅' : type === 'warn' ? '⚠️' : 'ℹ️';
   const t = document.createElement('div');
-  t.id = 'fcf-toast';
-  t.style.cssText = 'position:fixed;bottom:72px;left:50%;transform:translateX(-50%);background:#1a2438;border:1px solid #1e2d45;color:#e2e8f0;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:500;z-index:999;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,0.5);transition:opacity 0.3s';
-  t.textContent = msg;
+  t.id = 'fcf-big-toast';
+  t.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#0f1623;border:2px solid '+color+';color:#e2e8f0;padding:28px 36px;border-radius:16px;font-size:18px;font-weight:700;z-index:9999;box-shadow:0 8px 48px rgba(0,0,0,0.7);text-align:center;min-width:200px;transition:opacity 0.4s';
+  t.innerHTML = '<div style="font-size:36px;margin-bottom:12px">'+icon+'</div><div>'+msg+'</div>';
   document.body.appendChild(t);
-  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2800);
+  const bg = document.createElement('div');
+  bg.id = 'fcf-big-toast-bg';
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9998;transition:opacity 0.4s';
+  bg.onclick = () => { t.remove(); bg.remove(); };
+  document.body.appendChild(bg);
+  setTimeout(() => { t.style.opacity='0'; bg.style.opacity='0'; setTimeout(() => { t.remove(); bg.remove(); }, 400); }, 2200);
 }
+function showToast(msg) { showBigToast(msg, 'info'); }
 
 // ─── INFO MODAL (generic, used for biometrics + CNS explainer) ──────────────
 function showInfoModal(title, text) {
@@ -1318,9 +1337,9 @@ async function renderPreflight(p) {
   parts.push('<div class="card mb12">');
   parts.push('<div class="field-row" style="margin-bottom:10px">');
   parts.push('<div class="field" style="margin-bottom:0"><label>Flight Hours Today</label>');
-  parts.push('<input type="number" inputmode="decimal" step="0.5" min="0" max="16" value="'+(ST.flightHrsTouched?ST.flightHrs:'')+'" placeholder="0 = no-fly day" oninput="ST.flightHrs=parseFloat(this.value)||0;ST.flightHrsTouched=true;renderPage()"></div>');
+  parts.push('<input type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="'+(ST.flightHrsTouched?ST.flightHrs:'')+'" placeholder="0 = no-fly day" oninput="ST.flightHrs=parseFloat(this.value)||0;ST.flightHrsTouched=true;renderPage()"></div>');
   parts.push('<div class="field" style="margin-bottom:0"><label>Water Consumed (L)</label>');
-  parts.push('<input type="number" inputmode="decimal" step="0.1" min="0" max="10" value="'+(ST.waterIn||'')+'" placeholder="e.g. 1.2" oninput="ST.waterIn=parseFloat(this.value)||0;renderPage()"></div>');
+  parts.push('<input type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="'+(ST.waterIn||'')+'" placeholder="e.g. 1.2" oninput="ST.waterIn=parseFloat(this.value)||0;renderPage()"></div>');
   parts.push('</div>');
   if (ST.flightHrsTouched && ST.flightHrs === 0) {
     parts.push('<div class="alert alert-info" style="margin-bottom:8px"><div class="alert-icon">ℹ️</div><div>No-fly day — minimum 1.0L hydration target still applies. Your body needs baseline water regardless of duty status.</div></div>');
@@ -1421,6 +1440,172 @@ function engageWorkout() {
   switchTab('flight');
 }
 
+// ─── PROGRESSIVE OVERLOAD HELPERS ────────────────────────────────────────────
+function lastLoggedMax(exId) {
+  const all = ST.sessionCache || [];
+  for (let i = all.length-1; i >= 0; i--) {
+    const sets = all[i].sets?.[exId];
+    if (!sets) continue;
+    const weights = sets.map(s => parseFloat(s.weight)||0).filter(w => w > 0);
+    if (weights.length) return Math.max(...weights);
+  }
+  const ls = ST.lastSession?.sets?.[exId];
+  if (ls) { const w = ls.map(s=>parseFloat(s.weight)||0).filter(w=>w>0); if(w.length) return Math.max(...w); }
+  return null;
+}
+function lastLoggedReps(exId) {
+  const all = ST.sessionCache || [];
+  for (let i = all.length-1; i >= 0; i--) {
+    const sets = all[i].sets?.[exId];
+    if (!sets) continue;
+    const reps = sets.map(s=>parseInt(s.reps)||0).filter(r=>r>0);
+    if (reps.length) return Math.max(...reps);
+  }
+  const ls = ST.lastSession?.sets?.[exId];
+  if (ls) { const r = ls.map(s=>parseInt(s.reps)||0).filter(r=>r>0); if(r.length) return Math.max(...r); }
+  return null;
+}
+function suggestNextWeight(exId, exName, phaseKey) {
+  const last = lastLoggedMax(exId);
+  if (!last) return null;
+  const name = (exName||'').toLowerCase();
+  const isLower = name.includes('squat')||name.includes('deadlift')||name.includes('lunge')||name.includes('rdl');
+  const increment = (phaseKey==='takeoff' && isLower) ? 5 : 2.5;
+  return last + increment;
+}
+async function loadSessionCache() {
+  try { ST.sessionCache = await dbGetRecentSessions(90); }
+  catch(e) { ST.sessionCache = []; }
+}
+
+// ─── ALTERNATE EXERCISE SYSTEM ───────────────────────────────────────────────
+const ALTERNATES = {
+  'Back Squat': [
+    {name:'Goblet Squat (Heavy)',target:'4×10',note:'DB front-loaded squat. Less spinal compression.'},
+    {name:'Hack Squat (Machine)',target:'4×10',note:'Machine substitute. Quad dominant, adjustable load.'},
+    {name:'Leg Press',          target:'4×12',note:'Seated machine. Good if knees or back are an issue.'},
+  ],
+  'Romanian Deadlift': [
+    {name:'DB Romanian Deadlift',target:'4×10',note:'Same hip hinge, dumbbells if no barbell available.'},
+    {name:'Seated Leg Curl',    target:'3×12',note:'Machine isolation — direct hamstring without the hinge.'},
+    {name:'Good Morning',       target:'3×10',note:'Bar on back, hip hinge. Excellent hamstring stretch.'},
+  ],
+  'Conventional Deadlift': [
+    {name:'Trap Bar Deadlift',  target:'5×3', note:'More quad-friendly. Great for athletes.'},
+    {name:'DB Deadlift',        target:'4×8', note:'Hotel substitute. Same pattern, lighter load.'},
+    {name:'Romanian Deadlift',  target:'4×6', note:'Shifts work to hamstrings. Less total load.'},
+  ],
+  'Trap Bar Deadlift': [
+    {name:'Conventional Deadlift',target:'5×3',note:'Classic barbell. More posterior chain emphasis.'},
+    {name:'DB Deadlift',        target:'4×8', note:'Hotel substitute if trap bar unavailable.'},
+    {name:'Leg Press',          target:'4×10',note:'Machine alternative. Less posterior chain, more quad.'},
+  ],
+  'Flat Barbell Bench Press': [
+    {name:'DB Bench Press',     target:'4×10',note:'Greater ROM. Often easier on shoulders.'},
+    {name:'Machine Chest Press',target:'4×12',note:'Shoulder-friendly machine alternative.'},
+    {name:'Close Grip Bench',   target:'4×8', note:'More tricep emphasis. Same pressing stimulus.'},
+  ],
+  'Standing Overhead Press': [
+    {name:'DB Overhead Press',  target:'4×8', note:'Independent arms. Easier shoulder position.'},
+    {name:'Push Press',         target:'4×5', note:'Leg drive added — allows heavier overhead loads.'},
+    {name:'Pike Pushup',        target:'4×12',note:'Bodyweight overhead pressing. No equipment.',inputType:'reps_only'},
+  ],
+  'Barbell Row (Pendlay)': [
+    {name:'DB Row',             target:'4×10/side',note:'Unilateral. Fuller ROM per side.'},
+    {name:'Seated Cable Row',   target:'4×12',     note:'Constant tension through full range.'},
+    {name:'Machine Row',        target:'4×12',     note:'Easier position. Good for heavier reps.'},
+  ],
+  'Lat Pulldown': [
+    {name:'Pullups',            target:'4×max',note:'Bodyweight variant. Builds more strength.',inputType:'reps_only'},
+    {name:'Chinups',            target:'4×max',note:'Supinated grip. More bicep involvement.',inputType:'reps_only'},
+    {name:'Cable Straight-Arm Pulldown',target:'3×15',note:'Isolation. Hits lower lat without bicep.'},
+  ],
+  'Seated Cable Row': [
+    {name:'DB Row',             target:'4×10/side',note:'Fully loads each side independently.'},
+    {name:'Barbell Row (Pendlay)',target:'4×6',    note:'Heavier bilateral pulling.'},
+    {name:'Inverted Row',       target:'3×12',     note:'Bodyweight row under a table or bar.',inputType:'reps_only'},
+  ],
+  'Box Jump': [
+    {name:'Broad Jump',         target:'5×3',note:'Horizontal power. Same explosive hip extension.',inputType:'reps_only'},
+    {name:'Squat Jump',         target:'4×5',note:'No box needed. Same power demand.',inputType:'reps_only'},
+    {name:'DB Jump Squat',      target:'4×5',note:'Light DBs add load without a box.'},
+  ],
+  'Single Leg Split Squat': [
+    {name:'Reverse Lunge',      target:'3×12/leg',note:'Both feet on floor — lower balance demand.',inputType:'reps_only'},
+    {name:'Step-Up',            target:'3×12/leg',note:'Same glute + quad pattern. Use a bench.'},
+    {name:'Single Leg Squat (Pistol)',target:'3×5/leg',note:'Harder bodyweight version.',inputType:'reps_only'},
+  ],
+  'Face Pull': [
+    {name:'DB Rear Delt Fly',   target:'3×15',note:'Prone or bent-over. Same rear delt + external rotation.'},
+    {name:'Band Pull-Apart',    target:'3×20',note:'Resistance band. Great shoulder health work.',inputType:'reps_only'},
+    {name:'Seated DB Face Pull',target:'3×15',note:'Seated, light DBs, external rotation finish.'},
+  ],
+  'Goblet Squat': [
+    {name:'Back Squat',         target:'5×5',note:'Barbell version for heavier loading.'},
+    {name:'Single Leg Squat (Pistol)',target:'3×5/leg',note:'Bodyweight unilateral — very demanding.',inputType:'reps_only'},
+    {name:'Leg Press',          target:'4×12',note:'Machine alternative.'},
+  ],
+  'Rowing Machine Intervals': [
+    {name:'Assault Bike Intervals',target:'8×30s',note:'Full body combined. Equally brutal.'},
+    {name:'Treadmill Intervals',target:'8×1 min', note:'Run-based alternative.'},
+    {name:'Stair Sprint Intervals',target:'6×2 flights',note:'No machine needed.',inputType:'reps_only'},
+  ],
+};
+
+function getAlternates(exName) {
+  if (!exName) return [];
+  if (ALTERNATES[exName]) return ALTERNATES[exName];
+  // partial match
+  const key = Object.keys(ALTERNATES).find(k => {
+    const kl = k.toLowerCase(), nl = exName.toLowerCase();
+    return nl.includes(kl.split(' ')[0]) || kl.includes(nl.split(' ')[0]);
+  });
+  return key ? ALTERNATES[key] : [];
+}
+
+function showAlternates(exId, exName, phaseKey) {
+  const alts = getAlternates(exName);
+  if (!alts.length) { showBigToast('No alternates mapped for this exercise.','info'); return; }
+  const root = document.getElementById('modalRoot');
+  const parts = [];
+  parts.push('<div class="modal-bg" onclick="if(event.target===this)closeModal()">');
+  parts.push('<div class="modal-sheet">');
+  parts.push('<div class="modal-handle"></div>');
+  parts.push('<div class="modal-title">Alternate Exercises</div>');
+  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Same muscle group — different movement. Tap to swap in.</div>');
+  alts.forEach(alt => {
+    const safeAlt = JSON.stringify(alt).replace(/"/g,'\"');
+    parts.push('<div style="background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">');
+    parts.push('<div style="font-weight:700;font-size:14px;margin-bottom:3px">'+alt.name+'</div>');
+    parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--gold);margin-bottom:6px">'+alt.target+'</div>');
+    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px">'+alt.note+'</div>');
+    parts.push('<button class="btn btn-gold btn-sm" onclick=\'swapExercise("'+exId+'",'+JSON.stringify(alt)+');closeModal()\'>Swap In</button>');
+    parts.push('</div>');
+  });
+  parts.push('<button class="btn btn-outline mt8" onclick="closeModal()">CANCEL</button>');
+  parts.push('</div></div>');
+  root.innerHTML = parts.join('');
+}
+
+function swapExercise(exId, alt) {
+  if (!ST.workout) return;
+  for (const phase of ['taxi','takeoff','enroute','landing']) {
+    const idx = ST.workout[phase].findIndex(e => e.id === exId);
+    if (idx === -1) continue;
+    const newEx = ex('swap_'+Date.now(), alt.name, alt.target, 3, alt.note||'Alternate exercise.', false, alt.inputType||'reps_weight');
+    ST.workout[phase][idx] = newEx;
+    const iType = alt.inputType || 'reps_weight';
+    ST.sets[newEx.id] = iType==='reps_only' ? Array.from({length:3},()=>({reps:''})) :
+                        iType==='timed'      ? [{seconds:''}] :
+                                               Array.from({length:3},()=>({reps:'',weight:''}));
+    delete ST.sets[exId];
+    persistWorkoutState();
+    showBigToast(alt.name+' swapped in.','ok');
+    renderFlight(document.getElementById('mainPage'));
+    return;
+  }
+}
+
 // ─── FLIGHT TAB ───────────────────────────────────────────────────────────────
 const PHASES_META = [
   { key:'taxi',    label:'TAXI',     sub:'Pilot Protocol — mobilization and activation', icon:'🚕', cls:'phase-taxi'    },
@@ -1485,6 +1670,23 @@ function buildExCard(exItem, phaseKey) {
   if (isOpen) {
     parts.push('<div class="ex-body"><p class="ex-note">'+exItem.note+'</p>');
 
+    // Progressive overload banner — only for weighted exercises
+    if (!exItem.timed && exItem.inputType !== 'reps_only' && exItem.inputType !== 'nsdr' && !exItem.custom) {
+      const lastW = lastLoggedMax(exItem.id);
+      const lastR = lastLoggedReps(exItem.id);
+      const suggested = suggestNextWeight(exItem.id, exItem.name, phaseKey);
+      if (lastW !== null) {
+        parts.push('<div style="background:rgba(201,168,76,0.1);border:1px solid rgba(201,168,76,0.3);border-radius:8px;padding:10px 12px;margin-bottom:12px">');
+        parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin-bottom:4px">PROGRESSIVE OVERLOAD</div>');
+        parts.push('<div style="display:flex;justify-content:space-between;align-items:center">');
+        parts.push('<span style="font-size:12px">Last: <strong style="color:var(--text)">'+lastW+' lb'+(lastR?' × '+lastR+' reps':'')+'</strong></span>');
+        parts.push('<span style="color:var(--gold);font-weight:700;font-size:12px">Target → '+suggested+' lb</span>');
+        parts.push('</div></div>');
+      } else {
+        parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px;font-style:italic">First time logging — sets here to start tracking progress.</div>');
+      }
+    }
+
     if (exItem.inputType === 'nsdr') {
       parts.push(buildNSDRWidget(exItem.id, sets[0]?.seconds||''));
     } else if (exItem.timed) {
@@ -1518,7 +1720,13 @@ function buildExCard(exItem, phaseKey) {
     }
 
     if (!exItem.custom) {
-      parts.push('<div style="margin-top:10px"><button class="btn-info" onclick="showGuide(\''+exItem.id+'\')">ℹ Guide</button></div>');
+      const hasAlts = getAlternates(exItem.name).length > 0;
+      parts.push('<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">');
+      parts.push('<button class="btn-info" onclick="showGuide(\''+exItem.id+'\')">ℹ Guide</button>');
+      if (hasAlts) {
+        parts.push('<button class="btn-info" style="border-color:rgba(167,139,250,0.4);color:#a78bfa" onclick="showAlternates(\''+exItem.id+'\',\''+exItem.name+'\',\''+phaseKey+'\')">⇄ Alternate</button>');
+      }
+      parts.push('</div>');
     } else {
       parts.push('<div style="margin-top:10px"><button class="btn-info" style="color:#fca5a5;border-color:rgba(239,68,68,0.3)" onclick="deleteCustomExercise(\''+exItem.id+'\')">✕ Remove</button></div>');
     }
@@ -1990,19 +2198,53 @@ async function saveBio() {
   const sys   = parseInt(document.getElementById('inp_sys')?.value)||null;
   const dia   = parseInt(document.getElementById('inp_dia')?.value)||null;
   const gluc  = parseInt(document.getElementById('inp_gluc')?.value)||null;
-  if (!wt && !waist && !sys && !dia && !gluc) { showToast('Enter at least one value to log.'); return; }
+  if (!wt && !waist && !sys && !dia && !gluc) { showBigToast('Enter at least one value to log.','warn'); return; }
 
-  const row = { user_id: ST.user?.id || null, weight_lb:wt, waist_in:waist, systolic_bp:sys, diastolic_bp:dia, fasting_glucose:gluc, logged_at: new Date().toISOString() };
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+  const todayEnd   = new Date(); todayEnd.setHours(23,59,59,999);
+
   try {
-    const { error } = await SB.from('weight_log').insert([row]);
-    if (error) throw error;
-    showToast('✅ Biometrics recorded.');
-  } catch(e) {
-    showToast('⚠️ Saved locally.');
-    const local = JSON.parse(localStorage.getItem('fcf_bio')||'[]');
-    local.push({ ...row, logged_at: new Date().toISOString() });
-    localStorage.setItem('fcf_bio', JSON.stringify(local));
-  }
+    if (ST.user) {
+      const { data: existing } = await SB.from('weight_log')
+        .select('*').eq('user_id', ST.user.id)
+        .gte('logged_at', todayStart.toISOString())
+        .lte('logged_at', todayEnd.toISOString()).limit(1);
+
+      if (existing && existing.length > 0) {
+        const merged = {
+          weight_lb:       wt    ?? existing[0].weight_lb,
+          waist_in:        waist ?? existing[0].waist_in,
+          systolic_bp:     sys   ?? existing[0].systolic_bp,
+          diastolic_bp:    dia   ?? existing[0].diastolic_bp,
+          fasting_glucose: gluc  ?? existing[0].fasting_glucose,
+        };
+        const { error } = await SB.from('weight_log').update(merged).eq('id', existing[0].id);
+        if (error) throw error;
+        showBigToast("Today's record updated.",'ok');
+      } else {
+        const row = { user_id: ST.user.id, weight_lb:wt, waist_in:waist, systolic_bp:sys, diastolic_bp:dia, fasting_glucose:gluc, logged_at: new Date().toISOString() };
+        const { error } = await SB.from('weight_log').insert([row]);
+        if (error) throw error;
+        showBigToast('Biometrics logged.','ok');
+      }
+    } else {
+      const local = JSON.parse(localStorage.getItem('fcf_bio')||'[]');
+      const todayIdx = local.findIndex(r => { const d = new Date(r.logged_at); return d >= todayStart && d <= todayEnd; });
+      if (todayIdx >= 0) {
+        if (wt)    local[todayIdx].weight_lb       = wt;
+        if (waist) local[todayIdx].waist_in        = waist;
+        if (sys)   local[todayIdx].systolic_bp     = sys;
+        if (dia)   local[todayIdx].diastolic_bp    = dia;
+        if (gluc)  local[todayIdx].fasting_glucose = gluc;
+        showBigToast("Today's record updated.",'ok');
+      } else {
+        local.push({ weight_lb:wt, waist_in:waist, systolic_bp:sys, diastolic_bp:dia, fasting_glucose:gluc, logged_at: new Date().toISOString() });
+        showBigToast('Saved locally.','ok');
+      }
+      localStorage.setItem('fcf_bio', JSON.stringify(local));
+    }
+  } catch(e) { showBigToast('Could not save — check connection.','warn'); }
+
   if (wt) {
     const profile = (await dbGetProfile()) || {};
     profile.lastWeight = wt;
@@ -2180,15 +2422,184 @@ function renderDebrief(p) {
   p.innerHTML = parts.join('');
 }
 
+// ─── EXPORT CSV ──────────────────────────────────────────────────────────────
+async function exportCSV() {
+  showBigToast('Building export...','info');
+  let sessions = [];
+  let biometrics = [];
+  try {
+    const sFilter = ST.user ? SB.from('workout_sessions').select('*').eq('user_id', ST.user.id) : SB.from('workout_sessions').select('*');
+    const { data: sd } = await sFilter.order('started_at', { ascending: true });
+    sessions = (sd||[]).map(r => r.session_data).filter(Boolean);
+    const bFilter = ST.user ? SB.from('weight_log').select('*').eq('user_id', ST.user.id) : SB.from('weight_log').select('*');
+    const { data: bd } = await bFilter.order('logged_at', { ascending: true });
+    biometrics = bd || [];
+  } catch(e) {
+    sessions = JSON.parse(localStorage.getItem('fcf_sessions')||'[]');
+    biometrics = JSON.parse(localStorage.getItem('fcf_bio')||'[]');
+  }
+
+  const bioByDate = {};
+  biometrics.forEach(b => {
+    const d = new Date(b.logged_at).toLocaleDateString('en-US');
+    bioByDate[d] = b;
+  });
+
+  // Build CSV: one row per exercise set
+  const rows = [['Date','Day','Muscle Group','Environment','Goal','Fatigue','Level','Duration (min)','Phase','Exercise','Set #','Reps','Weight (lb)','Seconds','Body Weight (lb)','Waist (in)','Systolic BP','Diastolic BP','Fasting Glucose (mg/dL)']];
+
+  sessions.forEach(s => {
+    const date = new Date(s.date);
+    const dateStr = date.toLocaleDateString('en-US');
+    const dayStr = date.toLocaleDateString('en-US',{weekday:'long'});
+    const bio = bioByDate[dateStr] || {};
+    const sets = s.sets || {};
+    const wk = s.workoutSnapshot || {};
+    const phases = ['taxi','takeoff','enroute','landing'];
+    let hasRows = false;
+    phases.forEach(phase => {
+      (wk[phase]||[]).forEach(exItem => {
+        const exSets = sets[exItem.id] || [];
+        exSets.forEach((set, i) => {
+          if (!set.reps && !set.weight && !set.seconds) return;
+          rows.push([
+            dateStr, dayStr,
+            s.muscle_group||'', s.env||'', s.goal||'', s.fatigue||'', s.level||'',
+            s.durationMinutes||'',
+            phase, exItem.name||'', i+1,
+            set.reps||'', set.weight||'', set.seconds||'',
+            bio.weight_lb||'', bio.waist_in||'', bio.systolic_bp||'',
+            bio.diastolic_bp||'', bio.fasting_glucose||'',
+          ]);
+          hasRows = true;
+        });
+      });
+    });
+    // If no exercise breakdown (old sessions), add summary row
+    if (!hasRows) {
+      rows.push([dateStr, dayStr, s.muscle_group||'', s.env||'', s.goal||'', s.fatigue||'', s.level||'',
+        s.durationMinutes||'', '', '(session summary)', '', '', '', '',
+        bio.weight_lb||'', bio.waist_in||'', bio.systolic_bp||'', bio.diastolic_bp||'', bio.fasting_glucose||'']);
+    }
+  });
+
+  const csv = rows.map(r => r.map(v => '"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'flight-crew-fitness-'+new Date().toISOString().slice(0,10)+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  setTimeout(() => showBigToast('CSV exported — ready for AI analysis.','ok'), 300);
+}
+
+// ─── OURA RING INTEGRATION ────────────────────────────────────────────────────
+async function fetchOuraReadiness() {
+  const token = ST.ouraToken;
+  if (!token) { showBigToast('Add your Oura Personal Access Token in Profile settings.','warn'); return; }
+  try {
+    const today = new Date().toISOString().slice(0,10);
+    const url = 'https://api.ouraring.com/v2/usercollection/daily_readiness?start_date='+today+'&end_date='+today;
+    const res = await fetch(url, { headers: { Authorization: 'Bearer '+token } });
+    if (!res.ok) throw new Error('Oura API error '+res.status);
+    const data = await res.json();
+    const item = data?.data?.[0];
+    if (!item) { showBigToast('No readiness data for today yet — check back later.','info'); return; }
+    const score = item.score;
+    // Map readiness to Pilot Condition: 85+ = GO, 60-84 = MARGINAL, <60 = NO-GO
+    const condition = score >= 85 ? 'go' : score >= 60 ? 'marginal' : 'nogo';
+    const label = score >= 85 ? 'GO' : score >= 60 ? 'MARGINAL' : 'NO-GO';
+    ST.fatigue = condition;
+    ST.ouraScore = score;
+    const profile = (await dbGetProfile()) || {};
+    profile.ouraToken = token;
+    await dbSetProfile(profile);
+    showBigToast('Oura readiness '+score+' → '+label,'ok');
+    renderPage();
+  } catch(e) {
+    if (e.message.includes('Failed to fetch') || e.message.includes('CORS')) {
+      showBigToast('CORS blocked — Oura requires server-side proxy. See Profile for setup guide.','warn');
+    } else {
+      showBigToast('Oura error: '+e.message,'warn');
+    }
+  }
+}
+
+// ─── PHOTO PROGRESS ───────────────────────────────────────────────────────────
+async function uploadProgressPhoto() {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'image/*'; input.capture = 'user';
+  input.onchange = async () => {
+    const file = input.files[0];
+    if (!file) return;
+    if (!ST.user) { showBigToast('Sign in to save photos.','warn'); return; }
+    showBigToast('Uploading...','info');
+    try {
+      const path = ST.user.id+'/'+new Date().toISOString().slice(0,10)+'-'+Date.now()+'.jpg';
+      const { error } = await SB.storage.from('progress-photos').upload(path, file, { upsert: false });
+      if (error) throw error;
+      showBigToast('Photo saved!','ok');
+      loadPhotoTimeline();
+    } catch(e) {
+      if (e.message?.includes('Bucket not found')) {
+        showBigToast('Create a "progress-photos" bucket in Supabase Storage first.','warn');
+      } else {
+        showBigToast('Upload failed: '+e.message,'warn');
+      }
+    }
+  };
+  input.click();
+}
+
+async function loadPhotoTimeline() {
+  if (!ST.user) return;
+  try {
+    const { data: files } = await SB.storage.from('progress-photos').list(ST.user.id, { sortBy:{column:'created_at',order:'desc'}, limit:12 });
+    if (!files || !files.length) { ST.photoTimeline = []; return; }
+    const urls = await Promise.all(files.map(async f => {
+      const { data } = SB.storage.from('progress-photos').getPublicUrl(ST.user.id+'/'+f.name);
+      return { url: data.publicUrl, date: f.name.slice(0,10), name: f.name };
+    }));
+    ST.photoTimeline = urls;
+    if (ST.tab === 'profile') renderPage();
+  } catch(e) { ST.photoTimeline = []; }
+}
+
+function buildPhotoTimelineHTML() {
+  const photos = ST.photoTimeline || [];
+  const parts = [];
+  parts.push('<div class="section-label">PROGRESS PHOTOS</div>');
+  parts.push('<div class="card mb12">');
+  parts.push('<button class="btn btn-outline mb12" onclick="uploadProgressPhoto()">📷 Add Progress Photo</button>');
+  if (!photos.length) {
+    parts.push('<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px">No photos yet. Add your first to start tracking visual progress.</div>');
+  } else {
+    parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
+    photos.forEach(p => {
+      parts.push('<div style="border-radius:8px;overflow:hidden;position:relative">');
+      parts.push('<img src="'+p.url+'" style="width:100%;aspect-ratio:3/4;object-fit:cover;display:block">');
+      parts.push('<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);font-family:var(--mono);font-size:9px;color:#fff;padding:4px 6px">'+p.date+'</div>');
+      parts.push('</div>');
+    });
+    parts.push('</div>');
+    parts.push('<div style="font-size:10px;color:var(--muted);margin-top:8px;text-align:center">Requires "progress-photos" bucket in Supabase Storage (private, authenticated)</div>');
+  }
+  parts.push('</div>');
+  return parts.join('');
+}
+
 // ─── PROFILE TAB ──────────────────────────────────────────────────────────────
 function renderProfile(p) {
   const parts = [];
   parts.push('<div class="section-label">PILOT PROFILE</div>');
+
+  // Account card
   parts.push('<div class="card mb12">');
   parts.push('<div class="fb"><div style="font-size:14px;font-weight:600">'+(ST.user?.email||'Local user')+'</div><div class="status-dot ok"></div></div>');
   parts.push('<div style="font-size:11px;color:var(--muted);margin-top:4px">'+FCF_VERSION+' · Build '+FCF_BUILD+'</div>');
   parts.push('</div>');
 
+  // Training program
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">TRAINING PROGRAM</div>');
   const g = GOALS[ST.goal];
@@ -2200,18 +2611,61 @@ function renderProfile(p) {
   parts.push('<div style="font-size:11px;color:var(--muted);line-height:1.6">'+freq.split+'. '+freq.note+'</div>');
   parts.push('</div>');
 
+  // Oura Ring
+  parts.push('<div class="card mb12">');
+  parts.push('<div class="section-label" style="margin-top:0">OURA RING INTEGRATION</div>');
+  if (ST.ouraScore !== null) {
+    const scoreColor = ST.ouraScore >= 85 ? 'var(--green)' : ST.ouraScore >= 60 ? 'var(--amber)' : 'var(--red)';
+    const scoreLabel = ST.ouraScore >= 85 ? 'GO' : ST.ouraScore >= 60 ? 'MARGINAL' : 'NO-GO';
+    parts.push('<div class="fb mb8"><span style="font-size:13px">Today\'s Readiness</span><span style="font-family:var(--mono);font-size:16px;font-weight:700;color:'+scoreColor+'">'+ST.ouraScore+' · '+scoreLabel+'</span></div>');
+  }
+  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Your Oura readiness score (0-100) automatically sets your Pilot Condition. Get your Personal Access Token at <span style="color:var(--blue2)">cloud.ouraring.com/personal-access-tokens</span></div>');
+  parts.push('<div class="field" style="margin-bottom:8px"><label>Personal Access Token</label>');
+  parts.push('<input type="password" id="oura_token" value="'+(ST.ouraToken||'')+'" placeholder="eyJ..." oninput="ST.ouraToken=this.value"></div>');
+  parts.push('<div style="display:flex;gap:8px">');
+  parts.push('<button class="btn btn-blue btn-sm" onclick="saveOuraToken()">Save Token</button>');
+  parts.push('<button class="btn btn-outline btn-sm" onclick="fetchOuraReadiness()">Sync Now</button>');
+  parts.push('</div>');
+  parts.push('<div style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.5">Note: Oura\'s API may require server-side proxy if CORS is blocked in browser. If Sync fails, a Supabase Edge Function proxy is needed.</div>');
+  parts.push('</div>');
+
+  // Export
+  parts.push('<div class="card mb12">');
+  parts.push('<div class="section-label" style="margin-top:0">EXPORT DATA</div>');
+  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Export all workout sessions and biometrics as a CSV — one row per set, with date context and biometric data joined by date. Optimized for AI analysis.</div>');
+  parts.push('<button class="btn btn-outline" onclick="exportCSV()">📊 Export CSV for AI Analysis</button>');
+  parts.push('</div>');
+
+  // Photo progress
+  parts.push(buildPhotoTimelineHTML());
+
+  // Custom exercises
   if (ST.customExercises.length) {
-    parts.push('<div class="card mb12"><div class="section-label" style="margin-top:0">YOUR CUSTOM EXERCISES ('+ST.customExercises.length+')</div>');
+    parts.push('<div class="card mb12"><div class="section-label" style="margin-top:0">CUSTOM EXERCISES ('+ST.customExercises.length+')</div>');
     ST.customExercises.forEach(c => {
       parts.push('<div class="fb" style="padding:6px 0;border-bottom:1px solid var(--border)"><span style="font-size:12px">'+c.exercise.name+'</span><span style="font-size:10px;color:var(--muted)">'+c.muscleGroup+' · '+c.env+'</span></div>');
     });
     parts.push('</div>');
   }
 
+  // Safety disclaimer
   parts.push('<div class="card mb12"><div class="section-label" style="margin-top:0">SAFETY DISCLAIMER</div>');
   parts.push('<div class="disclaimer-banner">Flight Crew Fitness is a training tool, not medical advice. Consult a physician before beginning any new exercise program. Exercise at your own risk and within your own physical limits.</div>');
   parts.push('</div>');
 
   parts.push('<button class="btn btn-red-outline" onclick="doSignOut()">Sign Out</button>');
   p.innerHTML = parts.join('');
+
+  // Load photo timeline after render
+  if (ST.user) loadPhotoTimeline().catch(()=>{});
+}
+
+async function saveOuraToken() {
+  const token = document.getElementById('oura_token')?.value?.trim();
+  if (!token) { showBigToast('Enter your Oura access token.','warn'); return; }
+  ST.ouraToken = token;
+  const profile = (await dbGetProfile()) || {};
+  profile.ouraToken = token;
+  await dbSetProfile(profile);
+  showBigToast('Token saved.','ok');
 }

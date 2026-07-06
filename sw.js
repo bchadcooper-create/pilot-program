@@ -1,6 +1,6 @@
 // Flight Crew Fitness — Service Worker
 // Version: 5.0 | Forces fresh fetch on every new deploy
-const CACHE = 'fcf-v5-3';
+const CACHE = 'fcf-v5-4';
 const CORE = [
   '/pilot-program/',
   '/pilot-program/index.html',
@@ -26,7 +26,7 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-  if (url.hostname.includes('supabase.co') || url.hostname.includes('jsdelivr.net') || url.hostname.includes('googleapis.com')) {
+  if (url.hostname.includes('supabase.co') || url.hostname.includes('jsdelivr.net') || url.hostname.includes('googleapis.com') || url.hostname.includes('ouraring.com')) {
     e.respondWith(
       fetch(e.request).catch(() => caches.match(e.request).then(r => r || new Response('', { status: 503 })))
     );

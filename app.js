@@ -3,8 +3,8 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.3';
-const FCF_BUILD   = '20260705';
+const FCF_VERSION = 'v5.4';
+const FCF_BUILD   = '20260706';
 
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────
 const SB = supabase.createClient(
@@ -1193,7 +1193,8 @@ function buildCalendarHTML(weekData) {
   parts.push('<div class="section-label" style="margin:0">TRAINING CALENDAR</div>');
   parts.push('<button class="btn-ghost" onclick="shiftCalendarWeek(-1)" '+(ST.calendarWeekOffset===0?'style="visibility:hidden"':'')+'>Later →</button>');
   parts.push('</div>');
-  parts.push('<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">');
+  // Swipe support: track touchstart X, on touchend compute delta and shift week
+  parts.push('<div id="calSwipe" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px" ontouchstart="ST._swipeX=event.changedTouches[0].clientX" ontouchend="(function(){var dx=event.changedTouches[0].clientX-ST._swipeX;if(Math.abs(dx)>40){shiftCalendarWeek(dx<0?-1:1);}})()">');
   days.forEach(day => {
     const isToday = day.date.toDateString() === new Date().toDateString();
     const dow = day.date.toLocaleDateString('en-US',{weekday:'short'}).charAt(0);
@@ -1474,8 +1475,32 @@ function suggestNextWeight(exId, exName, phaseKey) {
   return last + increment;
 }
 async function loadSessionCache() {
-  try { ST.sessionCache = await dbGetRecentSessions(90); }
-  catch(e) { ST.sessionCache = []; }
+  try {
+    // First try recent 90 days (sessions with started_at populated)
+    let sessions = await dbGetRecentSessions(90);
+    // Also fetch ALL sessions without date filter to catch older entries
+    // that were saved before started_at was added to the insert
+    if (ST.user) {
+      try {
+        const { data } = await SB.from('workout_sessions')
+          .select('*').eq('user_id', ST.user.id)
+          .order('started_at', { ascending: true });
+        if (data && data.length > sessions.length) {
+          sessions = data.map(r => r.session_data).filter(Boolean);
+        }
+      } catch(e) {}
+    }
+    // Also include lastSession which is always loaded
+    if (ST.lastSession && !sessions.find(s => s.date === ST.lastSession.date)) {
+      sessions.push(ST.lastSession);
+    }
+    ST.sessionCache = sessions;
+  } catch(e) {
+    // Fall back to localStorage sessions
+    const keys = Object.keys(localStorage).filter(k => k.startsWith('fcf_session_'));
+    ST.sessionCache = keys.map(k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } }).filter(Boolean);
+    if (ST.lastSession) ST.sessionCache.push(ST.lastSession);
+  }
 }
 
 // ─── ALTERNATE EXERCISE SYSTEM ───────────────────────────────────────────────
@@ -1549,6 +1574,62 @@ const ALTERNATES = {
     {name:'Assault Bike Intervals',target:'8×30s',note:'Full body combined. Equally brutal.'},
     {name:'Treadmill Intervals',target:'8×1 min', note:'Run-based alternative.'},
     {name:'Stair Sprint Intervals',target:'6×2 flights',note:'No machine needed.',inputType:'reps_only'},
+  ],
+  // EN ROUTE accessories
+  'Lateral Raise': [
+    {name:'Cable Lateral Raise',target:'3×15',note:'Cable keeps tension at the bottom — harder than DBs.'},
+    {name:'Machine Lateral Raise',target:'3×15',note:'Machine version. Strict form, no cheating.'},
+    {name:'Upright Row',target:'3×12',note:'Barbell or DB. Hits lateral delt and upper trap.'},
+  ],
+  'EZ Bar Curl': [
+    {name:'DB Curl',target:'3×12',note:'Dumbbell variation. Allows neutral or supinated grip.'},
+    {name:'Cable Curl',target:'3×15',note:'Constant tension throughout. Great pump.'},
+    {name:'Hammer Curl',target:'3×12',note:'Neutral grip. Hits brachialis and brachioradialis.'},
+  ],
+  'DB Curl': [
+    {name:'EZ Bar Curl',target:'3×12',note:'Barbell variation. Slightly easier on the wrists.'},
+    {name:'Cable Curl',target:'3×15',note:'Constant tension. Good isolation.'},
+    {name:'Hammer Curl',target:'3×12',note:'Neutral grip. Different muscle emphasis.'},
+  ],
+  'Close Grip Bench': [
+    {name:'Tricep Pushdown',target:'3×15',note:'Cable. Great isolation for all three tricep heads.'},
+    {name:'DB Tricep Overhead',target:'3×12',note:'Overhead extension. Long head emphasis.'},
+    {name:'Dip',target:'3×max',note:'Bodyweight. Chest + tricep compound.',inputType:'reps_only'},
+  ],
+  'DB Tricep Overhead': [
+    {name:'Close Grip Bench',target:'3×8',note:'Barbell tricep pressing.'},
+    {name:'Tricep Pushdown',target:'3×15',note:'Cable isolation.'},
+    {name:'Chair Dips',target:'3×max',note:'Bodyweight. No equipment.',inputType:'reps_only'},
+  ],
+  'Leg Press': [
+    {name:'Back Squat',target:'5×5',note:'Free weight. More total body demand.'},
+    {name:'Goblet Squat (Heavy)',target:'4×10',note:'DB front-loaded. Good hotel substitute.'},
+    {name:'Hack Squat',target:'4×10',note:'More quad emphasis than leg press.'},
+  ],
+  'Standing Calf Raise': [
+    {name:'Seated Calf Raise',target:'4×15',note:'Seated hits the soleus (deeper calf muscle) more.'},
+    {name:'Single-Leg Calf Raise',target:'3×15/leg',note:'Bodyweight on a step. More ROM.',inputType:'reps_only'},
+    {name:'Leg Press Calf Raise',target:'4×20',note:'On the leg press machine. Easy to load heavy.'},
+  ],
+  'Pallof Press': [
+    {name:'Dead Bug',target:'3×8/side',note:'Anti-extension core. No equipment.',inputType:'reps_only'},
+    {name:'Plank',target:'3×60s',note:'Anti-extension. Simpler but still effective.',inputType:'timed'},
+    {name:'Cable Woodchop',target:'3×12/side',note:'Rotational power. Same anti-rotation principle.'},
+  ],
+  'Farmer Carry': [
+    {name:'Suitcase Carry',target:'3×40yd',note:'Single DB/KB. Greater anti-lateral-flexion demand.'},
+    {name:'Trap Bar Carry',target:'3×40yd',note:'Heavier loading. More grip and core.'},
+    {name:'Dead Bug',target:'3×8/side',note:'Core stability alternative if no space for carries.',inputType:'reps_only'},
+  ],
+  'Lunge (Walking)': [
+    {name:'Reverse Lunge',target:'3×12/leg',note:'Less knee stress. More glute emphasis.',inputType:'reps_only'},
+    {name:'Single Leg Split Squat',target:'3×10/leg',note:'Rear foot elevated. Higher difficulty.',inputType:'reps_only'},
+    {name:'Step-Up',target:'3×12/leg',note:'Same pattern. Box or bench needed.'},
+  ],
+  'Step-Up': [
+    {name:'Lunge (Walking)',target:'3×10/leg',note:'Floor-based. No box needed.'},
+    {name:'Single Leg Split Squat',target:'3×10/leg',note:'Rear foot elevated. More challenging.',inputType:'reps_only'},
+    {name:'Leg Press',target:'4×12',note:'Machine substitute. Same quad emphasis.'},
   ],
 };
 
@@ -2188,8 +2269,12 @@ function renderTrends(p) {
     parts.push('<div class="card mb8"><div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:6px">'+label+'</div><div class="chart-wrap"><canvas id="'+id+'"></canvas></div></div>');
   });
 
+  // Photo progress at bottom of Trends
+  parts.push(buildPhotoTimelineHTML());
+
   p.innerHTML = parts.join('');
   setTimeout(() => loadAndDrawCharts(), 50);
+  if (ST.user) loadPhotoTimeline().catch(()=>{});
 }
 
 async function saveBio() {
@@ -2526,20 +2611,23 @@ async function fetchOuraReadiness() {
 }
 
 // ─── PHOTO PROGRESS ───────────────────────────────────────────────────────────
-async function uploadProgressPhoto() {
+async function uploadProgressPhoto(useCamera) {
+  if (!ST.user) { showBigToast('Sign in to save photos.','warn'); return; }
   const input = document.createElement('input');
-  input.type = 'file'; input.accept = 'image/*'; input.capture = 'user';
+  input.type = 'file';
+  input.accept = 'image/*';
+  if (useCamera) input.capture = 'environment'; // rear camera when specified
   input.onchange = async () => {
     const file = input.files[0];
     if (!file) return;
-    if (!ST.user) { showBigToast('Sign in to save photos.','warn'); return; }
     showBigToast('Uploading...','info');
     try {
-      const path = ST.user.id+'/'+new Date().toISOString().slice(0,10)+'-'+Date.now()+'.jpg';
-      const { error } = await SB.storage.from('progress-photos').upload(path, file, { upsert: false });
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = ST.user.id+'/'+new Date().toISOString().slice(0,10)+'-'+Date.now()+'.'+ext;
+      const { error } = await SB.storage.from('progress-photos').upload(path, file, { upsert: false, contentType: file.type });
       if (error) throw error;
       showBigToast('Photo saved!','ok');
-      loadPhotoTimeline();
+      await loadPhotoTimeline();
     } catch(e) {
       if (e.message?.includes('Bucket not found')) {
         showBigToast('Create a "progress-photos" bucket in Supabase Storage first.','warn');
@@ -2548,7 +2636,9 @@ async function uploadProgressPhoto() {
       }
     }
   };
+  document.body.appendChild(input);
   input.click();
+  setTimeout(() => input.remove(), 5000);
 }
 
 async function loadPhotoTimeline() {
@@ -2557,10 +2647,13 @@ async function loadPhotoTimeline() {
     const { data: files } = await SB.storage.from('progress-photos').list(ST.user.id, { sortBy:{column:'created_at',order:'desc'}, limit:12 });
     if (!files || !files.length) { ST.photoTimeline = []; return; }
     const urls = await Promise.all(files.map(async f => {
-      const { data } = SB.storage.from('progress-photos').getPublicUrl(ST.user.id+'/'+f.name);
-      return { url: data.publicUrl, date: f.name.slice(0,10), name: f.name };
+      const { data, error } = await SB.storage.from('progress-photos')
+        .createSignedUrl(ST.user.id+'/'+f.name, 3600); // 1-hour signed URL for private bucket
+      if (error || !data?.signedUrl) return null;
+      return { url: data.signedUrl, date: f.name.slice(0,10), name: f.name };
     }));
-    ST.photoTimeline = urls;
+    const validUrls = urls.filter(Boolean);
+    ST.photoTimeline = validUrls;
     if (ST.tab === 'profile') renderPage();
   } catch(e) { ST.photoTimeline = []; }
 }
@@ -2570,7 +2663,10 @@ function buildPhotoTimelineHTML() {
   const parts = [];
   parts.push('<div class="section-label">PROGRESS PHOTOS</div>');
   parts.push('<div class="card mb12">');
-  parts.push('<button class="btn btn-outline mb12" onclick="uploadProgressPhoto()">📷 Add Progress Photo</button>');
+  parts.push('<div style="display:flex;gap:8px;margin-bottom:12px">');
+  parts.push('<button class="btn btn-outline" style="flex:1" onclick="uploadProgressPhoto(true)">📷 Camera</button>');
+  parts.push('<button class="btn btn-outline" style="flex:1" onclick="uploadProgressPhoto(false)">🖼 Library</button>');
+  parts.push('</div>');
   if (!photos.length) {
     parts.push('<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px">No photos yet. Add your first to start tracking visual progress.</div>');
   } else {
@@ -2636,9 +2732,6 @@ function renderProfile(p) {
   parts.push('<button class="btn btn-outline" onclick="exportCSV()">📊 Export CSV for AI Analysis</button>');
   parts.push('</div>');
 
-  // Photo progress
-  parts.push(buildPhotoTimelineHTML());
-
   // Custom exercises
   if (ST.customExercises.length) {
     parts.push('<div class="card mb12"><div class="section-label" style="margin-top:0">CUSTOM EXERCISES ('+ST.customExercises.length+')</div>');
@@ -2656,8 +2749,6 @@ function renderProfile(p) {
   parts.push('<button class="btn btn-red-outline" onclick="doSignOut()">Sign Out</button>');
   p.innerHTML = parts.join('');
 
-  // Load photo timeline after render
-  if (ST.user) loadPhotoTimeline().catch(()=>{});
 }
 
 async function saveOuraToken() {

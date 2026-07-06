@@ -3,8 +3,16 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.4';
-const FCF_BUILD   = '20260706';
+const FCF_VERSION = 'v5.5';
+const FCF_BUILD   = '20260707';
+
+// ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
+// Replace OURA_CLIENT_ID with your actual Client ID from cloud.ouraring.com/oauth/applications
+// The client secret lives ONLY in the Supabase Edge Function (oura-auth) — never here.
+const OURA_CLIENT_ID   = 'deb737ed-9343-407a-b993-9907bc101800';
+const OURA_REDIRECT_URI = 'https://bchadcooper-create.github.io/pilot-program/';
+const OURA_EDGE_FN      = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/oura-auth';
+const OURA_SCOPES       = 'daily personal'; // readiness, sleep, activity, personal info
 
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────
 const SB = supabase.createClient(
@@ -21,7 +29,11 @@ const ST = {
   authErr: '',
   authInfo: '',
   ouraToken: '',
+  ouraAccessToken: null,
+  ouraRefreshToken: null,
+  ouraConnected: false,
   ouraScore: null,
+  ouraData: null,
   photoTimeline: [],
   authInfo: '',
 
@@ -947,7 +959,10 @@ async function bootApp() {
     ST.level = profile.level || ST.level;
     ST.goal  = profile.goal  || ST.goal;
     ST.customExercises = profile.customExercises || [];
-    ST.ouraToken = profile.ouraToken || '';
+    ST.ouraToken       = profile.ouraToken || '';
+    ST.ouraAccessToken  = profile.ouraAccessToken || null;
+    ST.ouraRefreshToken = profile.ouraRefreshToken || null;
+    ST.ouraConnected    = !!profile.ouraConnected;
   }
   ST.lastSession = await dbGetLastSession();
   // Auto-select the recommended next mission profile so Preflight opens
@@ -1122,6 +1137,19 @@ if ('serviceWorker' in navigator) {
 }
 
 async function initApp() {
+  // Check for Oura OAuth callback before anything else
+  if (window.location.search.includes('code=')) {
+    ST.user = await checkAuth();
+    ST.authed = !!ST.user;
+    if (ST.authed) {
+      await bootApp();
+      await handleOuraCallback(); // process the OAuth code
+    } else {
+      renderRoot();
+    }
+    return;
+  }
+
   ST.user = await checkAuth();
   ST.authed = !!ST.user;
   if (ST.authed) {
@@ -2274,6 +2302,7 @@ function renderTrends(p) {
 
   p.innerHTML = parts.join('');
   setTimeout(() => loadAndDrawCharts(), 50);
+  // Load fresh signed URLs every time Trends tab opens — ensures photos always display
   if (ST.user) loadPhotoTimeline().catch(()=>{});
 }
 
@@ -2578,36 +2607,197 @@ async function exportCSV() {
   setTimeout(() => showBigToast('CSV exported — ready for AI analysis.','ok'), 300);
 }
 
-// ─── OURA RING INTEGRATION ────────────────────────────────────────────────────
-async function fetchOuraReadiness() {
-  const token = ST.ouraToken;
-  if (!token) { showBigToast('Add your Oura Personal Access Token in Profile settings.','warn'); return; }
+// ─── OURA RING OAUTH2 + DATA SYNC ────────────────────────────────────────────
+
+// Step 1: Send user to Oura's authorization page
+function connectOura() {
+  const state = Math.random().toString(36).slice(2);
+  localStorage.setItem('oura_state', state);
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id:     OURA_CLIENT_ID,
+    redirect_uri:  OURA_REDIRECT_URI,
+    scope:         OURA_SCOPES,
+    state:         state,
+  });
+  window.location.href = 'https://cloud.ouraring.com/oauth/authorize?' + params.toString();
+}
+
+// Step 2: Handle the OAuth callback (called on page load if ?code= is in the URL)
+async function handleOuraCallback() {
+  const params = new URLSearchParams(window.location.search);
+  const code  = params.get('code');
+  const state = params.get('state');
+  const error = params.get('error');
+
+  if (error) {
+    showBigToast('Oura authorization denied.','warn');
+    window.history.replaceState({}, '', window.location.pathname);
+    return;
+  }
+  if (!code) return; // no code in URL, not a callback
+
+  const savedState = localStorage.getItem('oura_state');
+  if (state !== savedState) {
+    showBigToast('Oura auth state mismatch — please try again.','warn');
+    window.history.replaceState({}, '', window.location.pathname);
+    return;
+  }
+
+  showBigToast('Connecting to Oura...','info');
+  window.history.replaceState({}, '', window.location.pathname); // clean URL
+
+  try {
+    const res = await fetch(OURA_EDGE_FN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'exchange', code, redirect_uri: OURA_REDIRECT_URI }),
+    });
+    const tokens = await res.json();
+    if (!res.ok || tokens.error) throw new Error(tokens.error || 'Token exchange failed');
+
+    // Save tokens to user profile
+    const profile = (await dbGetProfile()) || {};
+    profile.ouraAccessToken  = tokens.access_token;
+    profile.ouraRefreshToken = tokens.refresh_token;
+    profile.ouraConnected    = true;
+    await dbSetProfile(profile);
+    ST.ouraAccessToken  = tokens.access_token;
+    ST.ouraRefreshToken = tokens.refresh_token;
+    ST.ouraConnected    = true;
+    localStorage.removeItem('oura_state');
+
+    showBigToast('Oura connected! Syncing today\'s data...','ok');
+    await syncOuraData();
+  } catch(e) {
+    showBigToast('Oura connection failed: '+e.message,'warn');
+  }
+}
+
+// Step 3: Refresh expired access token via Edge Function
+async function refreshOuraToken() {
+  const profile = await dbGetProfile();
+  const refresh_token = ST.ouraRefreshToken || profile?.ouraRefreshToken;
+  if (!refresh_token) return null;
+  try {
+    const res = await fetch(OURA_EDGE_FN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'refresh', refresh_token }),
+    });
+    const tokens = await res.json();
+    if (!res.ok || tokens.error) throw new Error(tokens.error);
+    const updatedProfile = (await dbGetProfile()) || {};
+    updatedProfile.ouraAccessToken  = tokens.access_token;
+    updatedProfile.ouraRefreshToken = tokens.refresh_token;
+    await dbSetProfile(updatedProfile);
+    ST.ouraAccessToken  = tokens.access_token;
+    ST.ouraRefreshToken = tokens.refresh_token;
+    return tokens.access_token;
+  } catch(e) {
+    ST.ouraConnected = false;
+    return null;
+  }
+}
+
+// Step 4: Fetch from Oura API — auto-refreshes token if 401
+async function ouraFetch(endpoint) {
+  let token = ST.ouraAccessToken;
+  if (!token) return null;
+  const url = 'https://api.ouraring.com/v2/usercollection/'+endpoint;
+  let res = await fetch(url, { headers: { Authorization: 'Bearer '+token } });
+  if (res.status === 401) {
+    token = await refreshOuraToken();
+    if (!token) return null;
+    res = await fetch(url, { headers: { Authorization: 'Bearer '+token } });
+  }
+  if (!res.ok) throw new Error('Oura API error '+res.status);
+  return res.json();
+}
+
+// Step 5: Full sync — pulls readiness, sleep, activity; stores in Supabase
+async function syncOuraData() {
+  if (!ST.user || !ST.ouraAccessToken) {
+    showBigToast('Connect Oura Ring first.','warn');
+    return;
+  }
   try {
     const today = new Date().toISOString().slice(0,10);
-    const url = 'https://api.ouraring.com/v2/usercollection/daily_readiness?start_date='+today+'&end_date='+today;
-    const res = await fetch(url, { headers: { Authorization: 'Bearer '+token } });
-    if (!res.ok) throw new Error('Oura API error '+res.status);
-    const data = await res.json();
-    const item = data?.data?.[0];
-    if (!item) { showBigToast('No readiness data for today yet — check back later.','info'); return; }
-    const score = item.score;
-    // Map readiness to Pilot Condition: 85+ = GO, 60-84 = MARGINAL, <60 = NO-GO
-    const condition = score >= 85 ? 'go' : score >= 60 ? 'marginal' : 'nogo';
-    const label = score >= 85 ? 'GO' : score >= 60 ? 'MARGINAL' : 'NO-GO';
-    ST.fatigue = condition;
-    ST.ouraScore = score;
-    const profile = (await dbGetProfile()) || {};
-    profile.ouraToken = token;
-    await dbSetProfile(profile);
-    showBigToast('Oura readiness '+score+' → '+label,'ok');
-    renderPage();
-  } catch(e) {
-    if (e.message.includes('Failed to fetch') || e.message.includes('CORS')) {
-      showBigToast('CORS blocked — Oura requires server-side proxy. See Profile for setup guide.','warn');
-    } else {
-      showBigToast('Oura error: '+e.message,'warn');
+    const yesterday = new Date(Date.now()-86400000).toISOString().slice(0,10);
+
+    // Fetch readiness, sleep, and activity in parallel
+    const [readiness, sleep, activity] = await Promise.all([
+      ouraFetch('daily_readiness?start_date='+yesterday+'&end_date='+today).catch(()=>null),
+      ouraFetch('daily_sleep?start_date='+yesterday+'&end_date='+today).catch(()=>null),
+      ouraFetch('daily_activity?start_date='+yesterday+'&end_date='+today).catch(()=>null),
+    ]);
+
+    const readinessItem = readiness?.data?.[readiness.data.length-1];
+    const sleepItem     = sleep?.data?.[sleep.data.length-1];
+    const activityItem  = activity?.data?.[activity.data.length-1];
+
+    if (!readinessItem) {
+      showBigToast('No readiness data yet — sync your Oura app first.','info');
+      return;
     }
+
+    const score = readinessItem.score;
+    const row = {
+      user_id:             ST.user.id,
+      date:                readinessItem.day,
+      readiness_score:     score,
+      sleep_score:         sleepItem?.score || readinessItem.contributors?.previous_night || null,
+      hrv_balance:         readinessItem.contributors?.hrv_balance || null,
+      resting_heart_rate:  null, // from heart rate endpoint (separate call if needed)
+      temperature_deviation: readinessItem.temperature_deviation || null,
+      activity_score:      activityItem?.score || null,
+      total_sleep_seconds: sleepItem?.total_sleep_duration || null,
+      deep_sleep_seconds:  sleepItem?.deep_sleep_duration || null,
+      rem_sleep_seconds:   sleepItem?.rem_sleep_duration || null,
+      raw_readiness:       readinessItem,
+      raw_sleep:           sleepItem || null,
+      synced_at:           new Date().toISOString(),
+    };
+
+    // Upsert — one row per user per day
+    const { error } = await SB.from('oura_daily').upsert(row, { onConflict: 'user_id,date' });
+    if (error) throw error;
+
+    // Update app state
+    const condition = score >= 85 ? 'go' : score >= 60 ? 'marginal' : 'nogo';
+    const label     = score >= 85 ? '🟢 GO' : score >= 60 ? '🟡 MARGINAL' : '🔴 NO-GO';
+    ST.fatigue    = condition;
+    ST.ouraScore  = score;
+    ST.ouraData   = row;
+
+    // Show what we got
+    const sleepHrs = row.total_sleep_seconds ? (row.total_sleep_seconds/3600).toFixed(1) : '—';
+    showBigToast('Oura synced\nReadiness: '+score+' → '+label+'\nSleep: '+sleepHrs+'h','ok');
+    renderPage();
+
+  } catch(e) {
+    showBigToast('Oura sync failed: '+e.message,'warn');
   }
+}
+
+// Disconnect Oura
+async function disconnectOura() {
+  const profile = (await dbGetProfile()) || {};
+  delete profile.ouraAccessToken;
+  delete profile.ouraRefreshToken;
+  profile.ouraConnected = false;
+  await dbSetProfile(profile);
+  ST.ouraAccessToken = null;
+  ST.ouraRefreshToken = null;
+  ST.ouraConnected = false;
+  ST.ouraScore = null;
+  showBigToast('Oura disconnected.','info');
+  renderPage();
+}
+
+// Legacy PAT sync — kept for any users with old tokens still working
+async function fetchOuraReadiness() {
+  await syncOuraData();
 }
 
 // ─── PHOTO PROGRESS ───────────────────────────────────────────────────────────
@@ -2648,14 +2838,29 @@ async function loadPhotoTimeline() {
     if (!files || !files.length) { ST.photoTimeline = []; return; }
     const urls = await Promise.all(files.map(async f => {
       const { data, error } = await SB.storage.from('progress-photos')
-        .createSignedUrl(ST.user.id+'/'+f.name, 3600); // 1-hour signed URL for private bucket
+        .createSignedUrl(ST.user.id+'/'+f.name, 3600); // fresh 1-hour URL generated on every load
       if (error || !data?.signedUrl) return null;
-      return { url: data.signedUrl, date: f.name.slice(0,10), name: f.name };
+      return { url: data.signedUrl, date: f.name.slice(0,10), name: f.name, path: ST.user.id+'/'+f.name };
     }));
     const validUrls = urls.filter(Boolean);
     ST.photoTimeline = validUrls;
-    if (ST.tab === 'profile') renderPage();
+    if (ST.tab === 'trends' || ST.tab === 'profile') renderPage();
   } catch(e) { ST.photoTimeline = []; }
+}
+
+async function deleteProgressPhoto(idx) {
+  if (!ST.user) return;
+  const photo = (ST.photoTimeline||[])[idx];
+  if (!photo) return;
+  if (!confirm('Delete this progress photo? This cannot be undone.')) return;
+  try {
+    const { error } = await SB.storage.from('progress-photos').remove([photo.path]);
+    if (error) throw error;
+    showBigToast('Photo deleted.','ok');
+    await loadPhotoTimeline();
+  } catch(e) {
+    showBigToast('Delete failed: '+e.message,'warn');
+  }
 }
 
 function buildPhotoTimelineHTML() {
@@ -2663,22 +2868,28 @@ function buildPhotoTimelineHTML() {
   const parts = [];
   parts.push('<div class="section-label">PROGRESS PHOTOS</div>');
   parts.push('<div class="card mb12">');
-  parts.push('<div style="display:flex;gap:8px;margin-bottom:12px">');
-  parts.push('<button class="btn btn-outline" style="flex:1" onclick="uploadProgressPhoto(true)">📷 Camera</button>');
-  parts.push('<button class="btn btn-outline" style="flex:1" onclick="uploadProgressPhoto(false)">🖼 Library</button>');
+  parts.push('<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">');
+  parts.push('<button class="btn btn-outline" style="flex:1;min-width:100px" onclick="uploadProgressPhoto(true)">📷 Camera</button>');
+  parts.push('<button class="btn btn-outline" style="flex:1;min-width:100px" onclick="uploadProgressPhoto(false)">🖼 Library</button>');
+  parts.push('<button class="btn btn-outline" style="flex:1;min-width:100px" onclick="loadPhotoTimeline()">↻ Refresh</button>');
   parts.push('</div>');
-  if (!photos.length) {
-    parts.push('<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px">No photos yet. Add your first to start tracking visual progress.</div>');
+  if (!ST.user) {
+    parts.push('<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px">Sign in to save and view progress photos.</div>');
+  } else if (!photos.length) {
+    parts.push('<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px">No photos yet. Tap Camera or Library to add your first progress photo.</div>');
   } else {
     parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
-    photos.forEach(p => {
-      parts.push('<div style="border-radius:8px;overflow:hidden;position:relative">');
+    photos.forEach((p, i) => {
+      const photoIdx = i;
+      parts.push('<div style="border-radius:8px;overflow:hidden;position:relative;background:var(--bg3)">');
       parts.push('<img src="'+p.url+'" style="width:100%;aspect-ratio:3/4;object-fit:cover;display:block">');
-      parts.push('<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);font-family:var(--mono);font-size:9px;color:#fff;padding:4px 6px">'+p.date+'</div>');
+      parts.push('<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.65);display:flex;justify-content:space-between;align-items:center;padding:4px 6px">');
+      parts.push('<span style="font-family:var(--mono);font-size:9px;color:#fff">'+p.date+'</span>');
+      parts.push('<button onclick="deleteProgressPhoto('+photoIdx+')" style="background:rgba(239,68,68,0.7);border:none;color:white;font-size:10px;padding:2px 6px;border-radius:4px;cursor:pointer">✕</button>');
+      parts.push('</div>');
       parts.push('</div>');
     });
     parts.push('</div>');
-    parts.push('<div style="font-size:10px;color:var(--muted);margin-top:8px;text-align:center">Requires "progress-photos" bucket in Supabase Storage (private, authenticated)</div>');
   }
   parts.push('</div>');
   return parts.join('');
@@ -2707,22 +2918,34 @@ function renderProfile(p) {
   parts.push('<div style="font-size:11px;color:var(--muted);line-height:1.6">'+freq.split+'. '+freq.note+'</div>');
   parts.push('</div>');
 
-  // Oura Ring
+  // Oura Ring — OAuth2
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">OURA RING INTEGRATION</div>');
-  if (ST.ouraScore !== null) {
+  if (ST.ouraConnected && ST.ouraScore !== null) {
     const scoreColor = ST.ouraScore >= 85 ? 'var(--green)' : ST.ouraScore >= 60 ? 'var(--amber)' : 'var(--red)';
-    const scoreLabel = ST.ouraScore >= 85 ? 'GO' : ST.ouraScore >= 60 ? 'MARGINAL' : 'NO-GO';
-    parts.push('<div class="fb mb8"><span style="font-size:13px">Today\'s Readiness</span><span style="font-family:var(--mono);font-size:16px;font-weight:700;color:'+scoreColor+'">'+ST.ouraScore+' · '+scoreLabel+'</span></div>');
+    const scoreLabel = ST.ouraScore >= 85 ? '🟢 GO' : ST.ouraScore >= 60 ? '🟡 MARGINAL' : '🔴 NO-GO';
+    parts.push('<div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:8px;padding:12px;margin-bottom:12px">');
+    parts.push('<div class="fb"><span style="font-size:12px;color:var(--muted)">Connected ✓</span><button class="btn-ghost" style="font-size:11px;padding:4px 8px" onclick="disconnectOura()">Disconnect</button></div>');
+    parts.push('<div class="fb mt8"><span style="font-size:13px">Today\'s Readiness</span><span style="font-family:var(--mono);font-size:18px;font-weight:700;color:'+scoreColor+'">'+ST.ouraScore+'</span></div>');
+    parts.push('<div style="font-size:12px;color:'+scoreColor+';font-weight:600;margin-top:2px">Pilot Condition → '+scoreLabel+'</div>');
+    if (ST.ouraData) {
+      const sleepHrs = ST.ouraData.total_sleep_seconds ? (ST.ouraData.total_sleep_seconds/3600).toFixed(1)+'h' : '—';
+      const hrv = ST.ouraData.hrv_balance || '—';
+      parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:10px">');
+      parts.push('<div class="stat-box"><div class="stat-val" style="font-size:16px">'+sleepHrs+'</div><div class="stat-lbl">Sleep</div></div>');
+      parts.push('<div class="stat-box"><div class="stat-val" style="font-size:16px">'+hrv+'</div><div class="stat-lbl">HRV Bal.</div></div>');
+      parts.push('<div class="stat-box"><div class="stat-val" style="font-size:16px">'+(ST.ouraData.activity_score||'—')+'</div><div class="stat-lbl">Activity</div></div>');
+      parts.push('</div>');
+    }
+    parts.push('</div>');
+    parts.push('<button class="btn btn-outline" onclick="syncOuraData()">↻ Sync Now</button>');
+  } else {
+    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.65">Connect your Oura Ring to automatically set your Pilot Condition based on your daily readiness score. Readiness 85+ = GO, 60-84 = MARGINAL, below 60 = NO-GO.</div>');
+    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5;background:var(--bg3);border-radius:8px;padding:10px">');
+    parts.push('Requires the <strong style="color:var(--text)">oura-auth</strong> Supabase Edge Function to be deployed with your Client Secret. See the edge function zip for deploy instructions.');
+    parts.push('</div>');
+    parts.push('<button class="btn btn-blue" onclick="connectOura()">Connect Oura Ring →</button>');
   }
-  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Your Oura readiness score (0-100) automatically sets your Pilot Condition. Get your Personal Access Token at <span style="color:var(--blue2)">cloud.ouraring.com/personal-access-tokens</span></div>');
-  parts.push('<div class="field" style="margin-bottom:8px"><label>Personal Access Token</label>');
-  parts.push('<input type="password" id="oura_token" value="'+(ST.ouraToken||'')+'" placeholder="eyJ..." oninput="ST.ouraToken=this.value"></div>');
-  parts.push('<div style="display:flex;gap:8px">');
-  parts.push('<button class="btn btn-blue btn-sm" onclick="saveOuraToken()">Save Token</button>');
-  parts.push('<button class="btn btn-outline btn-sm" onclick="fetchOuraReadiness()">Sync Now</button>');
-  parts.push('</div>');
-  parts.push('<div style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.5">Note: Oura\'s API may require server-side proxy if CORS is blocked in browser. If Sync fails, a Supabase Edge Function proxy is needed.</div>');
   parts.push('</div>');
 
   // Export

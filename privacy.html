@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — Flight Crew Fitness</title>
+<style>
+  :root { --bg:#0a0f1a; --text:#e2e8f0; --muted:#94a3b8; --gold:#c9a84c; --border:#1e2d45; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:'Georgia',serif; line-height:1.8; padding:0 0 60px; }
+  .header { background:#0f1623; border-bottom:1px solid var(--border); padding:20px 24px; }
+  .logo { font-family:'Courier New',monospace; font-size:16px; color:var(--gold); letter-spacing:0.12em; }
+  .container { max-width:760px; margin:0 auto; padding:40px 24px; }
+  h1 { font-size:26px; font-weight:700; margin-bottom:8px; }
+  .updated { font-size:13px; color:var(--muted); margin-bottom:36px; }
+  h2 { font-size:17px; font-weight:700; color:var(--gold); margin:36px 0 12px; font-family:'Courier New',monospace; letter-spacing:0.06em; }
+  p { font-size:14px; color:#cbd5e1; margin-bottom:14px; }
+  ul { margin:0 0 14px 20px; }
+  li { font-size:14px; color:#cbd5e1; margin-bottom:6px; }
+  a { color:var(--gold); }
+  .back { display:inline-block; margin-top:40px; font-family:'Courier New',monospace; font-size:12px; color:var(--muted); text-decoration:none; border:1px solid var(--border); padding:8px 16px; border-radius:6px; }
+  .back:hover { color:var(--gold); border-color:var(--gold); }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="logo">✈ FLIGHT CREW FITNESS</div>
+</div>
+<div class="container">
+  <h1>Privacy Policy</h1>
+  <div class="updated">Effective date: July 6, 2026 &nbsp;·&nbsp; Last updated: July 6, 2026</div>
+
+  <p>Flight Crew Fitness ("we," "our," or "us") operates the Flight Crew Fitness web application (the "App") located at <a href="https://bchadcooper-create.github.io/pilot-program/">https://bchadcooper-create.github.io/pilot-program/</a>. This Privacy Policy explains how we collect, use, store, and protect your information when you use our App.</p>
+
+  <p>By creating an account or using the App, you agree to the collection and use of information as described in this policy. If you do not agree, please do not use the App.</p>
+
+  <h2>1. INFORMATION WE COLLECT</h2>
+  <p>We collect the following categories of information:</p>
+  <ul>
+    <li><strong>Account information:</strong> Your email address and encrypted password, collected when you create an account.</li>
+    <li><strong>Workout data:</strong> Exercise sessions, sets, repetitions, weights, duration, environment, fatigue level, and fitness goals you log in the App.</li>
+    <li><strong>Biometric data:</strong> Body weight, waist circumference, blood pressure, and fasting glucose levels you voluntarily enter.</li>
+    <li><strong>Progress photos:</strong> Photos you voluntarily upload to track visual fitness progress. These are stored securely in private cloud storage accessible only to you.</li>
+    <li><strong>Oura Ring data:</strong> If you connect your Oura Ring, we receive your daily readiness score, sleep score, HRV balance, temperature deviation, activity score, and related sleep metrics from the Oura API. This data is accessed only with your explicit authorization through Oura's OAuth2 consent flow.</li>
+    <li><strong>Usage data:</strong> General information about how you interact with the App, used to improve functionality.</li>
+  </ul>
+
+  <h2>2. HOW WE USE YOUR INFORMATION</h2>
+  <p>We use the information we collect solely to provide and improve the App's features. Specifically:</p>
+  <ul>
+    <li>To display your workout history, track progressive overload, and recommend the next training session.</li>
+    <li>To chart biometric trends and provide health-informed training guidance.</li>
+    <li>To display your Oura readiness score and automatically set your Pilot Condition (Go / Marginal / No-Go) to appropriately gate workout intensity.</li>
+    <li>To generate and deliver a CSV export of your data at your request.</li>
+    <li>To authenticate your account and protect your data.</li>
+  </ul>
+  <p>We do not use your data for advertising. We do not sell your data to third parties. We do not use your data to train artificial intelligence or machine learning models.</p>
+
+  <h2>3. OURA RING DATA — SPECIFIC PROVISIONS</h2>
+  <p>Flight Crew Fitness integrates with the Oura Ring API under Oura's API and MCP Agreement. With respect to Oura data specifically:</p>
+  <ul>
+    <li>Oura data is accessed only after you explicitly authorize the connection through Oura's OAuth2 consent screen.</li>
+    <li>We store your Oura daily readiness, sleep, and activity data in your private account database solely to enable the App's training guidance features and to include this data in your personal CSV export.</li>
+    <li>We do not share your Oura data with any third party, aggregator, or AI platform.</li>
+    <li>We do not use Oura data to train any AI model or machine learning system.</li>
+    <li>You may disconnect your Oura Ring at any time from the Profile tab. Upon disconnection, we will cease syncing new Oura data. You may request deletion of all stored Oura data by contacting us (see Section 7).</li>
+    <li>Oura data is stored only as long as your account is active. Upon account deletion, all Oura data is deleted.</li>
+  </ul>
+
+  <h2>4. DATA STORAGE AND SECURITY</h2>
+  <p>Your data is stored using Supabase, a secure cloud database platform. All data is encrypted in transit using TLS and encrypted at rest. Progress photos are stored in private Supabase Storage accessible only by your authenticated account.</p>
+  <p>We implement row-level security policies so that your data is accessible only by your authenticated account — no other user can access your records. Authentication tokens and OAuth credentials are stored securely and never exposed in client-side code.</p>
+  <p>While we take commercially reasonable measures to protect your information, no method of transmission over the internet or method of electronic storage is 100% secure.</p>
+
+  <h2>5. DATA SHARING</h2>
+  <p>We do not sell, rent, trade, or share your personal information with third parties except in the following limited circumstances:</p>
+  <ul>
+    <li><strong>Supabase:</strong> Our database and storage provider. Data is processed under their security standards and data processing agreements.</li>
+    <li><strong>Oura:</strong> When you connect your Oura Ring, we exchange OAuth tokens with Oura's servers to access your readiness data. We do not share your App data back to Oura.</li>
+    <li><strong>Legal requirements:</strong> We may disclose information if required by law, court order, or governmental authority.</li>
+  </ul>
+
+  <h2>6. YOUR RIGHTS AND CHOICES</h2>
+  <p>You have the following rights with respect to your personal information:</p>
+  <ul>
+    <li><strong>Access:</strong> You may export all of your data at any time using the Export CSV feature in the Profile tab.</li>
+    <li><strong>Correction:</strong> You may update your biometric and workout data directly within the App.</li>
+    <li><strong>Deletion:</strong> You may delete individual progress photos within the App. To request deletion of your entire account and all associated data, contact us at the address in Section 7. We will process deletion requests within 72 hours.</li>
+    <li><strong>Oura disconnection:</strong> You may disconnect your Oura Ring integration at any time from the Profile tab.</li>
+    <li><strong>Data portability:</strong> The Export CSV feature provides your complete data in a portable, machine-readable format.</li>
+  </ul>
+
+  <h2>7. CONTACT</h2>
+  <p>For privacy questions, data deletion requests, or concerns, please contact us at:</p>
+  <p><strong>Flight Crew Fitness</strong><br>
+  Email: <a href="mailto:privacy@flightcrewfitness.app">privacy@flightcrewfitness.app</a><br>
+  Website: <a href="https://bchadcooper-create.github.io/pilot-program/">https://bchadcooper-create.github.io/pilot-program/</a></p>
+
+  <h2>8. CHILDREN'S PRIVACY</h2>
+  <p>The App is not directed at children under the age of 18. We do not knowingly collect personal information from anyone under 18. If you believe a minor has provided us with personal information, please contact us and we will delete it promptly.</p>
+
+  <h2>9. CHANGES TO THIS POLICY</h2>
+  <p>We may update this Privacy Policy from time to time. We will notify you of significant changes by updating the effective date at the top of this page. Continued use of the App after changes constitutes acceptance of the updated policy.</p>
+
+  <h2>10. HEALTH DATA DISCLAIMER</h2>
+  <p>Flight Crew Fitness is a training tracking tool. It is not a medical device, does not provide medical advice, and is not a substitute for professional medical care. Biometric data and Oura Ring data displayed in the App are for personal tracking purposes only. Consult a licensed physician before beginning any new exercise program or making health decisions based on data displayed in this App.</p>
+
+  <a href="/pilot-program/" class="back">← Back to Flight Crew Fitness</a>
+</div>
+</body>
+</html>

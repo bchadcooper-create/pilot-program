@@ -1108,7 +1108,7 @@ function showAIPromptModal() {
     '<div class="modal-sheet">' +
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">AI Analysis Prompt</div>' +
-    '<div class="modal-body" style="margin-bottom:12px">Copy this, paste it into ChatGPT or Gemini, upload the exported CSV in the same message, and send.</div>' +
+    '<div class="modal-body" style="margin-bottom:12px">Copy this, paste it into ChatGPT or Gemini, upload the exported CSV in the same message, and send. Best done weekly — frequent enough to catch a stall early, infrequent enough for the trend lines to mean something.</div>' +
     '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:11px;line-height:1.6;color:var(--text);white-space:pre-wrap;max-height:40vh;overflow-y:auto;margin-bottom:12px">' + escaped + '</div>' +
     '<button class="btn btn-gold" onclick="copyAIPrompt()">📋 Copy Prompt</button>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">CLOSE</button>' +
@@ -1122,6 +1122,24 @@ function copyAIPrompt() {
       .catch(() => showToast('Copy failed — select and copy the text manually.'));
   } else {
     showToast('Copy not supported here — select and copy the text manually.');
+  }
+}
+
+function shareApp() {
+  const url = window.location.origin + window.location.pathname;
+  const shareData = {
+    title: 'Flight Crew Fitness',
+    text: 'Flight Crew Fitness — an aviation-phased workout tracker built for pilots and flight crew.',
+    url: url,
+  };
+  if (navigator.share) {
+    navigator.share(shareData).catch(() => {}); // user cancelling the share sheet isn't an error
+  } else if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(url)
+      .then(() => showToast('Link copied — share it with anyone.'))
+      .catch(() => showToast('Copy failed — copy the URL from your browser address bar.'));
+  } else {
+    showToast('Sharing not supported here — copy the URL from your browser address bar.');
   }
 }
 
@@ -3317,6 +3335,13 @@ function renderProfile(p) {
   parts.push('<div style="font-size:11px;color:var(--muted);margin-top:4px">'+FCF_VERSION+' · Build '+FCF_BUILD+'</div>');
   parts.push('</div>');
 
+  // Share app
+  parts.push('<div class="card mb12">');
+  parts.push('<div class="section-label" style="margin-top:0">SHARE APP</div>');
+  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Invite a fellow pilot or crew member to try Flight Crew Fitness.</div>');
+  parts.push('<button class="btn btn-outline" onclick="shareApp()">📤 Share Flight Crew Fitness</button>');
+  parts.push('</div>');
+
   // Mission objective (goal)
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">MISSION OBJECTIVE</div>');
@@ -3382,6 +3407,7 @@ function renderProfile(p) {
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">EXPORT DATA</div>');
   parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Export all workout sessions and biometrics as a CSV — one row per set, with date context and biometric data joined by date. Optimized for AI analysis.</div>');
+  parts.push('<div style="font-size:11px;color:var(--gold);margin-bottom:10px;line-height:1.5">💡 Recommended: export and review weekly. Daily exports are too noisy to show real trends; monthly is often too late to catch a stall early.</div>');
   parts.push('<button class="btn btn-outline" onclick="exportCSV()">📊 Export CSV for AI Analysis</button>');
   parts.push('<button class="btn btn-outline mt8" onclick="showAIPromptModal()">📋 View & Copy AI Prompt</button>');
   parts.push('</div>');

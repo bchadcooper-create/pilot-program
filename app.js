@@ -4,7 +4,7 @@
  */
 
 const FCF_VERSION = 'v5.6';
-const FCF_BUILD   = '20260707e';
+const FCF_BUILD   = '20260707g';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
 // Replace OURA_CLIENT_ID with your actual Client ID from cloud.ouraring.com/oauth/applications
@@ -973,6 +973,10 @@ async function bootApp() {
   await loadSessionCache();
   renderRoot();
   checkDB();
+  // Auto-sync Oura on boot if connected — runs in background after render
+  if (ST.ouraConnected && ST.ouraAccessToken) {
+    setTimeout(() => syncOuraData().catch(() => {}), 1500);
+  }
 }
 
 async function checkDB() {
@@ -1284,6 +1288,10 @@ async function showCalendarDay(isoDate) {
 
 // ─── PREFLIGHT TAB ────────────────────────────────────────────────────────────
 async function renderPreflight(p) {
+  // Auto-sync Oura in background if connected and data is stale (>30 min)
+  if (ST.ouraConnected && ST.ouraAccessToken && (Date.now() - (ST.ouraLastSync||0)) > 1800000) {
+    syncOuraData().catch(() => {});
+  }
   const hs    = hydroStatus();
   const pct   = hydroPct();
   const adv   = hydroAdvice();
@@ -2784,6 +2792,7 @@ async function syncOuraData() {
     if (error) throw error;
 
     // Update app state
+    ST.ouraLastSync = Date.now();
     const condition = score >= 85 ? 'go' : score >= 60 ? 'marginal' : 'nogo';
     const label     = score >= 85 ? '🟢 GO' : score >= 60 ? '🟡 MARGINAL' : '🔴 NO-GO';
     ST.fatigue    = condition;
@@ -2884,10 +2893,21 @@ async function uploadProgressPhoto(useCamera) {
     showBigToast('Uploading...','info');
     try {
       const ext = file.name.split('.').pop() || 'jpg';
-      const path = ST.user.id+'/'+new Date().toISOString().slice(0,10)+'-'+Date.now()+'.'+ext;
+
+      // Use the file's lastModified date as the photo date.
+      // On iOS and Android, file.lastModified reflects when the photo was
+      // originally taken — not when it was selected or uploaded.
+      // Falls back to today if lastModified is unavailable or zero.
+      const photoDate = (file.lastModified && file.lastModified > 0)
+        ? new Date(file.lastModified).toISOString().slice(0,10)
+        : new Date().toISOString().slice(0,10);
+
+      // Filename: photoDate-uploadTimestamp.ext
+      // photoDate is shown in the timeline; timestamp ensures uniqueness
+      const path = ST.user.id+'/'+photoDate+'-'+Date.now()+'.'+ext;
       const { error } = await SB.storage.from('progress-photos').upload(path, file, { upsert: false, contentType: file.type });
       if (error) throw error;
-      showBigToast('Photo saved!','ok');
+      showBigToast('Photo saved! Taken: '+photoDate,'ok');
       await loadPhotoTimeline();
     } catch(e) {
       if (e.message?.includes('Bucket not found')) {

@@ -2569,7 +2569,7 @@ async function loadAndDrawCharts() {
     // Chart 1: Readiness score with GO/MARGINAL reference lines
     mkChart('chartOuraReadiness', ouraLabels, [
       { data:ouraRows.map(d=>d.readiness_score), borderColor:'#22c55e', backgroundColor:'#22c55e22', tension:0.35, fill:true, pointRadius:4, pointBackgroundColor:'#22c55e', label:'Readiness' },
-      { ...refLine(ouraRows.length,85,'#22c55e55'), label:'GO (85)' },
+      { ...refLine(ouraRows.length,70,'#22c55e55'), label:'GO (70)' },
       { ...refLine(ouraRows.length,60,'#f59e0b55'), label:'MARGINAL (60)' },
     ], true);
 
@@ -2918,8 +2918,8 @@ async function syncOuraData() {
 
     // Update app state
     ST.ouraLastSync = Date.now();
-    const condition = score >= 85 ? 'go' : score >= 60 ? 'marginal' : 'nogo';
-    const label     = score >= 85 ? '🟢 GO' : score >= 60 ? '🟡 MARGINAL' : '🔴 NO-GO';
+    const condition = score >= 70 ? 'go' : score >= 60 ? 'marginal' : 'nogo';
+    const label     = score >= 70 ? '🟢 GO' : score >= 60 ? '🟡 MARGINAL' : '🔴 NO-GO';
     ST.fatigue    = condition;
     ST.ouraScore  = score;
     ST.ouraData   = row;
@@ -3132,8 +3132,8 @@ function renderProfile(p) {
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">OURA RING INTEGRATION</div>');
   if (ST.ouraConnected && ST.ouraScore !== null) {
-    const scoreColor = ST.ouraScore >= 85 ? 'var(--green)' : ST.ouraScore >= 60 ? 'var(--amber)' : 'var(--red)';
-    const scoreLabel = ST.ouraScore >= 85 ? '🟢 GO' : ST.ouraScore >= 60 ? '🟡 MARGINAL' : '🔴 NO-GO';
+    const scoreColor = ST.ouraScore >= 70 ? 'var(--green)' : ST.ouraScore >= 60 ? 'var(--amber)' : 'var(--red)';
+    const scoreLabel = ST.ouraScore >= 70 ? '🟢 GO' : ST.ouraScore >= 60 ? '🟡 MARGINAL' : '🔴 NO-GO';
     parts.push('<div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:8px;padding:12px;margin-bottom:12px">');
     parts.push('<div class="fb"><span style="font-size:12px;color:var(--muted)">Connected ✓</span><button class="btn-ghost" style="font-size:11px;padding:4px 8px" onclick="disconnectOura()">Disconnect</button></div>');
     parts.push('<div class="fb mt8"><span style="font-size:13px">Today\'s Readiness</span><span style="font-family:var(--mono);font-size:18px;font-weight:700;color:'+scoreColor+'">'+ST.ouraScore+'</span></div>');
@@ -3150,7 +3150,7 @@ function renderProfile(p) {
     parts.push('</div>');
     parts.push('<button class="btn btn-outline" onclick="syncOuraData()">↻ Sync Now</button>');
   } else {
-    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.65">Connect your Oura Ring to automatically set your Pilot Condition based on your daily readiness score. Readiness 85+ = GO, 60-84 = MARGINAL, below 60 = NO-GO.</div>');
+    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.65">Connect your Oura Ring to automatically set your Pilot Condition based on your daily readiness score. Readiness 70+ = GO, 60-69 = MARGINAL, below 60 = NO-GO. These bands match Oura\'s own Good/Fair/Pay Attention categories.</div>');
     parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5;background:var(--bg3);border-radius:8px;padding:10px">');
     parts.push('<strong style="color:var(--text)">Setup required before connecting:</strong><br>');
     parts.push('1. Deploy the <code style="color:var(--gold)">oura-auth</code> Edge Function (see edge function zip)<br>');

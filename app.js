@@ -3131,20 +3131,36 @@ async function loadPhotoTimeline() {
   try {
     const { data: files, error: listErr } = await SB.storage
       .from('progress-photos')
-      .list(ST.user.id, { sortBy:{column:'created_at',order:'desc'}, limit:24 });
+      .list(ST.user.id, { sortBy:{column:'created_at',order:'desc'}, limit:100 });
     if (listErr) { console.warn('Photo list error:', listErr.message); ST.photoTimeline = []; }
     else if (!files || !files.length) { ST.photoTimeline = []; }
     else {
-      const urls = await Promise.all(files.map(async f => {
+      // Extract capture date (and upload timestamp for same-day tiebreaks) from
+      // each filename BEFORE requesting signed URLs, so we only pay for the 24
+      // photos we'll actually keep instead of every file in the bucket.
+      const withDates = files.map(f => {
+        const datePart = f.name.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] || f.created_at?.slice(0,10) || '—';
+        const uploadTs = parseInt(f.name.match(/-(\d+)\./)?.[1] || '0', 10);
+        return { f, date: datePart, uploadTs };
+      }).sort((a, b) => {
+        if (a.date !== b.date) {
+          const ta = Date.parse(a.date), tb = Date.parse(b.date);
+          if (isNaN(ta) && isNaN(tb)) return 0;
+          if (isNaN(ta)) return 1;
+          if (isNaN(tb)) return -1;
+          return tb - ta; // newest capture date first
+        }
+        return b.uploadTs - a.uploadTs; // same-day tiebreak by upload time
+      }).slice(0, 24);
+
+      const urls = await Promise.all(withDates.map(async ({f, date}) => {
         const { data, error } = await SB.storage.from('progress-photos')
           .createSignedUrl(ST.user.id+'/'+f.name, 3600);
         if (error || !data?.signedUrl) {
           console.warn('Signed URL error for', f.name, error?.message);
           return null;
         }
-        // Extract date from filename (format: YYYY-MM-DD-timestamp.ext)
-        const datePart = f.name.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] || f.created_at?.slice(0,10) || '—';
-        return { url: data.signedUrl, date: datePart, name: f.name, path: ST.user.id+'/'+f.name };
+        return { url: data.signedUrl, date, name: f.name, path: ST.user.id+'/'+f.name };
       }));
       ST.photoTimeline = urls.filter(Boolean);
     }

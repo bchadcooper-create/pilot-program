@@ -4,7 +4,7 @@
  */
 
 const FCF_VERSION = 'v5.6';
-const FCF_BUILD   = '20260707d';
+const FCF_BUILD   = '20260707e';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
 // Replace OURA_CLIENT_ID with your actual Client ID from cloud.ouraring.com/oauth/applications
@@ -2712,18 +2712,26 @@ async function refreshOuraToken() {
   }
 }
 
-// Step 4: Fetch from Oura API — auto-refreshes token if 401
+// Step 4: Fetch from Oura API via Edge Function proxy (bypasses CORS)
 async function ouraFetch(endpoint) {
   let token = ST.ouraAccessToken;
   if (!token) return null;
-  const url = 'https://api.ouraring.com/v2/usercollection/'+endpoint;
-  let res = await fetch(url, { headers: { Authorization: 'Bearer '+token } });
+  const makeRequest = async (t) => fetch(OURA_EDGE_FN, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer '+SB_ANON_KEY },
+    body: JSON.stringify({ action: 'fetch', access_token: t, endpoint }),
+  });
+  let res = await makeRequest(token);
   if (res.status === 401) {
+    // Token expired — refresh and retry once
     token = await refreshOuraToken();
     if (!token) return null;
-    res = await fetch(url, { headers: { Authorization: 'Bearer '+token } });
+    res = await makeRequest(token);
   }
-  if (!res.ok) throw new Error('Oura API error '+res.status);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error('Oura API error '+res.status+(err.message ? ': '+err.message : ''));
+  }
   return res.json();
 }
 

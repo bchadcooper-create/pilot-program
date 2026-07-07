@@ -66,7 +66,6 @@ const ST = {
   lastDebrief: null,
   workoutStartedAt: null,
   disclaimerAccepted: false,
-  calendarWeekOffset: 0,
   calendarSessions: {},
   selectedCalendarDay: null,
 };
@@ -1193,44 +1192,45 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
   setTimeout(initApp, 0);
 }
 
-// ─── COMPACT ROLLING CALENDAR ─────────────────────────────────────────────────
-async function loadCalendarWeek(weekOffset) {
-  const cacheKey = String(weekOffset);
+// ─── COMPACT ROLLING CALENDAR (smooth continuous scroll, not week-paged) ─────
+const CALENDAR_DAYS = 28; // trailing window shown in the scrollable strip
+
+async function loadCalendarRange() {
+  const cacheKey = 'range_'+CALENDAR_DAYS;
   if (ST.calendarSessions[cacheKey]) return ST.calendarSessions[cacheKey];
 
   const today = new Date();
   today.setHours(23,59,59,999);
-  const windowEnd = new Date(today.getTime() - weekOffset*7*24*60*60*1000);
-  const windowStart = new Date(windowEnd.getTime() - 6*24*60*60*1000);
+  const windowStart = new Date(today.getTime() - (CALENDAR_DAYS-1)*24*60*60*1000);
   windowStart.setHours(0,0,0,0);
 
   try {
     const filter = ST.user ? SB.from('workout_sessions').select('*').eq('user_id', ST.user.id) : SB.from('workout_sessions').select('*');
     const { data, error } = await filter
       .gte('started_at', windowStart.toISOString())
-      .lte('started_at', windowEnd.toISOString())
+      .lte('started_at', today.toISOString())
       .order('started_at', { ascending: true });
     if (error) throw error;
     const sessions = (data||[]).map(r => r.session_data).filter(Boolean);
-    ST.calendarSessions[cacheKey] = { sessions, windowStart, windowEnd };
+    ST.calendarSessions[cacheKey] = { sessions, windowStart, windowEnd: today };
     return ST.calendarSessions[cacheKey];
   } catch(e) {
     const keys = Object.keys(localStorage).filter(k => k.startsWith('fcf_session_'));
     const all = keys.map(k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } }).filter(Boolean);
     const sessions = all.filter(s => {
       const t = new Date(s.date).getTime();
-      return t >= windowStart.getTime() && t <= windowEnd.getTime();
+      return t >= windowStart.getTime() && t <= today.getTime();
     });
-    const result = { sessions, windowStart, windowEnd };
+    const result = { sessions, windowStart, windowEnd: today };
     ST.calendarSessions[cacheKey] = result;
     return result;
   }
 }
 
-function buildCalendarHTML(weekData) {
-  const { sessions, windowStart } = weekData;
+function buildCalendarHTML(rangeData) {
+  const { sessions, windowStart } = rangeData;
   const days = [];
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < CALENDAR_DAYS; i++) {
     const d = new Date(windowStart.getTime() + i*24*60*60*1000);
     const dayStr = d.toDateString();
     const daySession = sessions.find(s => new Date(s.date).toDateString() === dayStr);
@@ -1239,13 +1239,8 @@ function buildCalendarHTML(weekData) {
 
   const parts = [];
   parts.push('<div class="card mb12">');
-  parts.push('<div class="fb mb8">');
-  parts.push('<button class="btn-ghost" onclick="shiftCalendarWeek(1)">← Earlier</button>');
-  parts.push('<div class="section-label" style="margin:0">TRAINING CALENDAR</div>');
-  parts.push('<button class="btn-ghost" onclick="shiftCalendarWeek(-1)" '+(ST.calendarWeekOffset===0?'style="visibility:hidden"':'')+'>Later →</button>');
-  parts.push('</div>');
-  // Swipe support: track touchstart X, on touchend compute delta and shift week
-  parts.push('<div id="calSwipe" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px" ontouchstart="ST._swipeX=event.changedTouches[0].clientX" ontouchend="(function(){var dx=event.changedTouches[0].clientX-ST._swipeX;if(Math.abs(dx)>40){shiftCalendarWeek(dx<0?-1:1);}})()">');
+  parts.push('<div class="section-label" style="margin-bottom:8px">TRAINING CALENDAR</div>');
+  parts.push('<div id="calScroll" style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;padding-bottom:2px;scrollbar-width:none">');
   days.forEach(day => {
     const isToday = day.date.toDateString() === new Date().toDateString();
     const dow = day.date.toLocaleDateString('en-US',{weekday:'short'}).charAt(0);
@@ -1253,7 +1248,7 @@ function buildCalendarHTML(weekData) {
     const hasWorkout = !!day.session;
     const cellStyle = isToday ? 'border-color:var(--gold)' : '';
     const bg = hasWorkout ? 'background:rgba(34,197,94,0.12);border-color:rgba(34,197,94,0.4)' : '';
-    parts.push('<div style="text-align:center;border:1.5px solid var(--border);border-radius:8px;padding:6px 2px;cursor:'+(hasWorkout?'pointer':'default')+';'+cellStyle+';'+bg+'" '+(hasWorkout?'onclick="showCalendarDay(\''+day.date.toISOString()+'\')"':'')+'>');
+    parts.push('<div style="flex:0 0 40px;scroll-snap-align:center;text-align:center;border:1.5px solid var(--border);border-radius:8px;padding:6px 2px;cursor:'+(hasWorkout?'pointer':'default')+';'+cellStyle+';'+bg+'" '+(hasWorkout?'onclick="showCalendarDay(\''+day.date.toISOString()+'\')"':'')+'>');
     parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted)">'+dow+'</div>');
     parts.push('<div style="font-size:13px;font-weight:600;margin-top:2px">'+dateNum+'</div>');
     if (hasWorkout) {
@@ -1268,22 +1263,79 @@ function buildCalendarHTML(weekData) {
   return parts.join('');
 }
 
-async function shiftCalendarWeek(delta) {
-  ST.calendarWeekOffset = Math.max(0, ST.calendarWeekOffset + delta);
-  renderPage();
+// Scrolls the calendar strip all the way to the right (today) on first paint.
+function scrollCalendarToToday() {
+  requestAnimationFrame(() => {
+    const el = document.getElementById('calScroll');
+    if (el) el.scrollLeft = el.scrollWidth;
+  });
+}
+
+// Non-timed/held exercises only — excludes stretches (timed holds) from the day summary.
+function isLoggableStrengthExercise(exItem) {
+  return !exItem.timed && exItem.inputType !== 'nsdr' && exItem.inputType !== 'timed_bilateral';
+}
+
+function formatSetPerformance(exItem, sets) {
+  const loggedSets = sets.filter(s => s.reps || s.weight || s.height || s.distance);
+  if (!loggedSets.length) return null;
+  if (exItem.inputType === 'reps_only') {
+    const reps = loggedSets.map(s => s.reps).filter(Boolean);
+    return loggedSets.length+'×'+(reps.length?Math.max(...reps.map(Number)):'—')+' reps';
+  }
+  if (exItem.inputType === 'reps_height') {
+    const heights = loggedSets.map(s=>parseFloat(s.height)||0).filter(v=>v>0);
+    return loggedSets.length+' sets · best '+(heights.length?Math.max(...heights):'—')+' in height';
+  }
+  if (exItem.inputType === 'reps_distance') {
+    const dists = loggedSets.map(s=>parseFloat(s.distance)||0).filter(v=>v>0);
+    return loggedSets.length+' sets · best '+(dists.length?Math.max(...dists):'—')+' in distance';
+  }
+  // reps_weight (default)
+  const weights = loggedSets.map(s=>parseFloat(s.weight)||0).filter(v=>v>0);
+  const topSet = loggedSets.reduce((best,s) => (parseFloat(s.weight)||0) > (parseFloat(best.weight)||0) ? s : best, loggedSets[0]);
+  return loggedSets.length+'×'+(topSet.reps||'—')+' @ '+(weights.length?Math.max(...weights):'—')+' lb';
+}
+
+// Was this exercise's best value on this day higher than every prior session? (PR at the time)
+function wasExercisePR(exId, exItem, sets, sessionDate, allPriorSessions) {
+  const field = exItem.inputType==='reps_height' ? 'height' : exItem.inputType==='reps_distance' ? 'distance' : exItem.inputType==='reps_only' ? 'reps' : 'weight';
+  const todayVals = sets.map(s=>parseFloat(s[field])||0).filter(v=>v>0);
+  if (!todayVals.length) return false;
+  const todayMax = Math.max(...todayVals);
+  let priorMax = 0;
+  allPriorSessions.forEach(s => {
+    if (new Date(s.date).getTime() >= sessionDate.getTime()) return;
+    const priorSets = (s.sets?.[exId]||[]).map(x=>parseFloat(x[field])||0).filter(v=>v>0);
+    if (priorSets.length) priorMax = Math.max(priorMax, ...priorSets);
+  });
+  return todayMax > priorMax && priorMax > 0;
 }
 
 async function showCalendarDay(isoDate) {
-  const weekData = await loadCalendarWeek(ST.calendarWeekOffset);
-  const session = weekData.sessions.find(s => new Date(s.date).toDateString() === new Date(isoDate).toDateString());
+  const rangeData = await loadCalendarRange();
+  const session = rangeData.sessions.find(s => new Date(s.date).toDateString() === new Date(isoDate).toDateString());
   if (!session) return;
 
   const profile = await dbGetProfile();
   const recentSessions = await dbGetRecentSessions(7);
+  const allHistory = await dbGetRecentSessions(3650); // full history, for accurate PR comparison
   const allEx = session.workoutSnapshot
     ? [...session.workoutSnapshot.taxi,...session.workoutSnapshot.takeoff,...session.workoutSnapshot.enroute,...session.workoutSnapshot.landing]
-    : Object.keys(session.sets||{}).map(id => ({id, name:id}));
+    : Object.keys(session.sets||{}).map(id => ({id, name:id, inputType:'reps_weight', timed:false}));
   const summary = buildWorkoutSummary(session, allEx, recentSessions, profile?.lastWeight);
+  const sessionDate = new Date(session.date);
+
+  const exerciseRows = allEx
+    .filter(isLoggableStrengthExercise)
+    .map(exItem => {
+      const sets = session.sets?.[exItem.id] || [];
+      const perf = formatSetPerformance(exItem, sets);
+      if (!perf) return null;
+      const isPR = wasExercisePR(exItem.id, exItem, sets, sessionDate, allHistory);
+      return { name: exItem.name, perf, isPR };
+    })
+    .filter(Boolean);
 
   const root = document.getElementById('modalRoot');
   const parts = [];
@@ -1291,13 +1343,24 @@ async function showCalendarDay(isoDate) {
   parts.push('<div class="modal-sheet">');
   parts.push('<div class="modal-handle"></div>');
   parts.push('<div class="modal-title">'+session.muscle_group+'</div>');
-  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:14px">'+new Date(session.date).toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+'</div>');
+  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:14px">'+sessionDate.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+'</div>');
   parts.push('<div class="stat-row">');
   parts.push('<div class="stat-box"><div class="stat-val">'+(session.durationMinutes||'—')+'</div><div class="stat-lbl">Minutes</div></div>');
   parts.push('<div class="stat-box"><div class="stat-val">'+summary.totalSets+'</div><div class="stat-lbl">Sets</div></div>');
   parts.push('<div class="stat-box"><div class="stat-val">'+summary.estCalories+'</div><div class="stat-lbl">Calories</div></div>');
   parts.push('</div>');
-  parts.push('<div class="modal-body">Environment: '+session.env+' · Condition: '+(session.fatigue||'go')+'</div>');
+  parts.push('<div class="modal-body" style="margin-bottom:10px">Environment: '+session.env+' · Condition: '+(session.fatigue||'go')+'</div>');
+
+  if (exerciseRows.length) {
+    parts.push('<div class="section-label" style="margin-top:4px">EXERCISES</div>');
+    exerciseRows.forEach(row => {
+      parts.push('<div class="fb" style="padding:8px 0;border-bottom:1px solid var(--border)">');
+      parts.push('<div style="font-size:13px">'+(row.isPR?'⭐ ':'')+row.name+'</div>');
+      parts.push('<div style="font-family:var(--mono);font-size:12px;color:'+(row.isPR?'var(--gold)':'var(--text)')+';font-weight:'+(row.isPR?'700':'400')+'">'+row.perf+'</div>');
+      parts.push('</div>');
+    });
+  }
+
   parts.push('<button class="btn btn-outline mt12" onclick="closeModal()">CLOSE</button>');
   parts.push('</div></div>');
   root.innerHTML = parts.join('');
@@ -1334,8 +1397,8 @@ async function renderPreflight(p) {
   }
 
   // Training calendar (rolling 7-day window, scrollable)
-  const weekData = await loadCalendarWeek(ST.calendarWeekOffset);
-  parts.push(buildCalendarHTML(weekData));
+  const rangeData = await loadCalendarRange();
+  parts.push(buildCalendarHTML(rangeData));
 
   // Goal / Mission Objective
   parts.push('<div class="section-label">MISSION OBJECTIVE</div>');
@@ -1350,8 +1413,6 @@ async function renderPreflight(p) {
     parts.push('</div>');
   });
   parts.push('</div>');
-  const freq = FREQUENCY_GUIDE[ST.level];
-  parts.push('<div class="alert alert-info mt12"><div class="alert-icon">🎯</div><div><strong>'+freq.days+' days/week</strong> recommended at your level — '+freq.split+'. '+freq.note+'</div></div>');
   parts.push('</div>');
 
   // Pilot condition
@@ -1442,6 +1503,7 @@ async function renderPreflight(p) {
   }
 
   p.innerHTML = parts.join('');
+  scrollCalendarToToday();
 }
 
 async function saveGoalLevel() {

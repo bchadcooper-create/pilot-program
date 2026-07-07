@@ -42,6 +42,7 @@ const ST = {
   tab: 'preflight',
   env: 'comm',
   flightHrs: 0,
+  flightHrsRaw: '',
   flightHrsTouched: false,
   waterIn: 0,
   waterInRaw: '',
@@ -111,6 +112,39 @@ function hydroAdvice() {
   if (def < 0.25) return `Sip ${Math.round(def*1000)}ml now — you're almost there.`;
   if (def < 0.5)  return `Drink ${Math.round(def*1000)}ml before starting. Dehydration cuts strength output by up to 20%.`;
   return `You're ${def.toFixed(1)}L behind. Drink 500ml now, then sip throughout your session.`;
+}
+
+// Patches just the hydration display elements on every keystroke instead of
+// calling renderPage() (which was destroying/recreating the input element on
+// every character and dropping keyboard focus — the "glitchy" decimal entry bug).
+function updateHydrationUI() {
+  const hs = hydroStatus();
+  const pct = hydroPct();
+  const adv = hydroAdvice();
+
+  const noFlyBox = document.getElementById('noFlyBox');
+  if (noFlyBox) noFlyBox.innerHTML = (ST.flightHrsTouched && ST.flightHrs === 0)
+    ? '<div class="alert alert-info" style="margin-bottom:8px"><div class="alert-icon">ℹ️</div><div>No-fly day — minimum 1.0L hydration target still applies. Your body needs baseline water regardless of duty status.</div></div>'
+    : '';
+
+  const targetEl = document.getElementById('hydroTargetVal');
+  if (targetEl) targetEl.textContent = hydroTarget().toFixed(1)+'L';
+
+  const statusEl = document.getElementById('hydroStatusLbl');
+  if (statusEl) { statusEl.textContent = hs.label; statusEl.style.color = hs.color; }
+
+  const barEl = document.getElementById('hydroBar');
+  if (barEl) { barEl.style.width = Math.round(pct*100)+'%'; barEl.className = 'hydro-bar '+(pct>=1?'hydro-ok':'hydro-warn'); }
+
+  const pctEl = document.getElementById('hydroPctText');
+  if (pctEl) pctEl.textContent = Math.round(pct*100)+'% of target';
+
+  const adviceBox = document.getElementById('hydroAdviceBox');
+  if (adviceBox) adviceBox.innerHTML = adv
+    ? '<div class="alert alert-warn mt8"><div class="alert-icon">💧</div><div>'+adv+'</div></div>'
+    : '<div class="alert alert-ok mt8"><div class="alert-icon">✅</div><div>Hydration nominal. Cleared for workout operations.</div></div>';
+
+  persistWorkoutState();
 }
 
 const MUSCLE_GROUPS = ['Lower Body','Upper Push','Upper Pull','Power / Plyo','Full Body','Longevity','Cardio'];
@@ -1096,6 +1130,7 @@ function restoreWorkoutState() {
     ST.fatigue = saved.fatigue;
     ST.level = saved.level;
     ST.flightHrs = saved.flightHrs;
+    ST.flightHrsRaw = saved.flightHrs ? String(saved.flightHrs) : '';
     ST.waterIn = saved.waterIn;
     ST.waterInRaw = saved.waterIn ? String(saved.waterIn) : '';
     ST.flightHrsTouched = true;
@@ -1386,34 +1421,9 @@ async function renderPreflight(p) {
   const parts = [];
   parts.push('<div class="section-label">PREFLIGHT BRIEFING — '+FCF_VERSION+'</div>');
 
-  // Last mission profile
-  if (ST.lastSession) {
-    const lastDate = new Date(ST.lastSession.date).toLocaleDateString('en-US',{month:'short',day:'numeric'});
-    parts.push('<div class="card card-dark mb12">');
-    parts.push('<div class="section-label" style="margin-top:0">LAST MISSION</div>');
-    parts.push('<div class="fb"><div style="font-size:13px;font-weight:600">'+(ST.lastSession.muscle_group||'—')+'</div><div style="font-family:var(--mono);font-size:11px;color:var(--muted)">'+lastDate+'</div></div>');
-    parts.push('<div style="font-size:11px;color:var(--green);margin-top:6px">→ Recommended next: <strong>'+recommended+'</strong></div>');
-    parts.push('</div>');
-  }
-
-  // Training calendar (rolling 7-day window, scrollable)
+  // Training calendar (rolling window, smooth scroll)
   const rangeData = await loadCalendarRange();
   parts.push(buildCalendarHTML(rangeData));
-
-  // Goal / Mission Objective
-  parts.push('<div class="section-label">MISSION OBJECTIVE</div>');
-  parts.push('<div class="card mb12">');
-  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Your overall training goal. This determines which mission profile gets recommended next.</div>');
-  parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
-  Object.keys(GOALS).forEach(gid => {
-    const g = GOALS[gid];
-    parts.push('<div class="env-btn '+(ST.goal===gid?'sel':'')+'" onclick="ST.goal=\''+gid+'\';ST.muscleGroup=getRecommendedNext();saveGoalLevel();renderPage()">');
-    parts.push('<div class="ei">'+g.icon+'</div><div class="el">'+g.label+'</div>');
-    parts.push('<div style="font-size:9px;color:var(--muted);margin-top:3px;line-height:1.3">'+g.desc+'</div>');
-    parts.push('</div>');
-  });
-  parts.push('</div>');
-  parts.push('</div>');
 
   // Pilot condition
   parts.push('<div class="section-label">PILOT CONDITION</div>');
@@ -1431,16 +1441,6 @@ async function renderPreflight(p) {
   }
   parts.push('</div>');
 
-  // Fitness level
-  parts.push('<div class="section-label">FITNESS LEVEL</div>');
-  parts.push('<div class="card mb12">');
-  parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">');
-  parts.push('<div class="env-btn '+(ST.level==='beginner'?'sel':'')+'" onclick="ST.level=\'beginner\';saveGoalLevel();renderPage()"><div class="ei">🌱</div><div class="el">BEGINNER</div></div>');
-  parts.push('<div class="env-btn '+(ST.level==='intermediate'?'sel':'')+'" onclick="ST.level=\'intermediate\';saveGoalLevel();renderPage()"><div class="ei">⚡</div><div class="el">INTERMED.</div></div>');
-  parts.push('<div class="env-btn '+(ST.level==='advanced'?'sel':'')+'" onclick="ST.level=\'advanced\';saveGoalLevel();renderPage()"><div class="ei">🔥</div><div class="el">ADVANCED</div></div>');
-  parts.push('</div>');
-  parts.push('</div>');
-
   // Environment
   parts.push('<div class="section-label">MISSION ENVIRONMENT</div>');
   parts.push('<div class="env-toggle">');
@@ -1454,19 +1454,26 @@ async function renderPreflight(p) {
   parts.push('<div class="card mb12">');
   parts.push('<div class="field-row" style="margin-bottom:10px">');
   parts.push('<div class="field" style="margin-bottom:0"><label>Flight Hours Today</label>');
-  parts.push('<input type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="'+(ST.flightHrsTouched?ST.flightHrs:'')+'" placeholder="0 = no-fly day" oninput="ST.flightHrs=parseFloat(this.value)||0;ST.flightHrsTouched=true;renderPage()"></div>');
+  parts.push('<input type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="'+ST.flightHrsRaw+'" placeholder="0 = no-fly day" oninput="ST.flightHrsRaw=this.value;ST.flightHrs=parseFloat(this.value)||0;ST.flightHrsTouched=true;updateHydrationUI()"></div>');
   parts.push('<div class="field" style="margin-bottom:0"><label>Water Consumed (L)</label>');
-  parts.push('<input type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="'+ST.waterInRaw+'" placeholder="e.g. 1.2 or .5" oninput="ST.waterInRaw=this.value;ST.waterIn=parseFloat(this.value)||0;renderPage()"></div>');
+  parts.push('<input type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="'+ST.waterInRaw+'" placeholder="e.g. 1.2 or .5" oninput="ST.waterInRaw=this.value;ST.waterIn=parseFloat(this.value)||0;updateHydrationUI()"></div>');
   parts.push('</div>');
-  if (ST.flightHrsTouched && ST.flightHrs === 0) {
-    parts.push('<div class="alert alert-info" style="margin-bottom:8px"><div class="alert-icon">ℹ️</div><div>No-fly day — minimum 1.0L hydration target still applies. Your body needs baseline water regardless of duty status.</div></div>');
+  parts.push('<div id="noFlyBox">'+(ST.flightHrsTouched && ST.flightHrs === 0 ? '<div class="alert alert-info" style="margin-bottom:8px"><div class="alert-icon">ℹ️</div><div>No-fly day — minimum 1.0L hydration target still applies. Your body needs baseline water regardless of duty status.</div></div>' : '')+'</div>');
+  parts.push('<div class="fb" style="margin-bottom:6px"><span style="font-family:var(--mono);font-size:11px;color:var(--muted)">TARGET: <span id="hydroTargetVal" style="color:var(--text)">'+hydroTarget().toFixed(1)+'L</span></span><span id="hydroStatusLbl" style="font-family:var(--mono);font-size:11px;color:'+hs.color+'">'+hs.label+'</span></div>');
+  parts.push('<div class="hydro-bar-wrap"><div id="hydroBar" class="hydro-bar '+(pct>=1?'hydro-ok':'hydro-warn')+'" style="width:'+Math.round(pct*100)+'%"></div></div>');
+  parts.push('<div id="hydroPctText" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px;text-align:right">'+Math.round(pct*100)+'% of target</div>');
+  parts.push('<div id="hydroAdviceBox">'+(adv ? '<div class="alert alert-warn mt8"><div class="alert-icon">💧</div><div>'+adv+'</div></div>' : '<div class="alert alert-ok mt8"><div class="alert-icon">✅</div><div>Hydration nominal. Cleared for workout operations.</div></div>')+'</div>');
+  parts.push('</div>');
+
+  // Last mission
+  if (ST.lastSession) {
+    const lastDate = new Date(ST.lastSession.date).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    parts.push('<div class="section-label">LAST MISSION</div>');
+    parts.push('<div class="card card-dark mb12">');
+    parts.push('<div class="fb"><div style="font-size:13px;font-weight:600">'+(ST.lastSession.muscle_group||'—')+'</div><div style="font-family:var(--mono);font-size:11px;color:var(--muted)">'+lastDate+'</div></div>');
+    parts.push('<div style="font-size:11px;color:var(--green);margin-top:6px">→ Recommended next: <strong>'+recommended+'</strong></div>');
+    parts.push('</div>');
   }
-  parts.push('<div class="fb" style="margin-bottom:6px"><span style="font-family:var(--mono);font-size:11px;color:var(--muted)">TARGET: <span style="color:var(--text)">'+hydroTarget().toFixed(1)+'L</span></span><span style="font-family:var(--mono);font-size:11px;color:'+hs.color+'">'+hs.label+'</span></div>');
-  parts.push('<div class="hydro-bar-wrap"><div class="hydro-bar '+(pct>=1?'hydro-ok':'hydro-warn')+'" style="width:'+Math.round(pct*100)+'%"></div></div>');
-  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px;text-align:right">'+Math.round(pct*100)+'% of target</div>');
-  if (adv) parts.push('<div class="alert alert-warn mt8"><div class="alert-icon">💧</div><div>'+adv+'</div></div>');
-  else     parts.push('<div class="alert alert-ok mt8"><div class="alert-icon">✅</div><div>Hydration nominal. Cleared for workout operations.</div></div>');
-  parts.push('</div>');
 
   // Mission profile
   parts.push('<div class="section-label">MISSION PROFILE</div>');
@@ -1475,15 +1482,6 @@ async function renderPreflight(p) {
     const cls = 'mg-pill' + (ST.muscleGroup===mg?' sel':'') + (mg===recommended && ST.muscleGroup!==mg?' recommended':'');
     parts.push('<div class="'+cls+'" onclick="ST.muscleGroup=\''+mg+'\';renderPage()">'+mg+(mg===recommended?' ★':'')+'</div>');
   });
-  parts.push('</div>');
-
-  // Readiness checklist — placed last, right before engaging the workout
-  parts.push('<div class="card card-dark mb12">');
-  parts.push('<div class="section-label" style="margin-top:0">READINESS CHECK</div>');
-  parts.push('<div class="check-item"><div class="check-icon">✅</div><div class="check-text">Flight hours logged today</div><div class="check-status status-ok">'+(ST.flightHrs>0?ST.flightHrs+' HRS':'0 (NO-FLY)')+'</div></div>');
-  parts.push('<div class="check-item"><div class="check-icon">'+(pct>=1?'✅':pct>=0.6?'⚠️':'🚨')+'</div><div class="check-text">Hydration status</div><div class="check-status '+hs.cls+'">'+hs.label+'</div></div>');
-  parts.push('<div class="check-item"><div class="check-icon">'+(rawWk?'✅':'⬜')+'</div><div class="check-text">Mission profile selected</div><div class="check-status '+(rawWk?'status-ok':'status-warn')+'">'+ST.muscleGroup.toUpperCase()+'</div></div>');
-  parts.push('<div class="check-item" style="border-bottom:none"><div class="check-icon">'+(ST.fatigue==='go'?'✅':ST.fatigue==='marginal'?'⚠️':'🔴')+'</div><div class="check-text">Pilot condition</div><div class="check-status '+(ST.fatigue==='go'?'status-ok':ST.fatigue==='marginal'?'status-warn':'status-no')+'">'+fatigueLabel+'</div></div>');
   parts.push('</div>');
 
   // Flight plan preview
@@ -3219,16 +3217,32 @@ function renderProfile(p) {
   parts.push('<div style="font-size:11px;color:var(--muted);margin-top:4px">'+FCF_VERSION+' · Build '+FCF_BUILD+'</div>');
   parts.push('</div>');
 
-  // Training program
+  // Mission objective (goal)
   parts.push('<div class="card mb12">');
-  parts.push('<div class="section-label" style="margin-top:0">TRAINING PROGRAM</div>');
-  const g = GOALS[ST.goal];
+  parts.push('<div class="section-label" style="margin-top:0">MISSION OBJECTIVE</div>');
+  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Your overall training goal. This determines which mission profile gets recommended next.</div>');
+  parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
+  Object.keys(GOALS).forEach(gid => {
+    const g = GOALS[gid];
+    parts.push('<div class="env-btn '+(ST.goal===gid?'sel':'')+'" onclick="ST.goal=\''+gid+'\';ST.muscleGroup=getRecommendedNext();saveGoalLevel();renderPage()">');
+    parts.push('<div class="ei">'+g.icon+'</div><div class="el">'+g.label+'</div>');
+    parts.push('<div style="font-size:9px;color:var(--muted);margin-top:3px;line-height:1.3">'+g.desc+'</div>');
+    parts.push('</div>');
+  });
+  parts.push('</div>');
+  parts.push('</div>');
+
+  // Fitness level
+  parts.push('<div class="card mb12">');
+  parts.push('<div class="section-label" style="margin-top:0">FITNESS LEVEL</div>');
+  parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">');
+  parts.push('<div class="env-btn '+(ST.level==='beginner'?'sel':'')+'" onclick="ST.level=\'beginner\';saveGoalLevel();renderPage()"><div class="ei">🌱</div><div class="el">BEGINNER</div></div>');
+  parts.push('<div class="env-btn '+(ST.level==='intermediate'?'sel':'')+'" onclick="ST.level=\'intermediate\';saveGoalLevel();renderPage()"><div class="ei">⚡</div><div class="el">INTERMED.</div></div>');
+  parts.push('<div class="env-btn '+(ST.level==='advanced'?'sel':'')+'" onclick="ST.level=\'advanced\';saveGoalLevel();renderPage()"><div class="ei">🔥</div><div class="el">ADVANCED</div></div>');
+  parts.push('</div>');
   const freq = FREQUENCY_GUIDE[ST.level];
-  parts.push('<div class="fb mb8"><span style="font-size:13px">Goal</span><span style="font-size:13px;font-weight:600">'+g.icon+' '+g.label+'</span></div>');
-  parts.push('<div class="fb mb8"><span style="font-size:13px">Level</span><span style="font-size:13px;font-weight:600">'+ST.level+'</span></div>');
-  parts.push('<div class="fb"><span style="font-size:13px">Recommended frequency</span><span style="font-size:13px;font-weight:600">'+freq.days+' days/wk</span></div>');
   parts.push('<div class="divider"></div>');
-  parts.push('<div style="font-size:11px;color:var(--muted);line-height:1.6">'+freq.split+'. '+freq.note+'</div>');
+  parts.push('<div style="font-size:11px;color:var(--muted);line-height:1.6"><strong style="color:var(--text)">'+freq.days+' days/week</strong> recommended — '+freq.split+'. '+freq.note+'</div>');
   parts.push('</div>');
 
   // Oura Ring — OAuth2

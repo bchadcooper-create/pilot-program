@@ -4,7 +4,7 @@
  */
 
 const FCF_VERSION = 'v5.6';
-const FCF_BUILD   = '20260707';
+const FCF_BUILD   = '20260707b';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
 // Replace OURA_CLIENT_ID with your actual Client ID from cloud.ouraring.com/oauth/applications
@@ -13,6 +13,8 @@ const OURA_CLIENT_ID   = 'deb737ed-9343-407a-b993-9907bc101800';
 const OURA_REDIRECT_URI = 'https://bchadcooper-create.github.io/pilot-program/';
 const OURA_EDGE_FN      = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/oura-auth';
 const OURA_SCOPES       = 'daily personal'; // readiness, sleep, activity, personal info
+// Supabase anon key sent as auth header — required when Edge Function JWT verification is enabled
+const SB_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRueGt5ZHhieWloZ3NpY3Riemp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3ODk4MTEsImV4cCI6MjA5NjM2NTgxMX0.oLUGuorQkbQ_u679NpE8FGBVAUmVE1K_rxl8q4B0n7k';
 
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────
 const SB = supabase.createClient(
@@ -2652,7 +2654,7 @@ async function handleOuraCallback() {
   try {
     const res = await fetch(OURA_EDGE_FN, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer '+SB_ANON_KEY },
       body: JSON.stringify({ action: 'exchange', code, redirect_uri: OURA_REDIRECT_URI }),
     });
     const tokens = await res.json();
@@ -2692,7 +2694,7 @@ async function refreshOuraToken() {
   try {
     const res = await fetch(OURA_EDGE_FN, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer '+SB_ANON_KEY },
       body: JSON.stringify({ action: 'refresh', refresh_token }),
     });
     const tokens = await res.json();
@@ -2811,7 +2813,7 @@ async function testOuraEdgeFn() {
   try {
     const res = await fetch(OURA_EDGE_FN, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer '+SB_ANON_KEY },
       body: JSON.stringify({ action: 'exchange', code: 'test', redirect_uri: OURA_REDIRECT_URI }),
     });
     const data = await res.json();

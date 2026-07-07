@@ -3,8 +3,8 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.6';
-const FCF_BUILD   = '20260707g';
+const FCF_VERSION = 'v5.7';
+const FCF_BUILD   = '20260707';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
 // Replace OURA_CLIENT_ID with your actual Client ID from cloud.ouraring.com/oauth/applications
@@ -544,16 +544,15 @@ const EXRX_VERIFIED = {
   r_pp_to2:'https://exrx.net/Plyometrics/BroadJump',
 };
 
-function exrxSearchLink(name) {
-  // Strip parenthetical notes and slashes that don't help search relevance
+function youtubeSearchLink(name) {
   const clean = name.replace(/\([^)]*\)/g, '').replace(/[\/]/g, ' ').trim();
-  return 'https://www.google.com/search?q=' + encodeURIComponent('site:exrx.net ' + clean);
+  return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(clean + ' exercise how to form');
 }
 
 function getExGuide(exId, exName) {
   const verified = EXRX_VERIFIED[exId];
   return {
-    exrx: verified || exrxSearchLink(exName || exId),
+    exrx: verified || youtubeSearchLink(exName || exId),
     verified: !!verified,
   };
 }
@@ -2101,7 +2100,7 @@ function showGuide(exId) {
 
   const linkLabel = guide.verified
     ? '📹 View Exercise Guide on ExRx.net →'
-    : '🔍 Search ExRx.net for "' + e.name + '" →';
+    : '▶️ Search YouTube: "' + e.name + '" →';
   const linkHTML = '<a class="modal-link" href="'+guide.exrx+'" target="_blank" rel="noopener">'+linkLabel+'</a>';
 
   root.innerHTML =
@@ -2307,6 +2306,14 @@ function renderTrends(p) {
     parts.push('<div class="card mb8"><div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:6px">'+label+'</div><div class="chart-wrap"><canvas id="'+id+'"></canvas></div></div>');
   });
 
+  // Oura Ring trend charts
+  if (ST.ouraConnected) {
+    parts.push('<div class="section-label">OURA RING TRENDS</div>');
+    [['chartOuraReadiness','READINESS SCORE (0-100)'],['chartOuraSleep','SLEEP SCORE + HRV BALANCE (0-100)'],['chartOuraSleepDuration','SLEEP DURATION (hours)']].forEach(([id,label]) => {
+      parts.push('<div class="card mb8"><div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:6px">'+label+'</div><div class="chart-wrap"><canvas id="'+id+'"></canvas></div></div>');
+    });
+  }
+
   // Photo progress at bottom of Trends — wrapped in id div for DOM patching
   parts.push('<div id="photo-timeline-section">');
   parts.push(buildPhotoTimelineHTML());
@@ -2461,6 +2468,37 @@ async function loadAndDrawCharts() {
       });
     }
   }
+
+  // Oura Ring trend charts — only drawn if user is connected
+  if (!ST.ouraConnected) return;
+  try {
+    const filter = ST.user ? SB.from('oura_daily').select('*').eq('user_id', ST.user.id) : null;
+    if (!filter) return;
+    const { data: ouraRows, error } = await filter.order('date', { ascending: true });
+    if (error || !ouraRows || !ouraRows.length) return;
+
+    const ouraLabels = ouraRows.map(d => new Date(d.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+
+    // Chart 1: Readiness score with GO/MARGINAL reference lines
+    mkChart('chartOuraReadiness', ouraLabels, [
+      { data:ouraRows.map(d=>d.readiness_score), borderColor:'#22c55e', backgroundColor:'#22c55e22', tension:0.35, fill:true, pointRadius:4, pointBackgroundColor:'#22c55e', label:'Readiness' },
+      { ...refLine(ouraRows.length,85,'#22c55e55'), label:'GO (85)' },
+      { ...refLine(ouraRows.length,60,'#f59e0b55'), label:'MARGINAL (60)' },
+    ], true);
+
+    // Chart 2: Sleep score + HRV balance on same axis (both 0-100)
+    mkChart('chartOuraSleep', ouraLabels, [
+      { data:ouraRows.map(d=>d.sleep_score),   borderColor:'#818cf8', backgroundColor:'#818cf811', tension:0.35, fill:false, pointRadius:4, pointBackgroundColor:'#818cf8', label:'Sleep Score' },
+      { data:ouraRows.map(d=>d.hrv_balance),   borderColor:'#38bdf8', backgroundColor:'#38bdf811', tension:0.35, fill:false, pointRadius:4, pointBackgroundColor:'#38bdf8', label:'HRV Balance' },
+    ], true);
+
+    // Chart 3: Sleep duration in hours with 7-hour reference line
+    const sleepHrsData = ouraRows.map(d => d.total_sleep_seconds ? parseFloat((d.total_sleep_seconds/3600).toFixed(1)) : null);
+    mkChart('chartOuraSleepDuration', ouraLabels, [
+      { data:sleepHrsData, borderColor:'#c084fc', backgroundColor:'#c084fc22', tension:0.35, fill:true, pointRadius:4, pointBackgroundColor:'#c084fc', label:'Sleep (hrs)', spanGaps:true },
+      { ...refLine(ouraRows.length,7,'#f59e0b55'), label:'7h target' },
+    ], true);
+  } catch(e) { /* Oura data not yet available */ }
 }
 
 // ─── WISDOM TAB ───────────────────────────────────────────────────────────────

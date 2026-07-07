@@ -711,6 +711,10 @@ const CNS_EXPLAINER = "CNS down-regulation means deliberately shifting your nerv
 
 // ─── BIOMETRIC INFO POPUPS ────────────────────────────────────────────────────
 const BIO_INFO = {
+  hrv: {
+    title: 'HRV Balance',
+    text: 'HRV Balance is Oura\'s score (0-100) comparing your recent heart rate variability to your own 2-week baseline — not a raw HRV number, and not comparable between people. Higher means your nervous system is more recovered relative to your normal; lower means accumulated stress, poor sleep, illness, or overtraining is dragging on recovery. A single low day matters less than a multi-day downward trend, which is a real signal to back off training intensity.',
+  },
   weight: {
     title: 'Body Weight Protocol',
     text: 'Weigh yourself at the same time daily — ideally upon waking, after using the restroom, before eating or drinking, on the same scale. Daily weight can swing 2-4 lbs from water and food alone, so look at your 7-day rolling average rather than any single reading.',
@@ -1090,11 +1094,14 @@ Each row is one logged set:
 - Body Weight (lb), Waist (in), Systolic/Diastolic BP, Fasting Glucose (mg/dL): my daily biometrics, repeated on every row logged that day
 - Rows marked "(session summary)" mean I logged a session without a full exercise breakdown — treat those as attendance only, not performance data
 
+OPTIONAL — MY FLIGHT SCHEDULE
+If I've also attached an .ics calendar file, it's my flight/duty schedule. Cross-reference it against the training data: layovers, long duty days, red-eyes, and time zone changes all affect recovery, sleep, and which environment (hotel room / hotel gym / commercial gym) I had access to. If I attached this file, factor travel load into your analysis rather than treating training gaps or off-trend days as unexplained.
+
 WHAT I WANT FROM YOU
 1. Trend analysis — is my strength on key lifts trending up, flat, or down over the logged period? Call out any plateaus by name.
 2. Consistency — how many sessions per week am I actually completing, and are there concerning gaps?
 3. Biometric trends — track body weight, waist, blood pressure, and fasting glucose over time. Flag anything moving the wrong direction or outside normal ranges.
-4. Cross-reference — connect biometric shifts to training patterns (e.g. did BP or glucose move after a change in training volume or a gap in sessions?).
+4. Cross-reference — connect biometric shifts to training patterns (e.g. did BP or glucose move after a change in training volume or a gap in sessions?), and to my flight schedule if I attached it (e.g. did a rough travel stretch line up with a training gap or a biometric dip?).
 5. Direct recommendations — 3-5 concrete bullet points on what to change next: which lifts need progression, what's stalling, what to prioritize.
 
 Reference actual numbers and dates from the data, not general advice. If something in the biometric data looks concerning, say so plainly rather than softening it.
@@ -1109,7 +1116,7 @@ function showAIPromptModal() {
     '<div class="modal-sheet">' +
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">AI Analysis Prompt</div>' +
-    '<div class="modal-body" style="margin-bottom:12px">Copy this, paste it into ChatGPT or Gemini, upload the exported CSV in the same message, and send. Best done weekly — frequent enough to catch a stall early, infrequent enough for the trend lines to mean something.</div>' +
+    '<div class="modal-body" style="margin-bottom:12px">Copy this, paste it into ChatGPT or Gemini, upload the exported CSV in the same message, and send. Best done weekly — frequent enough to catch a stall early, infrequent enough for the trend lines to mean something. If you also export your flight schedule as an .ics calendar file, upload that alongside the CSV — it gives the AI the full picture of how travel is affecting your training.</div>' +
     '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:11px;line-height:1.6;color:var(--text);white-space:pre-wrap;max-height:40vh;overflow-y:auto;margin-bottom:12px">' + escaped + '</div>' +
     '<button class="btn btn-gold" onclick="copyAIPrompt()">📋 Copy Prompt</button>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">CLOSE</button>' +
@@ -2620,8 +2627,8 @@ function renderTrends(p) {
   // Oura Ring trend charts
   if (ST.ouraConnected) {
     parts.push('<div class="section-label">OURA RING TRENDS</div>');
-    [['chartOuraReadiness','READINESS SCORE (0-100)'],['chartOuraSleep','SLEEP SCORE + HRV BALANCE (0-100)']].forEach(([id,label]) => {
-      parts.push('<div class="card mb8"><div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:6px">'+label+'</div><div class="chart-wrap"><canvas id="'+id+'"></canvas></div></div>');
+    [['chartOuraReadiness','READINESS SCORE (0-100)',null],['chartOuraSleep','SLEEP SCORE + HRV BALANCE (0-100)','hrv']].forEach(([id,label,infoKey]) => {
+      parts.push('<div class="card mb8"><div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:6px">'+label+(infoKey?' <span class="info-i" onclick="showBioInfo(\''+infoKey+'\')">i</span>':'')+'</div><div class="chart-wrap"><canvas id="'+id+'"></canvas></div></div>');
     });
   }
 

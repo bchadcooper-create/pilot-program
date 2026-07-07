@@ -173,7 +173,7 @@ WORKOUTS.comm = {};
 
 WORKOUTS.comm['Lower Body'] = {
   taxi: [
-    ex('c_lb_t1','Hip 90/90 Stretch','60s/side',1,'Sit on floor, both legs at 90°. Rotate slowly between internal and external hip rotation. Critical for pilots who sit compressed all day.',true,'timedtimed_bilateral'),
+    ex('c_lb_t1','Hip 90/90 Stretch','60s/side',1,'Sit on floor, both legs at 90°. Rotate slowly between internal and external hip rotation. Critical for pilots who sit compressed all day.',true,'timed_bilateral'),
     ex('c_lb_t2','Ankle Circles + Dorsiflexion','20 reps',1,'Rotate each ankle 10x each direction, then pull toes to shin. Ankle mobility directly affects squat depth.',false,'reps_only'),
     ex('c_lb_t3','Kettlebell Goblet Squat (Warmup)','2×10',2,'Light KB or DB at chest. Slow descent, pause at the bottom. Own the position before loading.'),
   ],
@@ -188,8 +188,8 @@ WORKOUTS.comm['Lower Body'] = {
     ex('c_lb_er4','Lateral Band Walk','2×15/side',2,'Band above knees. Stay low. Activates glute med.',false,'reps_only'),
   ],
   landing: [
-    ex('c_lb_l1','Pigeon Pose','90s/side',1,'External hip rotation stretch. Hold completely still.',true,'timedtimed_bilateral'),
-    ex('c_lb_l2','Supine Hamstring Stretch','60s/side',1,'Lying on back, pull one leg toward chest. Knee straight.',true,'timedtimed_bilateral'),
+    ex('c_lb_l1','Pigeon Pose','90s/side',1,'External hip rotation stretch. Hold completely still.',true,'timed_bilateral'),
+    ex('c_lb_l2','Supine Hamstring Stretch','60s/side',1,'Lying on back, pull one leg toward chest. Knee straight.',true,'timed_bilateral'),
     ex('c_lb_l3','Child\'s Pose + Reach','90s',1,'Arms extended, sit back toward heels. Decompresses the lumbar.',true,'timed'),
   ],
 };
@@ -211,8 +211,8 @@ WORKOUTS.comm['Upper Push'] = {
     ex('c_up_er4','DB Tricep Overhead','3×12',3,'Both hands on one DB. Full stretch at top.'),
   ],
   landing: [
-    ex('c_up_l1','Doorframe Chest Stretch','60s/side',1,'Arm at 90° in doorframe, rotate body away.',true,'timedtimed_bilateral'),
-    ex('c_up_l2','Lat Overhead Stretch','60s/side',1,'Reach one arm overhead, grab a rack or door frame, lean away.',true,'timedtimed_bilateral'),
+    ex('c_up_l1','Doorframe Chest Stretch','60s/side',1,'Arm at 90° in doorframe, rotate body away.',true,'timed_bilateral'),
+    ex('c_up_l2','Lat Overhead Stretch','60s/side',1,'Reach one arm overhead, grab a rack or door frame, lean away.',true,'timed_bilateral'),
     ex('c_up_l3','Diaphragmatic Breathing','10 breaths',1,'Lie on back. Inhale 4 counts, hold 2, exhale 6. Shifts the nervous system from sympathetic to parasympathetic — see "What is CNS Down-Regulation" in Wisdom.',false,'reps_only'),
   ],
 };
@@ -235,7 +235,7 @@ WORKOUTS.comm['Upper Pull'] = {
   ],
   landing: [
     ex('c_ul_l1','Lat Hang Stretch','45s',1,'Hang from pullup bar, completely relaxed.',true,'timed'),
-    ex('c_ul_l2','Thoracic Rotation (seated)','60s/side',1,'Seated, cross arms on chest. Rotate slowly through mid-back only.',true,'timedtimed_bilateral'),
+    ex('c_ul_l2','Thoracic Rotation (seated)','60s/side',1,'Seated, cross arms on chest. Rotate slowly through mid-back only.',true,'timed_bilateral'),
     ex('c_ul_l3','Diaphragmatic Breathing','10 breaths',1,'Inhale 4, hold 2, exhale 6. CNS down-regulation protocol.',false,'reps_only'),
   ],
 };
@@ -244,7 +244,7 @@ WORKOUTS.comm['Power / Plyo'] = {
   taxi: [
     ex('c_pp_t1','Jump Rope / Ankle Bouncing','3 min',1,'Moderate pace. Warms Achilles and prepares the elastic system.',true,'timed'),
     ex('c_pp_t2','Light Squat Jumps','2×5',2,'Bodyweight only. Focus on arm swing mechanics and soft landing.',false,'reps_only'),
-    ex('c_pp_t3','Hip Flexor Lunge Stretch','60s/side',1,'Kneeling lunge, hands overhead, lean forward.',true,'timedtimed_bilateral'),
+    ex('c_pp_t3','Hip Flexor Lunge Stretch','60s/side',1,'Kneeling lunge, hands overhead, lean forward.',true,'timed_bilateral'),
   ],
   takeoff: [
     ex('c_pp_to1','Box Jump','5×3',5,'FULL 3-minute rest between sets. Every rep is maximum effort.',false,'reps_height'),
@@ -257,7 +257,7 @@ WORKOUTS.comm['Power / Plyo'] = {
     ex('c_pp_er4','Ankle Hop','3×20',3,'Minimal knee bend. Fast and springy.',false,'reps_only'),
   ],
   landing: [
-    ex('c_pp_l1','Achilles / Calf Stretch','90s/side',1,'Step on step edge, drop heel slowly.',true,'timedtimed_bilateral'),
+    ex('c_pp_l1','Achilles / Calf Stretch','90s/side',1,'Step on step edge, drop heel slowly.',true,'timed_bilateral'),
     ex('c_pp_l2','Slow Pogo Hops (25% effort)','30s',1,'Gentle bouncing — minimal effort.',true,'timed'),
     ex('c_pp_l3','Non-Sleep Deep Rest (NSDR)','5 min',1,'Lie flat. Eyes closed. Breathe slowly. Use the NSDR timer below — it will chime at 5 minutes and record your session automatically.',true,'nsdr'),
   ],
@@ -288,7 +288,7 @@ WORKOUTS.comm['Longevity'] = {
   taxi: [
     ex('c_lg_t1','Cat-Cow','2×10',2,'Slow spinal articulation. Inhale on extension, exhale on flexion.',false,'reps_only'),
     ex('c_lg_t2','Dead Bug','2×8/side',2,'Lie on back. Extend opposite arm/leg slowly.',false,'reps_only'),
-    ex('c_lg_t3','Hip 90/90','60s/side',1,'Slow rotation between internal and external hip position.',true,'timedtimed_bilateral'),
+    ex('c_lg_t3','Hip 90/90','60s/side',1,'Slow rotation between internal and external hip position.',true,'timed_bilateral'),
   ],
   takeoff: [
     ex('c_lg_to1','Kettlebell Goblet Squat','3×10',3,'Moderate weight. Full depth. Most joint-friendly lower body compound.'),
@@ -301,7 +301,7 @@ WORKOUTS.comm['Longevity'] = {
     ex('c_lg_er4','Split Squat','3×10/leg',3,'Both feet on floor. Controlled descent.',false,'reps_only'),
   ],
   landing: [
-    ex('c_lg_l1','Hip 90/90 Rotation Drill','90s/side',1,'Your most important mobility work as a pilot.',true,'timedtimed_bilateral'),
+    ex('c_lg_l1','Hip 90/90 Rotation Drill','90s/side',1,'Your most important mobility work as a pilot.',true,'timed_bilateral'),
     ex('c_lg_l2','Neck Mobility Protocol','2×8/direction',1,'Forward, back, rotation each side, lateral flexion.',false,'reps_only'),
     ex('c_lg_l3','Zone 2 Walk','10 min',1,'Brisk walk. Conversational pace.',true,'timed'),
   ],

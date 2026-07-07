@@ -3141,8 +3141,9 @@ function renderProfile(p) {
     if (ST.ouraData) {
       const sleepHrs = ST.ouraData.total_sleep_seconds ? (ST.ouraData.total_sleep_seconds/3600).toFixed(1)+'h' : '—';
       const hrv = ST.ouraData.hrv_balance || '—';
-      parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:10px">');
-      parts.push('<div class="stat-box"><div class="stat-val" style="font-size:16px">'+sleepHrs+'</div><div class="stat-lbl">Sleep</div></div>');
+      parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-top:10px">');
+      parts.push('<div class="stat-box"><div class="stat-val" style="font-size:16px">'+(ST.ouraData.sleep_score||'—')+'</div><div class="stat-lbl">Sleep Score</div></div>');
+      parts.push('<div class="stat-box"><div class="stat-val" style="font-size:16px">'+sleepHrs+'</div><div class="stat-lbl">Sleep Hrs</div></div>');
       parts.push('<div class="stat-box"><div class="stat-val" style="font-size:16px">'+hrv+'</div><div class="stat-lbl">HRV Bal.</div></div>');
       parts.push('<div class="stat-box"><div class="stat-val" style="font-size:16px">'+(ST.ouraData.activity_score||'—')+'</div><div class="stat-lbl">Activity</div></div>');
       parts.push('</div>');

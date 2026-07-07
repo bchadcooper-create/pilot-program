@@ -37,6 +37,9 @@ const ST = {
   ouraScore: null,
   ouraData: null,
   photoTimeline: [],
+  photoAllMeta: null,
+  photoUrlCache: {},
+  photoShowCount: 24,
   authInfo: '',
 
   tab: 'preflight',
@@ -3126,53 +3129,76 @@ async function uploadProgressPhoto(useCamera) {
   setTimeout(() => input.remove(), 5000);
 }
 
-async function loadPhotoTimeline() {
+// Pages through the storage bucket to collect every photo's metadata (cheap —
+// no signed URLs yet), then sorts the full list by actual capture date.
+async function loadAllPhotoMeta() {
+  const pageSize = 100;
+  let offset = 0;
+  let all = [];
+  while (true) {
+    const { data: files, error } = await SB.storage.from('progress-photos')
+      .list(ST.user.id, { limit: pageSize, offset, sortBy:{column:'created_at',order:'desc'} });
+    if (error) { console.warn('Photo list error:', error.message); break; }
+    if (!files || !files.length) break;
+    all = all.concat(files);
+    if (files.length < pageSize) break;
+    offset += pageSize;
+  }
+  return all.map(f => {
+    const datePart = f.name.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] || f.created_at?.slice(0,10) || '—';
+    const uploadTs = parseInt(f.name.match(/-(\d+)\./)?.[1] || '0', 10);
+    return { name: f.name, date: datePart, uploadTs };
+  }).sort((a, b) => {
+    if (a.date !== b.date) {
+      const ta = Date.parse(a.date), tb = Date.parse(b.date);
+      if (isNaN(ta) && isNaN(tb)) return 0;
+      if (isNaN(ta)) return 1;
+      if (isNaN(tb)) return -1;
+      return tb - ta; // newest capture date first
+    }
+    return b.uploadTs - a.uploadTs; // same-day tiebreak by upload time
+  });
+}
+
+// Resolves signed URLs for the currently-visible page of photos (reusing any
+// already-fetched URLs) and re-renders the photo section.
+async function resolvePhotoSlice() {
   if (!ST.user) return;
   try {
-    const { data: files, error: listErr } = await SB.storage
-      .from('progress-photos')
-      .list(ST.user.id, { sortBy:{column:'created_at',order:'desc'}, limit:100 });
-    if (listErr) { console.warn('Photo list error:', listErr.message); ST.photoTimeline = []; }
-    else if (!files || !files.length) { ST.photoTimeline = []; }
-    else {
-      // Extract capture date (and upload timestamp for same-day tiebreaks) from
-      // each filename BEFORE requesting signed URLs, so we only pay for the 24
-      // photos we'll actually keep instead of every file in the bucket.
-      const withDates = files.map(f => {
-        const datePart = f.name.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] || f.created_at?.slice(0,10) || '—';
-        const uploadTs = parseInt(f.name.match(/-(\d+)\./)?.[1] || '0', 10);
-        return { f, date: datePart, uploadTs };
-      }).sort((a, b) => {
-        if (a.date !== b.date) {
-          const ta = Date.parse(a.date), tb = Date.parse(b.date);
-          if (isNaN(ta) && isNaN(tb)) return 0;
-          if (isNaN(ta)) return 1;
-          if (isNaN(tb)) return -1;
-          return tb - ta; // newest capture date first
-        }
-        return b.uploadTs - a.uploadTs; // same-day tiebreak by upload time
-      }).slice(0, 24);
-
-      const urls = await Promise.all(withDates.map(async ({f, date}) => {
-        const { data, error } = await SB.storage.from('progress-photos')
-          .createSignedUrl(ST.user.id+'/'+f.name, 3600);
-        if (error || !data?.signedUrl) {
-          console.warn('Signed URL error for', f.name, error?.message);
-          return null;
-        }
-        return { url: data.signedUrl, date, name: f.name, path: ST.user.id+'/'+f.name };
-      }));
-      ST.photoTimeline = urls.filter(Boolean);
-    }
-    // Update only the photo section — never call renderPage() here (causes infinite loop)
-    const photoSection = document.getElementById('photo-timeline-section');
-    if (photoSection) {
-      photoSection.innerHTML = buildPhotoTimelineHTML();
-    }
+    if (!ST.photoAllMeta) ST.photoAllMeta = await loadAllPhotoMeta();
+    const slice = ST.photoAllMeta.slice(0, ST.photoShowCount);
+    const resolved = await Promise.all(slice.map(async meta => {
+      const path = ST.user.id+'/'+meta.name;
+      if (ST.photoUrlCache[path]) return { url: ST.photoUrlCache[path], date: meta.date, name: meta.name, path };
+      const { data, error } = await SB.storage.from('progress-photos').createSignedUrl(path, 3600);
+      if (error || !data?.signedUrl) {
+        console.warn('Signed URL error for', meta.name, error?.message);
+        return null;
+      }
+      ST.photoUrlCache[path] = data.signedUrl;
+      return { url: data.signedUrl, date: meta.date, name: meta.name, path };
+    }));
+    ST.photoTimeline = resolved.filter(Boolean);
   } catch(e) {
-    console.warn('loadPhotoTimeline error:', e.message);
+    console.warn('resolvePhotoSlice error:', e.message);
     ST.photoTimeline = [];
   }
+  const photoSection = document.getElementById('photo-timeline-section');
+  if (photoSection) photoSection.innerHTML = buildPhotoTimelineHTML();
+}
+
+// Full refresh — used on tab load, the Refresh button, and after upload/delete.
+async function loadPhotoTimeline() {
+  if (!ST.user) return;
+  ST.photoAllMeta = null;
+  ST.photoUrlCache = {};
+  await resolvePhotoSlice();
+}
+
+// "Load More" — reveals the next page without re-listing the whole bucket.
+async function loadMorePhotos() {
+  ST.photoShowCount = (ST.photoShowCount||24) + 24;
+  await resolvePhotoSlice();
 }
 
 async function deleteProgressPhoto(idx) {
@@ -3217,6 +3243,9 @@ function buildPhotoTimelineHTML() {
       parts.push('</div>');
     });
     parts.push('</div>');
+    if (ST.photoAllMeta && ST.photoAllMeta.length > ST.photoShowCount) {
+      parts.push('<button class="btn btn-outline mt12" onclick="loadMorePhotos()">Load More ('+(ST.photoAllMeta.length - ST.photoShowCount)+' more)</button>');
+    }
   }
   parts.push('</div>');
   return parts.join('');

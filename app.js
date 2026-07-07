@@ -1813,14 +1813,14 @@ function buildExCard(exItem, phaseKey) {
       const lastR = lastLoggedReps(exItem.id);
       const suggested = suggestNextWeight(exItem.id, exItem.name, phaseKey);
       if (lastW !== null) {
-        parts.push('<div style="background:rgba(201,168,76,0.1);border:1px solid rgba(201,168,76,0.3);border-radius:8px;padding:10px 12px;margin-bottom:12px">');
-        parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin-bottom:4px">PROGRESSIVE OVERLOAD</div>');
+        parts.push('<div class="stat-banner">');
+        parts.push('<div class="stat-banner-label">PROGRESSIVE OVERLOAD</div>');
         parts.push('<div style="display:flex;justify-content:space-between;align-items:center">');
         parts.push('<span style="font-size:12px">Last: <strong style="color:var(--text)">'+lastW+' lb'+(lastR?' × '+lastR+' reps':'')+'</strong></span>');
         parts.push('<span style="color:var(--gold);font-weight:700;font-size:12px">Target → '+suggested+' lb</span>');
         parts.push('</div></div>');
       } else {
-        parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px;font-style:italic">First time logging — sets here to start tracking progress.</div>');
+        parts.push('<div class="stat-banner-empty">First time logging — sets here to start tracking progress.</div>');
       }
     }
 
@@ -1829,12 +1829,12 @@ function buildExCard(exItem, phaseKey) {
       const label = exItem.inputType === 'reps_height' ? 'box height' : 'distance';
       const lastBest = lastLoggedMaxField(exItem.id, field);
       if (lastBest !== null) {
-        parts.push('<div style="background:rgba(201,168,76,0.1);border:1px solid rgba(201,168,76,0.3);border-radius:8px;padding:10px 12px;margin-bottom:12px">');
-        parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin-bottom:4px">PERSONAL BEST</div>');
-        parts.push('<span style="font-size:12px">Best '+label+': <strong style="color:var(--gold)">'+lastBest+' in</strong></span>');
+        parts.push('<div class="stat-banner">');
+        parts.push('<div class="stat-banner-label">PERSONAL BEST</div>');
+        parts.push('<span style="font-size:12px">Best '+label+': <strong style="color:var(--teal)">'+lastBest+' in</strong></span>');
         parts.push('</div>');
       } else {
-        parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px;font-style:italic">First time logging — record your '+label+' in inches to start tracking progress.</div>');
+        parts.push('<div class="stat-banner-empty">First time logging — record your '+label+' in inches to start tracking progress.</div>');
       }
     }
 
@@ -1866,46 +1866,46 @@ function buildExCard(exItem, phaseKey) {
       parts.push('</div>');
       parts.push(buildStopwatchWidget(exItem.id));
     } else if (exItem.inputType === 'reps_height') {
-      parts.push('<div class="sets-scroll">');
+      parts.push('<div class="sets-wrap"><div class="sets-scroll">');
       sets.forEach((s,i) => {
         parts.push('<div class="set-tile '+(s.reps||s.height?'ok':'')+'" id="st_'+exItem.id+'_'+i+'"><div class="set-lbl">SET '+(i+1)+'</div>');
         parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value||ST.sets[\''+exItem.id+'\']['+i+'].height?\' ok\':\'\');persistWorkoutState()">');
         parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="Height" value="'+(s.height||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].height=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState()">');
         parts.push('<div class="set-hint">reps / height (in)</div></div>');
       });
-      parts.push('</div><div class="swipe-hint">← swipe for all sets</div>');
+      parts.push('</div></div><div class="swipe-hint">← swipe for all sets</div>');
       if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
         parts.push(buildRestTimerWidget(exItem.id, phaseKey));
       }
     } else if (exItem.inputType === 'reps_distance') {
-      parts.push('<div class="sets-scroll">');
+      parts.push('<div class="sets-wrap"><div class="sets-scroll">');
       sets.forEach((s,i) => {
         parts.push('<div class="set-tile '+(s.reps||s.distance?'ok':'')+'" id="st_'+exItem.id+'_'+i+'"><div class="set-lbl">SET '+(i+1)+'</div>');
         parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value||ST.sets[\''+exItem.id+'\']['+i+'].distance?\' ok\':\'\');persistWorkoutState()">');
         parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="Distance" value="'+(s.distance||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].distance=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState()">');
         parts.push('<div class="set-hint">reps / distance (in)</div></div>');
       });
-      parts.push('</div><div class="swipe-hint">← swipe for all sets</div>');
+      parts.push('</div></div><div class="swipe-hint">← swipe for all sets</div>');
       if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
         parts.push(buildRestTimerWidget(exItem.id, phaseKey));
       }
     } else if (exItem.inputType === 'reps_only') {
-      parts.push('<div class="sets-scroll">');
+      parts.push('<div class="sets-wrap"><div class="sets-scroll">');
       sets.forEach((s,i) => {
         parts.push('<div class="set-tile '+(s.reps?'ok':'')+'" id="st_'+exItem.id+'_'+i+'"><div class="set-lbl">SET '+(i+1)+'</div>');
         parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value?\' ok\':\'\');persistWorkoutState()">');
         parts.push('<div class="set-hint">reps only</div></div>');
       });
-      parts.push('</div><div class="swipe-hint">← swipe for all sets</div>');
+      parts.push('</div></div><div class="swipe-hint">← swipe for all sets</div>');
     } else {
-      parts.push('<div class="sets-scroll">');
+      parts.push('<div class="sets-wrap"><div class="sets-scroll">');
       sets.forEach((s,i) => {
         parts.push('<div class="set-tile '+(s.reps||s.weight?'ok':'')+'" id="st_'+exItem.id+'_'+i+'"><div class="set-lbl">SET '+(i+1)+'</div>');
         parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value||ST.sets[\''+exItem.id+'\']['+i+'].weight?\' ok\':\'\');persistWorkoutState()">');
         parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="lb" value="'+(s.weight||'')+'" onchange="afterSetLogged(\''+exItem.id+'\',\''+phaseKey+'\')" oninput="ST.sets[\''+exItem.id+'\']['+i+'].weight=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState()">');
         parts.push('<div class="set-hint">reps / lb</div></div>');
       });
-      parts.push('</div><div class="swipe-hint">← swipe for all sets</div>');
+      parts.push('</div></div><div class="swipe-hint">← swipe for all sets</div>');
       if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
         parts.push(buildRestTimerWidget(exItem.id, phaseKey));
       }
@@ -2925,8 +2925,8 @@ async function syncOuraData() {
     ST.ouraData   = row;
 
     // Show what we got
-    const sleepHrs = row.total_sleep_seconds ? (row.total_sleep_seconds/3600).toFixed(1) : '—';
-    showBigToast('Oura synced\nReadiness: '+score+' → '+label+'\nSleep: '+sleepHrs+'h','ok');
+    const sleepScoreStr = row.sleep_score ? String(row.sleep_score) : '—';
+    showBigToast('Oura synced\nReadiness: '+score+' → '+label+'\nSleep Score: '+sleepScoreStr,'ok');
     renderPage();
 
   } catch(e) {

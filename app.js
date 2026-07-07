@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.5';
+const FCF_VERSION = 'v5.6';
 const FCF_BUILD   = '20260707';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2297,13 +2297,15 @@ function renderTrends(p) {
     parts.push('<div class="card mb8"><div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:6px">'+label+'</div><div class="chart-wrap"><canvas id="'+id+'"></canvas></div></div>');
   });
 
-  // Photo progress at bottom of Trends
+  // Photo progress at bottom of Trends — wrapped in id div for DOM patching
+  parts.push('<div id="photo-timeline-section">');
   parts.push(buildPhotoTimelineHTML());
+  parts.push('</div>');
 
   p.innerHTML = parts.join('');
   setTimeout(() => loadAndDrawCharts(), 50);
-  // Load fresh signed URLs every time Trends tab opens — ensures photos always display
-  if (ST.user) loadPhotoTimeline().catch(()=>{});
+  // Load fresh signed URLs after render — patches only the photo section, not the whole page
+  if (ST.user) setTimeout(() => loadPhotoTimeline().catch(()=>{}), 100);
 }
 
 async function saveBio() {
@@ -2670,7 +2672,15 @@ async function handleOuraCallback() {
     showBigToast('Oura connected! Syncing today\'s data...','ok');
     await syncOuraData();
   } catch(e) {
-    showBigToast('Oura connection failed: '+e.message,'warn');
+    let errMsg = e.message || 'Unknown error';
+    if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError') || errMsg.includes('Load failed')) {
+      errMsg = 'Edge Function not reachable. Deploy the oura-auth function first (see DEPLOY.md in the edge function zip).';
+    } else if (errMsg.includes('404') || errMsg.includes('not found')) {
+      errMsg = 'oura-auth Edge Function not deployed yet. Deploy it via the Supabase CLI or dashboard first.';
+    } else if (errMsg.includes('500') || errMsg.includes('credentials not configured')) {
+      errMsg = 'Edge Function is running but secrets are missing. Set OURA_CLIENT_ID and OURA_CLIENT_SECRET via the Supabase dashboard → Edge Functions → oura-auth → Secrets.';
+    }
+    showBigToast(errMsg, 'warn');
   }
 }
 
@@ -2795,6 +2805,35 @@ async function disconnectOura() {
   renderPage();
 }
 
+// Test if the edge function is deployed and secrets are set
+async function testOuraEdgeFn() {
+  showBigToast('Testing edge function...', 'info');
+  try {
+    const res = await fetch(OURA_EDGE_FN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'exchange', code: 'test', redirect_uri: OURA_REDIRECT_URI }),
+    });
+    const data = await res.json();
+    // A proper response (even an error from Oura) means the function is deployed
+    if (data.error === 'invalid_grant' || data.error === 'invalid_code' || data.error_description) {
+      showBigToast('Edge function is live! Oura rejected the test code (expected). Ready to connect.', 'ok');
+    } else if (data.error === 'Oura credentials not configured in Edge Function secrets') {
+      showBigToast('Edge function deployed but secrets missing. Add OURA_CLIENT_ID and OURA_CLIENT_SECRET in Supabase dashboard.', 'warn');
+    } else if (data.access_token || data.error) {
+      showBigToast('Edge function is live and configured. Ready to connect.', 'ok');
+    } else {
+      showBigToast('Edge function responded: ' + JSON.stringify(data).slice(0,80), 'info');
+    }
+  } catch(e) {
+    if (e.message.includes('Failed to fetch') || e.message.includes('Load failed')) {
+      showBigToast('Cannot reach edge function. Deploy oura-auth via Supabase CLI first.', 'warn');
+    } else {
+      showBigToast('Edge function test: ' + e.message, 'warn');
+    }
+  }
+}
+
 // Legacy PAT sync — kept for any users with old tokens still working
 async function fetchOuraReadiness() {
   await syncOuraData();
@@ -2834,18 +2873,34 @@ async function uploadProgressPhoto(useCamera) {
 async function loadPhotoTimeline() {
   if (!ST.user) return;
   try {
-    const { data: files } = await SB.storage.from('progress-photos').list(ST.user.id, { sortBy:{column:'created_at',order:'desc'}, limit:12 });
-    if (!files || !files.length) { ST.photoTimeline = []; return; }
-    const urls = await Promise.all(files.map(async f => {
-      const { data, error } = await SB.storage.from('progress-photos')
-        .createSignedUrl(ST.user.id+'/'+f.name, 3600); // fresh 1-hour URL generated on every load
-      if (error || !data?.signedUrl) return null;
-      return { url: data.signedUrl, date: f.name.slice(0,10), name: f.name, path: ST.user.id+'/'+f.name };
-    }));
-    const validUrls = urls.filter(Boolean);
-    ST.photoTimeline = validUrls;
-    if (ST.tab === 'trends' || ST.tab === 'profile') renderPage();
-  } catch(e) { ST.photoTimeline = []; }
+    const { data: files, error: listErr } = await SB.storage
+      .from('progress-photos')
+      .list(ST.user.id, { sortBy:{column:'created_at',order:'desc'}, limit:24 });
+    if (listErr) { console.warn('Photo list error:', listErr.message); ST.photoTimeline = []; }
+    else if (!files || !files.length) { ST.photoTimeline = []; }
+    else {
+      const urls = await Promise.all(files.map(async f => {
+        const { data, error } = await SB.storage.from('progress-photos')
+          .createSignedUrl(ST.user.id+'/'+f.name, 3600);
+        if (error || !data?.signedUrl) {
+          console.warn('Signed URL error for', f.name, error?.message);
+          return null;
+        }
+        // Extract date from filename (format: YYYY-MM-DD-timestamp.ext)
+        const datePart = f.name.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] || f.created_at?.slice(0,10) || '—';
+        return { url: data.signedUrl, date: datePart, name: f.name, path: ST.user.id+'/'+f.name };
+      }));
+      ST.photoTimeline = urls.filter(Boolean);
+    }
+    // Update only the photo section — never call renderPage() here (causes infinite loop)
+    const photoSection = document.getElementById('photo-timeline-section');
+    if (photoSection) {
+      photoSection.innerHTML = buildPhotoTimelineHTML();
+    }
+  } catch(e) {
+    console.warn('loadPhotoTimeline error:', e.message);
+    ST.photoTimeline = [];
+  }
 }
 
 async function deleteProgressPhoto(idx) {
@@ -2942,9 +2997,13 @@ function renderProfile(p) {
   } else {
     parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.65">Connect your Oura Ring to automatically set your Pilot Condition based on your daily readiness score. Readiness 85+ = GO, 60-84 = MARGINAL, below 60 = NO-GO.</div>');
     parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5;background:var(--bg3);border-radius:8px;padding:10px">');
-    parts.push('Requires the <strong style="color:var(--text)">oura-auth</strong> Supabase Edge Function to be deployed with your Client Secret. See the edge function zip for deploy instructions.');
+    parts.push('<strong style="color:var(--text)">Setup required before connecting:</strong><br>');
+    parts.push('1. Deploy the <code style="color:var(--gold)">oura-auth</code> Edge Function (see edge function zip)<br>');
+    parts.push('2. In Supabase → Edge Functions → oura-auth → Secrets, add:<br>');
+    parts.push('&nbsp;&nbsp;<code style="color:var(--gold)">OURA_CLIENT_ID</code> and <code style="color:var(--gold)">OURA_CLIENT_SECRET</code>');
     parts.push('</div>');
-    parts.push('<button class="btn btn-blue" onclick="connectOura()">Connect Oura Ring →</button>');
+    parts.push('<button class="btn btn-blue" onclick="testOuraEdgeFn()">Test Connection Setup</button>');
+    parts.push('<button class="btn btn-outline mt8" onclick="connectOura()">Connect Oura Ring →</button>');
   }
   parts.push('</div>');
 

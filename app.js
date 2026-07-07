@@ -1318,8 +1318,55 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ─── INITIALIZATION ───────────────────────────────────────────────────────────
+let swRegistration = null;
+
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/pilot-program/sw.js').catch(() => {});
+  navigator.serviceWorker.register('/pilot-program/sw.js').then(reg => {
+    swRegistration = reg;
+
+    // A new worker was found and finished installing while one was already
+    // controlling the page — that means an update is ready, not a first install.
+    reg.addEventListener('updatefound', () => {
+      const newWorker = reg.installing;
+      if (!newWorker) return;
+      newWorker.addEventListener('statechange', () => {
+        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          showToast('Updating to the latest version…');
+        }
+      });
+    });
+
+    // Check for an update to sw.js right away, and periodically while the app
+    // stays open — otherwise a PWA left running in the background for days
+    // never notices a new version exists.
+    reg.update().catch(() => {});
+    setInterval(() => reg.update().catch(() => {}), 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') reg.update().catch(() => {});
+    });
+  }).catch(() => {});
+
+  // Fires once the new service worker (which calls skipWaiting + clients.claim
+  // in sw.js) actually takes control. Reload once to pick up the new cached
+  // assets — guarded so a reload can't loop.
+  let reloadedForUpdate = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloadedForUpdate) return;
+    reloadedForUpdate = true;
+    window.location.reload();
+  });
+}
+
+// Manual "check now" — used by the top-bar sync indicator.
+async function checkForAppUpdate() {
+  if (!swRegistration) { showToast('Update check unavailable in this browser.'); return; }
+  showToast('Checking for updates…');
+  try {
+    await swRegistration.update();
+    showToast('You\'re on the latest version.');
+  } catch(e) {
+    showToast('Update check failed: '+e.message);
+  }
 }
 
 async function initApp() {

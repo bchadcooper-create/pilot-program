@@ -44,6 +44,7 @@ const ST = {
   flightHrs: 0,
   flightHrsTouched: false,
   waterIn: 0,
+  waterInRaw: '',
   muscleGroup: 'Lower Body',
   goal: 'longevity', // 'jump' | 'muscle' | 'longevity' | 'fatloss'
   fatigue: 'go',
@@ -1081,6 +1082,7 @@ function restoreWorkoutState() {
     ST.level = saved.level;
     ST.flightHrs = saved.flightHrs;
     ST.waterIn = saved.waterIn;
+    ST.waterInRaw = saved.waterIn ? String(saved.waterIn) : '';
     ST.flightHrsTouched = true;
     ST.expanded = saved.expanded || {};
     ST.workoutStartedAt = saved.workoutStartedAt || saved.savedAt;
@@ -1377,7 +1379,7 @@ async function renderPreflight(p) {
   parts.push('<div class="field" style="margin-bottom:0"><label>Flight Hours Today</label>');
   parts.push('<input type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="'+(ST.flightHrsTouched?ST.flightHrs:'')+'" placeholder="0 = no-fly day" oninput="ST.flightHrs=parseFloat(this.value)||0;ST.flightHrsTouched=true;renderPage()"></div>');
   parts.push('<div class="field" style="margin-bottom:0"><label>Water Consumed (L)</label>');
-  parts.push('<input type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="'+(ST.waterIn||'')+'" placeholder="e.g. 1.2" oninput="ST.waterIn=parseFloat(this.value)||0;renderPage()"></div>');
+  parts.push('<input type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="'+ST.waterInRaw+'" placeholder="e.g. 1.2 or .5" oninput="ST.waterInRaw=this.value;ST.waterIn=parseFloat(this.value)||0;renderPage()"></div>');
   parts.push('</div>');
   if (ST.flightHrsTouched && ST.flightHrs === 0) {
     parts.push('<div class="alert alert-info" style="margin-bottom:8px"><div class="alert-icon">ℹ️</div><div>No-fly day — minimum 1.0L hydration target still applies. Your body needs baseline water regardless of duty status.</div></div>');

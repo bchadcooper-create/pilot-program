@@ -12,6 +12,7 @@ const FCF_BUILD   = '20260707';
 const OURA_CLIENT_ID   = 'deb737ed-9343-407a-b993-9907bc101800';
 const OURA_REDIRECT_URI = 'https://bchadcooper-create.github.io/pilot-program/';
 const OURA_EDGE_FN      = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/oura-auth';
+const FEEDBACK_EDGE_FN  = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/feedback-submit';
 const OURA_SCOPES       = 'daily personal'; // readiness, sleep, activity, personal info
 // Supabase anon key sent as auth header — required when Edge Function JWT verification is enabled
 const SB_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRueGt5ZHhieWloZ3NpY3Riemp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3ODk4MTEsImV4cCI6MjA5NjM2NTgxMX0.oLUGuorQkbQ_u679NpE8FGBVAUmVE1K_rxl8q4B0n7k';
@@ -1122,6 +1123,44 @@ function copyAIPrompt() {
       .catch(() => showToast('Copy failed — select and copy the text manually.'));
   } else {
     showToast('Copy not supported here — select and copy the text manually.');
+  }
+}
+
+function showFeedbackModal() {
+  const root = document.getElementById('modalRoot');
+  root.innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()">' +
+    '<div class="modal-sheet">' +
+    '<div class="modal-handle"></div>' +
+    '<div class="modal-title">Send Feedback</div>' +
+    '<div class="modal-body" style="margin-bottom:10px">Bugs, ideas, anything not working right — this goes straight to the person building the app.</div>' +
+    '<textarea id="feedbackText" rows="5" placeholder="What\'s on your mind?" style="width:100%;background:var(--bg3);border:1.5px solid var(--border);border-radius:8px;padding:12px;font-size:16px;color:var(--text);resize:vertical;margin-bottom:10px"></textarea>' +
+    '<div class="field" style="margin-bottom:14px"><label>Your email (optional — only if you want a reply)</label>' +
+    '<input id="feedbackEmail" type="email" placeholder="you@example.com"></div>' +
+    '<button class="btn btn-gold" onclick="submitFeedback()">Send Feedback</button>' +
+    '<button class="btn btn-outline mt8" onclick="closeModal()">CANCEL</button>' +
+    '</div></div>';
+}
+
+async function submitFeedback() {
+  const textEl = document.getElementById('feedbackText');
+  const emailEl = document.getElementById('feedbackEmail');
+  const message = textEl?.value.trim();
+  const email = emailEl?.value.trim();
+  if (!message) { showToast('Write something first.'); return; }
+
+  try {
+    const res = await fetch(FEEDBACK_EDGE_FN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer '+SB_ANON_KEY },
+      body: JSON.stringify({ message, contact_email: email || null, app_version: FCF_VERSION }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || 'Submission failed');
+    closeModal();
+    showBigToast('Feedback sent — thank you.', 'ok');
+  } catch(e) {
+    showToast('Couldn\'t send feedback: '+e.message);
   }
 }
 
@@ -3045,6 +3084,68 @@ async function ouraFetch(endpoint) {
   return res.json();
 }
 
+// One-time backfill — pulls a wider date range than the daily sync and
+// upserts every day found, so Trends charts have history from before you
+// connected the ring (or from a gap where the app wasn't syncing).
+async function importHistoricalOura(days) {
+  if (!ST.user || !ST.ouraAccessToken) {
+    showBigToast('Connect Oura Ring first.', 'warn');
+    return;
+  }
+  showBigToast('Importing '+days+' days of Oura history…', 'info');
+  try {
+    const today = new Date().toISOString().slice(0,10);
+    const startDate = new Date(Date.now() - days*86400000).toISOString().slice(0,10);
+
+    const [readiness, sleep, activity] = await Promise.all([
+      ouraFetch('daily_readiness?start_date='+startDate+'&end_date='+today).catch(()=>null),
+      ouraFetch('daily_sleep?start_date='+startDate+'&end_date='+today).catch(()=>null),
+      ouraFetch('daily_activity?start_date='+startDate+'&end_date='+today).catch(()=>null),
+    ]);
+
+    const readinessByDate = {}, sleepByDate = {}, activityByDate = {};
+    (readiness?.data||[]).forEach(r => { readinessByDate[r.day] = r; });
+    (sleep?.data||[]).forEach(s => { sleepByDate[s.day] = s; });
+    (activity?.data||[]).forEach(a => { activityByDate[a.day] = a; });
+
+    const allDates = new Set([...Object.keys(readinessByDate), ...Object.keys(sleepByDate), ...Object.keys(activityByDate)]);
+    if (!allDates.size) {
+      showBigToast('No historical Oura data found for that range.', 'info');
+      return;
+    }
+
+    const rows = Array.from(allDates).map(date => {
+      const readinessItem = readinessByDate[date];
+      const sleepItem = sleepByDate[date];
+      const activityItem = activityByDate[date];
+      return {
+        user_id: ST.user.id,
+        date: date,
+        readiness_score: readinessItem?.score || null,
+        sleep_score: sleepItem?.score || readinessItem?.contributors?.previous_night || null,
+        hrv_balance: readinessItem?.contributors?.hrv_balance || null,
+        resting_heart_rate: null,
+        temperature_deviation: readinessItem?.temperature_deviation || null,
+        activity_score: activityItem?.score || null,
+        total_sleep_seconds: sleepItem?.total_sleep_duration || null,
+        deep_sleep_seconds: sleepItem?.deep_sleep_duration || null,
+        rem_sleep_seconds: sleepItem?.rem_sleep_duration || null,
+        raw_readiness: readinessItem || null,
+        raw_sleep: sleepItem || null,
+        synced_at: new Date().toISOString(),
+      };
+    });
+
+    const { error } = await SB.from('oura_daily').upsert(rows, { onConflict: 'user_id,date' });
+    if (error) throw error;
+
+    showBigToast('Imported '+rows.length+' days of Oura history.', 'ok');
+    renderPage();
+  } catch(e) {
+    showBigToast('Historical import failed: '+e.message, 'warn');
+  }
+}
+
 // Step 5: Full sync — pulls readiness, sleep, activity; stores in Supabase
 async function syncOuraData() {
   if (!ST.user || !ST.ouraAccessToken) {
@@ -3340,6 +3441,7 @@ function renderProfile(p) {
   parts.push('<div class="section-label" style="margin-top:0">SHARE APP</div>');
   parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Invite a fellow pilot or crew member to try Flight Crew Fitness.</div>');
   parts.push('<button class="btn btn-outline" onclick="shareApp()">📤 Share Flight Crew Fitness</button>');
+  parts.push('<button class="btn btn-outline mt8" onclick="showFeedbackModal()">💬 Send Feedback</button>');
   parts.push('</div>');
 
   // Mission objective (goal)
@@ -3390,6 +3492,7 @@ function renderProfile(p) {
     }
     parts.push('</div>');
     parts.push('<button class="btn btn-outline" onclick="syncOuraData()">↻ Sync Now</button>');
+    parts.push('<button class="btn btn-outline mt8" onclick="importHistoricalOura(180)">📥 Import Last 6 Months</button>');
   } else {
     parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.65">Connect your Oura Ring to automatically set your Pilot Condition based on your daily readiness score. Readiness 70+ = GO, 60-69 = MARGINAL, below 60 = NO-GO. These bands match Oura\'s own Good/Fair/Pay Attention categories.</div>');
     parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5;background:var(--bg3);border-radius:8px;padding:10px">');

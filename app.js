@@ -4,7 +4,7 @@
  */
 
 const FCF_VERSION = 'v5.6';
-const FCF_BUILD   = '20260707c';
+const FCF_BUILD   = '20260707d';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
 // Replace OURA_CLIENT_ID with your actual Client ID from cloud.ouraring.com/oauth/applications
@@ -2807,6 +2807,28 @@ async function disconnectOura() {
   renderPage();
 }
 
+// Debug: show what client_id and secret the edge function actually has
+async function debugOuraSecrets() {
+  showBigToast('Checking secrets...', 'info');
+  try {
+    const res = await fetch(OURA_EDGE_FN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer '+SB_ANON_KEY },
+      body: JSON.stringify({ action: 'debug', redirect_uri: OURA_REDIRECT_URI }),
+    });
+    const data = await res.json();
+    if (data.error) {
+      showBigToast('Secrets error: '+data.error, 'warn');
+    } else {
+      const msg = 'Client ID: '+data.client_id_prefix+'... ('+data.client_id_length+' chars)\nSecret: '+data.client_secret_prefix+'... ('+data.client_secret_length+' chars)';
+      showBigToast(msg, 'info');
+      console.log('Oura debug:', data);
+    }
+  } catch(e) {
+    showBigToast('Debug failed: '+e.message, 'warn');
+  }
+}
+
 // Test if the edge function is deployed and secrets are set
 async function testOuraEdgeFn() {
   showBigToast('Testing edge function...', 'info');
@@ -3005,6 +3027,7 @@ function renderProfile(p) {
     parts.push('&nbsp;&nbsp;<code style="color:var(--gold)">OURA_CLIENT_ID</code> and <code style="color:var(--gold)">OURA_CLIENT_SECRET</code>');
     parts.push('</div>');
     parts.push('<button class="btn btn-blue" onclick="testOuraEdgeFn()">Test Connection Setup</button>');
+    parts.push('<button class="btn btn-outline mt8" onclick="debugOuraSecrets()">Debug: Check Secrets</button>');
     parts.push('<button class="btn btn-outline mt8" onclick="connectOura()">Connect Oura Ring →</button>');
   }
   parts.push('</div>');

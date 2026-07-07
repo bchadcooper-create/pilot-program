@@ -2398,7 +2398,7 @@ function renderTrends(p) {
   // Oura Ring trend charts
   if (ST.ouraConnected) {
     parts.push('<div class="section-label">OURA RING TRENDS</div>');
-    [['chartOuraReadiness','READINESS SCORE (0-100)'],['chartOuraSleep','SLEEP SCORE + HRV BALANCE (0-100)'],['chartOuraSleepDuration','SLEEP DURATION (hours)']].forEach(([id,label]) => {
+    [['chartOuraReadiness','READINESS SCORE (0-100)'],['chartOuraSleep','SLEEP SCORE + HRV BALANCE (0-100)']].forEach(([id,label]) => {
       parts.push('<div class="card mb8"><div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:6px">'+label+'</div><div class="chart-wrap"><canvas id="'+id+'"></canvas></div></div>');
     });
   }
@@ -2579,13 +2579,6 @@ async function loadAndDrawCharts() {
     mkChart('chartOuraSleep', ouraLabels, [
       { data:ouraRows.map(d=>d.sleep_score),   borderColor:'#818cf8', backgroundColor:'#818cf811', tension:0.35, fill:false, pointRadius:4, pointBackgroundColor:'#818cf8', label:'Sleep Score' },
       { data:ouraRows.map(d=>d.hrv_balance),   borderColor:'#38bdf8', backgroundColor:'#38bdf811', tension:0.35, fill:false, pointRadius:4, pointBackgroundColor:'#38bdf8', label:'HRV Balance' },
-    ], true);
-
-    // Chart 3: Sleep duration in hours with 7-hour reference line
-    const sleepHrsData = ouraRows.map(d => d.total_sleep_seconds ? parseFloat((d.total_sleep_seconds/3600).toFixed(1)) : null);
-    mkChart('chartOuraSleepDuration', ouraLabels, [
-      { data:sleepHrsData, borderColor:'#c084fc', backgroundColor:'#c084fc22', tension:0.35, fill:true, pointRadius:4, pointBackgroundColor:'#c084fc', label:'Sleep (hrs)', spanGaps:true },
-      { ...refLine(ouraRows.length,7,'#f59e0b55'), label:'7h target' },
     ], true);
   } catch(e) { /* Oura data not yet available */ }
 }

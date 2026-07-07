@@ -58,7 +58,7 @@ const ST = {
   showAddExercise: false,
 
   restTimer: { active: false, seconds: 0, total: 0, exId: null, interval: null, startTs: 0, endTs: 0 },
-  stopwatch:  { active: false, seconds: 0, interval: null, exId: null, startTs: 0 },
+  stopwatch:  { active: false, seconds: 0, interval: null, exId: null, side: null, startTs: 0 },
   nsdrTimer:  { active: false, seconds: 0, interval: null, chimed: false, startTs: 0 },
 
   lastSession: null, // last completed session summary
@@ -78,8 +78,8 @@ const ST = {
 const GOALS = {
   jump:     { label: 'Vertical Jump',    icon: '🏀', desc: 'Explosive power and athletic performance', order: ['Lower Body','Upper Pull','Power / Plyo','Upper Push','Cardio'] },
   muscle:   { label: 'Muscle Gain',      icon: '💪', desc: 'Bodybuilding-style hypertrophy training',   order: ['Lower Body','Upper Push','Upper Pull','Full Body'] },
-  longevity:{ label: 'General Health',  icon: '🌿', desc: 'Joint-friendly, sustainable, long-term health', order: ['Lower Body','Upper Pull','Longevity','Upper Push'] },
-  fatloss:  { label: 'Weight Loss',     icon: '🔥', desc: 'Higher-volume, metabolic conditioning focus', order: ['Lower Body','Cardio','Upper Push','Full Body'] },
+  longevity:{ label: 'General Health',  icon: '🌿', desc: 'Joint-friendly, sustainable, long-term health', order: ['Lower Body','Upper Pull','Cardio','Longevity','Upper Push'] },
+  fatloss:  { label: 'Weight Loss',     icon: '🔥', desc: 'Higher-volume, metabolic conditioning focus', order: ['Lower Body','Cardio','Upper Push','Upper Pull','Full Body'] },
 };
 
 // ─── FREQUENCY GUIDANCE (fitness coach logic) ────────────────────────────────
@@ -119,7 +119,7 @@ const MUSCLE_GROUPS = ['Lower Body','Upper Push','Upper Pull','Power / Plyo','Fu
 // rest: suggested rest in seconds for the heaviest set in this exercise (phase-aware default applied separately)
 const ex = (id, name, target, sets, note, timed, inputType) =>
   ({ id, name, target, sets: sets||3, note, timed: !!timed, inputType: inputType||'reps_weight' });
-  // inputType: 'reps_weight' | 'reps_only' | 'timed'
+  // inputType: 'reps_weight' | 'reps_only' | 'reps_height' | 'reps_distance' | 'timed' | 'timed_bilateral'
 
 // Phase-based default rest periods (seconds) — fitness coach standard
 const REST_DEFAULTS = {
@@ -135,7 +135,7 @@ WORKOUTS.comm = {};
 
 WORKOUTS.comm['Lower Body'] = {
   taxi: [
-    ex('c_lb_t1','Hip 90/90 Stretch','60s/side',1,'Sit on floor, both legs at 90°. Rotate slowly between internal and external hip rotation. Critical for pilots who sit compressed all day.',true,'timed'),
+    ex('c_lb_t1','Hip 90/90 Stretch','60s/side',1,'Sit on floor, both legs at 90°. Rotate slowly between internal and external hip rotation. Critical for pilots who sit compressed all day.',true,'timedtimed_bilateral'),
     ex('c_lb_t2','Ankle Circles + Dorsiflexion','20 reps',1,'Rotate each ankle 10x each direction, then pull toes to shin. Ankle mobility directly affects squat depth.',false,'reps_only'),
     ex('c_lb_t3','Kettlebell Goblet Squat (Warmup)','2×10',2,'Light KB or DB at chest. Slow descent, pause at the bottom. Own the position before loading.'),
   ],
@@ -150,8 +150,8 @@ WORKOUTS.comm['Lower Body'] = {
     ex('c_lb_er4','Lateral Band Walk','2×15/side',2,'Band above knees. Stay low. Activates glute med.',false,'reps_only'),
   ],
   landing: [
-    ex('c_lb_l1','Pigeon Pose','90s/side',1,'External hip rotation stretch. Hold completely still.',true,'timed'),
-    ex('c_lb_l2','Supine Hamstring Stretch','60s/side',1,'Lying on back, pull one leg toward chest. Knee straight.',true,'timed'),
+    ex('c_lb_l1','Pigeon Pose','90s/side',1,'External hip rotation stretch. Hold completely still.',true,'timedtimed_bilateral'),
+    ex('c_lb_l2','Supine Hamstring Stretch','60s/side',1,'Lying on back, pull one leg toward chest. Knee straight.',true,'timedtimed_bilateral'),
     ex('c_lb_l3','Child\'s Pose + Reach','90s',1,'Arms extended, sit back toward heels. Decompresses the lumbar.',true,'timed'),
   ],
 };
@@ -173,8 +173,8 @@ WORKOUTS.comm['Upper Push'] = {
     ex('c_up_er4','DB Tricep Overhead','3×12',3,'Both hands on one DB. Full stretch at top.'),
   ],
   landing: [
-    ex('c_up_l1','Doorframe Chest Stretch','60s/side',1,'Arm at 90° in doorframe, rotate body away.',true,'timed'),
-    ex('c_up_l2','Lat Overhead Stretch','60s/side',1,'Reach one arm overhead, grab a rack or door frame, lean away.',true,'timed'),
+    ex('c_up_l1','Doorframe Chest Stretch','60s/side',1,'Arm at 90° in doorframe, rotate body away.',true,'timedtimed_bilateral'),
+    ex('c_up_l2','Lat Overhead Stretch','60s/side',1,'Reach one arm overhead, grab a rack or door frame, lean away.',true,'timedtimed_bilateral'),
     ex('c_up_l3','Diaphragmatic Breathing','10 breaths',1,'Lie on back. Inhale 4 counts, hold 2, exhale 6. Shifts the nervous system from sympathetic to parasympathetic — see "What is CNS Down-Regulation" in Wisdom.',false,'reps_only'),
   ],
 };
@@ -197,7 +197,7 @@ WORKOUTS.comm['Upper Pull'] = {
   ],
   landing: [
     ex('c_ul_l1','Lat Hang Stretch','45s',1,'Hang from pullup bar, completely relaxed.',true,'timed'),
-    ex('c_ul_l2','Thoracic Rotation (seated)','60s/side',1,'Seated, cross arms on chest. Rotate slowly through mid-back only.',true,'timed'),
+    ex('c_ul_l2','Thoracic Rotation (seated)','60s/side',1,'Seated, cross arms on chest. Rotate slowly through mid-back only.',true,'timedtimed_bilateral'),
     ex('c_ul_l3','Diaphragmatic Breathing','10 breaths',1,'Inhale 4, hold 2, exhale 6. CNS down-regulation protocol.',false,'reps_only'),
   ],
 };
@@ -206,20 +206,20 @@ WORKOUTS.comm['Power / Plyo'] = {
   taxi: [
     ex('c_pp_t1','Jump Rope / Ankle Bouncing','3 min',1,'Moderate pace. Warms Achilles and prepares the elastic system.',true,'timed'),
     ex('c_pp_t2','Light Squat Jumps','2×5',2,'Bodyweight only. Focus on arm swing mechanics and soft landing.',false,'reps_only'),
-    ex('c_pp_t3','Hip Flexor Lunge Stretch','60s/side',1,'Kneeling lunge, hands overhead, lean forward.',true,'timed'),
+    ex('c_pp_t3','Hip Flexor Lunge Stretch','60s/side',1,'Kneeling lunge, hands overhead, lean forward.',true,'timedtimed_bilateral'),
   ],
   takeoff: [
-    ex('c_pp_to1','Box Jump','5×3',5,'FULL 3-minute rest between sets. Every rep is maximum effort.',false,'reps_only'),
+    ex('c_pp_to1','Box Jump','5×3',5,'FULL 3-minute rest between sets. Every rep is maximum effort.',false,'reps_height'),
     ex('c_pp_to2','Trap Bar Deadlift','5×3',5,'Heavy and FAST. The concentric must be explosive.'),
   ],
   enroute: [
-    ex('c_pp_er1','Broad Jump','5×3',5,'Horizontal power transfers to vertical. Max effort.',false,'reps_only'),
+    ex('c_pp_er1','Broad Jump','5×3',5,'Horizontal power transfers to vertical. Max effort.',false,'reps_distance'),
     ex('c_pp_er2','Lunge (Walking)','3×10/leg',3,'Light-moderate. Hip flexor strength critical for takeoff mechanics.',false,'reps_only'),
     ex('c_pp_er3','Sprint 40yd','6 reps',6,'Full speed. Walk back. Log time or distance in the notes.',false,'reps_only'),
     ex('c_pp_er4','Ankle Hop','3×20',3,'Minimal knee bend. Fast and springy.',false,'reps_only'),
   ],
   landing: [
-    ex('c_pp_l1','Achilles / Calf Stretch','90s/side',1,'Step on step edge, drop heel slowly.',true,'timed'),
+    ex('c_pp_l1','Achilles / Calf Stretch','90s/side',1,'Step on step edge, drop heel slowly.',true,'timedtimed_bilateral'),
     ex('c_pp_l2','Slow Pogo Hops (25% effort)','30s',1,'Gentle bouncing — minimal effort.',true,'timed'),
     ex('c_pp_l3','Non-Sleep Deep Rest (NSDR)','5 min',1,'Lie flat. Eyes closed. Breathe slowly. Use the NSDR timer below — it will chime at 5 minutes and record your session automatically.',true,'nsdr'),
   ],
@@ -250,7 +250,7 @@ WORKOUTS.comm['Longevity'] = {
   taxi: [
     ex('c_lg_t1','Cat-Cow','2×10',2,'Slow spinal articulation. Inhale on extension, exhale on flexion.',false,'reps_only'),
     ex('c_lg_t2','Dead Bug','2×8/side',2,'Lie on back. Extend opposite arm/leg slowly.',false,'reps_only'),
-    ex('c_lg_t3','Hip 90/90','60s/side',1,'Slow rotation between internal and external hip position.',true,'timed'),
+    ex('c_lg_t3','Hip 90/90','60s/side',1,'Slow rotation between internal and external hip position.',true,'timedtimed_bilateral'),
   ],
   takeoff: [
     ex('c_lg_to1','Kettlebell Goblet Squat','3×10',3,'Moderate weight. Full depth. Most joint-friendly lower body compound.'),
@@ -263,7 +263,7 @@ WORKOUTS.comm['Longevity'] = {
     ex('c_lg_er4','Split Squat','3×10/leg',3,'Both feet on floor. Controlled descent.',false,'reps_only'),
   ],
   landing: [
-    ex('c_lg_l1','Hip 90/90 Rotation Drill','90s/side',1,'Your most important mobility work as a pilot.',true,'timed'),
+    ex('c_lg_l1','Hip 90/90 Rotation Drill','90s/side',1,'Your most important mobility work as a pilot.',true,'timedtimed_bilateral'),
     ex('c_lg_l2','Neck Mobility Protocol','2×8/direction',1,'Forward, back, rotation each side, lateral flexion.',false,'reps_only'),
     ex('c_lg_l3','Zone 2 Walk','10 min',1,'Brisk walk. Conversational pace.',true,'timed'),
   ],
@@ -333,8 +333,8 @@ WORKOUTS.hotel['Upper Pull'] = {
 WORKOUTS.hotel['Power / Plyo'] = {
   taxi: WORKOUTS.comm['Power / Plyo'].taxi,
   takeoff: [
-    ex('h_pp_to1','Bench/Box Jump','5×3',5,'Highest stable surface. Max effort.',false,'reps_only'),
-    ex('h_pp_to2','Broad Jump','5×3',5,'Max horizontal distance.',false,'reps_only'),
+    ex('h_pp_to1','Bench/Box Jump','5×3',5,'Highest stable surface. Max effort.',false,'reps_height'),
+    ex('h_pp_to2','Broad Jump','5×3',5,'Max horizontal distance.',false,'reps_distance'),
   ],
   enroute: [
     ex('h_pp_er1','DB Jump Squat','4×5',4,'Light DBs. Explosive concentric.'),
@@ -421,8 +421,8 @@ WORKOUTS.room['Upper Pull'] = {
 WORKOUTS.room['Power / Plyo'] = {
   taxi: WORKOUTS.comm['Power / Plyo'].taxi,
   takeoff: [
-    ex('r_pp_to1','Bed/Chair Jump','5×3',5,'Any stable surface. Max jump every rep.',false,'reps_only'),
-    ex('r_pp_to2','Broad Jump','5×3',5,'Hallway. Max effort.',false,'reps_only'),
+    ex('r_pp_to1','Bed/Chair Jump','5×3',5,'Any stable surface. Max jump every rep.',false,'reps_height'),
+    ex('r_pp_to2','Broad Jump','5×3',5,'Hallway. Max effort.',false,'reps_distance'),
   ],
   enroute: [
     ex('r_pp_er1','Squat Jump','4×5',4,'Bodyweight. Explode every rep.',false,'reps_only'),
@@ -1096,7 +1096,7 @@ function persistTimerState() {
   try {
     localStorage.setItem(TIMER_STATE_KEY, JSON.stringify({
       restTimer: { active: ST.restTimer.active, exId: ST.restTimer.exId, endTs: ST.restTimer.endTs, total: ST.restTimer.total },
-      stopwatch: { active: ST.stopwatch.active, exId: ST.stopwatch.exId, startTs: ST.stopwatch.startTs },
+      stopwatch: { active: ST.stopwatch.active, exId: ST.stopwatch.exId, side: ST.stopwatch.side, startTs: ST.stopwatch.startTs },
       nsdrTimer: { active: ST.nsdrTimer.active, exId: ST.nsdrTimer.exId, startTs: ST.nsdrTimer.startTs, chimed: ST.nsdrTimer.chimed },
     }));
   } catch(e) {}
@@ -1115,8 +1115,8 @@ function restoreTimerState() {
       }
     }
     if (saved.stopwatch?.active) {
-      ST.stopwatch = { active: true, seconds: Math.round((Date.now()-saved.stopwatch.startTs)/1000), exId: saved.stopwatch.exId, interval: null, startTs: saved.stopwatch.startTs };
-      ST.stopwatch.interval = setInterval(() => tickStopwatch(saved.stopwatch.exId), 1000);
+      ST.stopwatch = { active: true, seconds: Math.round((Date.now()-saved.stopwatch.startTs)/1000), exId: saved.stopwatch.exId, side: saved.stopwatch.side||null, interval: null, startTs: saved.stopwatch.startTs };
+      ST.stopwatch.interval = setInterval(() => tickStopwatch(saved.stopwatch.exId, saved.stopwatch.side||null), 1000);
     }
     if (saved.nsdrTimer?.active) {
       ST.nsdrTimer = { active: true, seconds: Math.round((Date.now()-saved.nsdrTimer.startTs)/1000), interval: null, chimed: saved.nsdrTimer.chimed, exId: saved.nsdrTimer.exId, startTs: saved.nsdrTimer.startTs };
@@ -1131,7 +1131,7 @@ function restoreTimerState() {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   if (ST.restTimer.active) tickRestTimer(ST.restTimer.exId);
-  if (ST.stopwatch.active) tickStopwatch(ST.stopwatch.exId);
+  if (ST.stopwatch.active) tickStopwatch(ST.stopwatch.exId, ST.stopwatch.side||null);
   if (ST.nsdrTimer.active) tickNSDR(ST.nsdrTimer.exId);
   if (ST.tab === 'flight') renderFlight(document.getElementById('mainPage'));
 });
@@ -1463,8 +1463,14 @@ function engageWorkout() {
   allEx.forEach(exItem => {
     if (exItem.inputType === 'nsdr') {
       ST.sets[exItem.id] = [{ seconds: '' }];
+    } else if (exItem.inputType === 'timed_bilateral') {
+      ST.sets[exItem.id] = [{ seconds_left: '', seconds_right: '' }];
     } else if (exItem.timed) {
       ST.sets[exItem.id] = [{ seconds: '' }];
+    } else if (exItem.inputType === 'reps_height') {
+      ST.sets[exItem.id] = Array.from({ length: exItem.sets }, () => ({ reps: '', height: '' }));
+    } else if (exItem.inputType === 'reps_distance') {
+      ST.sets[exItem.id] = Array.from({ length: exItem.sets }, () => ({ reps: '', distance: '' }));
     } else if (exItem.inputType === 'reps_only') {
       ST.sets[exItem.id] = Array.from({ length: exItem.sets }, () => ({ reps: '' }));
     } else {
@@ -1501,6 +1507,19 @@ function lastLoggedReps(exId) {
   }
   const ls = ST.lastSession?.sets?.[exId];
   if (ls) { const r = ls.map(s=>parseInt(s.reps)||0).filter(r=>r>0); if(r.length) return Math.max(...r); }
+  return null;
+}
+// Generic best-value lookup for non-weight numeric fields (box height, broad jump distance)
+function lastLoggedMaxField(exId, field) {
+  const all = ST.sessionCache || [];
+  for (let i = all.length-1; i >= 0; i--) {
+    const sets = all[i].sets?.[exId];
+    if (!sets) continue;
+    const vals = sets.map(s => parseFloat(s[field])||0).filter(v => v > 0);
+    if (vals.length) return Math.max(...vals);
+  }
+  const ls = ST.lastSession?.sets?.[exId];
+  if (ls) { const v = ls.map(s=>parseFloat(s[field])||0).filter(v=>v>0); if(v.length) return Math.max(...v); }
   return null;
 }
 function suggestNextWeight(exId, exName, phaseKey) {
@@ -1588,7 +1607,7 @@ const ALTERNATES = {
     {name:'Inverted Row',       target:'3×12',     note:'Bodyweight row under a table or bar.',inputType:'reps_only'},
   ],
   'Box Jump': [
-    {name:'Broad Jump',         target:'5×3',note:'Horizontal power. Same explosive hip extension.',inputType:'reps_only'},
+    {name:'Broad Jump',         target:'5×3',note:'Horizontal power. Same explosive hip extension.',inputType:'reps_distance'},
     {name:'Squat Jump',         target:'4×5',note:'No box needed. Same power demand.',inputType:'reps_only'},
     {name:'DB Jump Squat',      target:'4×5',note:'Light DBs add load without a box.'},
   ],
@@ -1742,7 +1761,7 @@ function renderFlight(p) {
   const allEx = [...wk.taxi, ...wk.takeoff, ...wk.enroute, ...wk.landing];
   const done = allEx.filter(exItem => {
     const s = ST.sets[exItem.id];
-    return s && s.some(x => x.reps || x.weight || x.seconds);
+    return s && s.some(x => x.reps || x.weight || x.seconds || x.height || x.distance || x.seconds_left || x.seconds_right);
   }).length;
   const pct = Math.round(done / Math.max(allEx.length,1) * 100);
 
@@ -1779,7 +1798,7 @@ function renderFlight(p) {
 function buildExCard(exItem, phaseKey) {
   const isOpen = !!ST.expanded[exItem.id];
   const sets = ST.sets[exItem.id] || [];
-  const hasData = sets.some(s => s.reps || s.weight || s.seconds);
+  const hasData = sets.some(s => s.reps || s.weight || s.seconds || s.height || s.distance || s.seconds_left || s.seconds_right);
   const parts = [];
 
   parts.push('<div class="ex-card'+(exItem.custom?' custom-ex':'')+'">');
@@ -1789,7 +1808,7 @@ function buildExCard(exItem, phaseKey) {
     parts.push('<div class="ex-body"><p class="ex-note">'+exItem.note+'</p>');
 
     // Progressive overload banner — only for weighted exercises
-    if (!exItem.timed && exItem.inputType !== 'reps_only' && exItem.inputType !== 'nsdr' && !exItem.custom) {
+    if (!exItem.timed && exItem.inputType !== 'reps_only' && exItem.inputType !== 'reps_height' && exItem.inputType !== 'reps_distance' && exItem.inputType !== 'nsdr' && !exItem.custom) {
       const lastW = lastLoggedMax(exItem.id);
       const lastR = lastLoggedReps(exItem.id);
       const suggested = suggestNextWeight(exItem.id, exItem.name, phaseKey);
@@ -1805,8 +1824,39 @@ function buildExCard(exItem, phaseKey) {
       }
     }
 
+    if (exItem.inputType === 'reps_height' || exItem.inputType === 'reps_distance') {
+      const field = exItem.inputType === 'reps_height' ? 'height' : 'distance';
+      const label = exItem.inputType === 'reps_height' ? 'box height' : 'distance';
+      const lastBest = lastLoggedMaxField(exItem.id, field);
+      if (lastBest !== null) {
+        parts.push('<div style="background:rgba(201,168,76,0.1);border:1px solid rgba(201,168,76,0.3);border-radius:8px;padding:10px 12px;margin-bottom:12px">');
+        parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin-bottom:4px">PERSONAL BEST</div>');
+        parts.push('<span style="font-size:12px">Best '+label+': <strong style="color:var(--gold)">'+lastBest+' in</strong></span>');
+        parts.push('</div>');
+      } else {
+        parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px;font-style:italic">First time logging — record your '+label+' in inches to start tracking progress.</div>');
+      }
+    }
+
     if (exItem.inputType === 'nsdr') {
       parts.push(buildNSDRWidget(exItem.id, sets[0]?.seconds||''));
+    } else if (exItem.inputType === 'timed_bilateral') {
+      const valL = sets[0]?.seconds_left || '';
+      const valR = sets[0]?.seconds_right || '';
+      parts.push('<div style="display:flex;gap:8px">');
+      parts.push('<div class="timed-box" style="flex:1" id="tb_'+exItem.id+'_left">');
+      parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">LEFT SIDE</div>');
+      parts.push('<input class="timed-inp" type="number" inputmode="numeric" placeholder="0" value="'+valL+'" oninput="ST.sets[\''+exItem.id+'\'][0].seconds_left=this.value;persistWorkoutState()">');
+      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">seconds</div>');
+      parts.push(buildStopwatchWidget(exItem.id, 'left'));
+      parts.push('</div>');
+      parts.push('<div class="timed-box" style="flex:1" id="tb_'+exItem.id+'_right">');
+      parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">RIGHT SIDE</div>');
+      parts.push('<input class="timed-inp" type="number" inputmode="numeric" placeholder="0" value="'+valR+'" oninput="ST.sets[\''+exItem.id+'\'][0].seconds_right=this.value;persistWorkoutState()">');
+      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">seconds</div>');
+      parts.push(buildStopwatchWidget(exItem.id, 'right'));
+      parts.push('</div>');
+      parts.push('</div>');
     } else if (exItem.timed) {
       const val = sets[0]?.seconds || '';
       parts.push('<div class="timed-box '+(val?'ok':'')+'" id="tb_'+exItem.id+'">');
@@ -1815,6 +1865,30 @@ function buildExCard(exItem, phaseKey) {
       parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">seconds</div>');
       parts.push('</div>');
       parts.push(buildStopwatchWidget(exItem.id));
+    } else if (exItem.inputType === 'reps_height') {
+      parts.push('<div class="sets-scroll">');
+      sets.forEach((s,i) => {
+        parts.push('<div class="set-tile '+(s.reps||s.height?'ok':'')+'" id="st_'+exItem.id+'_'+i+'"><div class="set-lbl">SET '+(i+1)+'</div>');
+        parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value||ST.sets[\''+exItem.id+'\']['+i+'].height?\' ok\':\'\');persistWorkoutState()">');
+        parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="Height" value="'+(s.height||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].height=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState()">');
+        parts.push('<div class="set-hint">reps / height (in)</div></div>');
+      });
+      parts.push('</div><div class="swipe-hint">← swipe for all sets</div>');
+      if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
+        parts.push(buildRestTimerWidget(exItem.id, phaseKey));
+      }
+    } else if (exItem.inputType === 'reps_distance') {
+      parts.push('<div class="sets-scroll">');
+      sets.forEach((s,i) => {
+        parts.push('<div class="set-tile '+(s.reps||s.distance?'ok':'')+'" id="st_'+exItem.id+'_'+i+'"><div class="set-lbl">SET '+(i+1)+'</div>');
+        parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value||ST.sets[\''+exItem.id+'\']['+i+'].distance?\' ok\':\'\');persistWorkoutState()">');
+        parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="Distance" value="'+(s.distance||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].distance=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState()">');
+        parts.push('<div class="set-hint">reps / distance (in)</div></div>');
+      });
+      parts.push('</div><div class="swipe-hint">← swipe for all sets</div>');
+      if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
+        parts.push(buildRestTimerWidget(exItem.id, phaseKey));
+      }
     } else if (exItem.inputType === 'reps_only') {
       parts.push('<div class="sets-scroll">');
       sets.forEach((s,i) => {
@@ -1919,16 +1993,17 @@ function afterSetLogged(exId, phaseKey) {
 }
 
 // ─── STOPWATCH (auto-fills timed exercise seconds) ───────────────────────────
-function buildStopwatchWidget(exId) {
-  const isActive = ST.stopwatch.active && ST.stopwatch.exId === exId;
+function buildStopwatchWidget(exId, side) {
+  const isActive = ST.stopwatch.active && ST.stopwatch.exId === exId && (ST.stopwatch.side||null) === (side||null);
+  const domId = side ? exId+'_'+side : exId;
   const parts = [];
-  parts.push('<div class="timed-box" style="margin-top:8px" id="sw_'+exId+'">');
+  parts.push('<div class="timed-box" style="margin-top:8px" id="sw_'+domId+'">');
   parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">STOPWATCH</div>');
-  parts.push('<div class="stopwatch-display" id="sw_disp_'+exId+'">'+formatStopwatch(isActive?ST.stopwatch.seconds:0)+'</div>');
+  parts.push('<div class="stopwatch-display" id="sw_disp_'+domId+'">'+formatStopwatch(isActive?ST.stopwatch.seconds:0)+'</div>');
   if (!isActive) {
-    parts.push('<button class="stopwatch-btn btn-blue" onclick="startStopwatch(\''+exId+'\')">START</button>');
+    parts.push('<button class="stopwatch-btn btn-blue" onclick="startStopwatch(\''+exId+'\','+(side?"'"+side+"'":'null')+')">START</button>');
   } else {
-    parts.push('<button class="stopwatch-btn btn-green" onclick="stopStopwatch(\''+exId+'\')">STOP &amp; FILL</button>');
+    parts.push('<button class="stopwatch-btn btn-green" onclick="stopStopwatch(\''+exId+'\','+(side?"'"+side+"'":'null')+')">STOP &amp; FILL</button>');
   }
   parts.push('</div>');
   return parts.join('');
@@ -1937,27 +2012,32 @@ function formatStopwatch(sec) {
   const m = Math.floor(sec/60), s = sec%60;
   return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
 }
-function startStopwatch(exId) {
+function startStopwatch(exId, side) {
   if (ST.stopwatch.interval) clearInterval(ST.stopwatch.interval);
-  ST.stopwatch = { active: true, seconds: 0, exId, interval: null, startTs: Date.now() };
+  ST.stopwatch = { active: true, seconds: 0, exId, side: side||null, interval: null, startTs: Date.now() };
   persistTimerState();
   renderFlight(document.getElementById('mainPage'));
-  ST.stopwatch.interval = setInterval(() => tickStopwatch(exId), 1000);
+  ST.stopwatch.interval = setInterval(() => tickStopwatch(exId, side||null), 1000);
 }
-function tickStopwatch(exId) {
-  if (!ST.stopwatch.active || ST.stopwatch.exId !== exId) return;
+function tickStopwatch(exId, side) {
+  if (!ST.stopwatch.active || ST.stopwatch.exId !== exId || (ST.stopwatch.side||null) !== (side||null)) return;
   ST.stopwatch.seconds = Math.round((Date.now() - ST.stopwatch.startTs)/1000);
-  const el = document.getElementById('sw_disp_'+exId);
+  const domId = side ? exId+'_'+side : exId;
+  const el = document.getElementById('sw_disp_'+domId);
   if (el) el.textContent = formatStopwatch(ST.stopwatch.seconds);
 }
-function stopStopwatch(exId) {
+function stopStopwatch(exId, side) {
   if (ST.stopwatch.interval) clearInterval(ST.stopwatch.interval);
   const total = ST.stopwatch.seconds;
   ST.stopwatch.active = false;
-  if (ST.sets[exId]) ST.sets[exId][0].seconds = String(total);
+  if (ST.sets[exId]) {
+    if (side === 'left') ST.sets[exId][0].seconds_left = String(total);
+    else if (side === 'right') ST.sets[exId][0].seconds_right = String(total);
+    else ST.sets[exId][0].seconds = String(total);
+  }
   persistTimerState();
   persistWorkoutState();
-  showToast('⏱ Recorded '+total+' seconds.');
+  showToast('⏱ Recorded '+total+' seconds'+(side?' ('+side+' side)':'')+'.');
   renderFlight(document.getElementById('mainPage'));
 }
 
@@ -2144,7 +2224,7 @@ function buildWorkoutSummary(session, allExDefs, weeklySessions, bodyWeightLb) {
 
   exIds.forEach(id => {
     const setArr = sets[id];
-    const loggedSets = setArr.filter(s => s.reps || s.weight || s.seconds);
+    const loggedSets = setArr.filter(s => s.reps || s.weight || s.seconds || s.height || s.distance || s.seconds_left || s.seconds_right);
     if (loggedSets.length) completedExCount++;
     loggedSets.forEach(s => {
       totalSets++;
@@ -2156,20 +2236,27 @@ function buildWorkoutSummary(session, allExDefs, weeklySessions, bodyWeightLb) {
   const totalPlanned = allExDefs.length;
   const completionPct = totalPlanned ? Math.round(completedExCount/totalPlanned*100) : 0;
 
+  const PR_FIELDS = [
+    { field: 'weight', unit: 'lb' },
+    { field: 'height', unit: 'in' },
+    { field: 'distance', unit: 'in' },
+  ];
   exIds.forEach(id => {
-    const todaySets = sets[id].filter(s => s.weight);
-    if (!todaySets.length) return;
-    const todayMax = Math.max(...todaySets.map(s => parseFloat(s.weight)||0));
-    let priorMax = 0;
-    weeklySessions.forEach(s => {
-      if (s === session) return;
-      const priorSets = (s.sets?.[id]||[]).filter(x => x.weight);
-      priorSets.forEach(x => { priorMax = Math.max(priorMax, parseFloat(x.weight)||0); });
+    PR_FIELDS.forEach(({field, unit}) => {
+      const todaySets = sets[id].filter(s => s[field]);
+      if (!todaySets.length) return;
+      const todayMax = Math.max(...todaySets.map(s => parseFloat(s[field])||0));
+      let priorMax = 0;
+      weeklySessions.forEach(s => {
+        if (s === session) return;
+        const priorSets = (s.sets?.[id]||[]).filter(x => x[field]);
+        priorSets.forEach(x => { priorMax = Math.max(priorMax, parseFloat(x[field])||0); });
+      });
+      if (todayMax > priorMax && priorMax > 0) {
+        const exDef = allExDefs.find(e => e.id === id);
+        prHits.push({ name: exDef?.name || id, weight: todayMax, unit });
+      }
     });
-    if (todayMax > priorMax && priorMax > 0) {
-      const exDef = allExDefs.find(e => e.id === id);
-      prHits.push({ name: exDef?.name || id, weight: todayMax });
-    }
   });
 
   const sessionsThisWeek = weeklySessions.filter(s => {
@@ -2179,7 +2266,7 @@ function buildWorkoutSummary(session, allExDefs, weeklySessions, bodyWeightLb) {
   const targetDays = parseInt((FREQUENCY_GUIDE[session.level||'intermediate'].days||'3').split('-')[0]);
 
   const landingIds = (session.workoutSnapshot?.landing || []).map(e => e.id);
-  const landingLogged = landingIds.length ? landingIds.some(id => (sets[id]||[]).some(s => s.reps||s.weight||s.seconds)) : null;
+  const landingLogged = landingIds.length ? landingIds.some(id => (sets[id]||[]).some(s => s.reps||s.weight||s.seconds||s.seconds_left||s.seconds_right)) : null;
 
   const estCalories = estimateCalories(session.workoutSnapshot || {taxi:[],takeoff:[],enroute:[],landing:[]}, bodyWeightLb, session.durationMinutes);
 
@@ -2204,7 +2291,7 @@ function buildDebriefMessages(summary) {
 
   if (summary.prHits.length) {
     summary.prHits.forEach(pr => {
-      msgs.push({ type:'ok', icon:'🏆', text:'New PR: '+pr.name+' at '+pr.weight+' lb — nice work.' });
+      msgs.push({ type:'ok', icon:'🏆', text:'New PR: '+pr.name+' at '+pr.weight+' '+(pr.unit||'lb')+' — nice work.' });
     });
   }
 
@@ -2227,7 +2314,7 @@ async function setTheChocks() {
   const wk = ST.workout;
   if (!wk) return;
   const allEx = [...wk.taxi,...wk.takeoff,...wk.enroute,...wk.landing];
-  const logged = allEx.filter(exItem => ST.sets[exItem.id]?.some(s => s.reps||s.weight||s.seconds));
+  const logged = allEx.filter(exItem => ST.sets[exItem.id]?.some(s => s.reps||s.weight||s.seconds||s.height||s.distance||s.seconds_left||s.seconds_right));
   if (logged.length === 0) { showToast('Log at least one exercise before setting the chocks.'); return; }
 
   const startedAt = ST.workoutStartedAt || Date.now();
@@ -2610,7 +2697,7 @@ async function exportCSV() {
   });
 
   // Build CSV: one row per exercise set
-  const rows = [['Date','Day','Muscle Group','Environment','Goal','Fatigue','Level','Duration (min)','Phase','Exercise','Set #','Reps','Weight (lb)','Seconds','Body Weight (lb)','Waist (in)','Systolic BP','Diastolic BP','Fasting Glucose (mg/dL)']];
+  const rows = [['Date','Day','Muscle Group','Environment','Goal','Fatigue','Level','Duration (min)','Phase','Exercise','Set #','Reps','Weight (lb)','Seconds','Height (in)','Distance (in)','Seconds Left','Seconds Right','Body Weight (lb)','Waist (in)','Systolic BP','Diastolic BP','Fasting Glucose (mg/dL)']];
 
   sessions.forEach(s => {
     const date = new Date(s.date);
@@ -2625,13 +2712,13 @@ async function exportCSV() {
       (wk[phase]||[]).forEach(exItem => {
         const exSets = sets[exItem.id] || [];
         exSets.forEach((set, i) => {
-          if (!set.reps && !set.weight && !set.seconds) return;
+          if (!set.reps && !set.weight && !set.seconds && !set.height && !set.distance && !set.seconds_left && !set.seconds_right) return;
           rows.push([
             dateStr, dayStr,
             s.muscle_group||'', s.env||'', s.goal||'', s.fatigue||'', s.level||'',
             s.durationMinutes||'',
             phase, exItem.name||'', i+1,
-            set.reps||'', set.weight||'', set.seconds||'',
+            set.reps||'', set.weight||'', set.seconds||'', set.height||'', set.distance||'', set.seconds_left||'', set.seconds_right||'',
             bio.weight_lb||'', bio.waist_in||'', bio.systolic_bp||'',
             bio.diastolic_bp||'', bio.fasting_glucose||'',
           ]);
@@ -2642,7 +2729,7 @@ async function exportCSV() {
     // If no exercise breakdown (old sessions), add summary row
     if (!hasRows) {
       rows.push([dateStr, dayStr, s.muscle_group||'', s.env||'', s.goal||'', s.fatigue||'', s.level||'',
-        s.durationMinutes||'', '', '(session summary)', '', '', '', '',
+        s.durationMinutes||'', '', '(session summary)', '', '', '', '', '', '', '', '',
         bio.weight_lb||'', bio.waist_in||'', bio.systolic_bp||'', bio.diastolic_bp||'', bio.fasting_glucose||'']);
     }
   });

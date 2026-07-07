@@ -1070,6 +1070,61 @@ function showBigToast(msg, type) {
 function showToast(msg) { showBigToast(msg, 'info'); }
 
 // ─── INFO MODAL (generic, used for biometrics + CNS explainer) ──────────────
+// ─── AI ANALYSIS COMPANION PROMPT ────────────────────────────────────────────
+// CSVs can't carry an executable "system prompt" — ChatGPT/Gemini just see it
+// as data. This is the copy-paste prompt users attach alongside the CSV upload
+// so the receiving AI knows how to read our specific column schema.
+const AI_ANALYSIS_PROMPT = `You are analyzing my personal workout and biometric data, exported from Flight Crew Fitness, a training app I use. Don't give generic fitness platitudes — look at the actual numbers and tell me what's really happening.
+
+ABOUT THE CSV
+Each row is one logged set:
+- Date, Day: when the session happened
+- Muscle Group, Environment, Goal, Fatigue, Level: session context (Fatigue is my self-reported readiness that day: go / marginal / nogo)
+- Duration (min): total session length
+- Phase: Taxi (warmup) / Takeoff (heavy compound lifts) / En Route (accessory work) / Landing (cooldown/stretching)
+- Exercise, Set #, Reps, Weight (lb): standard strength sets
+- Seconds: held-stretch duration (mostly Landing phase)
+- Height (in): box jump height, Distance (in): broad jump distance
+- Seconds Left / Seconds Right: independently-timed left/right stretches
+- Body Weight (lb), Waist (in), Systolic/Diastolic BP, Fasting Glucose (mg/dL): my daily biometrics, repeated on every row logged that day
+- Rows marked "(session summary)" mean I logged a session without a full exercise breakdown — treat those as attendance only, not performance data
+
+WHAT I WANT FROM YOU
+1. Trend analysis — is my strength on key lifts trending up, flat, or down over the logged period? Call out any plateaus by name.
+2. Consistency — how many sessions per week am I actually completing, and are there concerning gaps?
+3. Biometric trends — track body weight, waist, blood pressure, and fasting glucose over time. Flag anything moving the wrong direction or outside normal ranges.
+4. Cross-reference — connect biometric shifts to training patterns (e.g. did BP or glucose move after a change in training volume or a gap in sessions?).
+5. Direct recommendations — 3-5 concrete bullet points on what to change next: which lifts need progression, what's stalling, what to prioritize.
+
+Reference actual numbers and dates from the data, not general advice. If something in the biometric data looks concerning, say so plainly rather than softening it.
+
+If I'm also tracking any supplements, medications, or protocols alongside this (e.g. hormone therapy, GLP-1/GIP medications, peptides), I'll mention them below this prompt — factor their expected physiological effects into the analysis if I do.`;
+
+function showAIPromptModal() {
+  const root = document.getElementById('modalRoot');
+  const escaped = AI_ANALYSIS_PROMPT.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  root.innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()">' +
+    '<div class="modal-sheet">' +
+    '<div class="modal-handle"></div>' +
+    '<div class="modal-title">AI Analysis Prompt</div>' +
+    '<div class="modal-body" style="margin-bottom:12px">Copy this, paste it into ChatGPT or Gemini, upload the exported CSV in the same message, and send.</div>' +
+    '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:11px;line-height:1.6;color:var(--text);white-space:pre-wrap;max-height:40vh;overflow-y:auto;margin-bottom:12px">' + escaped + '</div>' +
+    '<button class="btn btn-gold" onclick="copyAIPrompt()">📋 Copy Prompt</button>' +
+    '<button class="btn btn-outline mt8" onclick="closeModal()">CLOSE</button>' +
+    '</div></div>';
+}
+
+function copyAIPrompt() {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(AI_ANALYSIS_PROMPT)
+      .then(() => showToast('Prompt copied — paste it into ChatGPT or Gemini.'))
+      .catch(() => showToast('Copy failed — select and copy the text manually.'));
+  } else {
+    showToast('Copy not supported here — select and copy the text manually.');
+  }
+}
+
 function showInfoModal(title, text) {
   const root = document.getElementById('modalRoot');
   root.innerHTML =
@@ -3328,6 +3383,7 @@ function renderProfile(p) {
   parts.push('<div class="section-label" style="margin-top:0">EXPORT DATA</div>');
   parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Export all workout sessions and biometrics as a CSV — one row per set, with date context and biometric data joined by date. Optimized for AI analysis.</div>');
   parts.push('<button class="btn btn-outline" onclick="exportCSV()">📊 Export CSV for AI Analysis</button>');
+  parts.push('<button class="btn btn-outline mt8" onclick="showAIPromptModal()">📋 View & Copy AI Prompt</button>');
   parts.push('</div>');
 
   // Custom exercises

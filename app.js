@@ -1155,11 +1155,18 @@ async function submitFeedback() {
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer '+SB_ANON_KEY },
       body: JSON.stringify({ message, contact_email: email || null, app_version: FCF_VERSION }),
     });
-    const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error || 'Submission failed');
+    const rawText = await res.text();
+    let data = {};
+    try { data = JSON.parse(rawText); } catch(parseErr) { /* not JSON — fall through with raw text below */ }
+
+    if (!res.ok || data.error) {
+      const detail = data.error || data.message || rawText.slice(0,150) || 'no response body';
+      throw new Error('HTTP '+res.status+' — '+detail);
+    }
     closeModal();
     showBigToast('Feedback sent — thank you.', 'ok');
   } catch(e) {
+    console.warn('Feedback submission error:', e);
     showToast('Couldn\'t send feedback: '+e.message);
   }
 }

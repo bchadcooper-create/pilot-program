@@ -3242,34 +3242,6 @@ async function disconnectOura() {
 }
 
 // Test if the edge function is deployed and secrets are set
-async function testOuraEdgeFn() {
-  showBigToast('Testing edge function...', 'info');
-  try {
-    const res = await fetch(OURA_EDGE_FN, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer '+SB_ANON_KEY },
-      body: JSON.stringify({ action: 'exchange', code: 'test', redirect_uri: OURA_REDIRECT_URI }),
-    });
-    const data = await res.json();
-    // A proper response (even an error from Oura) means the function is deployed
-    if (data.error === 'invalid_grant' || data.error === 'invalid_code' || data.error_description) {
-      showBigToast('Edge function is live! Oura rejected the test code (expected). Ready to connect.', 'ok');
-    } else if (data.error === 'Oura credentials not configured in Edge Function secrets') {
-      showBigToast('Edge function deployed but secrets missing. Add OURA_CLIENT_ID and OURA_CLIENT_SECRET in Supabase dashboard.', 'warn');
-    } else if (data.access_token || data.error) {
-      showBigToast('Edge function is live and configured. Ready to connect.', 'ok');
-    } else {
-      showBigToast('Edge function responded: ' + JSON.stringify(data).slice(0,80), 'info');
-    }
-  } catch(e) {
-    if (e.message.includes('Failed to fetch') || e.message.includes('Load failed')) {
-      showBigToast('Cannot reach edge function. Deploy oura-auth via Supabase CLI first.', 'warn');
-    } else {
-      showBigToast('Edge function test: ' + e.message, 'warn');
-    }
-  }
-}
-
 // Legacy PAT sync — kept for any users with old tokens still working
 async function fetchOuraReadiness() {
   await syncOuraData();
@@ -3509,14 +3481,7 @@ function renderProfile(p) {
     parts.push('<button class="btn btn-outline mt8" onclick="importHistoricalOura(180)">📥 Import Last 6 Months</button>');
   } else {
     parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.65">Connect your Oura Ring to automatically set your Pilot Condition based on your daily readiness score. Readiness 70+ = GO, 60-69 = MARGINAL, below 60 = NO-GO. These bands match Oura\'s own Good/Fair/Pay Attention categories.</div>');
-    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5;background:var(--bg3);border-radius:8px;padding:10px">');
-    parts.push('<strong style="color:var(--text)">Setup required before connecting:</strong><br>');
-    parts.push('1. Deploy the <code style="color:var(--gold)">oura-auth</code> Edge Function (see edge function zip)<br>');
-    parts.push('2. In Supabase → Edge Functions → oura-auth → Secrets, add:<br>');
-    parts.push('&nbsp;&nbsp;<code style="color:var(--gold)">OURA_CLIENT_ID</code> and <code style="color:var(--gold)">OURA_CLIENT_SECRET</code>');
-    parts.push('</div>');
-    parts.push('<button class="btn btn-blue" onclick="testOuraEdgeFn()">Test Connection Setup</button>');
-    parts.push('<button class="btn btn-outline mt8" onclick="connectOura()">Connect Oura Ring →</button>');
+    parts.push('<button class="btn btn-outline" onclick="connectOura()">Connect Oura Ring →</button>');
   }
   parts.push('</div>');
 

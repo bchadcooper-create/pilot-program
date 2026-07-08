@@ -2797,6 +2797,18 @@ async function loadAndDrawCharts() {
     const key = 'c_'+id;
     if (ST.chartInst[key]) { try { ST.chartInst[key].destroy(); } catch(e){} }
     if (!labels.length) return; // nothing logged for this metric yet
+    // Adaptive density: with months of data, 4px dots merge into a solid blob
+    // on a phone screen. Shrink points (and slightly thin the line) as the
+    // series grows; ref lines set their own pointRadius:0 and are untouched.
+    const n = labels.length;
+    const pr = n > 90 ? 0 : n > 45 ? 1.5 : n > 21 ? 2.5 : 4;
+    const bw = n > 90 ? 2 : 2.5;
+    datasets.forEach(d => {
+      if (d.borderDash) return; // reference line — leave as-is
+      d.pointRadius = pr;
+      d.borderWidth = bw;
+      d.pointHitRadius = 8; // keep taps easy even when dots are tiny/hidden
+    });
     ST.chartInst[key] = new Chart(canvas.getContext('2d'), { type:'line', data:{labels,datasets}, options:{...OPTS, plugins:{legend:{display:!!legendOn,labels:{font:{size:9,family:'Share Tech Mono'},color:'#64748b'}}}} });
   }
   const refLine = (n,val,color) => ({ data:Array.from({length:n},()=>val), borderColor:color, borderDash:[4,3], pointRadius:0, fill:false });

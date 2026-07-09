@@ -1,6 +1,6 @@
 // Flight Crew Fitness — Service Worker
-// Version: 5.8
-const CACHE = 'fcf-v5-8';
+// Version: 5.8.1
+const CACHE = 'fcf-v5-8-1';
 const CORE = [
   '/pilot-program/',
   '/pilot-program/index.html',
@@ -11,7 +11,14 @@ const CORE = [
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE)
-      .then(c => Promise.allSettled(CORE.map(url => c.add(url))))
+      // cache:'reload' bypasses the HTTP cache — without it, a freshly
+      // installing SW can populate its new cache with a STALE app.js served
+      // from the browser/CDN HTTP cache (GitHub Pages max-age is 10 min).
+      .then(c => Promise.allSettled(CORE.map(url =>
+        fetch(new Request(url, { cache: 'reload' })).then(res => {
+          if (res.ok) return c.put(url, res);
+        })
+      )))
       .then(() => self.skipWaiting())
   );
 });

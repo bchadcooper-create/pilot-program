@@ -1366,7 +1366,11 @@ async function checkForAppUpdate() {
   showToast('Checking for updates…');
   try {
     await swRegistration.update();
-    showToast('You\'re on the latest version.');
+    if (swRegistration.installing || swRegistration.waiting) {
+      showToast('Update found — installing now…');
+    } else {
+      showToast('You\'re on the latest version ('+FCF_VERSION+' · '+FCF_BUILD+').');
+    }
   } catch(e) {
     showToast('Update check failed: '+e.message);
   }

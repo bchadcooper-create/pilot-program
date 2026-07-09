@@ -47,6 +47,9 @@ const ST = {
   env: 'comm',
   flightHrs: 0,
   flightHrsRaw: '',
+  sex: null,
+  heightIn: null,
+  lastWeight: null,
   flightHrsTouched: false,
   waterIn: 0,
   waterInRaw: '',
@@ -121,6 +124,30 @@ function hydroAdvice() {
 // Patches just the hydration display elements on every keystroke instead of
 // calling renderPage() (which was destroying/recreating the input element on
 // every character and dropping keyboard focus — the "glitchy" decimal entry bug).
+// Flight hours and water persist for the calendar day, then reset.
+const DAILY_INPUTS_KEY = 'fcf_daily_inputs';
+function persistDailyInputs() {
+  try {
+    localStorage.setItem(DAILY_INPUTS_KEY, JSON.stringify({
+      day: new Date().toDateString(),
+      flightHrs: ST.flightHrs, flightHrsRaw: ST.flightHrsRaw, flightHrsTouched: ST.flightHrsTouched,
+      waterIn: ST.waterIn, waterInRaw: ST.waterInRaw,
+    }));
+  } catch(e) {}
+}
+function restoreDailyInputs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(DAILY_INPUTS_KEY)||'null');
+    if (!saved) return;
+    if (saved.day !== new Date().toDateString()) { localStorage.removeItem(DAILY_INPUTS_KEY); return; }
+    ST.flightHrs = saved.flightHrs || 0;
+    ST.flightHrsRaw = saved.flightHrsRaw || '';
+    ST.flightHrsTouched = !!saved.flightHrsTouched;
+    ST.waterIn = saved.waterIn || 0;
+    ST.waterInRaw = saved.waterInRaw || '';
+  } catch(e) {}
+}
+
 function updateHydrationUI() {
   const hs = hydroStatus();
   const pct = hydroPct();
@@ -149,6 +176,7 @@ function updateHydrationUI() {
     : '<div class="alert alert-ok mt8"><div class="alert-icon">✅</div><div>Hydration nominal. Cleared for workout operations.</div></div>';
 
   persistWorkoutState();
+  persistDailyInputs();
 }
 
 const MUSCLE_GROUPS = ['Lower Body','Upper Push','Upper Pull','Power / Plyo','Full Body','Longevity','Cardio'];
@@ -1027,7 +1055,11 @@ async function bootApp() {
     ST.ouraAccessToken  = profile.ouraAccessToken || null;
     ST.ouraRefreshToken = profile.ouraRefreshToken || null;
     ST.ouraConnected    = !!profile.ouraConnected;
+    ST.sex        = profile.sex || null;
+    ST.heightIn   = profile.heightIn || null;
+    ST.lastWeight = profile.lastWeight || null;
   }
+  restoreDailyInputs();
   ST.lastSession = await dbGetLastSession();
   // Auto-select the recommended next mission profile so Preflight opens
   // pre-loaded with the right choice rather than always defaulting to Lower Body.
@@ -1493,12 +1525,19 @@ function scrollCalendarToToday() {
 
 // Non-timed/held exercises only — excludes stretches (timed holds) from the day summary.
 function isLoggableStrengthExercise(exItem) {
-  return !exItem.timed && exItem.inputType !== 'nsdr' && exItem.inputType !== 'timed_bilateral';
+  if (exItem.inputType === 'nsdr' || exItem.inputType === 'timed_bilateral') return false;
+  if ((exItem.name||'').toLowerCase().includes('stretch')) return false;
+  return true; // timed cardio (walking, treadmill, runs) now shows with minutes
 }
 
 function formatSetPerformance(exItem, sets) {
-  const loggedSets = sets.filter(s => s.reps || s.weight || s.height || s.distance);
+  const loggedSets = sets.filter(s => s.reps || s.weight || s.height || s.distance || s.seconds);
   if (!loggedSets.length) return null;
+  if (exItem.timed || exItem.inputType === 'timed') {
+    const totalSec = loggedSets.reduce((a,s) => a + (parseFloat(s.seconds)||0), 0);
+    if (totalSec <= 0) return null;
+    return (Math.round(totalSec/60*10)/10)+' min';
+  }
   if (exItem.inputType === 'reps_only') {
     const reps = loggedSets.map(s => s.reps).filter(Boolean);
     return loggedSets.length+'×'+(reps.length?Math.max(...reps.map(Number)):'—')+' reps';
@@ -1612,12 +1651,12 @@ function buildExerciseCatalog() {
 // Third element marks minute-display fields: shown/entered as minutes,
 // stored as seconds so existing data and the CSV export stay consistent.
 function edFieldsFor(exDef) {
-  if (exDef.inputType === 'timed_bilateral') return [['seconds_left','L min','min'],['seconds_right','R min','min']];
-  if (exDef.timed || exDef.inputType === 'timed' || exDef.inputType === 'nsdr') return [['seconds','Minutes','min']];
-  if (exDef.inputType === 'reps_only') return [['reps','Reps']];
-  if (exDef.inputType === 'reps_height') return [['reps','Reps'],['height','Height (in)']];
-  if (exDef.inputType === 'reps_distance') return [['reps','Reps'],['distance','Dist (in)']];
-  return [['reps','Reps'],['weight','Weight (lb)']];
+  if (exDef.inputType === 'timed_bilateral') return [['seconds_left','Left','min'],['seconds_right','Right','min']];
+  if (exDef.timed || exDef.inputType === 'timed' || exDef.inputType === 'nsdr') return [['seconds','Time','min']];
+  if (exDef.inputType === 'reps_only') return [['reps','Reps','reps']];
+  if (exDef.inputType === 'reps_height') return [['reps','Reps','reps'],['height','Height','in']];
+  if (exDef.inputType === 'reps_distance') return [['reps','Reps','reps'],['distance','Distance','in']];
+  return [['reps','Reps','reps'],['weight','Weight','lb']];
 }
 
 function emptySnapshot() { return { taxi:[], takeoff:[], enroute:[], landing:[] }; }
@@ -1686,7 +1725,9 @@ function renderSessionEditor() {
           ? (raw ? Math.round((parseFloat(raw)/60)*10)/10 : '')
           : (raw || '');
         const handler = unit === 'min' ? 'edSetValMin' : 'edSetVal';
-        parts.push('<input type="text" inputmode="decimal" placeholder="'+label+'" value="'+shown+'" style="flex:1;min-width:0;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:16px;color:var(--text)" oninput="'+handler+'(\''+exDef.id+'\','+i+',\''+field+'\',this.value)">');
+        parts.push('<div style="flex:1;min-width:0;display:flex;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:0 8px 0 0">');
+        parts.push('<input type="text" inputmode="decimal" placeholder="'+label+'" value="'+shown+'" style="flex:1;min-width:0;background:transparent;border:none;padding:8px;font-size:16px;color:var(--text);outline:none" oninput="'+handler+'(\''+exDef.id+'\','+i+',\''+field+'\',this.value)">');
+        parts.push('<span style="font-family:var(--mono);font-size:9px;color:var(--muted);flex-shrink:0">'+(unit||'')+'</span></div>');
       });
       parts.push('</div>');
     });
@@ -1946,6 +1987,30 @@ async function renderPreflight(p) {
 
   p.innerHTML = parts.join('');
   scrollCalendarToToday();
+}
+
+async function saveBodyMetrics() {
+  const sexEl = document.getElementById('bmSex');
+  const ftEl = document.getElementById('bmFt');
+  const inEl = document.getElementById('bmIn');
+  const ft = parseInt(ftEl?.value) || 0;
+  const inches = parseFloat(inEl?.value) || 0;
+  ST.sex = sexEl?.value || null;
+  ST.heightIn = (ft || inches) ? ft*12 + inches : null;
+  const profile = (await dbGetProfile()) || {};
+  profile.sex = ST.sex;
+  profile.heightIn = ST.heightIn;
+  await dbSetProfile(profile);
+  showToast('Body metrics saved.');
+  renderPage();
+}
+
+function bmiFrom(weightLb, heightIn) {
+  if (!weightLb || !heightIn) return null;
+  const bmi = 703 * weightLb / (heightIn * heightIn);
+  const cat = bmi < 18.5 ? 'Underweight' : bmi < 25 ? 'Normal' : bmi < 30 ? 'Overweight' : 'Obese';
+  const color = bmi < 18.5 ? 'var(--amber)' : bmi < 25 ? 'var(--green)' : bmi < 30 ? 'var(--amber)' : 'var(--red)';
+  return { value: Math.round(bmi*10)/10, cat, color };
 }
 
 async function saveGoalLevel() {
@@ -3014,6 +3079,7 @@ async function saveBio() {
   if (wt) {
     const profile = (await dbGetProfile()) || {};
     profile.lastWeight = wt;
+    ST.lastWeight = wt;
     await dbSetProfile(profile);
   }
   setTimeout(() => loadAndDrawCharts(), 100);
@@ -3755,6 +3821,30 @@ function renderProfile(p) {
   parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Invite a fellow pilot or crew member to try Flight Crew Fitness.</div>');
   parts.push('<button class="btn btn-outline" onclick="shareApp()">📤 Share Flight Crew Fitness</button>');
   parts.push('<button class="btn btn-outline mt8" onclick="showFeedbackModal()">💬 Send Feedback</button>');
+  parts.push('</div>');
+
+  // Body metrics (sex, height, BMI)
+  parts.push('<div class="card mb12">');
+  parts.push('<div class="section-label" style="margin-top:0">BODY METRICS</div>');
+  parts.push('<div class="field-row" style="margin-bottom:10px">');
+  parts.push('<div class="field" style="margin-bottom:0"><label>Sex</label><select id="bmSex">');
+  parts.push('<option value=""'+(!ST.sex?' selected':'')+'>—</option>');
+  parts.push('<option value="male"'+(ST.sex==='male'?' selected':'')+'>Male</option>');
+  parts.push('<option value="female"'+(ST.sex==='female'?' selected':'')+'>Female</option>');
+  parts.push('</select></div>');
+  const hFt = ST.heightIn ? Math.floor(ST.heightIn/12) : '';
+  const hIn = ST.heightIn ? Math.round((ST.heightIn%12)*10)/10 : '';
+  parts.push('<div class="field" style="margin-bottom:0"><label>Height (ft)</label><input id="bmFt" type="text" inputmode="numeric" placeholder="5" value="'+hFt+'"></div>');
+  parts.push('<div class="field" style="margin-bottom:0"><label>(in)</label><input id="bmIn" type="text" inputmode="decimal" placeholder="10" value="'+hIn+'"></div>');
+  parts.push('</div>');
+  const bmi = bmiFrom(ST.lastWeight, ST.heightIn);
+  if (bmi) {
+    parts.push('<div class="fb" style="margin-bottom:10px"><span style="font-size:13px">BMI (from last logged weight '+ST.lastWeight+' lb)</span>');
+    parts.push('<span style="font-family:var(--mono);font-size:16px;font-weight:700;color:'+bmi.color+'">'+bmi.value+' · '+bmi.cat.toUpperCase()+'</span></div>');
+  } else if (ST.heightIn) {
+    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Log a body weight in Preflight biometrics to see your BMI.</div>');
+  }
+  parts.push('<button class="btn btn-outline" onclick="saveBodyMetrics()">💾 Save Body Metrics</button>');
   parts.push('</div>');
 
   // Mission objective (goal)

@@ -318,6 +318,7 @@ WORKOUTS.comm['Cardio'] = {
   enroute: [
     ex('c_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace — speak in full sentences.',true,'timed'),
     ex('c_ca_er3','Walking','30-45 min',1,'Zone 1-2 steady pace. Great low-impact active recovery.',true,'timed'),
+    ex('c_ca_er4','Treadmill','30 min',1,'Any steady treadmill session — walk, incline, or run.',true,'timed'),
     ex('c_ca_er2','Step-Up','3×15/leg',3,'Active recovery strength.'),
   ],
   landing: [
@@ -410,6 +411,7 @@ WORKOUTS.hotel['Cardio'] = {
   enroute: [
     ex('h_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace.',true,'timed'),
     ex('h_ca_er3','Walking','30-45 min',1,'Zone 1-2 steady pace. Great low-impact active recovery.',true,'timed'),
+    ex('h_ca_er4','Treadmill','30 min',1,'Any steady treadmill session — walk, incline, or run.',true,'timed'),
     ex('h_ca_er2','Step-Up','3×15/leg',3,'Active recovery strength.'),
   ],
   landing: WORKOUTS.comm['Cardio'].landing,
@@ -1593,11 +1595,13 @@ function buildExerciseCatalog() {
   const seen = {};
   const catalog = [];
   Object.values(WORKOUTS).forEach(envW => {
-    ['taxi','takeoff','enroute','landing'].forEach(ph => {
-      (envW[ph]||[]).forEach(e => {
-        if (seen[e.name]) return;
-        seen[e.name] = true;
-        catalog.push({ id: e.id, name: e.name, target: e.target, sets: e.sets, note: e.note, timed: e.timed, inputType: e.inputType });
+    Object.values(envW).forEach(mgW => {
+      ['taxi','takeoff','enroute','landing'].forEach(ph => {
+        (mgW[ph]||[]).forEach(e => {
+          if (seen[e.name]) return;
+          seen[e.name] = true;
+          catalog.push({ id: e.id, name: e.name, target: e.target, sets: e.sets, note: e.note, timed: e.timed, inputType: e.inputType });
+        });
       });
     });
   });
@@ -1605,9 +1609,11 @@ function buildExerciseCatalog() {
 }
 
 // Which set fields an exercise uses, for rendering editable inputs.
+// Third element marks minute-display fields: shown/entered as minutes,
+// stored as seconds so existing data and the CSV export stay consistent.
 function edFieldsFor(exDef) {
-  if (exDef.inputType === 'timed_bilateral') return [['seconds_left','L sec'],['seconds_right','R sec']];
-  if (exDef.timed || exDef.inputType === 'timed' || exDef.inputType === 'nsdr') return [['seconds','Seconds']];
+  if (exDef.inputType === 'timed_bilateral') return [['seconds_left','L min','min'],['seconds_right','R min','min']];
+  if (exDef.timed || exDef.inputType === 'timed' || exDef.inputType === 'nsdr') return [['seconds','Minutes','min']];
   if (exDef.inputType === 'reps_only') return [['reps','Reps']];
   if (exDef.inputType === 'reps_height') return [['reps','Reps'],['height','Height (in)']];
   if (exDef.inputType === 'reps_distance') return [['reps','Reps'],['distance','Dist (in)']];
@@ -1674,8 +1680,13 @@ function renderSessionEditor() {
     sets.forEach((set, i) => {
       parts.push('<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">');
       parts.push('<span style="font-family:var(--mono);font-size:9px;color:var(--muted);flex:0 0 30px">SET '+(i+1)+'</span>');
-      fields.forEach(([field, label]) => {
-        parts.push('<input type="text" inputmode="decimal" placeholder="'+label+'" value="'+(set[field]||'')+'" style="flex:1;min-width:0;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:16px;color:var(--text)" oninput="edSetVal(\''+exDef.id+'\','+i+',\''+field+'\',this.value)">');
+      fields.forEach(([field, label, unit]) => {
+        const raw = set[field];
+        const shown = unit === 'min'
+          ? (raw ? Math.round((parseFloat(raw)/60)*10)/10 : '')
+          : (raw || '');
+        const handler = unit === 'min' ? 'edSetValMin' : 'edSetVal';
+        parts.push('<input type="text" inputmode="decimal" placeholder="'+label+'" value="'+shown+'" style="flex:1;min-width:0;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:16px;color:var(--text)" oninput="'+handler+'(\''+exDef.id+'\','+i+',\''+field+'\',this.value)">');
       });
       parts.push('</div>');
     });
@@ -1697,6 +1708,13 @@ function renderSessionEditor() {
 function edSetVal(exId, i, field, value) {
   const sets = ST.editSession.session.sets[exId];
   if (sets && sets[i]) sets[i][field] = value;
+}
+// Minute-displayed fields store seconds internally.
+function edSetValMin(exId, i, field, value) {
+  const sets = ST.editSession.session.sets[exId];
+  if (!sets || !sets[i]) return;
+  const mins = parseFloat(value);
+  sets[i][field] = (isNaN(mins) || mins <= 0) ? '' : String(Math.round(mins * 60));
 }
 function edAddSet(exId) {
   const s = ST.editSession.session;
@@ -1725,8 +1743,12 @@ function edFilterExercises(q) {
     parts.push('<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:13px" onclick="edAddCatalogExercise('+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+(e.target||'')+'</span></div>');
   });
   const qSafe = q.replace(/[<>'"]/g,'');
-  parts.push('<div style="padding:10px 12px;border:1px dashed var(--border);border-radius:8px;margin-bottom:4px;cursor:pointer;font-size:12px;color:var(--muted)" onclick="edAddCustomExercise(\''+qSafe+'\',\'timed\')">+ Add "'+qSafe+'" as timed (minutes/seconds)</div>');
-  parts.push('<div style="padding:10px 12px;border:1px dashed var(--border);border-radius:8px;cursor:pointer;font-size:12px;color:var(--muted)" onclick="edAddCustomExercise(\''+qSafe+'\',\'reps_weight\')">+ Add "'+qSafe+'" as reps × weight</div>');
+  if (matches.length) parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin:8px 0 6px">NOT LISTED? ADD IT AS CUSTOM:</div>');
+  else parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin:2px 0 6px">NO MATCH — ADD "'+qSafe.toUpperCase()+'" AS CUSTOM:</div>');
+  parts.push('<div style="display:flex;gap:8px;margin-bottom:6px">');
+  parts.push('<button class="btn btn-blue" style="flex:1;font-size:12px;padding:12px 8px" onclick="edAddCustomExercise(\''+qSafe+'\',\'timed\')">⏱ ADD AS TIMED</button>');
+  parts.push('<button class="btn btn-blue" style="flex:1;font-size:12px;padding:12px 8px" onclick="edAddCustomExercise(\''+qSafe+'\',\'reps_weight\')">🏋️ ADD AS REPS × WEIGHT</button>');
+  parts.push('</div>');
   box.innerHTML = parts.join('');
 }
 function edAddCatalogExercise(matchIdx, q) {

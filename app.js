@@ -2005,14 +2005,6 @@ async function saveBodyMetrics() {
   renderPage();
 }
 
-function bmiFrom(weightLb, heightIn) {
-  if (!weightLb || !heightIn) return null;
-  const bmi = 703 * weightLb / (heightIn * heightIn);
-  const cat = bmi < 18.5 ? 'Underweight' : bmi < 25 ? 'Normal' : bmi < 30 ? 'Overweight' : 'Obese';
-  const color = bmi < 18.5 ? 'var(--amber)' : bmi < 25 ? 'var(--green)' : bmi < 30 ? 'var(--amber)' : 'var(--red)';
-  return { value: Math.round(bmi*10)/10, cat, color };
-}
-
 async function saveGoalLevel() {
   const profile = (await dbGetProfile()) || {};
   profile.goal = ST.goal;
@@ -3837,13 +3829,6 @@ function renderProfile(p) {
   parts.push('<div class="field" style="margin-bottom:0"><label>Height (ft)</label><input id="bmFt" type="text" inputmode="numeric" placeholder="5" value="'+hFt+'"></div>');
   parts.push('<div class="field" style="margin-bottom:0"><label>(in)</label><input id="bmIn" type="text" inputmode="decimal" placeholder="10" value="'+hIn+'"></div>');
   parts.push('</div>');
-  const bmi = bmiFrom(ST.lastWeight, ST.heightIn);
-  if (bmi) {
-    parts.push('<div class="fb" style="margin-bottom:10px"><span style="font-size:13px">BMI (from last logged weight '+ST.lastWeight+' lb)</span>');
-    parts.push('<span style="font-family:var(--mono);font-size:16px;font-weight:700;color:'+bmi.color+'">'+bmi.value+' · '+bmi.cat.toUpperCase()+'</span></div>');
-  } else if (ST.heightIn) {
-    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Log a body weight in Preflight biometrics to see your BMI.</div>');
-  }
   parts.push('<button class="btn btn-outline" onclick="saveBodyMetrics()">💾 Save Body Metrics</button>');
   parts.push('</div>');
 

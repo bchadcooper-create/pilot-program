@@ -3,8 +3,8 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.7';
-const FCF_BUILD   = '20260707';
+const FCF_VERSION = 'v5.8';
+const FCF_BUILD   = '20260708';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
 // Replace OURA_CLIENT_ID with your actual Client ID from cloud.ouraring.com/oauth/applications
@@ -317,6 +317,7 @@ WORKOUTS.comm['Cardio'] = {
   ],
   enroute: [
     ex('c_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace — speak in full sentences.',true,'timed'),
+    ex('c_ca_er3','Walking','30-45 min',1,'Zone 1-2 steady pace. Great low-impact active recovery.',true,'timed'),
     ex('c_ca_er2','Step-Up','3×15/leg',3,'Active recovery strength.'),
   ],
   landing: [
@@ -408,6 +409,7 @@ WORKOUTS.hotel['Cardio'] = {
   ],
   enroute: [
     ex('h_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace.',true,'timed'),
+    ex('h_ca_er3','Walking','30-45 min',1,'Zone 1-2 steady pace. Great low-impact active recovery.',true,'timed'),
     ex('h_ca_er2','Step-Up','3×15/leg',3,'Active recovery strength.'),
   ],
   landing: WORKOUTS.comm['Cardio'].landing,
@@ -509,6 +511,7 @@ WORKOUTS.room['Cardio'] = {
   ],
   enroute: [
     ex('r_ca_er1','Jump Lunge','4×10/leg',4,'Explosive alternating.',false,'reps_only'),
+    ex('r_ca_er3','Walking','30-45 min',1,'Outside or hotel corridors. Zone 1-2 steady pace.',true,'timed'),
     ex('r_ca_er2','Mountain Climbers','4×30s',4,'Fast feet.',true,'timed'),
   ],
   landing: WORKOUTS.comm['Cardio'].landing,
@@ -1422,7 +1425,7 @@ async function loadCalendarRange() {
       .lte('started_at', today.toISOString())
       .order('started_at', { ascending: true });
     if (error) throw error;
-    const sessions = (data||[]).map(r => r.session_data).filter(Boolean);
+    const sessions = (data||[]).map(r => r.session_data ? {...r.session_data, _key: r.session_key} : null).filter(Boolean);
     ST.calendarSessions[cacheKey] = { sessions, windowStart, windowEnd: today };
     return ST.calendarSessions[cacheKey];
   } catch(e) {
@@ -1459,14 +1462,14 @@ function buildCalendarHTML(rangeData) {
     const hasWorkout = !!day.session;
     const cellStyle = isToday ? 'border-color:var(--gold)' : '';
     const bg = hasWorkout ? 'background:rgba(34,197,94,0.12);border-color:rgba(34,197,94,0.4)' : '';
-    parts.push('<div style="flex:0 0 40px;scroll-snap-align:center;text-align:center;border:1.5px solid var(--border);border-radius:8px;padding:6px 2px;cursor:'+(hasWorkout?'pointer':'default')+';'+cellStyle+';'+bg+'" '+(hasWorkout?'onclick="showCalendarDay(\''+day.date.toISOString()+'\')"':'')+'>');
+    parts.push('<div style="flex:0 0 40px;scroll-snap-align:center;text-align:center;border:1.5px solid var(--border);border-radius:8px;padding:6px 2px;cursor:pointer;'+cellStyle+';'+bg+'" onclick="'+(hasWorkout?'showCalendarDay(\''+day.date.toISOString()+'\')':'openNewSessionEditor(\''+day.date.toISOString()+'\')')+'">');
     parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted)">'+dow+'</div>');
     parts.push('<div style="font-size:13px;font-weight:600;margin-top:2px">'+dateNum+'</div>');
     if (hasWorkout) {
       const icon = {'Lower Body':'🦵','Upper Push':'💪','Upper Pull':'🎯','Power / Plyo':'⚡','Full Body':'🔥','Longevity':'🌿','Cardio':'❤️'}[day.session.muscle_group] || '✓';
       parts.push('<div style="font-size:13px;margin-top:2px">'+icon+'</div>');
     } else {
-      parts.push('<div style="font-size:10px;color:var(--muted);margin-top:4px">—</div>');
+      parts.push('<div style="font-size:12px;color:var(--muted);margin-top:3px">+</div>');
     }
     parts.push('</div>');
   });
@@ -1572,9 +1575,248 @@ async function showCalendarDay(isoDate) {
     });
   }
 
-  parts.push('<button class="btn btn-outline mt12" onclick="closeModal()">CLOSE</button>');
+  parts.push('<button class="btn btn-gold mt12" onclick="openEditSessionEditor(\''+(session._key||'')+'\')">✏️ EDIT SESSION</button>');
+  parts.push('<button class="btn btn-outline mt8" style="color:var(--red);border-color:var(--red)" onclick="confirmDeleteSession(\''+(session._key||'')+'\')">🗑 DELETE SESSION</button>');
+  parts.push('<button class="btn btn-outline mt8" onclick="closeModal()">CLOSE</button>');
   parts.push('</div></div>');
   root.innerHTML = parts.join('');
+}
+
+// ─── SESSION EDITOR (edit past workouts / retroactively log missed ones) ─────
+
+// Every unique exercise across all environments, for the searchable picker.
+function buildExerciseCatalog() {
+  const seen = {};
+  const catalog = [];
+  Object.values(WORKOUTS).forEach(envW => {
+    ['taxi','takeoff','enroute','landing'].forEach(ph => {
+      (envW[ph]||[]).forEach(e => {
+        if (seen[e.name]) return;
+        seen[e.name] = true;
+        catalog.push({ id: e.id, name: e.name, target: e.target, sets: e.sets, note: e.note, timed: e.timed, inputType: e.inputType });
+      });
+    });
+  });
+  return catalog.sort((a,b) => a.name.localeCompare(b.name));
+}
+
+// Which set fields an exercise uses, for rendering editable inputs.
+function edFieldsFor(exDef) {
+  if (exDef.inputType === 'timed_bilateral') return [['seconds_left','L sec'],['seconds_right','R sec']];
+  if (exDef.timed || exDef.inputType === 'timed' || exDef.inputType === 'nsdr') return [['seconds','Seconds']];
+  if (exDef.inputType === 'reps_only') return [['reps','Reps']];
+  if (exDef.inputType === 'reps_height') return [['reps','Reps'],['height','Height (in)']];
+  if (exDef.inputType === 'reps_distance') return [['reps','Reps'],['distance','Dist (in)']];
+  return [['reps','Reps'],['weight','Weight (lb)']];
+}
+
+function emptySnapshot() { return { taxi:[], takeoff:[], enroute:[], landing:[] }; }
+
+// New blank session on an empty past date.
+function openNewSessionEditor(isoDate) {
+  const d = new Date(isoDate);
+  const noon = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0);
+  ST.editSession = {
+    key: null, isNew: true,
+    session: {
+      date: noon.toISOString(),
+      env: ST.env, muscle_group: 'Cardio', goal: ST.goal, fatigue: 'go', level: ST.level,
+      sets: {}, durationMinutes: null, workoutSnapshot: emptySnapshot(),
+    },
+    exList: [],
+  };
+  renderSessionEditor();
+}
+
+// Edit an existing session found in the calendar cache by its DB key.
+async function openEditSessionEditor(key) {
+  if (!key) { showToast('This session can\'t be edited (no sync record found).'); return; }
+  const rangeData = await loadCalendarRange();
+  const found = rangeData.sessions.find(s => s._key === key);
+  if (!found) { showToast('Session not found.'); return; }
+  const session = JSON.parse(JSON.stringify(found));
+  delete session._key;
+  if (!session.sets) session.sets = {};
+  if (!session.workoutSnapshot) session.workoutSnapshot = emptySnapshot();
+  const snapEx = [...session.workoutSnapshot.taxi, ...session.workoutSnapshot.takeoff, ...session.workoutSnapshot.enroute, ...session.workoutSnapshot.landing];
+  // Editor shows exercises that have any logged data, keeping their real defs
+  // so PR history stays linked to the same exercise ids.
+  const exList = snapEx.filter(e => (session.sets[e.id]||[]).some(set => Object.values(set).some(v => v)));
+  ST.editSession = { key, isNew: false, session, exList };
+  renderSessionEditor();
+}
+
+function renderSessionEditor() {
+  const ed = ST.editSession;
+  const s = ed.session;
+  const dateLabel = new Date(s.date).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  const parts = [];
+  parts.push('<div class="modal-bg" onclick="if(event.target===this)closeModal()">');
+  parts.push('<div class="modal-sheet" style="max-height:85vh;overflow-y:auto">');
+  parts.push('<div class="modal-handle"></div>');
+  parts.push('<div class="modal-title">'+(ed.isNew ? 'Add Workout' : 'Edit Workout')+'</div>');
+  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:14px">'+dateLabel+'</div>');
+
+  parts.push('<div class="field"><label>Muscle Group</label><select onchange="ST.editSession.session.muscle_group=this.value">');
+  MUSCLE_GROUPS.forEach(mg => parts.push('<option value="'+mg+'"'+(s.muscle_group===mg?' selected':'')+'>'+mg+'</option>'));
+  parts.push('</select></div>');
+
+  ed.exList.forEach(exDef => {
+    const sets = s.sets[exDef.id] || [];
+    const fields = edFieldsFor(exDef);
+    parts.push('<div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px">');
+    parts.push('<div class="fb" style="margin-bottom:8px"><div style="font-size:13px;font-weight:600">'+exDef.name+'</div>');
+    parts.push('<button class="btn-ghost" style="font-size:11px;padding:4px 8px;color:var(--red)" onclick="edRemoveExercise(\''+exDef.id+'\')">✕ Remove</button></div>');
+    sets.forEach((set, i) => {
+      parts.push('<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">');
+      parts.push('<span style="font-family:var(--mono);font-size:9px;color:var(--muted);flex:0 0 30px">SET '+(i+1)+'</span>');
+      fields.forEach(([field, label]) => {
+        parts.push('<input type="text" inputmode="decimal" placeholder="'+label+'" value="'+(set[field]||'')+'" style="flex:1;min-width:0;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:16px;color:var(--text)" oninput="edSetVal(\''+exDef.id+'\','+i+',\''+field+'\',this.value)">');
+      });
+      parts.push('</div>');
+    });
+    parts.push('<button class="btn-ghost" style="font-size:11px" onclick="edAddSet(\''+exDef.id+'\')">+ Add Set</button>');
+    parts.push('</div>');
+  });
+
+  parts.push('<div class="field" style="margin-top:6px"><label>Add Exercise (type to search)</label>');
+  parts.push('<input type="text" id="edSearch" placeholder="e.g. walking, squat, push…" oninput="edFilterExercises(this.value)" autocomplete="off">');
+  parts.push('</div>');
+  parts.push('<div id="edSearchResults"></div>');
+
+  parts.push('<button class="btn btn-gold mt12" onclick="saveEditedSession()">💾 SAVE WORKOUT</button>');
+  parts.push('<button class="btn btn-outline mt8" onclick="closeModal()">CANCEL</button>');
+  parts.push('</div></div>');
+  document.getElementById('modalRoot').innerHTML = parts.join('');
+}
+
+function edSetVal(exId, i, field, value) {
+  const sets = ST.editSession.session.sets[exId];
+  if (sets && sets[i]) sets[i][field] = value;
+}
+function edAddSet(exId) {
+  const s = ST.editSession.session;
+  if (!s.sets[exId]) s.sets[exId] = [];
+  s.sets[exId].push({});
+  renderSessionEditor();
+}
+function edRemoveExercise(exId) {
+  const ed = ST.editSession;
+  ed.exList = ed.exList.filter(e => e.id !== exId);
+  delete ed.session.sets[exId];
+  const snap = ed.session.workoutSnapshot;
+  ['taxi','takeoff','enroute','landing'].forEach(ph => { snap[ph] = (snap[ph]||[]).filter(e => e.id !== exId); });
+  renderSessionEditor();
+}
+
+function edFilterExercises(q) {
+  const box = document.getElementById('edSearchResults');
+  if (!box) return;
+  q = (q||'').trim().toLowerCase();
+  if (!q) { box.innerHTML = ''; return; }
+  const existing = new Set(ST.editSession.exList.map(e => e.id));
+  const matches = buildExerciseCatalog().filter(e => e.name.toLowerCase().includes(q) && !existing.has(e.id)).slice(0, 6);
+  const parts = [];
+  matches.forEach((e, i) => {
+    parts.push('<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:13px" onclick="edAddCatalogExercise('+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+(e.target||'')+'</span></div>');
+  });
+  const qSafe = q.replace(/[<>'"]/g,'');
+  parts.push('<div style="padding:10px 12px;border:1px dashed var(--border);border-radius:8px;margin-bottom:4px;cursor:pointer;font-size:12px;color:var(--muted)" onclick="edAddCustomExercise(\''+qSafe+'\',\'timed\')">+ Add "'+qSafe+'" as timed (minutes/seconds)</div>');
+  parts.push('<div style="padding:10px 12px;border:1px dashed var(--border);border-radius:8px;cursor:pointer;font-size:12px;color:var(--muted)" onclick="edAddCustomExercise(\''+qSafe+'\',\'reps_weight\')">+ Add "'+qSafe+'" as reps × weight</div>');
+  box.innerHTML = parts.join('');
+}
+function edAddCatalogExercise(matchIdx, q) {
+  const existing = new Set(ST.editSession.exList.map(e => e.id));
+  const matches = buildExerciseCatalog().filter(e => e.name.toLowerCase().includes(q.toLowerCase()) && !existing.has(e.id)).slice(0, 6);
+  const exDef = matches[matchIdx];
+  if (!exDef) return;
+  edPushExercise(exDef);
+}
+function edAddCustomExercise(name, inputType) {
+  if (!name) return;
+  const exDef = {
+    id: 'custom_'+Date.now(),
+    name: name.charAt(0).toUpperCase()+name.slice(1),
+    target: '', sets: 1, note: 'Custom exercise', timed: inputType === 'timed', inputType,
+  };
+  edPushExercise(exDef);
+}
+function edPushExercise(exDef) {
+  const ed = ST.editSession;
+  ed.exList.push(exDef);
+  ed.session.sets[exDef.id] = [{}];
+  ed.session.workoutSnapshot.enroute.push(exDef);
+  renderSessionEditor();
+}
+
+async function saveEditedSession() {
+  const ed = ST.editSession;
+  const s = ed.session;
+  // Drop exercises where every set is completely empty
+  Object.keys(s.sets).forEach(exId => {
+    s.sets[exId] = (s.sets[exId]||[]).filter(set => Object.values(set).some(v => v !== '' && v != null));
+    if (!s.sets[exId].length) {
+      delete s.sets[exId];
+      ['taxi','takeoff','enroute','landing'].forEach(ph => {
+        s.workoutSnapshot[ph] = (s.workoutSnapshot[ph]||[]).filter(e => e.id !== exId);
+      });
+    }
+  });
+  if (!Object.keys(s.sets).length) { showToast('Log at least one set before saving.'); return; }
+
+  try {
+    if (ed.isNew) {
+      const { error } = await SB.from('workout_sessions').insert([{
+        user_id: ST.user?.id || null,
+        session_key: String(Date.now()),
+        session_data: s,
+        workout_key: s.muscle_group,
+        started_at: s.date,
+      }]);
+      if (error) throw error;
+    } else {
+      let q = SB.from('workout_sessions').update({ session_data: s, workout_key: s.muscle_group }).eq('session_key', ed.key);
+      if (ST.user) q = q.eq('user_id', ST.user.id);
+      const { error } = await q;
+      if (error) throw error;
+    }
+    ST.calendarSessions = {};
+    await loadSessionCache();
+    closeModal();
+    renderPage();
+    showToast(ed.isNew ? '✅ Workout added.' : '✅ Workout updated.');
+  } catch(e) {
+    showToast('Save failed: '+e.message);
+  }
+}
+
+function confirmDeleteSession(key) {
+  if (!key) { showToast('This session can\'t be deleted (no sync record found).'); return; }
+  const root = document.getElementById('modalRoot');
+  root.innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()">' +
+    '<div class="modal-sheet">' +
+    '<div class="modal-handle"></div>' +
+    '<div class="modal-title">Delete this workout?</div>' +
+    '<div class="modal-body" style="margin-bottom:14px">This permanently removes the session and all its logged sets. This cannot be undone.</div>' +
+    '<button class="btn" style="background:var(--red);color:#fff" onclick="deleteSessionConfirmed(\''+key+'\')">🗑 CONFIRM DELETE</button>' +
+    '<button class="btn btn-outline mt8" onclick="closeModal()">CANCEL</button>' +
+    '</div></div>';
+}
+async function deleteSessionConfirmed(key) {
+  try {
+    let q = SB.from('workout_sessions').delete().eq('session_key', key);
+    if (ST.user) q = q.eq('user_id', ST.user.id);
+    const { error } = await q;
+    if (error) throw error;
+    ST.calendarSessions = {};
+    await loadSessionCache();
+    closeModal();
+    renderPage();
+    showToast('Session deleted.');
+  } catch(e) {
+    showToast('Delete failed: '+e.message);
+  }
 }
 
 // ─── PREFLIGHT TAB ────────────────────────────────────────────────────────────

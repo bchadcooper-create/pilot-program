@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.11.1';
+const FCF_VERSION = 'v5.11.2';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2097,7 +2097,7 @@ async function renderPreflight(p) {
   const adv   = hydroAdvice();
   const rawWk = getCombinedWorkout(ST.env, ST.muscleGroup);
   const profileIncomplete = !ST.sex;
-  const wk    = getFilteredWorkout(rawWk);
+  const wk    = applyTimeFilter(getFilteredWorkout(rawWk), ST.timeAvailMin);
 
   const levelLabel   = {beginner:'Beginner',intermediate:'Intermediate',advanced:'Advanced'}[ST.level];
   const fatigueLabel = {go:'🟢 GO',marginal:'🟡 MARGINAL',nogo:'🔴 NO-GO'}[ST.fatigue];
@@ -2221,12 +2221,12 @@ async function renderPreflight(p) {
 
   // Flight plan preview
   if (wk) {
-    parts.push('<div class="section-label">FLIGHT PLAN PREVIEW — '+totalEx+' EXERCISES ('+levelLabel+(ST.fatigue!=='go'?' / '+fatigueLabel:'')+')</div>');
+    parts.push('<div class="section-label">FLIGHT PLAN PREVIEW — '+totalEx+' EXERCISES ('+levelLabel+(ST.fatigue!=='go'?' / '+fatigueLabel:'')+(ST.timeAvailMin?' / ⏱ '+ST.timeAvailMin+'min':'')+')</div>');
     parts.push('<div class="card card-dark mb12"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
     [['🚕 TAXI',wk.taxi],['🛫 TAKEOFF',wk.takeoff],['✈️ EN ROUTE',wk.enroute],['🛬 LANDING',wk.landing]].forEach(([label,exs]) => {
       parts.push('<div style="background:var(--bg);border-radius:8px;padding:10px"><div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">'+label+'</div>');
       if (!exs.length) parts.push('<div style="font-size:11px;color:var(--muted);font-style:italic">— skipped —</div>');
-      else exs.forEach(e => parts.push('<div style="font-size:11px;color:var(--text);margin-bottom:3px">· '+e.name+'</div>'));
+      else exs.forEach(e => parts.push('<div style="font-size:11px;color:'+(e.swappedForInjury?'var(--blue)':e.injuryCaution?'var(--amber)':'var(--text)')+';margin-bottom:3px">· '+e.name+(e.swappedForInjury?' 🩹':e.injuryCaution?' ⚠️':'')+'</div>'));
       parts.push('</div>');
     });
     parts.push('</div></div>');

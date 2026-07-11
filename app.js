@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.11.2';
+const FCF_VERSION = 'v5.12';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -72,7 +72,7 @@ const ST = {
   showAddExercise: false,
 
   restTimer: { active: false, seconds: 0, total: 0, exId: null, interval: null, startTs: 0, endTs: 0 },
-  stopwatch:  { active: false, seconds: 0, interval: null, exId: null, side: null, startTs: 0 },
+  stopwatch:  { active: false, seconds: 0, interval: null, exId: null, side: null, startTs: 0, targetSec: null, chimed: false },
   nsdrTimer:  { active: false, seconds: 0, interval: null, chimed: false, startTs: 0 },
 
   lastSession: null, // last completed session summary
@@ -1513,7 +1513,7 @@ function persistTimerState() {
   try {
     localStorage.setItem(TIMER_STATE_KEY, JSON.stringify({
       restTimer: { active: ST.restTimer.active, exId: ST.restTimer.exId, endTs: ST.restTimer.endTs, total: ST.restTimer.total },
-      stopwatch: { active: ST.stopwatch.active, exId: ST.stopwatch.exId, side: ST.stopwatch.side, startTs: ST.stopwatch.startTs },
+      stopwatch: { active: ST.stopwatch.active, exId: ST.stopwatch.exId, side: ST.stopwatch.side, startTs: ST.stopwatch.startTs, targetSec: ST.stopwatch.targetSec, chimed: ST.stopwatch.chimed },
       nsdrTimer: { active: ST.nsdrTimer.active, exId: ST.nsdrTimer.exId, startTs: ST.nsdrTimer.startTs, chimed: ST.nsdrTimer.chimed },
     }));
   } catch(e) {}
@@ -1532,7 +1532,7 @@ function restoreTimerState() {
       }
     }
     if (saved.stopwatch?.active) {
-      ST.stopwatch = { active: true, seconds: Math.round((Date.now()-saved.stopwatch.startTs)/1000), exId: saved.stopwatch.exId, side: saved.stopwatch.side||null, interval: null, startTs: saved.stopwatch.startTs };
+      ST.stopwatch = { active: true, seconds: Math.round((Date.now()-saved.stopwatch.startTs)/1000), exId: saved.stopwatch.exId, side: saved.stopwatch.side||null, interval: null, startTs: saved.stopwatch.startTs, targetSec: saved.stopwatch.targetSec||null, chimed: !!saved.stopwatch.chimed };
       ST.stopwatch.interval = setInterval(() => tickStopwatch(saved.stopwatch.exId, saved.stopwatch.side||null), 1000);
     }
     if (saved.nsdrTimer?.active) {
@@ -2821,13 +2821,13 @@ function buildExCard(exItem, phaseKey) {
       parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">LEFT SIDE</div>');
       parts.push('<input class="timed-inp" type="number" inputmode="numeric" placeholder="0" value="'+valL+'" oninput="ST.sets[\''+exItem.id+'\'][0].seconds_left=this.value;persistWorkoutState()">');
       parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">seconds</div>');
-      parts.push(buildStopwatchWidget(exItem.id, 'left'));
+      parts.push(buildStopwatchWidget(exItem.id, 'left', exItem.target));
       parts.push('</div>');
       parts.push('<div class="timed-box" style="flex:1" id="tb_'+exItem.id+'_right">');
       parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">RIGHT SIDE</div>');
       parts.push('<input class="timed-inp" type="number" inputmode="numeric" placeholder="0" value="'+valR+'" oninput="ST.sets[\''+exItem.id+'\'][0].seconds_right=this.value;persistWorkoutState()">');
       parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">seconds</div>');
-      parts.push(buildStopwatchWidget(exItem.id, 'right'));
+      parts.push(buildStopwatchWidget(exItem.id, 'right', exItem.target));
       parts.push('</div>');
       parts.push('</div>');
     } else if (exItem.timed) {
@@ -2837,7 +2837,7 @@ function buildExCard(exItem, phaseKey) {
       parts.push('<input class="timed-inp" type="number" inputmode="numeric" placeholder="0" value="'+val+'" oninput="ST.sets[\''+exItem.id+'\'][0].seconds=this.value;document.getElementById(\'tb_'+exItem.id+'\').className=\'timed-box\'+(this.value?\' ok\':\'\');persistWorkoutState()">');
       parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">seconds</div>');
       parts.push('</div>');
-      parts.push(buildStopwatchWidget(exItem.id));
+      parts.push(buildStopwatchWidget(exItem.id, null, exItem.target));
     } else if (exItem.inputType === 'reps_height') {
       parts.push('<div class="sets-wrap"><div class="sets-scroll">');
       sets.forEach((s,i) => {
@@ -2972,15 +2972,16 @@ function afterSetLogged(exId, phaseKey) {
 }
 
 // ─── STOPWATCH (auto-fills timed exercise seconds) ───────────────────────────
-function buildStopwatchWidget(exId, side) {
+function buildStopwatchWidget(exId, side, targetLabel) {
   const isActive = ST.stopwatch.active && ST.stopwatch.exId === exId && (ST.stopwatch.side||null) === (side||null);
   const domId = side ? exId+'_'+side : exId;
+  const targetSec = parseTargetSeconds(targetLabel);
   const parts = [];
   parts.push('<div class="timed-box" style="margin-top:8px" id="sw_'+domId+'">');
-  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">STOPWATCH</div>');
+  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">STOPWATCH'+(targetSec?' — CHIMES AT '+formatStopwatch(targetSec):'')+'</div>');
   parts.push('<div class="stopwatch-display" id="sw_disp_'+domId+'">'+formatStopwatch(isActive?ST.stopwatch.seconds:0)+'</div>');
   if (!isActive) {
-    parts.push('<button class="stopwatch-btn btn-blue" onclick="startStopwatch(\''+exId+'\','+(side?"'"+side+"'":'null')+')">START</button>');
+    parts.push('<button class="stopwatch-btn btn-blue" onclick="startStopwatch(\''+exId+'\','+(side?"'"+side+"'":'null')+','+(targetSec||'null')+')">START</button>');
   } else {
     parts.push('<button class="stopwatch-btn btn-green" onclick="stopStopwatch(\''+exId+'\','+(side?"'"+side+"'":'null')+')">STOP &amp; FILL</button>');
   }
@@ -2991,9 +2992,25 @@ function formatStopwatch(sec) {
   const m = Math.floor(sec/60), s = sec%60;
   return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
 }
-function startStopwatch(exId, side) {
+
+// Extracts a target duration in seconds from a target string like '90s/side',
+// '3×30s' (takes the per-round value, not multiplied — one continuous
+// stopwatch press represents a single round), '5 min', or '30-45 min' (takes
+// the lower bound). Returns null when no confident duration can be read
+// (e.g. '1 round'), in which case no completion chime is scheduled.
+function parseTargetSeconds(target) {
+  if (!target) return null;
+  let m = target.match(/(\d+)\s*s(?!\w)/);
+  if (m) return parseInt(m[1], 10);
+  m = target.match(/(\d+)\s*-\s*\d+\s*min/); // range like '30-45 min' — lower bound
+  if (m) return parseInt(m[1], 10) * 60;
+  m = target.match(/(\d+)\s*min/);
+  if (m) return parseInt(m[1], 10) * 60;
+  return null;
+}
+function startStopwatch(exId, side, targetSec) {
   if (ST.stopwatch.interval) clearInterval(ST.stopwatch.interval);
-  ST.stopwatch = { active: true, seconds: 0, exId, side: side||null, interval: null, startTs: Date.now() };
+  ST.stopwatch = { active: true, seconds: 0, exId, side: side||null, interval: null, startTs: Date.now(), targetSec: targetSec||null, chimed: false };
   persistTimerState();
   renderFlight(document.getElementById('mainPage'));
   ST.stopwatch.interval = setInterval(() => tickStopwatch(exId, side||null), 1000);
@@ -3001,6 +3018,12 @@ function startStopwatch(exId, side) {
 function tickStopwatch(exId, side) {
   if (!ST.stopwatch.active || ST.stopwatch.exId !== exId || (ST.stopwatch.side||null) !== (side||null)) return;
   ST.stopwatch.seconds = Math.round((Date.now() - ST.stopwatch.startTs)/1000);
+  if (ST.stopwatch.targetSec && !ST.stopwatch.chimed && ST.stopwatch.seconds >= ST.stopwatch.targetSec) {
+    ST.stopwatch.chimed = true;
+    persistTimerState();
+    playChime();
+    showToast('🔔 Target time reached — stop when ready.');
+  }
   const domId = side ? exId+'_'+side : exId;
   const el = document.getElementById('sw_disp_'+domId);
   if (el) el.textContent = formatStopwatch(ST.stopwatch.seconds);

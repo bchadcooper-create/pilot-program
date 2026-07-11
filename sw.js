@@ -1,6 +1,6 @@
 // Flight Crew Fitness — Service Worker
-// Version: 5.11.2
-const CACHE = 'fcf-v5-11-2';
+// Version: 5.12
+const CACHE = 'fcf-v5-12';
 const CORE = [
   '/pilot-program/',
   '/pilot-program/index.html',

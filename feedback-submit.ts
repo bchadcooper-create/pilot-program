@@ -41,6 +41,22 @@ serve(async (req) => {
       });
     }
 
+    // Abuse guards: this endpoint is reachable with the public anon key, so cap
+    // sizes (a scripted caller could otherwise open giant GitHub issues) and
+    // rate-limit bursts within this isolate's lifetime.
+    if (message.length > 4000 || (contact_email && String(contact_email).length > 200)) {
+      return new Response(JSON.stringify({ error: "Feedback too long (4000 char max)." }), {
+        status: 400, headers: { ...CORS, "Content-Type": "application/json" }
+      });
+    }
+    globalThis._fcfSubmits = (globalThis._fcfSubmits || []).filter((t: number) => Date.now() - t < 60000);
+    if (globalThis._fcfSubmits.length >= 5) {
+      return new Response(JSON.stringify({ error: "Too many submissions — try again in a minute." }), {
+        status: 429, headers: { ...CORS, "Content-Type": "application/json" }
+      });
+    }
+    globalThis._fcfSubmits.push(Date.now());
+
     const TOKEN = Deno.env.get("GITHUB_FEEDBACK_TOKEN") || "";
     if (!TOKEN) {
       return new Response(JSON.stringify({ error: "Feedback isn't configured yet — GITHUB_FEEDBACK_TOKEN missing." }), {

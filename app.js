@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.10.1';
+const FCF_VERSION = 'v5.10.2';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -121,7 +121,7 @@ function hydroAdvice() {
   const def = hydroDeficit();
   if (def <= 0) return null;
   if (def < 0.25) return `Sip ${Math.round(def*1000)}ml now — you're almost there.`;
-  if (def < 0.5)  return `Drink ${Math.round(def*1000)}ml before starting. Dehydration cuts strength output by up to 20%.`;
+  if (def < 0.5)  return `Drink ${Math.round(def*1000)}ml before starting. Even 2% dehydration measurably cuts strength, endurance, and focus.`;
   return `You're ${def.toFixed(1)}L behind. Drink 500ml now, then sip throughout your session.`;
 }
 

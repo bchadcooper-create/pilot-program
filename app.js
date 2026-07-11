@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.12';
+const FCF_VERSION = 'v5.12.1';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -3668,7 +3668,7 @@ function renderDebrief(p) {
   parts.push('<div class="section-label">POST-FLIGHT DEBRIEF</div>');
   parts.push('<div class="card card-dark mb12" style="text-align:center;padding:24px 16px">');
   parts.push('<div style="font-size:36px;margin-bottom:8px">'+(s.completionPct===100?'🎯':'✈️')+'</div>');
-  parts.push('<div style="font-family:var(--mono);font-size:18px;color:var(--gold);letter-spacing:0.04em">'+ST.muscleGroup.toUpperCase()+' COMPLETE</div>');
+  parts.push('<div style="font-family:var(--mono);font-size:18px;color:var(--gold);letter-spacing:0.04em">'+session.muscle_group.toUpperCase()+' COMPLETE</div>');
   parts.push('<div style="font-size:11px;color:var(--muted);margin-top:4px">'+new Date(session.date).toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+'</div>');
   parts.push('</div>');
 

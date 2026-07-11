@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.9';
+const FCF_VERSION = 'v5.10';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -71,6 +71,7 @@ const ST = {
   nsdrTimer:  { active: false, seconds: 0, interval: null, chimed: false, startTs: 0 },
 
   lastSession: null, // last completed session summary
+  prevSession: null, // session before last — disambiguates emphasis rotations
   lastDebrief: null,
   workoutStartedAt: null,
   disclaimerAccepted: false,
@@ -88,6 +89,9 @@ const GOALS = {
   muscle:   { label: 'Muscle Gain',      icon: '💪', desc: 'Bodybuilding-style hypertrophy training',   order: ['Lower Body','Upper Push','Upper Pull','Full Body'] },
   longevity:{ label: 'General Health',  icon: '🌿', desc: 'Joint-friendly, sustainable, long-term health', order: ['Lower Body','Upper Pull','Cardio','Longevity','Upper Push'] },
   fatloss:  { label: 'Weight Loss',     icon: '🔥', desc: 'Higher-volume, metabolic conditioning focus', order: ['Lower Body','Cardio','Upper Push','Upper Pull','Full Body'] },
+  chest:    { label: 'Chest & Shoulders', icon: '🏋️', desc: 'Pressing emphasis — Upper Push comes around twice per rotation', suggestFor: 'male', order: ['Upper Push','Lower Body','Upper Push','Upper Pull','Full Body'] },
+  glute:    { label: 'Glute Emphasis',   icon: '🍑', desc: 'Glute-focused programming — Lower Body comes around twice per rotation', suggestFor: 'female', order: ['Lower Body','Upper Push','Lower Body','Upper Pull','Full Body'] },
+  strength: { label: 'Overall Strength', icon: '⚡', desc: 'Heavy low-rep compounds plus explosive power work', order: ['Lower Body','Upper Push','Upper Pull','Power / Plyo','Full Body'] },
 };
 
 // ─── FREQUENCY GUIDANCE (fitness coach logic) ────────────────────────────────
@@ -554,6 +558,57 @@ const LEVEL_EX = {
   advanced:     { taxi: 3, takeoff: 2, enroute: 4, landing: 3 },
 };
 
+// ─── GOAL OVERLAYS (emphasis objectives modify the base catalog) ─────────────
+// Each overlay swaps specific exercises (by name, per env/muscle group/phase)
+// and/or retargets rep schemes (by exercise id). Applied in getCombinedWorkout
+// so there is ONE source of truth per exercise — no duplicated catalogs.
+const GOAL_OVERLAYS = {
+  glute: {
+    swaps: {
+      comm: { 'Lower Body': {
+        takeoff: { 'Romanian Deadlift': ex('g_c_lb_ht','Barbell Hip Thrust','4×8',4,'Shoulders on a bench, bar over hips, chin tucked. Drive to full lockout and squeeze hard for 2 seconds. The single best glute builder.') },
+        enroute: { 'Leg Press': ex('g_c_lb_gk','Cable Glute Kickback','3×12/leg',3,'Slight forward lean, kick straight back through the heel. Squeeze at full extension — no swinging.') },
+      }},
+      hotel: { 'Lower Body': {
+        takeoff: { 'DB Romanian Deadlift': ex('g_h_lb_ht','DB Hip Thrust','4×10',4,'Shoulders on the bench edge, dumbbell over hips. Full lockout, hard glute squeeze at the top.') },
+      }},
+      room: { 'Lower Body': {
+        takeoff: { 'Hamstring Raise (Nordic Curl)': ex('g_r_lb_ht','Single-Leg Hip Thrust','4×10/leg',4,'Shoulders on the bed edge, one foot planted. Drive through the heel to full lockout.',false,'reps_only') },
+      }},
+    },
+  },
+  chest: {
+    swaps: {
+      comm: { 'Upper Push': {
+        enroute: { 'DB Tricep Overhead': ex('g_c_up_dip','Weighted Dip','3×8',3,'Slight forward lean for chest emphasis. Add weight once 3×8 at bodyweight is easy.') },
+      }},
+      hotel: { 'Upper Push': {
+        enroute: { 'DB Front Raise': ex('g_h_up_fly','DB Flye','3×12',3,'Slight elbow bend, deep stretch at the bottom, hug-a-barrel arc up.') },
+      }},
+    },
+  },
+  strength: {
+    swaps: {
+      comm: { 'Lower Body': {
+        takeoff: { 'Romanian Deadlift': ex('g_c_lb_dl','Conventional Deadlift','5×3',5,'Heavy triples. Brace hard, bar close to shins, hips and shoulders rise together.') },
+      }},
+    },
+    retarget: { c_lb_to1: '5×3', c_up_to1: '5×3', c_up_to2: '4×3' },
+  },
+};
+
+// Women complete more reps at a given intensity and recover faster between
+// sets (fatigue-resistance research) — so hypertrophy-slot (enroute) rep
+// targets shift up by 2 for female users. Heavy strength work (takeoff) and
+// set counts stay identical: the science shows no difference there.
+function femaleTargetBump(target) {
+  return target.replace(/^(\d+)×(\d+)(\/\w+)?$/, (m, s, r, suf) => {
+    r = parseInt(r, 10);
+    if (r >= 6 && r <= 12) r += 2;
+    return s + '×' + r + (suf || '');
+  });
+}
+
 function getFilteredWorkout(rawWk) {
   if (!rawWk) return null;
   if (ST.fatigue === 'nogo') {
@@ -574,10 +629,20 @@ function getFilteredWorkout(rawWk) {
 // Recommend next muscle group based on goal rotation + last completed session
 function getRecommendedNext() {
   const order = (GOALS[ST.goal] || GOALS.longevity).order;
-  if (!ST.lastSession || !ST.lastSession.muscle_group) return order[0];
-  const idx = order.indexOf(ST.lastSession.muscle_group);
-  if (idx === -1) return order[0];
-  return order[(idx + 1) % order.length];
+  const last = ST.lastSession?.muscle_group;
+  if (!last) return order[0];
+  const L = order.length;
+  // Emphasis goals repeat a muscle group in the rotation, so the same group
+  // can appear at two positions — disambiguate using the session before last.
+  const idxs = [];
+  order.forEach((mg, i) => { if (mg === last) idxs.push(i); });
+  if (!idxs.length) return order[0];
+  let idx = idxs[0];
+  if (idxs.length > 1 && ST.prevSession?.muscle_group) {
+    const match = idxs.find(i => order[(i - 1 + L) % L] === ST.prevSession.muscle_group);
+    if (match !== undefined) idx = match;
+  }
+  return order[(idx + 1) % L];
 }
 
 // ─── EXERCISE GUIDE LINKS ─────────────────────────────────────────────────────
@@ -809,12 +874,14 @@ async function dbGetRecentSessions(days) {
 async function dbGetLastSession() {
   try {
     const filter = ST.user ? SB.from('workout_sessions').select('*').eq('user_id', ST.user.id) : SB.from('workout_sessions').select('*');
-    const { data } = await filter.order('started_at', { ascending: false }).limit(1);
+    const { data } = await filter.order('started_at', { ascending: false }).limit(2);
+    ST.prevSession = data?.[1]?.session_data || null;
     return data?.[0]?.session_data || null;
   } catch(e) {
     const keys = Object.keys(localStorage).filter(k => k.startsWith('fcf_session_'));
     if (!keys.length) return null;
     keys.sort();
+    ST.prevSession = keys.length > 1 ? JSON.parse(localStorage.getItem(keys[keys.length-2])) : null;
     return JSON.parse(localStorage.getItem(keys[keys.length-1]));
   }
 }
@@ -1060,6 +1127,12 @@ async function bootApp() {
     ST.lastWeight = profile.lastWeight || null;
   }
   restoreDailyInputs();
+  // First-ever open with no profile info: land on Profile once so the user
+  // sets sex + objective before their first mission. Flag persists locally.
+  if (!ST.sex && !localStorage.getItem('fcf_profile_intro')) {
+    localStorage.setItem('fcf_profile_intro', '1');
+    ST.tab = 'profile';
+  }
   ST.lastSession = await dbGetLastSession();
   // Auto-select the recommended next mission profile so Preflight opens
   // pre-loaded with the right choice rather than always defaulting to Lower Body.
@@ -1896,6 +1969,7 @@ async function renderPreflight(p) {
   const pct   = hydroPct();
   const adv   = hydroAdvice();
   const rawWk = getCombinedWorkout(ST.env, ST.muscleGroup);
+  const profileIncomplete = !ST.sex;
   const wk    = getFilteredWorkout(rawWk);
 
   const levelLabel   = {beginner:'Beginner',intermediate:'Intermediate',advanced:'Advanced'}[ST.level];
@@ -1905,6 +1979,13 @@ async function renderPreflight(p) {
 
   const parts = [];
   parts.push('<div class="section-label">PREFLIGHT BRIEFING — '+FCF_VERSION+'</div>');
+  if (profileIncomplete) {
+    parts.push('<div class="card mb12" style="border-color:var(--gold);cursor:pointer" onclick="switchTab(\'profile\')">');
+    parts.push('<div class="fb"><div><div style="font-size:13px;font-weight:600">👤 Complete your profile</div>');
+    parts.push('<div style="font-size:11px;color:var(--muted);margin-top:3px">Set sex and training objective to unlock personalized programming.</div></div>');
+    parts.push('<div style="font-size:18px;color:var(--gold)">→</div></div>');
+    parts.push('</div>');
+  }
 
   // Training calendar (rolling window, smooth scroll)
   const rangeData = await loadCalendarRange();
@@ -1998,11 +2079,41 @@ async function saveBodyMetrics() {
   ST.sex = sexEl?.value || null;
   ST.heightIn = (ft || inches) ? ft*12 + inches : null;
   const profile = (await dbGetProfile()) || {};
+  const hadSex = !!profile.sex;
   profile.sex = ST.sex;
   profile.heightIn = ST.heightIn;
   await dbSetProfile(profile);
   showToast('Body metrics saved.');
   renderPage();
+  // First time sex is set: offer (once) to switch to the suggested emphasis
+  // objective. History is untouched either way.
+  if (!hadSex && ST.sex) {
+    const suggested = ST.sex === 'female' ? 'glute' : 'chest';
+    if (ST.goal !== suggested) showStyleUpdatePrompt(suggested);
+  }
+}
+
+function showStyleUpdatePrompt(suggestedGoal) {
+  const g = GOALS[suggestedGoal];
+  if (!g) return;
+  const root = document.getElementById('modalRoot');
+  root.innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()">' +
+    '<div class="modal-sheet">' +
+    '<div class="modal-handle"></div>' +
+    '<div class="modal-title">Update your workout style?</div>' +
+    '<div class="modal-body" style="margin-bottom:14px">Based on your profile, we suggest <strong>'+g.icon+' '+g.label+'</strong> — '+g.desc.toLowerCase()+'. Your training history stays exactly as it is either way, and you can change this anytime in Mission Objective.</div>' +
+    '<button class="btn btn-gold" onclick="applyStyleUpdate(\''+suggestedGoal+'\')">'+g.icon+' SWITCH TO '+g.label.toUpperCase()+'</button>' +
+    '<button class="btn btn-outline mt8" onclick="closeModal()">KEEP MY CURRENT OBJECTIVE</button>' +
+    '</div></div>';
+}
+async function applyStyleUpdate(goal) {
+  ST.goal = goal;
+  ST.muscleGroup = getRecommendedNext();
+  await saveGoalLevel();
+  closeModal();
+  renderPage();
+  showToast('Objective updated — workouts now reflect your profile.');
 }
 
 async function saveGoalLevel() {
@@ -2017,15 +2128,30 @@ async function saveGoalLevel() {
 function getCombinedWorkout(env, muscleGroup) {
   const base = WORKOUTS[env]?.[muscleGroup];
   if (!base) return null;
-  const customForThis = ST.customExercises.filter(c => c.env === env && c.muscleGroup === muscleGroup);
-  if (!customForThis.length) return base;
-  // Custom exercises get added to enroute by default (volume/accessory slot)
-  return {
-    taxi: base.taxi,
-    takeoff: base.takeoff,
-    enroute: [...base.enroute, ...customForThis.map(c => c.exercise)],
-    landing: base.landing,
+  const ov = GOAL_OVERLAYS[ST.goal];
+  const swaps = ov?.swaps?.[env]?.[muscleGroup] || null;
+  const retarget = ov?.retarget || null;
+  const female = ST.sex === 'female';
+  const mapPhase = (list, phase) => list.map(e => {
+    let out = e;
+    if (swaps && swaps[phase] && swaps[phase][e.name]) out = swaps[phase][e.name];
+    if (retarget && retarget[out.id]) out = { ...out, target: retarget[out.id] };
+    if (female && phase === 'enroute' && !out.timed && (out.inputType === 'reps_weight' || out.inputType === 'reps_only')) {
+      const t = femaleTargetBump(out.target);
+      if (t !== out.target) out = { ...out, target: t };
+    }
+    return out;
+  });
+  const wk = {
+    taxi:    mapPhase(base.taxi, 'taxi'),
+    takeoff: mapPhase(base.takeoff, 'takeoff'),
+    enroute: mapPhase(base.enroute, 'enroute'),
+    landing: mapPhase(base.landing, 'landing'),
   };
+  // Custom exercises get added to enroute by default (volume/accessory slot)
+  const customForThis = ST.customExercises.filter(c => c.env === env && c.muscleGroup === muscleGroup);
+  if (customForThis.length) wk.enroute = [...wk.enroute, ...customForThis.map(c => c.exercise)];
+  return wk;
 }
 
 // Finds the exercise the user is currently working on: the first one that's
@@ -3839,14 +3965,6 @@ function renderProfile(p) {
   parts.push('<div style="font-size:11px;color:var(--muted);margin-top:4px">'+FCF_VERSION+' · Build '+FCF_BUILD+'</div>');
   parts.push('</div>');
 
-  // Share app
-  parts.push('<div class="card mb12">');
-  parts.push('<div class="section-label" style="margin-top:0">SHARE APP</div>');
-  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Invite a fellow pilot or crew member to try Flight Crew Fitness.</div>');
-  parts.push('<button class="btn btn-outline" onclick="shareApp()">📤 Share Flight Crew Fitness</button>');
-  parts.push('<button class="btn btn-outline mt8" onclick="showFeedbackModal()">💬 Send Feedback</button>');
-  parts.push('</div>');
-
   // Body metrics (sex, height, BMI)
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">BODY METRICS</div>');
@@ -3871,7 +3989,11 @@ function renderProfile(p) {
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
   Object.keys(GOALS).forEach(gid => {
     const g = GOALS[gid];
-    parts.push('<div class="env-btn '+(ST.goal===gid?'sel':'')+'" onclick="ST.goal=\''+gid+'\';ST.muscleGroup=getRecommendedNext();saveGoalLevel();renderPage()">');
+    // Sex-tagged emphasis goals only show for the matching profile (or if already selected)
+    if (g.suggestFor && g.suggestFor !== ST.sex && ST.goal !== gid) return;
+    const suggested = g.suggestFor && g.suggestFor === ST.sex;
+    parts.push('<div class="env-btn '+(ST.goal===gid?'sel':'')+'" style="position:relative" onclick="ST.goal=\''+gid+'\';ST.muscleGroup=getRecommendedNext();saveGoalLevel();renderPage()">');
+    if (suggested) parts.push('<div style="position:absolute;top:4px;right:4px;font-family:var(--mono);font-size:7px;letter-spacing:0.06em;color:var(--gold);border:1px solid var(--gold);border-radius:4px;padding:1px 4px">SUGGESTED</div>');
     parts.push('<div class="ei">'+g.icon+'</div><div class="el">'+g.label+'</div>');
     parts.push('<div style="font-size:9px;color:var(--muted);margin-top:3px;line-height:1.3">'+g.desc+'</div>');
     parts.push('</div>');
@@ -3940,6 +4062,14 @@ function renderProfile(p) {
   // Safety disclaimer
   parts.push('<div class="card mb12"><div class="section-label" style="margin-top:0">SAFETY DISCLAIMER</div>');
   parts.push('<div class="disclaimer-banner">Flight Crew Fitness is a training tool, not medical advice. Consult a physician before beginning any new exercise program. Exercise at your own risk and within your own physical limits.</div>');
+  parts.push('</div>');
+
+  // Share app
+  parts.push('<div class="card mb12">');
+  parts.push('<div class="section-label" style="margin-top:0">SHARE APP</div>');
+  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Invite a fellow pilot or crew member to try Flight Crew Fitness.</div>');
+  parts.push('<button class="btn btn-outline" onclick="shareApp()">📤 Share Flight Crew Fitness</button>');
+  parts.push('<button class="btn btn-outline mt8" onclick="showFeedbackModal()">💬 Send Feedback</button>');
   parts.push('</div>');
 
   parts.push('<button class="btn btn-red-outline" onclick="doSignOut()">Sign Out</button>');

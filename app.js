@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.10.2';
+const FCF_VERSION = 'v5.11';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -49,7 +49,12 @@ const ST = {
   flightHrsRaw: '',
   sex: null,
   heightIn: null,
+  age: null,
   lastWeight: null,
+  injuries: [],       // persistent (profile) — active flagged body regions
+  timeAvailMin: null, // daily — minutes available for today's session
+  sleepHours: null,   // daily — manual sleep entry for non-Oura users
+  readiness: null,    // daily — 1-5 self-reported readiness
   flightHrsTouched: false,
   waterIn: 0,
   waterInRaw: '',
@@ -136,6 +141,7 @@ function persistDailyInputs() {
       day: new Date().toDateString(),
       flightHrs: ST.flightHrs, flightHrsRaw: ST.flightHrsRaw, flightHrsTouched: ST.flightHrsTouched,
       waterIn: ST.waterIn, waterInRaw: ST.waterInRaw,
+      timeAvailMin: ST.timeAvailMin, sleepHours: ST.sleepHours, readiness: ST.readiness,
     }));
   } catch(e) {}
 }
@@ -149,6 +155,9 @@ function restoreDailyInputs() {
     ST.flightHrsTouched = !!saved.flightHrsTouched;
     ST.waterIn = saved.waterIn || 0;
     ST.waterInRaw = saved.waterInRaw || '';
+    ST.timeAvailMin = saved.timeAvailMin || null;
+    ST.sleepHours = saved.sleepHours || null;
+    ST.readiness = saved.readiness || null;
   } catch(e) {}
 }
 
@@ -624,6 +633,79 @@ function femaleTargetBump(target) {
   });
 }
 
+// ─── INJURY-AWARE FILTERING ───────────────────────────────────────────────────
+// Conservative, name-based heuristic — not a medical assessment. Flags which
+// body regions an exercise plausibly loads, based on movement pattern
+// keywords in its name. Used to auto-swap to a known-safer alternative where
+// one exists (via the same ALTERNATES data the manual Alternate button uses),
+// and to caution-flag exercises where no confident substitute exists.
+const INJURY_REGIONS = {
+  shoulder:    { label: 'Shoulder',      keywords: ['Overhead Press','Lateral Raise','Front Raise','Upright Row','Handstand','Pike Pushup','Arnold','Y-T-W','Face Pull'] },
+  elbow_wrist: { label: 'Elbow / Wrist',  keywords: ['Curl','Tricep','Extension','Close Grip','Dip','Pushup','Push-up','Plank'] },
+  lower_back:  { label: 'Lower Back',     keywords: ['Deadlift','Good Morning','Back Extension','Superman','Row','RDL','Romanian'] },
+  hip:         { label: 'Hip',            keywords: ['Squat','Lunge','Split Squat','Step-Up','Hip Thrust','Deadlift','Pistol','Goblet'] },
+  knee:        { label: 'Knee',           keywords: ['Squat','Lunge','Split Squat','Step-Up','Jump','Box Jump','Pistol','Leg Press','Leg Extension'] },
+  ankle_foot:  { label: 'Ankle / Foot',   keywords: ['Calf Raise','Jump','Box Jump','Run','Sprint','Walking','Treadmill'] },
+  neck:        { label: 'Neck',           keywords: ['Neck','Shrug'] },
+};
+
+function exerciseRegionTags(exName) {
+  if (!exName) return [];
+  return Object.keys(INJURY_REGIONS).filter(r =>
+    INJURY_REGIONS[r].keywords.some(kw => exName.toLowerCase().includes(kw.toLowerCase()))
+  );
+}
+
+function slugify(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''); }
+
+// Given an exercise, if the user has an active injury flag matching it, try
+// to substitute a known-safer alternative from ALTERNATES. Returns either
+// the original exercise (untouched), a caution-flagged copy (no safe
+// alternative found), or a substituted exercise (new id, so PR history for
+// the swap-in stays clean and separate from the original movement).
+function applyInjuryFilter(exItem) {
+  if (!ST.injuries || !ST.injuries.length) return exItem;
+  const tags = exerciseRegionTags(exItem.name);
+  const flagged = tags.filter(t => ST.injuries.includes(t));
+  if (!flagged.length) return exItem;
+
+  const alts = getAlternates(exItem.name);
+  const safeAlt = alts.find(a => {
+    const altTags = exerciseRegionTags(a.name);
+    return !altTags.some(t => ST.injuries.includes(t));
+  });
+
+  if (safeAlt) {
+    return {
+      ...exItem,
+      id: 'inj_' + slugify(safeAlt.name),
+      name: safeAlt.name, target: safeAlt.target, note: safeAlt.note,
+      swappedForInjury: true, originalName: exItem.name,
+      flaggedRegion: INJURY_REGIONS[flagged[0]].label,
+    };
+  }
+  return { ...exItem, injuryCaution: true, flaggedRegion: INJURY_REGIONS[flagged[0]].label };
+}
+
+// ─── TIME-AWARE FILTERING ─────────────────────────────────────────────────────
+// Trims a workout to fit a stated time budget. Taxi (warmup) and Landing
+// (cooldown) are protected — cutting those to save time is exactly backwards,
+// since they're what prevents the injuries that cost far more training time
+// later. En Route (accessory volume) is trimmed first, Takeoff (the primary
+// compound lifts) only if time is still short after that.
+const MIN_PER_EXERCISE = 4; // rough minutes incl. rest, coach rule-of-thumb
+function applyTimeFilter(wk, minutes) {
+  if (!minutes) return wk;
+  let budget = Math.floor(minutes / MIN_PER_EXERCISE);
+  const protectedCount = wk.taxi.length + wk.landing.length;
+  let takeoff = [...wk.takeoff], enroute = [...wk.enroute];
+  let remaining = Math.max(budget - protectedCount, 0);
+  if (enroute.length > remaining) enroute = enroute.slice(0, Math.max(remaining, 0));
+  remaining = Math.max(remaining - enroute.length, 0);
+  if (takeoff.length > remaining) takeoff = takeoff.slice(0, Math.max(remaining, 1)); // keep at least 1 main lift
+  return { taxi: wk.taxi, takeoff, enroute, landing: wk.landing };
+}
+
 function getFilteredWorkout(rawWk) {
   if (!rawWk) return null;
   if (ST.fatigue === 'nogo') {
@@ -824,6 +906,26 @@ const CNS_EXPLAINER = "CNS down-regulation means deliberately shifting your nerv
 
 // ─── BIOMETRIC INFO POPUPS ────────────────────────────────────────────────────
 const BIO_INFO = {
+  injury: {
+    title: 'Injury Flag',
+    text: 'Flag a body region that\'s currently bothering you. The app checks every exercise in your program against your flagged region(s): where a proven safer alternative already exists in the exercise library, it swaps it in automatically and shows what it replaced. Where no confident substitute exists, it leaves the original exercise in place but marks it with a caution badge so you can decide — open Alternate to browse other options, or skip it that day. This is a conservative heuristic based on exercise names and movement patterns, not a medical assessment. It won\'t catch everything, and it\'s not a substitute for a doctor or physical therapist if something actually hurts. Clear the flag once you\'re past it.',
+  },
+  timeAvail: {
+    title: 'Time Available',
+    text: 'Tell the app how many minutes you actually have today, and it trims your session to fit — the same way a coach would shorten a workout on a tight schedule. Warm-up (Taxi) and cooldown (Landing) are protected and trimmed last, since skipping them to save time is exactly backwards: they\'re what prevent the injuries that cost you far more training time later. The accessory volume (En Route) gets cut first, since that\'s the lowest-cost place to lose a set when time is short. Leave it blank for your full programmed session.',
+  },
+  sleepHours: {
+    title: 'Sleep Hours',
+    text: 'If you don\'t have a wearable, this gives the app the single most useful recovery signal after Oura: how much you actually slept. Under 6 hours suggests dialing back to MARGINAL, under 5 suggests NO-GO — sleep debt measurably impairs strength output, reaction time, and injury resistance the next day. This only suggests; your own Pilot Condition selection always has the final say. If Oura is connected, its readiness score already accounts for sleep, so this field is hidden.',
+  },
+  age: {
+    title: 'Age',
+    text: 'Recovery capacity between sets and between sessions declines gradually with age — not dramatically, but enough that most strength coaches build in slightly longer rest periods for lifters over 45, and more so over 60. The app applies a modest rest-timer adjustment on that basis. It does not change your program\'s exercise selection, volume, or intensity — those are governed by your Fitness Level and Mission Objective, not age. Nothing here implies age is a limit; it\'s a small recovery-window adjustment, nothing more.',
+  },
+  readiness: {
+    title: 'Daily Readiness (1-5)',
+    text: 'A quick self-check: how recovered do you actually feel today? This captures things no wearable can — motivation, life stress, an oncoming cold, how last night\'s duty day actually felt. A rating of 1-2 suggests NO-GO, 3 suggests MARGINAL, 4-5 suggests GO — the same bands Oura\'s readiness score maps to. Like every other automatic suggestion in this app, it only pre-selects your Pilot Condition; you can always override it with the GO / MARGINAL / NO-GO buttons directly. If Oura is connected, its readiness score takes precedence and this is hidden to avoid two competing signals.',
+  },
   hrv: {
     title: 'HRV Balance',
     text: 'HRV Balance is Oura\'s score (0-100) comparing your recent heart rate variability to your own 2-week baseline — not a raw HRV number, and not comparable between people. Higher means your nervous system is more recovered relative to your normal; lower means accumulated stress, poor sleep, illness, or overtraining is dragging on recovery. A single low day matters less than a multi-day downward trend, which is a real signal to back off training intensity.',
@@ -1146,7 +1248,9 @@ async function bootApp() {
     ST.ouraConnected    = !!profile.ouraConnected;
     ST.sex        = profile.sex || null;
     ST.heightIn   = profile.heightIn || null;
+    ST.age        = profile.age || null;
     ST.lastWeight = profile.lastWeight || null;
+    ST.injuries   = profile.injuries || [];
   }
   restoreDailyInputs();
   // First-ever open with no profile info: land on Profile once so the user
@@ -2028,9 +2132,51 @@ async function renderPreflight(p) {
   } else if (ST.fatigue === 'nogo') {
     parts.push('<div class="alert alert-danger"><div class="alert-icon">🔴</div><div>Only Taxi and Landing phases active. Training under significant fatigue increases injury risk — this is physiology, not weakness.</div></div>');
   }
+  if (!ST.ouraConnected) {
+    parts.push('<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">');
+    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">No Oura connected — these help set today\'s Pilot Condition manually.</div>');
+    parts.push('<div class="field" style="margin-bottom:10px"><label>Sleep Last Night (hours) <span class="info-i" onclick="showBioInfo(\'sleepHours\')">i</span></label>');
+    parts.push('<input type="text" inputmode="decimal" placeholder="e.g. 6.5" value="'+(ST.sleepHours||'')+'" oninput="ST.sleepHours=parseFloat(this.value)||null;persistDailyInputs()"></div>');
+    parts.push('<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">How recovered do you feel today? <span class="info-i" onclick="showBioInfo(\'readiness\')">i</span></label>');
+    parts.push('<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px">');
+    for (let i=1;i<=5;i++) {
+      parts.push('<div class="env-btn" style="padding:8px 2px'+(ST.readiness===i?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="setReadiness('+i+')"><div style="font-size:15px;font-weight:700">'+i+'</div></div>');
+    }
+    parts.push('</div>');
+    parts.push('</div>');
+  }
   parts.push('</div>');
 
-  // Environment
+  // Injury flag
+  parts.push('<div class="section-label">INJURY FLAG <span class="info-i" onclick="showBioInfo(\'injury\')">i</span></div>');
+  parts.push('<div class="card mb12">');
+  if (ST.injuries.length) {
+    parts.push('<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">');
+    ST.injuries.forEach(r => {
+      parts.push('<div style="display:flex;align-items:center;gap:6px;background:rgba(245,158,11,0.1);border:1px solid var(--amber);border-radius:16px;padding:4px 10px;font-size:11px;color:var(--amber)">'+INJURY_REGIONS[r].label+' <span style="cursor:pointer" onclick="toggleInjury(\''+r+'\')">✕</span></div>');
+    });
+    parts.push('</div>');
+  } else {
+    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px">No regions flagged. Tap a region below if something\'s bothering you today.</div>');
+  }
+  parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">');
+  Object.keys(INJURY_REGIONS).forEach(r => {
+    const on = ST.injuries.includes(r);
+    parts.push('<div class="env-btn" style="padding:8px'+(on?';border-color:var(--amber);background:rgba(245,158,11,0.08)':'')+'" onclick="toggleInjury(\''+r+'\')"><div style="font-size:11px">'+INJURY_REGIONS[r].label+'</div></div>');
+  });
+  parts.push('</div>');
+  parts.push('</div>');
+
+  // Time available
+  parts.push('<div class="section-label">TIME AVAILABLE <span class="info-i" onclick="showBioInfo(\'timeAvail\')">i</span></div>');
+  parts.push('<div class="card mb12">');
+  parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">');
+  [15,30,45,60,90,null].forEach(m => {
+    const sel = ST.timeAvailMin === m;
+    parts.push('<div class="env-btn" style="padding:10px'+(sel?' sel':'')+'" onclick="ST.timeAvailMin='+(m===null?'null':m)+';persistDailyInputs();renderPage()"><div style="font-size:12px;font-weight:600">'+(m===null?'Full Session':m+' min')+'</div></div>');
+  });
+  parts.push('</div>');
+  parts.push('</div>');
   parts.push('<div class="section-label">MISSION ENVIRONMENT</div>');
   parts.push('<div class="env-toggle">');
   parts.push('<div class="env-btn '+(ST.env==='room'?'sel':'')+'" onclick="ST.env=\'room\';renderPage()"><div class="ei">🛏️</div><div class="el">HOTEL ROOM</div></div>');
@@ -2097,14 +2243,17 @@ async function saveBodyMetrics() {
   const sexEl = document.getElementById('bmSex');
   const ftEl = document.getElementById('bmFt');
   const inEl = document.getElementById('bmIn');
+  const ageEl = document.getElementById('bmAge');
   const ft = parseInt(ftEl?.value) || 0;
   const inches = parseFloat(inEl?.value) || 0;
   ST.sex = sexEl?.value || null;
   ST.heightIn = (ft || inches) ? ft*12 + inches : null;
+  ST.age = parseInt(ageEl?.value) || null;
   const profile = (await dbGetProfile()) || {};
   const hadSex = !!profile.sex;
   profile.sex = ST.sex;
   profile.heightIn = ST.heightIn;
+  profile.age = ST.age;
   await dbSetProfile(profile);
   showToast('Body metrics saved.');
   renderPage();
@@ -2139,6 +2288,24 @@ async function applyStyleUpdate(goal) {
   showToast('Objective updated — workouts now reflect your profile.');
 }
 
+function setReadiness(n) {
+  ST.readiness = n;
+  persistDailyInputs();
+  // Suggests Pilot Condition — same pattern as Oura's auto-set. The GO/
+  // MARGINAL/NO-GO buttons remain a manual override at all times.
+  ST.fatigue = n <= 2 ? 'nogo' : n === 3 ? 'marginal' : 'go';
+  renderPage();
+}
+
+async function toggleInjury(region) {
+  const i = ST.injuries.indexOf(region);
+  if (i === -1) ST.injuries.push(region); else ST.injuries.splice(i, 1);
+  const profile = (await dbGetProfile()) || {};
+  profile.injuries = ST.injuries;
+  await dbSetProfile(profile);
+  renderPage();
+}
+
 async function saveGoalLevel() {
   const profile = (await dbGetProfile()) || {};
   profile.goal = ST.goal;
@@ -2163,6 +2330,7 @@ function getCombinedWorkout(env, muscleGroup) {
       const t = femaleTargetBump(out.target);
       if (t !== out.target) out = { ...out, target: t };
     }
+    out = applyInjuryFilter(out);
     return out;
   });
   const wk = {
@@ -2204,8 +2372,9 @@ function getCurrentExerciseId() {
 function engageWorkout() {
   const rawWk = getCombinedWorkout(ST.env, ST.muscleGroup);
   if (!rawWk) { showToast('No workout available for this environment + muscle group.'); return; }
-  const wk = getFilteredWorkout(rawWk);
+  let wk = getFilteredWorkout(rawWk);
   if (!wk) return;
+  wk = applyTimeFilter(wk, ST.timeAvailMin);
 
   ST.workout = wk;
   ST.sets = {};
@@ -2601,6 +2770,11 @@ function buildExCard(exItem, phaseKey) {
 
   parts.push('<div class="ex-card'+(exItem.custom?' custom-ex':'')+'" id="excard_'+exItem.id+'">');
   parts.push('<div class="ex-hdr"><div style="flex:1;cursor:pointer" onclick="toggleEx(\''+exItem.id+'\')"><div class="ex-name">'+exItem.name+(exItem.custom?' <span style="font-size:9px;color:var(--gold)">CUSTOM</span>':'')+'</div><div class="ex-target">'+exItem.target+(exItem.timed?' · ⏱ TIMED':'')+'</div></div><div class="ex-right"><button class="btn-ghost" style="font-size:11px;padding:4px 8px;margin-right:4px;color:var(--blue)" onclick="event.stopPropagation();openExerciseGuide(\''+exItem.name+'\')">ⓘ Guide</button><div class="ex-done '+(hasData?'ok':'')+'">'+(hasData?'✓':'')+'</div><div class="ex-caret '+(isOpen?'open':'')+'">⌄</div></div></div>');
+  if (exItem.swappedForInjury) {
+    parts.push('<div style="padding:6px 14px;background:rgba(56,189,248,0.08);border-top:1px solid var(--border);font-size:10px;color:var(--blue)">🩹 Swapped from '+exItem.originalName+' — '+exItem.flaggedRegion+' flagged</div>');
+  } else if (exItem.injuryCaution) {
+    parts.push('<div style="padding:6px 14px;background:rgba(245,158,11,0.08);border-top:1px solid var(--border);font-size:10px;color:var(--amber)">⚠️ May stress your flagged '+exItem.flaggedRegion+' — consider Alternate below</div>');
+  }
 
   if (isOpen) {
     parts.push('<div class="ex-body"><p class="ex-note">'+exItem.note+'</p>');
@@ -2732,8 +2906,15 @@ function toggleEx(id) {
 }
 
 // ─── REST TIMER (between sets, phase-aware default) ──────────────────────────
+function ageRestBonus() {
+  if (!ST.age) return 0;
+  if (ST.age >= 60) return 30;
+  if (ST.age >= 45) return 15;
+  return 0;
+}
+
 function buildRestTimerWidget(exId, phaseKey) {
-  const defaultSec = REST_OVERRIDES[exId] || REST_DEFAULTS[phaseKey] || 60;
+  const defaultSec = (REST_OVERRIDES[exId] || REST_DEFAULTS[phaseKey] || 60) + ageRestBonus();
   const isActive = ST.restTimer.active && ST.restTimer.exId === exId;
   const mins = Math.floor((isActive?ST.restTimer.seconds:defaultSec)/60);
   const secs = (isActive?ST.restTimer.seconds:defaultSec)%60;
@@ -4022,6 +4203,8 @@ function renderProfile(p) {
   parts.push('<div class="field" style="margin-bottom:0"><label>Height (ft)</label><input id="bmFt" type="text" inputmode="numeric" placeholder="5" value="'+hFt+'"></div>');
   parts.push('<div class="field" style="margin-bottom:0"><label>(in)</label><input id="bmIn" type="text" inputmode="decimal" placeholder="10" value="'+hIn+'"></div>');
   parts.push('</div>');
+  parts.push('<div class="field"><label>Age <span class="info-i" onclick="showBioInfo(\'age\')">i</span></label>');
+  parts.push('<input id="bmAge" type="text" inputmode="numeric" placeholder="e.g. 42" value="'+(ST.age||'')+'"></div>');
   parts.push('<button class="btn btn-outline" onclick="saveBodyMetrics()">💾 Save Body Metrics</button>');
   parts.push('</div>');
 

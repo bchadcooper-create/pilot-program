@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.10';
+const FCF_VERSION = 'v5.10.1';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -191,6 +191,21 @@ const ex = (id, name, target, sets, note, timed, inputType) =>
   ({ id, name, target, sets: sets||3, note, timed: !!timed, inputType: inputType||'reps_weight' });
   // inputType: 'reps_weight' | 'reps_only' | 'reps_height' | 'reps_distance' | 'timed' | 'timed_bilateral'
 
+// Per-exercise rest overrides (seconds). Max-effort power/strength movements
+// programmed in the enroute slot need full ATP-PC system recovery (2.5-3 min,
+// NSCA guidelines) — the 75s hypertrophy default would collapse output quality
+// and, for heavy pulls done fatigued, raise injury risk.
+const REST_OVERRIDES = {
+  c_fb_er1: 180, // Deadlift heavy triples on Full Body day
+  c_pp_er1: 150, // Broad Jump — max effort
+  c_pp_er3: 150, // 40yd Sprint — full speed
+  h_pp_er1: 120, // DB Jump Squat
+  h_pp_er2: 120, // Sprints
+  h_pp_er4: 120, // Depth Drop
+  r_pp_er1: 120, // Squat Jump
+  r_pp_er3: 120, // Explosive Pushup
+};
+
 // Phase-based default rest periods (seconds) — fitness coach standard
 const REST_DEFAULTS = {
   takeoff: 210,  // 3.5 min — heavy compounds
@@ -305,7 +320,7 @@ WORKOUTS.comm['Full Body'] = {
     ex('c_fb_to2','Bench Press','4×5',4,'Heavy. Primary upper push.'),
   ],
   enroute: [
-    ex('c_fb_er1','Deadlift','3×3',3,'Heavy triple. Maximum posterior chain.'),
+    ex('c_fb_er1','Deadlift','3×3',3,'Heavy triple. Maximum posterior chain. Take the FULL rest timer — heavy pulls after squat and bench demand complete recovery.'),
     ex('c_fb_er2','Weighted Pullups','3×6',3,'Add weight if bodyweight is easy.'),
     ex('c_fb_er3','Overhead Press','3×8',3,'Moderate. Standing.'),
     ex('c_fb_er4','Single Leg Split Squat','3×8/leg',3,'Unilateral leg accessory.',false,'reps_only'),
@@ -344,8 +359,8 @@ WORKOUTS.comm['Cardio'] = {
     ex('c_ca_t1','Brisk Walk Ramp-Up','3 min',1,'Start slow, build pace.',true,'timed'),
   ],
   takeoff: [
-    ex('c_ca_to1','Rowing Machine Intervals','6×500m',6,'Hard effort. Record split time each interval.'),
-    ex('c_ca_to2','Assault Bike Intervals','8×30s',8,'All-out 30 seconds. 60s easy spin.'),
+    ex('c_ca_to1','Rowing Machine Intervals','6×500m',6,'Hard effort. Log your 500m split in seconds as the rep value for each interval.',false,'reps_only'),
+    ex('c_ca_to2','Assault Bike Intervals','8×30s',8,'All-out 30 seconds, 60s easy spin. Log calories or RPM as the rep value.',false,'reps_only'),
   ],
   enroute: [
     ex('c_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace — speak in full sentences.',true,'timed'),
@@ -412,7 +427,7 @@ WORKOUTS.hotel['Power / Plyo'] = {
     ex('h_pp_er1','DB Jump Squat','4×5',4,'Light DBs. Explosive concentric.'),
     ex('h_pp_er2','Sprint (hall/outside)','6×20yd',6,'Full speed. Walk back.',false,'reps_only'),
     ex('h_pp_er3','Split Jump','3×6',3,'Lunge position, jump and switch.',false,'reps_only'),
-    ex('h_pp_er4','Depth Drop','3×5',3,'Step off low bench, land softly, absorb.'),
+    ex('h_pp_er4','Depth Drop','3×5',3,'Step off low bench, land softly, absorb.',false,'reps_only'),
   ],
   landing: WORKOUTS.comm['Power / Plyo'].landing,
 };
@@ -437,8 +452,8 @@ WORKOUTS.hotel['Longevity'] = WORKOUTS.comm['Longevity'];
 WORKOUTS.hotel['Cardio'] = {
   taxi: WORKOUTS.comm['Cardio'].taxi,
   takeoff: [
-    ex('h_ca_to1','Treadmill Intervals','8×1 min',8,'Hard 1 min run, 90s walk.'),
-    ex('h_ca_to2','Stationary Bike Intervals','6×45s',6,'High resistance. Hard effort.'),
+    ex('h_ca_to1','Treadmill Intervals','8×1 min',8,'Hard 1 min run, 90s walk. Log speed (mph) as the rep value.',false,'reps_only'),
+    ex('h_ca_to2','Stationary Bike Intervals','6×45s',6,'High resistance, hard effort. Log resistance level or watts as the rep value.',false,'reps_only'),
   ],
   enroute: [
     ex('h_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace.',true,'timed'),
@@ -590,7 +605,7 @@ const GOAL_OVERLAYS = {
   strength: {
     swaps: {
       comm: { 'Lower Body': {
-        takeoff: { 'Romanian Deadlift': ex('g_c_lb_dl','Conventional Deadlift','5×3',5,'Heavy triples. Brace hard, bar close to shins, hips and shoulders rise together.') },
+        takeoff: { 'Romanian Deadlift': ex('c_ul_to1','Conventional Deadlift','5×3',5,'Heavy triples. Brace hard, bar close to shins, hips and shoulders rise together.') },
       }},
     },
     retarget: { c_lb_to1: '5×3', c_up_to1: '5×3', c_up_to2: '4×3' },
@@ -1117,7 +1132,14 @@ async function bootApp() {
   if (profile) {
     ST.level = profile.level || ST.level;
     ST.goal  = profile.goal  || ST.goal;
-    ST.customExercises = profile.customExercises || [];
+    ST.customExercises = (profile.customExercises || []).map(ce => {
+      if (ce?.exercise) {
+        ce.exercise.name = sanitizeUserText(ce.exercise.name);
+        ce.exercise.note = sanitizeUserText(ce.exercise.note);
+        ce.exercise.target = sanitizeUserText(ce.exercise.target) || '—';
+      }
+      return ce;
+    });
     ST.ouraToken       = profile.ouraToken || '';
     ST.ouraAccessToken  = profile.ouraAccessToken || null;
     ST.ouraRefreshToken = profile.ouraRefreshToken || null;
@@ -1873,6 +1895,7 @@ function edAddCatalogExercise(matchIdx, q) {
   edPushExercise(exDef);
 }
 function edAddCustomExercise(name, inputType) {
+  name = sanitizeUserText(name);
   if (!name) return;
   const exDef = {
     id: 'custom_'+Date.now(),
@@ -2547,7 +2570,21 @@ function openExerciseGuide(exName) {
   const guideURL = GUIDE_BASE_URL + guideFile;
   const root = document.getElementById('modalRoot');
   root.innerHTML = '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet" style="max-height:95vh;width:95vw;max-width:90vh;padding:0;border-radius:12px;overflow:hidden;display:flex;flex-direction:column"><div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0"><div style="font-weight:600">'+exName+' Form Guide</div><button class="btn-ghost" style="font-size:20px;padding:0;width:32px;height:32px" onclick="closeModal()">✕</button></div><div id="guideContent" style="flex:1;overflow-y:auto;background:#000;display:flex;align-items:center;justify-content:center;color:#ccc">Loading...</div></div></div>';
-  fetch(guideURL, { cache: 'reload' }).then(r => r.text()).then(html => { const el = document.getElementById('guideContent'); if (el) { el.innerHTML = html; el.style.display = 'block'; } }).catch(e => { const el = document.getElementById('guideContent'); if (el) el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">Failed to load.<br><button class="btn btn-blue mt12" onclick="openYouTubeSearch(\''+exName+'\')">Open YouTube</button></div>'; });
+  fetch(guideURL, { cache: 'reload' }).then(r => r.text()).then(html => {
+    const el = document.getElementById('guideContent');
+    if (!el) return;
+    // Guides exported as runtime shells (they load ./support.js and scene
+    // .jsx files that aren't published) can't render standalone — and
+    // innerHTML never executes scripts regardless. Fall back gracefully.
+    if (html.includes('support.js') || html.includes('<x-import')) {
+      closeModal();
+      showToast('In-app animation coming soon — opening YouTube guide.');
+      openYouTubeSearch(exName);
+      return;
+    }
+    el.innerHTML = html;
+    el.style.display = 'block';
+  }).catch(e => { const el = document.getElementById('guideContent'); if (el) el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">Failed to load.<br><button class="btn btn-blue mt12" onclick="openYouTubeSearch(\''+exName+'\')">Open YouTube</button></div>'; });
 }
 
 function openYouTubeSearch(exName) {
@@ -2696,7 +2733,7 @@ function toggleEx(id) {
 
 // ─── REST TIMER (between sets, phase-aware default) ──────────────────────────
 function buildRestTimerWidget(exId, phaseKey) {
-  const defaultSec = REST_DEFAULTS[phaseKey] || 60;
+  const defaultSec = REST_OVERRIDES[exId] || REST_DEFAULTS[phaseKey] || 60;
   const isActive = ST.restTimer.active && ST.restTimer.exId === exId;
   const mins = Math.floor((isActive?ST.restTimer.seconds:defaultSec)/60);
   const secs = (isActive?ST.restTimer.seconds:defaultSec)%60;
@@ -2886,11 +2923,17 @@ function buildAddExerciseCard() {
   return parts.join('');
 }
 
+function sanitizeUserText(s) {
+  // User text is rendered via innerHTML and inside inline handler attributes.
+  // Stripping quote/angle/backtick chars prevents markup or handler injection.
+  return String(s || '').replace(/[<>"'`\\]/g, '').slice(0, 120);
+}
+
 async function saveCustomExercise() {
-  const name = document.getElementById('custom_ex_name')?.value?.trim();
-  const target = document.getElementById('custom_ex_target')?.value?.trim() || '—';
+  const name = sanitizeUserText(document.getElementById('custom_ex_name')?.value?.trim());
+  const target = sanitizeUserText(document.getElementById('custom_ex_target')?.value?.trim()) || '—';
   const inputType = document.getElementById('custom_ex_type')?.value || 'reps_weight';
-  const note = document.getElementById('custom_ex_note')?.value?.trim() || 'User-created exercise.';
+  const note = sanitizeUserText(document.getElementById('custom_ex_note')?.value?.trim()) || 'User-created exercise.';
   if (!name) { showToast('Enter an exercise name.'); return; }
 
   const id = 'custom_' + Date.now();

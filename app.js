@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.11';
+const FCF_VERSION = 'v5.11.1';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2173,7 +2173,7 @@ async function renderPreflight(p) {
   parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">');
   [15,30,45,60,90,null].forEach(m => {
     const sel = ST.timeAvailMin === m;
-    parts.push('<div class="env-btn" style="padding:10px'+(sel?' sel':'')+'" onclick="ST.timeAvailMin='+(m===null?'null':m)+';persistDailyInputs();renderPage()"><div style="font-size:12px;font-weight:600">'+(m===null?'Full Session':m+' min')+'</div></div>');
+    parts.push('<div class="env-btn'+(sel?' sel':'')+'" style="padding:10px" onclick="ST.timeAvailMin='+(m===null?'null':m)+';persistDailyInputs();renderPage()"><div style="font-size:12px;font-weight:600">'+(m===null?'Full Session':m+' min')+'</div></div>');
   });
   parts.push('</div>');
   parts.push('</div>');

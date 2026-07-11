@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <style>body { margin: 0; background: #0a0f1a; }</style>
+</helmet>
+<div style="position:relative;width:100%;height:100vh;background:#0a0f1a;" data-screen-label="Kettlebell Goblet Squat (Warmup)">
+  <x-import component-from-global-scope="GobletSquatAnimation" from="./animations.jsx ./fitness-kit.jsx ./goblet-squat-scene.jsx"
+    figure-style="{{ figureStyle }}" name="KETTLEBELL GOBLET SQUAT (WARMUP)" depth="warmup" hint-size="100%,100%"></x-import>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;figureStyle&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;skeleton&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;options&quot;: [&quot;skeleton&quot;, &quot;silhouette&quot;, &quot;abstract&quot;]}}"></script>
+</body>
+</html>

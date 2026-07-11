@@ -2414,19 +2414,21 @@ function exNameToGuideName(name) {
 function openExerciseGuide(exName) {
   const guideFile = exNameToGuideName(exName);
   if (!guideFile) { showToast('No guide available.'); return; }
-  const guideURL = GUIDE_BASE_URL + guideFile;
   
+  const GUIDES = ['Archer_Pushup_dc.html','Back_Squat_dc.html','Band_Pull-Apart_dc.html','Barbell_Row__Pendlay__dc.html','Bench_Box_Jump_dc.html','Bench_Press_dc.html','Bent-Over_DB_Face_Pull_dc.html','Cable_Row_dc.html','Calf_Raise__Step__dc.html','Canvas_dc.html','Chair_Dips_dc.html','Close_Grip_Bench_dc.html','Conventional_Deadlift_dc.html','DB_Bench_Press_dc.html','DB_Curl_dc.html','DB_Front_Raise_dc.html','DB_Hammer_Curl_dc.html','DB_Incline_Press_dc.html','DB_Jump_Squat_dc.html','DB_Lateral_Raise_dc.html','DB_Overhead_Press_dc.html','DB_Romanian_Deadlift_dc.html','Kettlebell_Goblet_Squat__Warmup__dc.html','Single_Leg_Squat__Pistol__dc.html','Standing_Overhead_Press_dc.html','Step-Up__Weighted__dc.html','Table___Inverted_Row_dc.html','Thoracic_Extension__chair__dc.html','Towel_Curl_dc.html','Trap_Bar_Deadlift_dc.html'];
+  if (!GUIDES.includes(guideFile)) { openYouTubeSearch(exName); return; }
+  
+  const guideURL = GUIDE_BASE_URL + guideFile;
   const root = document.getElementById('modalRoot');
-  root.innerHTML =
-    '<div class="modal-bg" onclick="if(event.target===this)closeModal()">' +
-    '<div class="modal-sheet" style="max-height:95vh;width:95vw;max-width:90vh;padding:0;border-radius:12px;overflow:hidden">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg3);border-bottom:1px solid var(--border)">' +
-    '<div style="font-weight:600">'+exName+' Form Guide</div>' +
-    '<button class="btn-ghost" style="font-size:20px;padding:0;width:32px;height:32px" onclick="closeModal()">✕</button>' +
-    '</div>' +
-    '<iframe src="'+guideURL+'" style="width:100%;height:calc(95vh - 50px);border:none;background:#000"></iframe>' +
-    '</div></div>';
+  root.innerHTML = '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet" style="max-height:95vh;width:95vw;max-width:90vh;padding:0;border-radius:12px;overflow:hidden;display:flex;flex-direction:column"><div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0"><div style="font-weight:600">'+exName+' Form Guide</div><button class="btn-ghost" style="font-size:20px;padding:0;width:32px;height:32px" onclick="closeModal()">✕</button></div><div id="guideContent" style="flex:1;overflow-y:auto;background:#000;display:flex;align-items:center;justify-content:center;color:#ccc">Loading...</div></div></div>';
+  fetch(guideURL, { cache: 'reload' }).then(r => r.text()).then(html => { const el = document.getElementById('guideContent'); if (el) { el.innerHTML = html; el.style.display = 'block'; } }).catch(e => { const el = document.getElementById('guideContent'); if (el) el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">Failed to load.<br><button class="btn btn-blue mt12" onclick="openYouTubeSearch(\''+exName+'\')">Open YouTube</button></div>'; });
 }
+
+function openYouTubeSearch(exName) {
+  const q = encodeURIComponent(exName + ' form');
+  window.open('https://www.youtube.com/results?search_query=' + q, '_blank');
+}
+
 
 function buildExCard(exItem, phaseKey) {
   const isOpen = !!ST.expanded[exItem.id];
@@ -2546,12 +2548,11 @@ function buildExCard(exItem, phaseKey) {
 
     if (!exItem.custom) {
       const hasAlts = getAlternates(exItem.name).length > 0;
-      parts.push('<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">');
-      parts.push('<button class="btn-info" onclick="showGuide(\''+exItem.id+'\')">ℹ Guide</button>');
       if (hasAlts) {
+        parts.push('<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">');
         parts.push('<button class="btn-info" style="border-color:rgba(167,139,250,0.4);color:#a78bfa" onclick="showAlternates(\''+exItem.id+'\',\''+exItem.name+'\',\''+phaseKey+'\')">⇄ Alternate</button>');
+        parts.push('</div>');
       }
-      parts.push('</div>');
     } else {
       parts.push('<div style="margin-top:10px"><button class="btn-info" style="color:#fca5a5;border-color:rgba(239,68,68,0.3)" onclick="deleteCustomExercise(\''+exItem.id+'\')">✕ Remove</button></div>');
     }

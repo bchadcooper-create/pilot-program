@@ -3,8 +3,8 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.8';
-const FCF_BUILD   = '20260708';
+const FCF_VERSION = 'v5.9';
+const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
 // Replace OURA_CLIENT_ID with your actual Client ID from cloud.ouraring.com/oauth/applications

@@ -2066,7 +2066,7 @@ function engageWorkout() {
   allEx.forEach(exItem => {
     if (exItem.inputType === 'nsdr') {
       ST.sets[exItem.id] = [{ seconds: '' }];
-    } else if (exItem.inputType === 'timed_bilateral') {
+    } else if (exItem.inputType === 'timed_bilateral' || (exItem.timed && exItem.target?.includes('/side'))) {
       ST.sets[exItem.id] = [{ seconds_left: '', seconds_right: '' }];
     } else if (exItem.timed) {
       ST.sets[exItem.id] = [{ seconds: '' }];
@@ -2475,7 +2475,8 @@ function buildExCard(exItem, phaseKey) {
 
     if (exItem.inputType === 'nsdr') {
       parts.push(buildNSDRWidget(exItem.id, sets[0]?.seconds||''));
-    } else if (exItem.inputType === 'timed_bilateral') {
+    } else if (exItem.inputType === 'timed_bilateral' || (exItem.timed && exItem.target?.includes('/side'))) {
+      // Bilateral stretches marked as timed_bilateral OR timed with "/side" in target (e.g., "90s/side")
       const valL = sets[0]?.seconds_left || '';
       const valR = sets[0]?.seconds_right || '';
       parts.push('<div style="display:flex;gap:8px">');

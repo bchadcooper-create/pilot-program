@@ -2398,6 +2398,36 @@ function renderFlight(p) {
   p.innerHTML = parts.join('');
 }
 
+// Exercise guide lookup — maps exercise name to .dc.html filename
+const GUIDE_BASE_URL = 'https://raw.githubusercontent.com/bchadcooper-create/pilot-program/main/guides/';
+function exNameToGuideName(name) {
+  if (!name) return null;
+  // Normalize: spaces→underscores, (x)→__x__, capitalize words, add suffix
+  let fn = name
+    .replace(/\s+/g, '_')
+    .replace(/\(([^)]+)\)/g, (m, inner) => '__' + inner.replace(/\s+/g, '_') + '__')
+    .split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('_')
+    + '_dc.html';
+  return fn;
+}
+
+function openExerciseGuide(exName) {
+  const guideFile = exNameToGuideName(exName);
+  if (!guideFile) { showToast('No guide available.'); return; }
+  const guideURL = GUIDE_BASE_URL + guideFile;
+  
+  const root = document.getElementById('modalRoot');
+  root.innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()">' +
+    '<div class="modal-sheet" style="max-height:95vh;width:95vw;max-width:90vh;padding:0;border-radius:12px;overflow:hidden">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg3);border-bottom:1px solid var(--border)">' +
+    '<div style="font-weight:600">'+exName+' Form Guide</div>' +
+    '<button class="btn-ghost" style="font-size:20px;padding:0;width:32px;height:32px" onclick="closeModal()">✕</button>' +
+    '</div>' +
+    '<iframe src="'+guideURL+'" style="width:100%;height:calc(95vh - 50px);border:none;background:#000"></iframe>' +
+    '</div></div>';
+}
+
 function buildExCard(exItem, phaseKey) {
   const isOpen = !!ST.expanded[exItem.id];
   const sets = ST.sets[exItem.id] || [];
@@ -2405,7 +2435,7 @@ function buildExCard(exItem, phaseKey) {
   const parts = [];
 
   parts.push('<div class="ex-card'+(exItem.custom?' custom-ex':'')+'" id="excard_'+exItem.id+'">');
-  parts.push('<div class="ex-hdr" onclick="toggleEx(\''+exItem.id+'\')"><div><div class="ex-name">'+exItem.name+(exItem.custom?' <span style="font-size:9px;color:var(--gold)">CUSTOM</span>':'')+'</div><div class="ex-target">'+exItem.target+(exItem.timed?' · ⏱ TIMED':'')+'</div></div><div class="ex-right"><div class="ex-done '+(hasData?'ok':'')+'">'+(hasData?'✓':'')+'</div><div class="ex-caret '+(isOpen?'open':'')+'">⌄</div></div></div>');
+  parts.push('<div class="ex-hdr"><div style="flex:1;cursor:pointer" onclick="toggleEx(\''+exItem.id+'\')"><div class="ex-name">'+exItem.name+(exItem.custom?' <span style="font-size:9px;color:var(--gold)">CUSTOM</span>':'')+'</div><div class="ex-target">'+exItem.target+(exItem.timed?' · ⏱ TIMED':'')+'</div></div><div class="ex-right"><button class="btn-ghost" style="font-size:11px;padding:4px 8px;margin-right:4px;color:var(--blue)" onclick="event.stopPropagation();openExerciseGuide(\''+exItem.name+'\')">ⓘ Guide</button><div class="ex-done '+(hasData?'ok':'')+'">'+(hasData?'✓':'')+'</div><div class="ex-caret '+(isOpen?'open':'')+'">⌄</div></div></div>');
 
   if (isOpen) {
     parts.push('<div class="ex-body"><p class="ex-note">'+exItem.note+'</p>');

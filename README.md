@@ -1,171 +1,106 @@
 # ✈ Flight Crew Fitness
 
-A mobile-first PWA workout tracker built for pilots and flight crew.
-7 training goals · 84 workout templates · Works offline · Cloud sync
+A mobile-first PWA workout tracker built for pilots and flight crew — training that adapts to duty schedules, layover gyms, fatigue, and recovery instead of ignoring them.
+
+**Live:** https://bchadcooper-create.github.io/pilot-program/
+**Version:** v5.12.1 · Single-file vanilla JS, no build step · Supabase backend
 
 ---
 
-## What's New in This Version
+## What It Does
 
-- **Flight Crew Fitness** branding
-- **Corrected workout rotations** — no two leg-heavy days back-to-back in any goal
-- **Exercise images** — Wikimedia Commons GIFs in guide modal + ExRx.net links
-- **Fitness level limits** — Beginner=3, Intermediate=4, Advanced=5 exercises per session
-- **Timed exercises** — Plank, carries, cardio, holds use seconds instead of reps/weight
-- **Waist tracking** — log and chart waist alongside bodyweight
-- **Custom exercises** — add any exercise to any workout
-- **Offline support** — service worker caches app for use without internet
+**7 Mission Objectives**, each with real exercise programming behind it — not just a label:
+- 🏀 Vertical Jump — explosive power and athletic performance
+- 💪 Muscle Gain — bodybuilding-style hypertrophy
+- 🌿 General Health — joint-friendly, sustainable long-term training
+- 🔥 Weight Loss — higher-volume metabolic conditioning
+- 🏋️ Chest & Shoulders — pressing emphasis, suggested default for men
+- 🍑 Glute Emphasis — glute-focused programming, suggested default for women
+- ⚡ Overall Strength — heavy low-rep compounds plus explosive power
+
+The two sex-suggested objectives run on the same base exercise catalog as everything else — no duplicated workout data. A goal overlay swaps in specific exercises (e.g. Barbell Hip Thrust replaces Romanian Deadlift under Glute Emphasis) and adjusts rep targets, so there's one source of truth per exercise and no drift between versions.
+
+**3 training environments** — Commercial Gym, Hotel Gym, Hotel Room — each with its own full exercise catalog, since a barbell rack isn't always where you are.
+
+**Fitness levels** — Beginner, Intermediate, Advanced — cap how many exercises land in each session phase.
 
 ---
 
-## Setup (One Time — ~10 Minutes)
+## Personalization Inputs
 
-### Step 1 — Supabase
+Every one of these has an in-app **ⓘ info button** explaining exactly what it does and why:
 
-1. Go to [supabase.com](https://supabase.com) → free account → **New Project**
-2. **Project Settings → API** → copy Project URL and anon key
-3. Go to **SQL Editor** → paste and run the SQL below
+- **Pilot Condition (GO / MARGINAL / NO-GO)** — gates workout intensity for the day. Auto-set by Oura readiness score if connected; otherwise by a manual 1–5 self-report.
+- **Injury Flag** — flag a body region (shoulder, knee, lower back, etc.) and the app auto-swaps to a known-safer alternative where one exists, or caution-flags the exercise where it doesn't. Name-based heuristic, not a medical assessment.
+- **Time Available** — pick 15/30/45/60/90 minutes or a full session; warmup and cooldown are protected, accessory volume gets trimmed first.
+- **Sleep Hours** — manual entry for non-Oura users, suggests Pilot Condition.
+- **Age** — modest rest-period adjustment for 45+/60+ lifters; never touches volume or exercise selection.
+- **Sex + Height** — drives the suggested Mission Objective and the evidence-based female hypertrophy rep scheme (+2 reps in accessory work; heavy strength work and set counts are unaffected — the research doesn't support a difference there).
 
-### Step 2 — Run This SQL
+---
 
-```sql
--- Current workout state
-create table if not exists current_workout (
-  user_id uuid references auth.users primary key,
-  workout_data jsonb,
-  updated_at timestamptz
-);
+## Oura Ring Integration
 
--- Completed sessions
-create table if not exists workout_sessions (
-  id uuid default gen_random_uuid() primary key,
-  user_id uuid references auth.users,
-  session_key text,
-  session_data jsonb,
-  started_at timestamptz,
-  workout_key text,
-  unique(user_id, session_key)
-);
+OAuth2 connection via a Supabase Edge Function (`oura-auth` — see `DEPLOY.md`). Once connected:
+- Daily readiness/sleep/HRV auto-sync, sets Pilot Condition automatically
+- 6-month historical import
+- Trend charts for readiness, sleep score, and HRV Balance (with an explainer for what HRV Balance actually means)
 
--- User profile
-create table if not exists user_profiles (
-  user_id uuid references auth.users primary key,
-  profile_data jsonb,
-  updated_at timestamptz
-);
+---
 
--- Body weight + waist log
-create table if not exists weight_log (
-  id uuid default gen_random_uuid() primary key,
-  user_id uuid references auth.users,
-  weight_lb numeric,
-  waist_in numeric,
-  logged_at timestamptz default now()
-);
+## Tracking & Review
 
--- Row Level Security
-alter table current_workout enable row level security;
-alter table workout_sessions enable row level security;
-alter table user_profiles enable row level security;
-alter table weight_log enable row level security;
+- **28-day rolling training calendar** — tap any day to view it, edit a completed workout, log one you forgot, or delete a session (with confirmation)
+- **Progressive overload tracking** with PR detection (⭐) against full session history
+- **Rest timers and stretch stopwatches** that chime once on completion (Web Audio, no sound file) — including independent LEFT/RIGHT timers for bilateral stretches
+- **Exercise form guides** — tap ⓘ Guide on any exercise; falls back to a YouTube search when no guide exists yet
+- **Progress photos** with pagination
+- **CSV export** matched column-for-column to a companion **AI Analysis Prompt** — copy both into ChatGPT/Gemini/Claude for a real trend review; the prompt also knows what to do with an optional `.ics` flight-schedule upload for travel context
+- **Post-Flight Debrief** after every session — duration, sets, volume, completion %, and any PRs hit
 
-DROP POLICY IF EXISTS "own data" ON public.current_workout;
-CREATE POLICY "own data" ON public.current_workout
-  FOR ALL TO authenticated
-  USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+---
 
-DROP POLICY IF EXISTS "own data" ON public.workout_sessions;
-CREATE POLICY "own data" ON public.workout_sessions
-  FOR ALL TO authenticated
-  USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+## Built for Actual Flying
 
-DROP POLICY IF EXISTS "own data" ON public.user_profiles;
-CREATE POLICY "own data" ON public.user_profiles
-  FOR ALL TO authenticated
-  USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+- **Flight hours + water intake** tracked daily, auto-resets at midnight, hydration target scales with flight hours (FAA aircrew guidance, ~0.3L/hr)
+- **Send Feedback** files a GitHub Issue directly from the app via a Supabase Edge Function — no email round-trip
+- Installable PWA with offline support and automatic update detection (checks on load, every 5 minutes, and on app foreground; force-checkable by tapping the sync indicator)
 
-DROP POLICY IF EXISTS "own data" ON public.weight_log;
-CREATE POLICY "own data" ON public.weight_log
-  FOR ALL TO authenticated
-  USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+---
+
+## Tech Stack
+
+- **Frontend:** single `app.js` file (~4,000 lines), vanilla JS, no framework, no build step
+- **Backend:** Supabase — Postgres (RLS-protected per-user data), Auth, Storage (progress photos), Edge Functions (Oura OAuth proxy, GitHub feedback relay)
+- **Charts:** Chart.js
+- **Wearables:** Oura API v2
+
+The Supabase anon key is baked into `app.js` (this is expected and safe for Supabase's client-side model — Row Level Security is what actually protects user data, not key secrecy). Edge Function secrets (Oura client secret, GitHub feedback token) are never exposed client-side; see `DEPLOY.md` for how those are configured.
+
+---
+
+## Repo Structure
+
 ```
-
-**If you already have a weight_log table from the previous version**, add the waist column:
-```sql
-alter table weight_log add column if not exists waist_in numeric;
+index.html          — app shell, loads app.js
+app.js               — the entire application
+sw.js                — service worker (offline + update detection)
+manifest.json        — PWA manifest
+guides/              — exercise form guide files
+feedback-submit.ts   — Edge Function: in-app feedback → GitHub Issue
+index.ts             — Edge Function: oura-auth OAuth proxy
+privacy.html / terms.html
+DEPLOY.md            — Edge Function deployment instructions
 ```
-
-### Step 3 — Edit index.html
-
-Open `index.html` in any text editor. Find near the top:
-
-```javascript
-const SB_URL  = 'YOUR_SUPABASE_URL';
-const SB_ANON = 'YOUR_SUPABASE_ANON_KEY';
-```
-
-Replace with your actual values and save.
-
-### Step 4 — Upload to GitHub
-
-Upload all 3 files to your `pilot-program` GitHub repo:
-- `index.html`
-- `manifest.json`
-- `sw.js`
-
-Settings → Pages → Deploy from main branch → wait 2 min.
-
-Your URL: `https://bchadcooper-create.github.io/pilot-program`
-
-### Step 5 — iPhone Home Screen
-
-1. Open **Safari** → go to your URL
-2. Share button → **Add to Home Screen** → Add
-3. Opens full-screen, works offline after first load
-
----
-
-## Workout Rotations (Corrected)
-
-All goals now alternate muscle groups so you never hit the same group two days in a row.
-
-| Goal | Day A | Day B | Day C | Day D |
-|------|-------|-------|-------|-------|
-| Fat Loss | Legs + Upper | **Upper Only** | Legs + Upper | **Cardio** |
-| Muscle Gain | Legs | **Chest + Tri** | **Back + Bi** | **Shoulders + Arms** |
-| Strength | Squat (Legs) | **Bench (Upper)** | **Pull (Upper)** | Deadlift (Legs) |
-| Vertical Jump | Lower Strength | **Upper + Core** | Power/Plyo | Sprint/Reactive |
-| Longevity | Lower + Mobility | **Upper Pull** | **Upper Push + Core** | Carries + Cardio |
-| Tactical | Strength | Conditioning | Overhead + Carries | Run + Lift |
-| Cardio | Zone 2 | Intervals | Long Run | Strength + Cardio |
-
-**Key fix:** Strength moved deadlift from C→D. Jump moved upper to B and plyo to C. Longevity moved carries to D. Fat Loss made B upper-only.
-
----
-
-## Fitness Level Exercise Counts
-
-- **Beginner** — 3 exercises per session (core movements only)
-- **Intermediate** — 4 exercises per session
-- **Advanced** — 5 exercises per session (full template)
-
-Change your level anytime in Profile.
-
----
-
-## Timed Exercises
-
-These exercises record **seconds** instead of reps and weight:
-Plank, Wall Sit, Hollow Body Hold, L-Sit, Farmer Carry, all stretches, all cardio (walk, run, bike, row, stair).
 
 ---
 
 ## Troubleshooting
 
-**404 on home screen icon:** Delete old icon, re-add from Safari. Make sure manifest.json has `"start_url": "/pilot-program/"`.
+**App shows an old version after an update:** the update checker needs one refresh to pick up its own fix the very first time; after that, updates should apply automatically within a few minutes of being pushed. Tap the SYNCED/LOCAL indicator top-right to force a manual check.
 
-**Offline not working:** Must visit the app once with internet to cache it. After that it works offline.
+**Offline not working:** the app has to be opened once with internet to cache itself. After that it works offline.
 
-**Can't sign in:** Check email for Supabase confirmation link (check spam).
+**Can't sign in:** check for a Supabase confirmation email (including spam).
 
-**Waist column error:** Run `alter table weight_log add column if not exists waist_in numeric;` in SQL Editor.
+**Oura not syncing:** confirm the connection under Profile → Oura Ring. Historical import pulls the last 6 months on demand.

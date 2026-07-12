@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.12.3';
+const FCF_VERSION = 'v5.12.4';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2872,7 +2872,7 @@ function buildExCard(exItem, phaseKey) {
       sets.forEach((s,i) => {
         parts.push('<div class="set-tile '+(s.reps||s.weight?'ok':'')+'" id="st_'+exItem.id+'_'+i+'"><div class="set-lbl">SET '+(i+1)+'</div>');
         parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value||ST.sets[\''+exItem.id+'\']['+i+'].weight?\' ok\':\'\');persistWorkoutState()">');
-        parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="lb" value="'+(s.weight||'')+'" onchange="afterSetLogged(\''+exItem.id+'\',\''+phaseKey+'\')" oninput="ST.sets[\''+exItem.id+'\']['+i+'].weight=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState()">');
+        parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="lb" value="'+(s.weight||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].weight=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState()">');
         parts.push('<div class="set-hint">reps / lb</div></div>');
       });
       parts.push('</div></div><div class="swipe-hint">← swipe for all sets</div>');
@@ -2960,12 +2960,6 @@ function stopRestTimer() {
   ST.restTimer.active = false;
   persistTimerState();
   renderFlight(document.getElementById('mainPage'));
-}
-function afterSetLogged(exId, phaseKey) {
-  // Auto-suggest starting rest timer after logging a set in heavy phases
-  if (phaseKey === 'takeoff' && !ST.restTimer.active) {
-    showToast('Set logged. Rest 3-4 min before your next set.');
-  }
 }
 
 // ─── STOPWATCH (auto-fills timed exercise seconds) ───────────────────────────

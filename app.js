@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.12.1';
+const FCF_VERSION = 'v5.12.2';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -1049,11 +1049,15 @@ function renderLanding(root) {
 
   const features = [
     ['🌍','Environment-aware workouts','Every session adapts automatically to Commercial Gym, Hotel Gym, or just a Hotel Room — no equipment excuses.'],
-    ['🚦','Fatigue-gated intensity','A pilot condition toggle (Go / Marginal / No-Go) reduces or removes heavy lifting when you\'re running on insufficient rest. Training through fatigue increases injury risk — this app respects that.'],
+    ['🚦','Fatigue-gated intensity','A pilot condition toggle (Go / Marginal / No-Go) reduces or removes heavy lifting when you\'re running on insufficient rest — auto-set from your Oura Ring if you wear one, or a 15-second self-check if you don\'t.'],
+    ['⌚','Oura Ring auto-sync','Connect once and your daily readiness, sleep, and HRV drive your workout intensity automatically — no manual logging required.'],
+    ['🩹','Injury-aware programming','Flag a sore shoulder or knee and the app automatically swaps in a safer alternative where one exists, or flags the exercise so you can decide — instead of just handing you the same plan regardless.'],
+    ['⏱️','Built for a 20-minute layover','Tell it how much time you actually have and it trims the session to fit — protecting your warmup and cooldown, never your actual lift.'],
+    ['🎯','Goal-driven programming','Seven mission objectives — from Vertical Jump to Glute Emphasis to Overall Strength — each with real, distinct exercise programming behind it, not just a label.'],
     ['💧','Hydration math built in','0.3L per flight hour, with a sensible floor on no-fly days. The app tells you exactly how much to drink and when.'],
     ['🛫','Aviation-phased structure','Every workout follows Taxi (warmup) → Takeoff (heavy) → En Route (volume) → Landing (decompression) — a logical, recoverable structure, not just a random exercise list.'],
-    ['🎯','Goal-driven programming','Pick Vertical Jump, Muscle Gain, General Health, or Weight Loss, and the app recommends the right next session in the right order — no guesswork.'],
     ['📊','Real biometric tracking','Weight, waist, blood pressure, and fasting glucose — with the actual clinical protocol for measuring each one correctly.'],
+    ['📶','Works with no signal','Installs like a real app and keeps working with zero connectivity — at altitude, in a dead-zone layover hotel, wherever.'],
   ];
   features.forEach(([icon,title,desc]) => {
     parts.push('<div class="feature-row"><div class="feature-icon">'+icon+'</div><div class="feature-text"><h4>'+title+'</h4><p>'+desc+'</p></div></div>');
@@ -1064,15 +1068,15 @@ function renderLanding(root) {
   parts.push('<div class="landing-quote">"The biggest mistake I see in shift-work athletes is treating every day the same. Your training should respond to how you actually feel — not an arbitrary schedule." — Sports medicine consensus on fatigue-informed training</div>');
   parts.push('<div class="landing-stat-row">');
   parts.push('<div class="landing-stat"><div class="num">7</div><div class="lbl">Mission Profiles</div></div>');
-  parts.push('<div class="landing-stat"><div class="num">4</div><div class="lbl">Goal Tracks</div></div>');
-  parts.push('<div class="landing-stat"><div class="num">50</div><div class="lbl">Wisdom Briefings</div></div>');
+  parts.push('<div class="landing-stat"><div class="num">7</div><div class="lbl">Goal Tracks</div></div>');
+  parts.push('<div class="landing-stat"><div class="num">102</div><div class="lbl">Wisdom Briefings</div></div>');
   parts.push('</div>');
   parts.push('</div>');
 
   parts.push('<div class="landing-section">');
   parts.push('<div class="landing-section-title">How it works</div>');
   parts.push('<div class="feature-row"><div class="feature-icon">1️⃣</div><div class="feature-text"><h4>Preflight</h4><p>Set your environment, log your hydration, and tell the app how you\'re actually feeling today.</p></div></div>');
-  parts.push('<div class="feature-row"><div class="feature-icon">2️⃣</div><div class="feature-text"><h4>Flight</h4><p>Work through your generated plan phase by phase, with rest timers and form guides for every exercise.</p></div></div>');
+  parts.push('<div class="feature-row"><div class="feature-icon">2️⃣</div><div class="feature-text"><h4>Flight</h4><p>Work through your generated plan phase by phase, with rest timers that chime when they\'re done and a form guide on every exercise — built-in animations where we have them, a YouTube search where we don\'t.</p></div></div>');
   parts.push('<div class="feature-row"><div class="feature-icon">3️⃣</div><div class="feature-text"><h4>Trends</h4><p>Log your biometrics and watch your progress chart itself over weeks and months.</p></div></div>');
   parts.push('</div>');
 

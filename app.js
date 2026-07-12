@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.12.2';
+const FCF_VERSION = 'v5.12.3';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -1472,8 +1472,6 @@ function persistWorkoutState() {
       goal: ST.goal,
       fatigue: ST.fatigue,
       level: ST.level,
-      flightHrs: ST.flightHrs,
-      waterIn: ST.waterIn,
       expanded: ST.expanded,
       workoutStartedAt: ST.workoutStartedAt,
       savedAt: Date.now(),
@@ -1498,11 +1496,6 @@ function restoreWorkoutState() {
     ST.goal = saved.goal;
     ST.fatigue = saved.fatigue;
     ST.level = saved.level;
-    ST.flightHrs = saved.flightHrs;
-    ST.flightHrsRaw = saved.flightHrs ? String(saved.flightHrs) : '';
-    ST.waterIn = saved.waterIn;
-    ST.waterInRaw = saved.waterIn ? String(saved.waterIn) : '';
-    ST.flightHrsTouched = true;
     ST.expanded = saved.expanded || {};
     ST.workoutStartedAt = saved.workoutStartedAt || saved.savedAt;
     return true;

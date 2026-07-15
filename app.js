@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.13.2';
+const FCF_VERSION = 'v5.13.3';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2860,11 +2860,17 @@ function showAlternates(exId, exName, phaseKey) {
       parts.push('</div>');
     });
   } else {
-    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px">No alternates mapped for this exercise yet — create your own below.</div>');
+    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px">No alternates specifically curated for this exercise yet — search the catalog or create your own below.</div>');
   }
 
   parts.push('<div style="border-top:1px solid var(--border);margin-top:6px;padding-top:14px">');
-  parts.push('<div style="font-size:12px;font-weight:600;margin-bottom:10px">✏️ Create Your Own Alternate</div>');
+  parts.push('<div class="field"><label>Search the exercise catalog</label>');
+  parts.push('<input type="text" id="swapSearch" placeholder="e.g. squat, curl, row…" oninput="swapFilterExercises(\''+exId+'\',this.value)" autocomplete="off"></div>');
+  parts.push('<div id="swapSearchResults"></div>');
+  parts.push('</div>');
+
+  parts.push('<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">');
+  parts.push('<div style="font-size:12px;font-weight:600;margin-bottom:10px">✏️ Or Create Your Own</div>');
   parts.push('<div class="field"><label>Exercise Name</label><input id="altName" type="text" placeholder="e.g. Cable Squat"></div>');
   parts.push('<div class="field"><label>Target (e.g. 3x10, 45s, 3x12/side)</label><input id="altTarget" type="text" placeholder="3x10"></div>');
   parts.push('<div class="field"><label>Type</label><select id="altType"><option value="reps_weight">Reps + Weight</option><option value="reps_only">Reps Only</option><option value="timed">Timed</option></select></div>');
@@ -2875,6 +2881,27 @@ function showAlternates(exId, exName, phaseKey) {
   parts.push('<button class="btn btn-outline mt8" onclick="closeModal()">CANCEL</button>');
   parts.push('</div></div>');
   root.innerHTML = parts.join('');
+}
+
+function swapFilterExercises(exId, q) {
+  const box = document.getElementById('swapSearchResults');
+  if (!box) return;
+  q = (q||'').trim().toLowerCase();
+  if (!q) { box.innerHTML = ''; return; }
+  const matches = buildExerciseCatalog().filter(e => e.name.toLowerCase().includes(q)).slice(0, 6);
+  const parts = [];
+  matches.forEach((e, i) => {
+    parts.push('<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:13px" onclick="swapAddCatalogExercise(\''+exId+'\','+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+(e.target||'')+'</span></div>');
+  });
+  if (matches.length) parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin:8px 0 2px">TAP TO SWAP IN — OR USE "CREATE YOUR OWN" BELOW</div>');
+  box.innerHTML = parts.join('');
+}
+function swapAddCatalogExercise(exId, matchIdx, q) {
+  const matches = buildExerciseCatalog().filter(e => e.name.toLowerCase().includes(q.toLowerCase())).slice(0, 6);
+  const exDef = matches[matchIdx];
+  if (!exDef) return;
+  swapExercise(exId, { name: exDef.name, target: exDef.target, note: exDef.note||'Swapped from catalog.', inputType: exDef.inputType });
+  closeModal();
 }
 
 function swapCustomAlternate(exId) {
@@ -2894,12 +2921,17 @@ function swapExercise(exId, alt) {
     if (idx === -1) continue;
     const setsMatch = (alt.target||'').match(/^(\d+)\s*[x×]/i);
     const setsCount = setsMatch ? Math.max(1, parseInt(setsMatch[1], 10)) : 3;
-    const newEx = ex('swap_'+Date.now(), alt.name, alt.target, setsCount, alt.note||'Alternate exercise.', alt.inputType==='timed', alt.inputType||'reps_weight');
-    ST.workout[phase][idx] = newEx;
     const iType = alt.inputType || 'reps_weight';
-    ST.sets[newEx.id] = iType==='reps_only' ? Array.from({length:setsCount},()=>({reps:''})) :
-                        iType==='timed'      ? [{seconds:''}] :
-                                               Array.from({length:setsCount},()=>({reps:'',weight:''}));
+    const isTimed = iType==='timed' || iType==='timed_bilateral';
+    const newEx = ex('swap_'+Date.now(), alt.name, alt.target, setsCount, alt.note||'Alternate exercise.', isTimed, iType);
+    ST.workout[phase][idx] = newEx;
+    ST.sets[newEx.id] =
+      iType==='timed_bilateral' ? [{seconds_left:'',seconds_right:''}] :
+      iType==='timed'           ? [{seconds:''}] :
+      iType==='reps_only'       ? Array.from({length:setsCount},()=>({reps:''})) :
+      iType==='reps_height'     ? Array.from({length:setsCount},()=>({reps:'',height:''})) :
+      iType==='reps_distance'   ? Array.from({length:setsCount},()=>({reps:'',distance:''})) :
+                                   Array.from({length:setsCount},()=>({reps:'',weight:''}));
     delete ST.sets[exId];
     persistWorkoutState();
     showBigToast(alt.name+' swapped in.','ok');

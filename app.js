@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.13.3';
+const FCF_VERSION = 'v5.14';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -288,6 +288,7 @@ WORKOUTS.comm['Upper Pull'] = {
     ex('c_ul_er2','Seated Cable Row','3×12',3,'Retract fully at the end — shoulder blades together.'),
     ex('c_ul_er3','Face Pull','3×20',3,'Cable at face height. Pull to forehead, elbows high and wide.'),
     ex('c_ul_er4','EZ Bar Curl','3×12',3,'Strict — no swing. Control the eccentric.'),
+    ex('c_ul_er5','Preacher Curl','3×12',3,'Arm braced on the pad — isolates the biceps by removing shoulder swing entirely.'),
   ],
   landing: [
     ex('c_ul_l1','Lat Hang Stretch','45s',1,'Hang from pullup bar, completely relaxed.',true,'timed'),
@@ -421,6 +422,7 @@ WORKOUTS.hotel['Upper Pull'] = {
   enroute: [
     ex('h_ul_er1','Chinups','3×max',3,'Supinated grip.',false,'reps_only'),
     ex('h_ul_er2','DB Curl','3×12',3,'Controlled eccentric.'),
+    ex('h_ul_er4','DB Preacher Curl','3×12',3,'Brace the back of your arm against an incline bench set upright.'),
     ex('h_ul_er3','Bent-Over DB Face Pull','3×15',3,'Light DBs.'),
     ex('h_ul_er4','DB Hammer Curl','3×12',3,'Neutral grip.'),
   ],
@@ -1826,6 +1828,57 @@ async function showCalendarDay(isoDate) {
 // ─── SESSION EDITOR (edit past workouts / retroactively log missed ones) ─────
 
 // Every unique exercise across all environments, for the searchable picker.
+// Common alternate names for exercises already in the catalog under a
+// different label — so searching "Bulgarian split squat" finds "Single Leg
+// Split Squat", searching "RDL" finds "Romanian Deadlift", etc. Keys are
+// lowercase alternate names; values are the exact catalog name they map to.
+const EXERCISE_SYNONYMS = {
+  'bulgarian split squat': 'Single Leg Split Squat',
+  'rear foot elevated split squat': 'Single Leg Split Squat',
+  'rfess': 'Single Leg Split Squat',
+  'rdl': 'Romanian Deadlift',
+  'db rdl': 'DB Romanian Deadlift',
+  'farmers walk': 'Farmer Carry',
+  "farmer's walk": 'Farmer Carry',
+  'farmers carry': 'Farmer Carry',
+  'hex bar deadlift': 'Trap Bar Deadlift',
+  'good mornings': 'Good Morning',
+  'db shoulder press': 'DB Overhead Press',
+  'military press': 'Standing Overhead Press',
+  'ohp': 'Standing Overhead Press',
+  'lat pull down': 'Lat Pulldown',
+  'skull crushers': 'DB Tricep Overhead',
+  'bird dogs': 'Bird Dog',
+  'dead bugs': 'Dead Bug',
+  'nordic hamstring curl': 'Hamstring Raise (Nordic Curl)',
+  'nordic hamstring curls': 'Hamstring Raise (Nordic Curl)',
+  'pistol squats': 'Single Leg Squat (Pistol)',
+};
+
+// Query normalization: expand common abbreviations both directions so a
+// search matches regardless of which form the exercise name uses or the
+// person types. Covers ~15 catalog exercises that use "DB" for dumbbell.
+function expandSearchQuery(q) {
+  const variants = new Set([q]);
+  if (q.includes('dumbbell')) variants.add(q.replace(/dumbbell/g, 'db'));
+  if (/\bdb\b/.test(q)) variants.add(q.replace(/\bdb\b/g, 'dumbbell'));
+  if (q.includes('barbell')) variants.add(q.replace(/barbell/g, 'bb'));
+  // Basic plural handling — "curls" -> "curl", "preacher curls" -> "preacher curl"
+  if (q.endsWith('s') && q.length > 3) variants.add(q.slice(0, -1));
+  return [...variants];
+}
+
+// True if an exercise (by its canonical catalog name) matches a search query,
+// checking the name itself, DB/dumbbell query variants, and known synonyms.
+function exerciseMatchesQuery(canonicalName, rawQuery) {
+  const nameLower = canonicalName.toLowerCase();
+  const variants = expandSearchQuery(rawQuery);
+  if (variants.some(v => nameLower.includes(v))) return true;
+  return Object.entries(EXERCISE_SYNONYMS).some(([syn, canon]) =>
+    canon === canonicalName && variants.some(v => syn.includes(v))
+  );
+}
+
 function buildExerciseCatalog() {
   const seen = {};
   const catalog = [];
@@ -1974,7 +2027,7 @@ function edFilterExercises(q) {
   q = (q||'').trim().toLowerCase();
   if (!q) { box.innerHTML = ''; return; }
   const existing = new Set(ST.editSession.exList.map(e => e.id));
-  const matches = buildExerciseCatalog().filter(e => e.name.toLowerCase().includes(q) && !existing.has(e.id)).slice(0, 6);
+  const matches = buildExerciseCatalog().filter(e => exerciseMatchesQuery(e.name, q) && !existing.has(e.id)).slice(0, 6);
   const parts = [];
   matches.forEach((e, i) => {
     parts.push('<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:13px" onclick="edAddCatalogExercise('+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+(e.target||'')+'</span></div>');
@@ -1990,7 +2043,7 @@ function edFilterExercises(q) {
 }
 function edAddCatalogExercise(matchIdx, q) {
   const existing = new Set(ST.editSession.exList.map(e => e.id));
-  const matches = buildExerciseCatalog().filter(e => e.name.toLowerCase().includes(q.toLowerCase()) && !existing.has(e.id)).slice(0, 6);
+  const matches = buildExerciseCatalog().filter(e => exerciseMatchesQuery(e.name, q.toLowerCase()) && !existing.has(e.id)).slice(0, 6);
   const exDef = matches[matchIdx];
   if (!exDef) return;
   edPushExercise(exDef);
@@ -2790,6 +2843,7 @@ const ALTERNATES = {
     {name:'Hammer Curl',target:'3×12',note:'Neutral grip. Hits brachialis and brachioradialis.'},
   ],
   'DB Curl': [
+    {name:'Preacher Curl',target:'3×12',note:'Removes shoulder swing entirely — strictest possible bicep isolation.'},
     {name:'EZ Bar Curl',target:'3×12',note:'Barbell variation. Slightly easier on the wrists.'},
     {name:'Cable Curl',target:'3×15',note:'Constant tension. Good isolation.'},
     {name:'Hammer Curl',target:'3×12',note:'Neutral grip. Different muscle emphasis.'},
@@ -2888,7 +2942,7 @@ function swapFilterExercises(exId, q) {
   if (!box) return;
   q = (q||'').trim().toLowerCase();
   if (!q) { box.innerHTML = ''; return; }
-  const matches = buildExerciseCatalog().filter(e => e.name.toLowerCase().includes(q)).slice(0, 6);
+  const matches = buildExerciseCatalog().filter(e => exerciseMatchesQuery(e.name, q)).slice(0, 6);
   const parts = [];
   matches.forEach((e, i) => {
     parts.push('<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:13px" onclick="swapAddCatalogExercise(\''+exId+'\','+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+(e.target||'')+'</span></div>');
@@ -2897,7 +2951,7 @@ function swapFilterExercises(exId, q) {
   box.innerHTML = parts.join('');
 }
 function swapAddCatalogExercise(exId, matchIdx, q) {
-  const matches = buildExerciseCatalog().filter(e => e.name.toLowerCase().includes(q.toLowerCase())).slice(0, 6);
+  const matches = buildExerciseCatalog().filter(e => exerciseMatchesQuery(e.name, q.toLowerCase())).slice(0, 6);
   const exDef = matches[matchIdx];
   if (!exDef) return;
   swapExercise(exId, { name: exDef.name, target: exDef.target, note: exDef.note||'Swapped from catalog.', inputType: exDef.inputType });

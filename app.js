@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.13.1';
+const FCF_VERSION = 'v5.13.2';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -3131,9 +3131,10 @@ function buildExCard(exItem, phaseKey) {
     if (!exItem.custom) {
       parts.push('<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">');
       parts.push('<button class="btn-info" style="border-color:rgba(167,139,250,0.4);color:#a78bfa" onclick="showAlternates(\''+exItem.id+'\',\''+exItem.name+'\',\''+phaseKey+'\')">⇄ Alternate</button>');
+      parts.push('<button class="btn-info" style="color:#fca5a5;border-color:rgba(239,68,68,0.3)" onclick="confirmRemoveExercise(\''+exItem.id+'\',\''+exItem.name.replace(/'/g,"")+'\',false)">✕ Remove</button>');
       parts.push('</div>');
     } else {
-      parts.push('<div style="margin-top:10px"><button class="btn-info" style="color:#fca5a5;border-color:rgba(239,68,68,0.3)" onclick="deleteCustomExercise(\''+exItem.id+'\')">✕ Remove</button></div>');
+      parts.push('<div style="margin-top:10px"><button class="btn-info" style="color:#fca5a5;border-color:rgba(239,68,68,0.3)" onclick="confirmRemoveExercise(\''+exItem.id+'\',\''+exItem.name.replace(/'/g,"")+'\',true)">✕ Remove</button></div>');
     }
     parts.push('</div>');
   }
@@ -3417,8 +3418,33 @@ async function saveCustomExercise() {
   renderFlight(document.getElementById('mainPage'));
 }
 
+function confirmRemoveExercise(exId, exName, isCustom) {
+  const root = document.getElementById('modalRoot');
+  root.innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()">' +
+    '<div class="modal-sheet">' +
+    '<div class="modal-handle"></div>' +
+    '<div class="modal-title">Remove '+exName+'?</div>' +
+    '<div class="modal-body" style="margin-bottom:14px">This removes it from today\'s workout. Any sets already logged for it will be discarded when you set the chocks. This only affects today — it won\'t change tomorrow\'s plan.</div>' +
+    '<button class="btn" style="background:var(--red);color:#fff" onclick="'+(isCustom?'deleteCustomExercise':'removeCatalogExercise')+'(\''+exId+'\')">✕ CONFIRM REMOVE</button>' +
+    '<button class="btn btn-outline mt8" onclick="closeModal()">CANCEL</button>' +
+    '</div></div>';
+}
+
+function removeCatalogExercise(exId) {
+  if (ST.workout) {
+    ['taxi','takeoff','enroute','landing'].forEach(k => {
+      ST.workout[k] = ST.workout[k].filter(e => e.id !== exId);
+    });
+  }
+  delete ST.sets[exId];
+  persistWorkoutState();
+  closeModal();
+  renderFlight(document.getElementById('mainPage'));
+  showToast('Removed from today\'s workout.');
+}
+
 async function deleteCustomExercise(exId) {
-  if (!confirm('Remove this custom exercise from your workout?')) return;
   if (ST.workout) {
     ['taxi','takeoff','enroute','landing'].forEach(k => {
       ST.workout[k] = ST.workout[k].filter(e => e.id !== exId);
@@ -3429,6 +3455,8 @@ async function deleteCustomExercise(exId) {
   profile.customExercises = ST.customExercises;
   await dbSetProfile(profile);
   delete ST.sets[exId];
+  persistWorkoutState();
+  closeModal();
   renderFlight(document.getElementById('mainPage'));
 }
 

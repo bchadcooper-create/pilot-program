@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.14';
+const FCF_VERSION = 'v5.14.1';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -1833,26 +1833,87 @@ async function showCalendarDay(isoDate) {
 // Split Squat", searching "RDL" finds "Romanian Deadlift", etc. Keys are
 // lowercase alternate names; values are the exact catalog name they map to.
 const EXERCISE_SYNONYMS = {
+  // Squats & lunges
   'bulgarian split squat': 'Single Leg Split Squat',
   'rear foot elevated split squat': 'Single Leg Split Squat',
   'rfess': 'Single Leg Split Squat',
+  'elevated split squat': 'Single Leg Split Squat',
+  'static lunge': 'Split Squat',
+  'side lunge': 'Dumbbell Lateral Lunge',
+  'db side lunge': 'Dumbbell Lateral Lunge',
+  'lateral lunge': 'Dumbbell Lateral Lunge',
+  'backward lunge': 'Reverse Lunge',
+  'pistol squats': 'Single Leg Squat (Pistol)',
+  'kb goblet squat': 'Kettlebell Goblet Squat',
+  'box step up': 'Step-Up',
+  'barbell squat': 'Back Squat',
+  'high bar squat': 'Back Squat',
+
+  // Deadlifts & hinges
   'rdl': 'Romanian Deadlift',
   'db rdl': 'DB Romanian Deadlift',
-  'farmers walk': 'Farmer Carry',
-  "farmer's walk": 'Farmer Carry',
-  'farmers carry': 'Farmer Carry',
+  'stiff leg deadlift': 'Romanian Deadlift',
+  'stiff legged deadlift': 'Romanian Deadlift',
+  'stiff-leg deadlift': 'Romanian Deadlift',
   'hex bar deadlift': 'Trap Bar Deadlift',
+  'hex deadlift': 'Trap Bar Deadlift',
   'good mornings': 'Good Morning',
+
+  // Presses
   'db shoulder press': 'DB Overhead Press',
   'military press': 'Standing Overhead Press',
   'ohp': 'Standing Overhead Press',
-  'lat pull down': 'Lat Pulldown',
+  'strict press': 'Standing Overhead Press',
+  'barbell shoulder press': 'Standing Overhead Press',
+  'flat bench': 'Flat Barbell Bench Press',
+  'barbell bench press': 'Flat Barbell Bench Press',
+  'cgbp': 'Close Grip Bench',
+  'close grip bench press': 'Close Grip Bench',
+  'dips': 'Weighted Dip',
+  'chest press machine': 'DB Bench Press',
+
+  // Rows & pulls
+  'pendlay row': 'Barbell Row (Pendlay)',
+  'bent over row': 'Barbell Row (Pendlay)',
+  'bb row': 'Barbell Row (Pendlay)',
+  'pulldown': 'Lat Pulldown',
+  'wide grip pulldown': 'Lat Pulldown',
+  'chin ups': 'Chinups',
+  'pull ups': 'Pullups',
+
+  // Curls
+  'ez curl': 'EZ Bar Curl',
   'skull crushers': 'DB Tricep Overhead',
+  'skull crusher': 'DB Tricep Overhead',
+  'lying tricep extension': 'DB Tricep Overhead',
+
+  // Core / anti-rotation — includes common real-world misspellings
+  'paloff press': 'Pallof Press',
+  'palloff press': 'Pallof Press',
+  'palof press': 'Pallof Press',
   'bird dogs': 'Bird Dog',
   'dead bugs': 'Dead Bug',
+
+  // Plyo / jumps
+  'jump squat': 'Squat Jump',
+  'jump squats': 'Squat Jump',
+  'standing long jump': 'Broad Jump',
+  'box jumps': 'Box Jump',
+  'lunge jump': 'Split Jump',
+  'switch lunge jump': 'Split Jump',
+
+  // Carries & conditioning
+  'farmers walk': 'Farmer Carry',
+  "farmer's walk": 'Farmer Carry',
+  'farmers carry': 'Farmer Carry',
+  "farmer's carry": 'Farmer Carry',
+
+  // Stretches / mobility
   'nordic hamstring curl': 'Hamstring Raise (Nordic Curl)',
   'nordic hamstring curls': 'Hamstring Raise (Nordic Curl)',
-  'pistol squats': 'Single Leg Squat (Pistol)',
+  'pigeon stretch': 'Pigeon Pose',
+  'cat cow': 'Cat-Cow',
+  'cat cow stretch': 'Cat-Cow',
 };
 
 // Query normalization: expand common abbreviations both directions so a
@@ -1873,7 +1934,17 @@ function expandSearchQuery(q) {
 function exerciseMatchesQuery(canonicalName, rawQuery) {
   const nameLower = canonicalName.toLowerCase();
   const variants = expandSearchQuery(rawQuery);
-  if (variants.some(v => nameLower.includes(v))) return true;
+
+  // Word-order-independent match: every word in the query must appear
+  // somewhere in the name, regardless of order. This is what lets "dumbbell
+  // incline press" find "Incline DB Press" (reversed word order from what
+  // was typed) and not just exact-phrase matches.
+  const wordsMatch = (q) => {
+    const words = q.split(/\s+/).filter(Boolean);
+    return words.length > 0 && words.every(w => nameLower.includes(w));
+  };
+  if (variants.some(v => nameLower.includes(v) || wordsMatch(v))) return true;
+
   return Object.entries(EXERCISE_SYNONYMS).some(([syn, canon]) =>
     canon === canonicalName && variants.some(v => syn.includes(v))
   );

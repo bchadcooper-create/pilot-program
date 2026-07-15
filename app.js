@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.12.4';
+const FCF_VERSION = 'v5.13';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2549,6 +2549,235 @@ const ALTERNATES = {
     {name:'Treadmill Intervals',target:'8×1 min', note:'Run-based alternative.'},
     {name:'Stair Sprint Intervals',target:'6×2 flights',note:'No machine needed.',inputType:'reps_only'},
   ],
+
+  // HOTEL GYM
+  'Kettlebell Goblet Squat (Heavy)': [
+    {name:'Goblet Squat',target:'4×12',note:'Lighter load, same pattern. Use if the heavy KB isn\'t available.'},
+    {name:'DB Romanian Deadlift',target:'4×10',note:'Shifts emphasis to posterior chain instead of quads.'},
+    {name:'Step-Up (Weighted)',target:'3×12/leg',note:'Unilateral quad/glute work using a bench.'},
+  ],
+  'DB Romanian Deadlift': [
+    {name:'Good Morning',target:'3×10',note:'Bar on back, same hip hinge, no dumbbells needed.'},
+    {name:'Single Leg Split Squat',target:'3×8/leg',note:'Different pattern, same posterior chain and glute demand.'},
+    {name:'Kettlebell Goblet Squat (Heavy)',target:'4×10',note:'Quad-dominant substitute if hinging bothers your back.'},
+  ],
+  'Step-Up (Weighted)': [
+    {name:'Reverse Lunge',target:'3×12/leg',note:'No bench needed. Same unilateral quad/glute demand.'},
+    {name:'Single Leg Split Squat',target:'3×8/leg',note:'Rear foot elevated variant — more quad stretch.'},
+    {name:'Step-Up',target:'3×12/leg',note:'Unweighted version if the loaded step feels too aggressive.'},
+  ],
+  'Single-Leg Calf Raise': [
+    {name:'Standing Calf Raise',target:'4×15',note:'Bilateral — easier balance, still loads the calf hard.'},
+    {name:'Calf Raise (step)',target:'3×15/leg',note:'Same unilateral pattern using a step for extra range.'},
+  ],
+  'Dumbbell Lateral Lunge': [
+    {name:'Reverse Lunge',target:'3×12/leg',note:'Sagittal-plane substitute — easier on the groin/adductors.'},
+    {name:'Step-Up (Weighted)',target:'3×12/leg',note:'Different plane, same single-leg strength demand.'},
+  ],
+  'DB Bench Press': [
+    {name:'Machine Chest Press',target:'4×12',note:'Fixed path — easier on the shoulders for higher reps.'},
+    {name:'Pushup Variations',target:'4×max',note:'Bodyweight substitute if dumbbells aren\'t heavy enough or available.',inputType:'reps_only'},
+    {name:'DB Incline Press',target:'4×10',note:'Shifts emphasis to upper chest.'},
+  ],
+  'DB Overhead Press': [
+    {name:'Standing Overhead Press',target:'4×8',note:'Barbell version — heavier bilateral loading.'},
+    {name:'Pike Pushup',target:'4×12',note:'Bodyweight overhead pressing, no equipment needed.',inputType:'reps_only'},
+    {name:'DB Incline Press',target:'4×10',note:'Still hits the front delts, less overhead shoulder strain.'},
+  ],
+  'DB Incline Press': [
+    {name:'DB Bench Press',target:'4×10',note:'Flat variant if an incline bench isn\'t available.'},
+    {name:'Machine Chest Press',target:'4×12',note:'Fixed path alternative.'},
+    {name:'Pushup Variations',target:'4×max',note:'Bodyweight substitute — elevate feet for upper-chest emphasis.',inputType:'reps_only'},
+  ],
+  'DB Lateral Raise': [
+    {name:'Cable Lateral Raise',target:'3×15',note:'Constant tension through the full range — harder than DBs.'},
+    {name:'Upright Row',target:'3×12',note:'Hits lateral delt and upper trap together.'},
+  ],
+  'DB Front Raise': [
+    {name:'Cable Front Raise',target:'3×15',note:'Constant tension version if a cable stack is available.'},
+    {name:'DB Lateral Raise',target:'3×15',note:'Different plane, same front-delt-adjacent shoulder work.'},
+  ],
+  'Pullups': [
+    {name:'Lat Pulldown',target:'4×10',note:'Adjustable load — good if bodyweight pullups are too hard yet.'},
+    {name:'DB Row',target:'4×10/side',note:'Horizontal pulling substitute, no bar needed.'},
+    {name:'Chinups',target:'4×max',note:'Supinated grip — more bicep involvement.',inputType:'reps_only'},
+  ],
+  'DB Row': [
+    {name:'Seated Cable Row',target:'4×12',note:'Bilateral, constant tension version.'},
+    {name:'Barbell Row (Pendlay)',target:'4×6',note:'Heavier bilateral pulling if a barbell is available.'},
+  ],
+  'Chinups': [
+    {name:'Pullups',target:'4×max',note:'Pronated grip — more lat, less bicep.',inputType:'reps_only'},
+    {name:'Lat Pulldown',target:'4×10',note:'Adjustable load, supinated grip on most machines.'},
+  ],
+  'Bent-Over DB Face Pull': [
+    {name:'Band Pull-Apart',target:'3×20',note:'No dumbbells needed — great shoulder health work.',inputType:'reps_only'},
+    {name:'DB Lateral Raise',target:'3×15',note:'Different but complementary rear/side delt work.'},
+  ],
+  'DB Hammer Curl': [
+    {name:'EZ Bar Curl',target:'3×12',note:'Barbell substitute if available.'},
+    {name:'Towel Curl',target:'3×12',note:'No equipment needed — partner or fixed object required.'},
+  ],
+  'Bench/Box Jump': [
+    {name:'Broad Jump',target:'5×3',note:'Horizontal power, no box height needed.',inputType:'reps_distance'},
+    {name:'Squat Jump',target:'4×5',note:'No box needed — same explosive demand.',inputType:'reps_only'},
+    {name:'DB Jump Squat',target:'4×5',note:'Light DBs add load without needing a box.'},
+  ],
+  'Broad Jump': [
+    {name:'Squat Jump',target:'4×5',note:'Vertical power substitute, no space needed.',inputType:'reps_only'},
+    {name:'Bench/Box Jump',target:'5×3',note:'Vertical power if you have a sturdy box or bench.'},
+  ],
+  'DB Jump Squat': [
+    {name:'Squat Jump',target:'4×5',note:'Bodyweight version if dumbbells aren\'t appropriate for jumping.',inputType:'reps_only'},
+    {name:'Broad Jump',target:'5×3',note:'Horizontal power alternative.',inputType:'reps_distance'},
+  ],
+  'Sprint (hall/outside)': [
+    {name:'Treadmill Intervals',target:'8×1 min',note:'Indoor substitute, same hard-effort demand.',inputType:'reps_only'},
+    {name:'Stationary Bike Intervals',target:'6×45s',note:'Lower impact if sprinting isn\'t an option today.',inputType:'reps_only'},
+  ],
+  'Split Jump': [
+    {name:'Squat Jump',target:'4×5',note:'Bilateral power substitute if space is tight.',inputType:'reps_only'},
+    {name:'Reverse Lunge',target:'3×12/leg',note:'Same split-stance pattern without the jump.'},
+  ],
+  'Depth Drop': [
+    {name:'Squat Jump',target:'4×5',note:'Lower-intensity power substitute, no box needed.',inputType:'reps_only'},
+    {name:'Bench/Box Jump',target:'5×3',note:'Concentric-only power alternative.'},
+  ],
+  'Treadmill Intervals': [
+    {name:'Stationary Bike Intervals',target:'6×45s',note:'Lower impact, similar conditioning demand.',inputType:'reps_only'},
+    {name:'Rowing Machine Intervals',target:'6×500m',note:'Full-body substitute if a treadmill isn\'t free.',inputType:'reps_only'},
+  ],
+  'Stationary Bike Intervals': [
+    {name:'Treadmill Intervals',target:'8×1 min',note:'Run-based alternative.',inputType:'reps_only'},
+    {name:'Rowing Machine Intervals',target:'6×500m',note:'Full-body, non-impact substitute.',inputType:'reps_only'},
+  ],
+  'Treadmill Zone 2 Run': [
+    {name:'Stationary Bike Intervals',target:'20 min',note:'Same aerobic zone, lower impact.',inputType:'reps_only'},
+    {name:'Walking',target:'30-45 min',note:'Zone 1-2 substitute — easier recovery day option.',inputType:'timed'},
+  ],
+  'Treadmill': [
+    {name:'Stationary Bike Intervals',target:'20 min',note:'Lower-impact substitute for the same duration.',inputType:'reps_only'},
+    {name:'Walking',target:'30-45 min',note:'If the treadmill is occupied or you want lower intensity.',inputType:'timed'},
+  ],
+
+  // HOTEL ROOM
+  'Single Leg Squat (Pistol)': [
+    {name:'Slow Bodyweight Squat',target:'4×12',note:'Bilateral regression — build control before going unilateral.'},
+    {name:'Reverse Lunge',target:'3×12/leg',note:'Easier balance demand, same single-leg strength focus.',inputType:'reps_only'},
+  ],
+  'Hamstring Raise (Nordic Curl)': [
+    {name:'Single-Leg Glute Bridge',target:'3×12/leg',note:'Easier hamstring/glute regression if Nordics are too advanced.',inputType:'reps_only'},
+    {name:'Reverse Lunge',target:'3×12/leg',note:'Different pattern, still loads the hamstrings eccentrically.',inputType:'reps_only'},
+  ],
+  'Single-Leg Glute Bridge': [
+    {name:'Hamstring Raise (Nordic Curl)',target:'3×6',note:'Harder progression once single-leg bridges feel easy.',inputType:'reps_only'},
+    {name:'Reverse Lunge',target:'3×12/leg',note:'Standing alternative, same glute emphasis.',inputType:'reps_only'},
+  ],
+  'Calf Raise (step)': [
+    {name:'Single-Leg Calf Raise',target:'3×15/leg',note:'No step needed — harder unilateral version.',inputType:'reps_only'},
+  ],
+  'Reverse Lunge': [
+    {name:'Split Squat',target:'3×10/leg',note:'Static stance — easier balance, same quad/glute demand.',inputType:'reps_only'},
+    {name:'Single Leg Squat (Pistol)',target:'3×5/leg',note:'Harder progression once lunges feel easy.',inputType:'reps_only'},
+  ],
+  'Archer Pushup': [
+    {name:'Pushup Variations',target:'4×max',note:'Standard version if the archer variant is too advanced.',inputType:'reps_only'},
+    {name:'Decline Pushup',target:'4×max',note:'Different difficulty lever — feet elevated instead of arm reach.',inputType:'reps_only'},
+  ],
+  'Pike Pushup': [
+    {name:'Chair Dips',target:'3×12',note:'Different pressing angle, still shoulder/tricep focused.',inputType:'reps_only'},
+    {name:'Decline Pushup',target:'4×max',note:'Upper-chest/shoulder emphasis without full overhead position.',inputType:'reps_only'},
+  ],
+  'Pushup Variations': [
+    {name:'Decline Pushup',target:'4×max',note:'Feet elevated — more upper chest and shoulder.',inputType:'reps_only'},
+    {name:'Archer Pushup',target:'4×max',note:'Harder unilateral progression.',inputType:'reps_only'},
+  ],
+  'Chair Dips': [
+    {name:'Decline Pushup',target:'4×max',note:'Different pressing pattern, similar tricep/chest demand.',inputType:'reps_only'},
+    {name:'Pike Pushup',target:'4×12',note:'More shoulder-dominant substitute.',inputType:'reps_only'},
+  ],
+  'Decline Pushup': [
+    {name:'Pushup Variations',target:'4×max',note:'Standard version if elevating your feet isn\'t comfortable.',inputType:'reps_only'},
+    {name:'Archer Pushup',target:'4×max',note:'Harder unilateral progression.',inputType:'reps_only'},
+  ],
+  'Plank': [
+    {name:'Dead Bug',target:'3×10/side',note:'More controlled anti-extension work, easier on the lower back.',inputType:'reps_only'},
+    {name:'Bird Dog',target:'3×10/side',note:'Adds an anti-rotation component.',inputType:'reps_only'},
+  ],
+  'Pullups (bar if available)': [
+    {name:'Table / Inverted Row',target:'3×12',note:'No bar needed — use a sturdy table edge.',inputType:'reps_only'},
+    {name:'Door Frame Row',target:'3×12',note:'Another no-equipment pulling substitute.',inputType:'reps_only'},
+  ],
+  'Table / Inverted Row': [
+    {name:'Door Frame Row',target:'3×12',note:'Similar horizontal pull if no sturdy table is available.',inputType:'reps_only'},
+    {name:'Pullups (bar if available)',target:'3×max',note:'Vertical pull alternative if a bar is available.',inputType:'reps_only'},
+  ],
+  'Towel Curl': [
+    {name:'Door Frame Row',target:'3×12',note:'Different pulling pattern, still hits the biceps and back.',inputType:'reps_only'},
+  ],
+  'Door Frame Row': [
+    {name:'Table / Inverted Row',target:'3×12',note:'Similar horizontal pull using a table instead.',inputType:'reps_only'},
+    {name:'Towel Curl',target:'3×15',note:'Bicep-focused substitute using a towel and partner or fixed anchor.'},
+  ],
+  'Superman Hold': [
+    {name:'Bird Dog',target:'3×10/side',note:'More controlled, adds an anti-rotation component.',inputType:'reps_only'},
+    {name:'Dead Bug',target:'3×10/side',note:'Easier on the lower back if Superman feels like too much extension.',inputType:'reps_only'},
+  ],
+  'Bed/Chair Jump': [
+    {name:'Squat Jump',target:'4×5',note:'No furniture needed, same vertical power demand.',inputType:'reps_only'},
+    {name:'Split Jump',target:'4×6/side',note:'Different plane, same explosive intent.',inputType:'reps_only'},
+  ],
+  'Squat Jump': [
+    {name:'Split Jump',target:'4×6/side',note:'Unilateral power alternative.',inputType:'reps_only'},
+    {name:'Bed/Chair Jump',target:'4×5',note:'Added height challenge if bodyweight jumps feel easy.',inputType:'reps_only'},
+  ],
+  'Explosive Pushup': [
+    {name:'Pushup Variations',target:'4×max',note:'Standard tempo if explosive reps aren\'t appropriate today.',inputType:'reps_only'},
+  ],
+  'Pogo Hop': [
+    {name:'Squat Jump',target:'4×5',note:'Bigger, slower power expression instead of quick ground contacts.',inputType:'reps_only'},
+    {name:'Jump Lunge',target:'3×10/side',note:'Different plane, similar plyometric intent.',inputType:'reps_only'},
+  ],
+  'Pullups / Table Row': [
+    {name:'Door Frame Row',target:'3×12',note:'No table or bar needed.',inputType:'reps_only'},
+  ],
+  'Slow Bodyweight Squat': [
+    {name:'Reverse Lunge',target:'3×12/leg',note:'Unilateral progression once bilateral tempo squats feel easy.',inputType:'reps_only'},
+    {name:'Single Leg Squat (Pistol)',target:'3×5/leg',note:'Harder unilateral progression.',inputType:'reps_only'},
+  ],
+  'Inverted Row / Door Row': [
+    {name:'Table / Inverted Row',target:'3×12',note:'Same pattern, different anchor point.',inputType:'reps_only'},
+    {name:'Towel Curl',target:'3×15',note:'Bicep-focused substitute if neither anchor is available.'},
+  ],
+  'Slow Pushup': [
+    {name:'Pushup Variations',target:'4×max',note:'Standard tempo version.',inputType:'reps_only'},
+    {name:'Decline Pushup',target:'4×max',note:'Harder lever if tempo reps feel too easy.',inputType:'reps_only'},
+  ],
+  'Dead Bug': [
+    {name:'Bird Dog',target:'3×10/side',note:'Similar anti-extension demand from a different position.',inputType:'reps_only'},
+    {name:'Plank',target:'3×30s',note:'Static alternative — less coordination-dependent.',inputType:'timed'},
+  ],
+  'Bird Dog': [
+    {name:'Dead Bug',target:'3×10/side',note:'Similar anti-rotation demand, on your back instead of hands and knees.',inputType:'reps_only'},
+    {name:'Plank',target:'3×30s',note:'Static core alternative.',inputType:'timed'},
+  ],
+  'Burpee Intervals': [
+    {name:'Mountain Climbers',target:'6×30s',note:'Lower impact, still elevates heart rate hard.',inputType:'timed'},
+    {name:'Jump Lunge',target:'3×10/side',note:'Different but similarly demanding conditioning substitute.',inputType:'reps_only'},
+  ],
+  'Stair Sprint Intervals': [
+    {name:'Mountain Climbers',target:'6×30s',note:'No stairs needed, similar conditioning demand.',inputType:'timed'},
+    {name:'Burpee Intervals',target:'8×30s',note:'Full-body conditioning alternative.',inputType:'timed'},
+  ],
+  'Jump Lunge': [
+    {name:'Split Jump',target:'4×6/side',note:'Very similar movement — pick whichever cues better for you.',inputType:'reps_only'},
+    {name:'Reverse Lunge',target:'3×12/leg',note:'Remove the jump if you want the pattern without impact.',inputType:'reps_only'},
+  ],
+  'Mountain Climbers': [
+    {name:'Burpee Intervals',target:'8×30s',note:'Higher-intensity conditioning substitute.',inputType:'timed'},
+    {name:'Plank',target:'3×30s',note:'Static alternative if you want the core demand without the cardio component.',inputType:'timed'},
+  ],
+
   // EN ROUTE accessories
   'Lateral Raise': [
     {name:'Cable Lateral Raise',target:'3×15',note:'Cable keeps tension at the bottom — harder than DBs.'},
@@ -2620,26 +2849,48 @@ function getAlternates(exName) {
 
 function showAlternates(exId, exName, phaseKey) {
   const alts = getAlternates(exName);
-  if (!alts.length) { showBigToast('No alternates mapped for this exercise.','info'); return; }
   const root = document.getElementById('modalRoot');
   const parts = [];
   parts.push('<div class="modal-bg" onclick="if(event.target===this)closeModal()">');
-  parts.push('<div class="modal-sheet">');
+  parts.push('<div class="modal-sheet" style="max-height:85vh;overflow-y:auto">');
   parts.push('<div class="modal-handle"></div>');
   parts.push('<div class="modal-title">Alternate Exercises</div>');
-  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Same muscle group — different movement. Tap to swap in.</div>');
-  alts.forEach(alt => {
-    const safeAlt = JSON.stringify(alt).replace(/"/g,'\"');
-    parts.push('<div style="background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">');
-    parts.push('<div style="font-weight:700;font-size:14px;margin-bottom:3px">'+alt.name+'</div>');
-    parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--gold);margin-bottom:6px">'+alt.target+'</div>');
-    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px">'+alt.note+'</div>');
-    parts.push('<button class="btn btn-gold btn-sm" onclick=\'swapExercise("'+exId+'",'+JSON.stringify(alt)+');closeModal()\'>Swap In</button>');
-    parts.push('</div>');
-  });
+  if (alts.length) {
+    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Same muscle group — different movement. Tap to swap in.</div>');
+    alts.forEach(alt => {
+      parts.push('<div style="background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">');
+      parts.push('<div style="font-weight:700;font-size:14px;margin-bottom:3px">'+alt.name+'</div>');
+      parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--gold);margin-bottom:6px">'+alt.target+'</div>');
+      parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px">'+alt.note+'</div>');
+      parts.push('<button class="btn btn-gold btn-sm" onclick=\'swapExercise("'+exId+'",'+JSON.stringify(alt)+');closeModal()\'>Swap In</button>');
+      parts.push('</div>');
+    });
+  } else {
+    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px">No alternates mapped for this exercise yet — create your own below.</div>');
+  }
+
+  parts.push('<div style="border-top:1px solid var(--border);margin-top:6px;padding-top:14px">');
+  parts.push('<div style="font-size:12px;font-weight:600;margin-bottom:10px">✏️ Create Your Own Alternate</div>');
+  parts.push('<div class="field"><label>Exercise Name</label><input id="altName" type="text" placeholder="e.g. Cable Squat"></div>');
+  parts.push('<div class="field"><label>Target (e.g. 3x10, 45s, 3x12/side)</label><input id="altTarget" type="text" placeholder="3x10"></div>');
+  parts.push('<div class="field"><label>Type</label><select id="altType"><option value="reps_weight">Reps + Weight</option><option value="reps_only">Reps Only</option><option value="timed">Timed</option></select></div>');
+  parts.push('<div class="field"><label>Note (optional)</label><input id="altNote" type="text" placeholder="Why this works as a substitute"></div>');
+  parts.push('<button class="btn btn-gold" onclick="swapCustomAlternate(\''+exId+'\')">Swap In Custom Exercise</button>');
+  parts.push('</div>');
+
   parts.push('<button class="btn btn-outline mt8" onclick="closeModal()">CANCEL</button>');
   parts.push('</div></div>');
   root.innerHTML = parts.join('');
+}
+
+function swapCustomAlternate(exId) {
+  const name = sanitizeUserText(document.getElementById('altName')?.value?.trim());
+  const target = sanitizeUserText(document.getElementById('altTarget')?.value?.trim()) || '3x10';
+  const inputType = document.getElementById('altType')?.value || 'reps_weight';
+  const note = sanitizeUserText(document.getElementById('altNote')?.value?.trim()) || 'Custom alternate.';
+  if (!name) { showToast('Enter an exercise name.'); return; }
+  swapExercise(exId, { name, target, note, inputType });
+  closeModal();
 }
 
 function swapExercise(exId, alt) {
@@ -2647,12 +2898,14 @@ function swapExercise(exId, alt) {
   for (const phase of ['taxi','takeoff','enroute','landing']) {
     const idx = ST.workout[phase].findIndex(e => e.id === exId);
     if (idx === -1) continue;
-    const newEx = ex('swap_'+Date.now(), alt.name, alt.target, 3, alt.note||'Alternate exercise.', false, alt.inputType||'reps_weight');
+    const setsMatch = (alt.target||'').match(/^(\d+)\s*[x×]/i);
+    const setsCount = setsMatch ? Math.max(1, parseInt(setsMatch[1], 10)) : 3;
+    const newEx = ex('swap_'+Date.now(), alt.name, alt.target, setsCount, alt.note||'Alternate exercise.', alt.inputType==='timed', alt.inputType||'reps_weight');
     ST.workout[phase][idx] = newEx;
     const iType = alt.inputType || 'reps_weight';
-    ST.sets[newEx.id] = iType==='reps_only' ? Array.from({length:3},()=>({reps:''})) :
+    ST.sets[newEx.id] = iType==='reps_only' ? Array.from({length:setsCount},()=>({reps:''})) :
                         iType==='timed'      ? [{seconds:''}] :
-                                               Array.from({length:3},()=>({reps:'',weight:''}));
+                                               Array.from({length:setsCount},()=>({reps:'',weight:''}));
     delete ST.sets[exId];
     persistWorkoutState();
     showBigToast(alt.name+' swapped in.','ok');
@@ -2843,7 +3096,7 @@ function buildExCard(exItem, phaseKey) {
         parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="Height" value="'+(s.height||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].height=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState()">');
         parts.push('<div class="set-hint">reps / height (in)</div></div>');
       });
-      parts.push('</div></div><div class="swipe-hint">← swipe for all sets</div>');
+      parts.push('</div></div><div class="swipe-hint">← swipe for all sets</div><button class="btn-ghost" style="font-size:11px;margin-top:6px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button>');
       if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
         parts.push(buildRestTimerWidget(exItem.id, phaseKey));
       }
@@ -2855,7 +3108,7 @@ function buildExCard(exItem, phaseKey) {
         parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="Distance" value="'+(s.distance||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].distance=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState()">');
         parts.push('<div class="set-hint">reps / distance (in)</div></div>');
       });
-      parts.push('</div></div><div class="swipe-hint">← swipe for all sets</div>');
+      parts.push('</div></div><div class="swipe-hint">← swipe for all sets</div><button class="btn-ghost" style="font-size:11px;margin-top:6px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button>');
       if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
         parts.push(buildRestTimerWidget(exItem.id, phaseKey));
       }
@@ -2866,7 +3119,7 @@ function buildExCard(exItem, phaseKey) {
         parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value?\' ok\':\'\');persistWorkoutState()">');
         parts.push('<div class="set-hint">reps only</div></div>');
       });
-      parts.push('</div></div><div class="swipe-hint">← swipe for all sets</div>');
+      parts.push('</div></div><div class="swipe-hint">← swipe for all sets</div><button class="btn-ghost" style="font-size:11px;margin-top:6px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button>');
     } else {
       parts.push('<div class="sets-wrap"><div class="sets-scroll">');
       sets.forEach((s,i) => {
@@ -2875,19 +3128,16 @@ function buildExCard(exItem, phaseKey) {
         parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="lb" value="'+(s.weight||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].weight=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState()">');
         parts.push('<div class="set-hint">reps / lb</div></div>');
       });
-      parts.push('</div></div><div class="swipe-hint">← swipe for all sets</div>');
+      parts.push('</div></div><div class="swipe-hint">← swipe for all sets</div><button class="btn-ghost" style="font-size:11px;margin-top:6px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button>');
       if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
         parts.push(buildRestTimerWidget(exItem.id, phaseKey));
       }
     }
 
     if (!exItem.custom) {
-      const hasAlts = getAlternates(exItem.name).length > 0;
-      if (hasAlts) {
-        parts.push('<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">');
-        parts.push('<button class="btn-info" style="border-color:rgba(167,139,250,0.4);color:#a78bfa" onclick="showAlternates(\''+exItem.id+'\',\''+exItem.name+'\',\''+phaseKey+'\')">⇄ Alternate</button>');
-        parts.push('</div>');
-      }
+      parts.push('<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">');
+      parts.push('<button class="btn-info" style="border-color:rgba(167,139,250,0.4);color:#a78bfa" onclick="showAlternates(\''+exItem.id+'\',\''+exItem.name+'\',\''+phaseKey+'\')">⇄ Alternate</button>');
+      parts.push('</div>');
     } else {
       parts.push('<div style="margin-top:10px"><button class="btn-info" style="color:#fca5a5;border-color:rgba(239,68,68,0.3)" onclick="deleteCustomExercise(\''+exItem.id+'\')">✕ Remove</button></div>');
     }
@@ -2955,6 +3205,18 @@ function tickRestTimer(exId) {
     renderFlight(document.getElementById('mainPage'));
   }
 }
+function addLiveSet(exId) {
+  const sets = ST.sets[exId];
+  if (!sets || !sets.length) return;
+  // Clone the shape of the last set (whatever fields it has) so this works
+  // generically across reps/weight, reps-only, reps/height, reps/distance.
+  const blank = {};
+  Object.keys(sets[sets.length-1]).forEach(k => { blank[k] = ''; });
+  sets.push(blank);
+  persistWorkoutState();
+  renderFlight(document.getElementById('mainPage'));
+}
+
 function stopRestTimer() {
   if (ST.restTimer.interval) clearInterval(ST.restTimer.interval);
   ST.restTimer.active = false;
@@ -3131,14 +3393,21 @@ async function saveCustomExercise() {
   const note = sanitizeUserText(document.getElementById('custom_ex_note')?.value?.trim()) || 'User-created exercise.';
   if (!name) { showToast('Enter an exercise name.'); return; }
 
+  // Parse the leading 'N×' or 'NxM' set count out of the target string
+  // (e.g. '5x10' -> 5 sets) so the number of set tiles actually matches what
+  // the user typed, instead of a hardcoded default.
+  const setsMatch = target.match(/^(\d+)\s*[x×]/i);
+  const setsCount = setsMatch ? Math.max(1, parseInt(setsMatch[1], 10)) : 3;
+
   const id = 'custom_' + Date.now();
-  const newEx = ex(id, name, target, 3, note, inputType==='timed', inputType);
+  const newEx = ex(id, name, target, setsCount, note, inputType==='timed', inputType);
   newEx.custom = true;
 
   // Add to current active workout (enroute slot) immediately
   if (ST.workout) {
     ST.workout.enroute.push(newEx);
-    ST.sets[id] = inputType==='timed' ? [{seconds:''}] : inputType==='reps_only' ? [{reps:''}] : [{reps:'',weight:''}];
+    const blankSet = inputType==='timed' ? {seconds:''} : inputType==='reps_only' ? {reps:''} : {reps:'',weight:''};
+    ST.sets[id] = Array.from({ length: setsCount }, () => ({...blankSet}));
   }
 
   // Persist for future sessions in this env/muscle group

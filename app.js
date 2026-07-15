@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.14.1';
+const FCF_VERSION = 'v5.14.2';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -4264,7 +4264,7 @@ async function handleOuraCallback() {
     localStorage.removeItem('oura_state');
 
     showBigToast('Oura connected! Syncing today\'s data...','ok');
-    await syncOuraData();
+    await syncOuraData(true);
   } catch(e) {
     let errMsg = e.message || 'Unknown error';
     if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError') || errMsg.includes('Load failed')) {
@@ -4390,7 +4390,8 @@ async function importHistoricalOura(days) {
 }
 
 // Step 5: Full sync — pulls readiness, sleep, activity; stores in Supabase
-async function syncOuraData() {
+const OURA_TOAST_KEY = 'fcf_oura_toast_date';
+async function syncOuraData(force) {
   if (!ST.user || !ST.ouraAccessToken) {
     showBigToast('Connect Oura Ring first.','warn');
     return;
@@ -4411,7 +4412,7 @@ async function syncOuraData() {
     const activityItem  = activity?.data?.[activity.data.length-1];
 
     if (!readinessItem) {
-      showBigToast('No readiness data yet — sync your Oura app first.','info');
+      if (force) showBigToast('No readiness data yet — sync your Oura app first.','info');
       return;
     }
 
@@ -4445,13 +4446,19 @@ async function syncOuraData() {
     ST.ouraScore  = score;
     ST.ouraData   = row;
 
-    // Show what we got
-    const sleepScoreStr = row.sleep_score ? String(row.sleep_score) : '—';
-    showBigToast('Oura synced\nReadiness: '+score+' → '+label+'\nSleep Score: '+sleepScoreStr,'ok');
+    // Show the sync result once per day for automatic background syncs — a
+    // manual "Sync Now" tap always shows it, since that's a deliberate
+    // action expecting confirmation.
+    const alreadyShownToday = localStorage.getItem(OURA_TOAST_KEY) === today;
+    if (force || !alreadyShownToday) {
+      const sleepScoreStr = row.sleep_score ? String(row.sleep_score) : '—';
+      showBigToast('Oura synced\nReadiness: '+score+' → '+label+'\nSleep Score: '+sleepScoreStr,'ok');
+      localStorage.setItem(OURA_TOAST_KEY, today);
+    }
     renderPage();
 
   } catch(e) {
-    showBigToast('Oura sync failed: '+e.message,'warn');
+    if (force) showBigToast('Oura sync failed: '+e.message,'warn');
   }
 }
 
@@ -4721,7 +4728,7 @@ function renderProfile(p) {
       parts.push('</div>');
     }
     parts.push('</div>');
-    parts.push('<button class="btn btn-outline" onclick="syncOuraData()">↻ Sync Now</button>');
+    parts.push('<button class="btn btn-outline" onclick="syncOuraData(true)">↻ Sync Now</button>');
     parts.push('<button class="btn btn-outline mt8" onclick="importHistoricalOura(180)">📥 Import Last 6 Months</button>');
   } else {
     parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.65">Connect your Oura Ring to automatically set your Pilot Condition based on your daily readiness score. Readiness 70+ = GO, 60-69 = MARGINAL, below 60 = NO-GO. These bands match Oura\'s own Good/Fair/Pay Attention categories.</div>');

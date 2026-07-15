@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.14.3';
+const FCF_VERSION = 'v5.14.4';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -695,7 +695,7 @@ function applyInjuryFilter(exItem) {
 // since they're what prevents the injuries that cost far more training time
 // later. En Route (accessory volume) is trimmed first, Takeoff (the primary
 // compound lifts) only if time is still short after that.
-const MIN_PER_EXERCISE = 4; // rough minutes incl. rest, coach rule-of-thumb
+const MIN_PER_EXERCISE = 6; // minutes incl. rest, equipment setup/teardown, and walking between stations
 function applyTimeFilter(wk, minutes) {
   if (!minutes) return wk;
   let budget = Math.floor(minutes / MIN_PER_EXERCISE);
@@ -2295,7 +2295,7 @@ async function renderPreflight(p) {
   parts.push('<div class="section-label">TIME AVAILABLE <span class="info-i" onclick="showBioInfo(\'timeAvail\')">i</span></div>');
   parts.push('<div class="card mb12">');
   parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">');
-  [15,30,45,60,90,null].forEach(m => {
+  [15,30,45,60,null].forEach(m => {
     const sel = ST.timeAvailMin === m;
     parts.push('<div class="env-btn'+(sel?' sel':'')+'" style="padding:10px" onclick="ST.timeAvailMin='+(m===null?'null':m)+';persistDailyInputs();renderPage()"><div style="font-size:12px;font-weight:600">'+(m===null?'Full Session':m+' min')+'</div>'+(m===null?'<div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:2px">~'+fullSessionMin+' min</div>':'')+'</div>');
   });

@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.14.2';
+const FCF_VERSION = 'v5.14.3';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2219,6 +2219,9 @@ async function renderPreflight(p) {
   const rawWk = getCombinedWorkout(ST.env, ST.muscleGroup);
   const profileIncomplete = !ST.sex;
   const wk    = applyTimeFilter(getFilteredWorkout(rawWk), ST.timeAvailMin);
+  const fullSessionEx = getFilteredWorkout(rawWk);
+  const fullSessionCount = fullSessionEx ? (fullSessionEx.taxi.length+fullSessionEx.takeoff.length+fullSessionEx.enroute.length+fullSessionEx.landing.length) : 0;
+  const fullSessionMin = fullSessionCount * MIN_PER_EXERCISE;
 
   const levelLabel   = {beginner:'Beginner',intermediate:'Intermediate',advanced:'Advanced'}[ST.level];
   const fatigueLabel = {go:'🟢 GO',marginal:'🟡 MARGINAL',nogo:'🔴 NO-GO'}[ST.fatigue];
@@ -2294,7 +2297,7 @@ async function renderPreflight(p) {
   parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">');
   [15,30,45,60,90,null].forEach(m => {
     const sel = ST.timeAvailMin === m;
-    parts.push('<div class="env-btn'+(sel?' sel':'')+'" style="padding:10px" onclick="ST.timeAvailMin='+(m===null?'null':m)+';persistDailyInputs();renderPage()"><div style="font-size:12px;font-weight:600">'+(m===null?'Full Session':m+' min')+'</div></div>');
+    parts.push('<div class="env-btn'+(sel?' sel':'')+'" style="padding:10px" onclick="ST.timeAvailMin='+(m===null?'null':m)+';persistDailyInputs();renderPage()"><div style="font-size:12px;font-weight:600">'+(m===null?'Full Session':m+' min')+'</div>'+(m===null?'<div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:2px">~'+fullSessionMin+' min</div>':'')+'</div>');
   });
   parts.push('</div>');
   parts.push('</div>');

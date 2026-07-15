@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.13';
+const FCF_VERSION = 'v5.13.1';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2838,13 +2838,7 @@ const ALTERNATES = {
 
 function getAlternates(exName) {
   if (!exName) return [];
-  if (ALTERNATES[exName]) return ALTERNATES[exName];
-  // partial match
-  const key = Object.keys(ALTERNATES).find(k => {
-    const kl = k.toLowerCase(), nl = exName.toLowerCase();
-    return nl.includes(kl.split(' ')[0]) || kl.includes(nl.split(' ')[0]);
-  });
-  return key ? ALTERNATES[key] : [];
+  return ALTERNATES[exName] || [];
 }
 
 function showAlternates(exId, exName, phaseKey) {

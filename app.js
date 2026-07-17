@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.14.5';
+const FCF_VERSION = 'v5.15';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -52,6 +52,9 @@ const ST = {
   age: null,
   lastWeight: null,
   injuries: [],       // persistent (profile) — active flagged body regions
+  customProfiles: [],       // persistent (profile) — saved 'Build Your Own' routines
+  activeCustomProfileId: null, // currently selected custom profile, if any
+  buildProfile: null,        // in-progress custom profile being created/edited
   timeAvailMin: null, // daily — minutes available for today's session
   sleepHours: null,   // daily — manual sleep entry for non-Oura users
   readiness: null,    // daily — 1-5 self-reported readiness
@@ -725,6 +728,26 @@ function getFilteredWorkout(rawWk) {
   };
 }
 
+// Returns the effective workout to show/engage right now. When a custom
+// "Build Your Own" profile is active, it's returned exactly as saved — no
+// level/fatigue filtering, no time trimming, no injury swaps, no rep
+// adjustments. That's deliberate: a custom profile is a fixed routine the
+// user built by hand, not something the app should second-guess. Deep-cloned
+// so nothing in a live session can ever mutate the saved template.
+function getActiveWorkout() {
+  if (ST.activeCustomProfileId) {
+    const cp = ST.customProfiles.find(p => p.id === ST.activeCustomProfileId);
+    if (cp) {
+      return JSON.parse(JSON.stringify({
+        taxi: cp.taxi, takeoff: cp.takeoff, enroute: cp.enroute, landing: cp.landing,
+      }));
+    }
+  }
+  const rawWk = getCombinedWorkout(ST.env, ST.muscleGroup);
+  if (!rawWk) return null;
+  return applyTimeFilter(getFilteredWorkout(rawWk), ST.timeAvailMin);
+}
+
 // Recommend next muscle group based on goal rotation + last completed session
 function getRecommendedNext() {
   const order = (GOALS[ST.goal] || GOALS.longevity).order;
@@ -1257,6 +1280,10 @@ async function bootApp() {
     ST.age        = profile.age || null;
     ST.lastWeight = profile.lastWeight || null;
     ST.injuries   = profile.injuries || [];
+    ST.customProfiles = (profile.customProfiles || []).map(cp => ({
+      ...cp,
+      name: sanitizeUserText(cp.name),
+    }));
   }
   restoreDailyInputs();
   // First-ever open with no profile info: land on Profile once so the user
@@ -1932,6 +1959,7 @@ function expandSearchQuery(q) {
 // True if an exercise (by its canonical catalog name) matches a search query,
 // checking the name itself, DB/dumbbell query variants, and known synonyms.
 function exerciseMatchesQuery(canonicalName, rawQuery) {
+  if (!canonicalName || !rawQuery) return false;
   const nameLower = canonicalName.toLowerCase();
   const variants = expandSearchQuery(rawQuery);
 
@@ -2207,6 +2235,176 @@ async function deleteSessionConfirmed(key) {
   }
 }
 
+// ─── BUILD YOUR OWN MISSION PROFILE ──────────────────────────────────────────
+// Saved custom routines: fixed exercise lists the user assembles by hand.
+// Used exactly as saved — deliberately outside the adaptive pipeline.
+
+function selectMissionProfile(mg) {
+  ST.activeCustomProfileId = null;
+  ST.muscleGroup = mg;
+  renderPage();
+}
+function selectCustomProfile(id) {
+  const cp = ST.customProfiles.find(p => p.id === id);
+  if (!cp) return;
+  ST.activeCustomProfileId = id;
+  // Custom name flows through everywhere ST.muscleGroup is used for labeling:
+  // Flight header, debrief title, calendar day, session record.
+  ST.muscleGroup = cp.name;
+  renderPage();
+}
+
+async function saveCustomProfilesToDb() {
+  const profile = (await dbGetProfile()) || {};
+  profile.customProfiles = ST.customProfiles;
+  await dbSetProfile(profile);
+}
+
+const BP_SECTIONS = [
+  ['taxi',    'WARMUP / STRETCHING'],
+  ['enroute', 'MAIN EXERCISES'],
+  ['landing', 'COOLDOWN STRETCHES'],
+];
+
+function openProfileBuilder(editId) {
+  const existing = editId ? ST.customProfiles.find(p => p.id === editId) : null;
+  ST.buildProfile = existing
+    ? JSON.parse(JSON.stringify(existing))
+    : { id: 'cp_' + Date.now(), name: '', taxi: [], takeoff: [], enroute: [], landing: [] };
+  renderProfileBuilder();
+}
+
+// Builder search draws from the full catalog PLUS the user's own custom
+// exercises, deduped by id.
+function bpSearchSource() {
+  const seen = new Set();
+  const out = [];
+  buildExerciseCatalog().forEach(e => { if (!seen.has(e.id)) { seen.add(e.id); out.push(e); } });
+  (ST.customExercises || []).forEach(ce => {
+    const e = ce.exercise;
+    if (e && e.id && e.name && !seen.has(e.id)) { seen.add(e.id); out.push({ id: e.id, name: e.name, target: e.target, sets: e.sets, note: e.note, timed: e.timed, inputType: e.inputType }); }
+  });
+  return out;
+}
+
+function renderProfileBuilder() {
+  const bp = ST.buildProfile;
+  if (!bp) return;
+  const parts = [];
+  parts.push('<div class="modal-bg" onclick="if(event.target===this)closeModal()">');
+  parts.push('<div class="modal-sheet" style="max-height:88vh;overflow-y:auto">');
+  parts.push('<div class="modal-handle"></div>');
+  parts.push('<div class="modal-title">Build Your Own Routine</div>');
+  parts.push('<div class="field"><label>Routine Name</label><input id="bpName" type="text" placeholder="e.g. Quick Hotel Pump" value="'+bp.name+'" oninput="ST.buildProfile.name=this.value"></div>');
+
+  BP_SECTIONS.forEach(([section, label]) => {
+    parts.push('<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">');
+    parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--gold);letter-spacing:0.08em;margin-bottom:8px">'+label+'</div>');
+    (bp[section]||[]).forEach(e => {
+      parts.push('<div class="fb" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:6px">');
+      parts.push('<div><span style="font-size:13px">'+e.name+'</span> <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+(e.target||'')+'</span></div>');
+      parts.push('<span style="color:var(--red);cursor:pointer;font-size:14px" onclick="bpRemove(\''+section+'\',\''+e.id+'\')">✕</span>');
+      parts.push('</div>');
+    });
+    parts.push('<input type="text" placeholder="Search to add…" oninput="bpFilter(\''+section+'\',this.value)" autocomplete="off" style="margin-bottom:6px">');
+    parts.push('<div id="bpResults_'+section+'"></div>');
+    parts.push('</div>');
+  });
+
+  parts.push('<button class="btn btn-gold mt12" onclick="saveBuildProfile()">💾 SAVE ROUTINE</button>');
+  parts.push('<button class="btn btn-outline mt8" onclick="closeModal()">CANCEL</button>');
+  parts.push('</div></div>');
+  document.getElementById('modalRoot').innerHTML = parts.join('');
+}
+
+function bpFilter(section, q) {
+  const box = document.getElementById('bpResults_'+section);
+  if (!box) return;
+  q = (q||'').trim().toLowerCase();
+  if (!q) { box.innerHTML = ''; return; }
+  const chosen = new Set([...ST.buildProfile.taxi, ...ST.buildProfile.takeoff, ...ST.buildProfile.enroute, ...ST.buildProfile.landing].map(e => e.id));
+  const matches = bpSearchSource().filter(e => exerciseMatchesQuery(e.name, q) && !chosen.has(e.id)).slice(0, 5);
+  const parts = [];
+  matches.forEach((e, i) => {
+    parts.push('<div style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:5px;cursor:pointer;font-size:13px" onclick="bpAdd(\''+section+'\','+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+(e.target||'')+'</span></div>');
+  });
+  if (!matches.length) parts.push('<div style="font-size:11px;color:var(--muted);padding:4px 2px">No catalog match. Add it as a custom exercise from the Flight tab first, then it will appear here.</div>');
+  box.innerHTML = parts.join('');
+}
+function bpAdd(section, matchIdx, q) {
+  const chosen = new Set([...ST.buildProfile.taxi, ...ST.buildProfile.takeoff, ...ST.buildProfile.enroute, ...ST.buildProfile.landing].map(e => e.id));
+  const matches = bpSearchSource().filter(e => exerciseMatchesQuery(e.name, q.toLowerCase()) && !chosen.has(e.id)).slice(0, 5);
+  const exDef = matches[matchIdx];
+  if (!exDef) return;
+  ST.buildProfile[section].push(JSON.parse(JSON.stringify(exDef)));
+  renderProfileBuilder();
+}
+function bpRemove(section, exId) {
+  ST.buildProfile[section] = ST.buildProfile[section].filter(e => e.id !== exId);
+  renderProfileBuilder();
+}
+
+async function saveBuildProfile() {
+  const bp = ST.buildProfile;
+  if (!bp) return;
+  bp.name = sanitizeUserText((document.getElementById('bpName')?.value || bp.name || '').trim());
+  if (!bp.name) { showToast('Give your routine a name.'); return; }
+  const total = bp.taxi.length + bp.takeoff.length + bp.enroute.length + bp.landing.length;
+  if (!total) { showToast('Add at least one exercise.'); return; }
+  const idx = ST.customProfiles.findIndex(p => p.id === bp.id);
+  if (idx >= 0) ST.customProfiles[idx] = bp; else ST.customProfiles.push(bp);
+  await saveCustomProfilesToDb();
+  ST.buildProfile = null;
+  closeModal();
+  selectCustomProfile(bp.id);
+  showToast('✅ Routine saved.');
+}
+
+function openProfileManager() {
+  const parts = [];
+  parts.push('<div class="modal-bg" onclick="if(event.target===this)closeModal()">');
+  parts.push('<div class="modal-sheet">');
+  parts.push('<div class="modal-handle"></div>');
+  parts.push('<div class="modal-title">Saved Routines</div>');
+  ST.customProfiles.forEach(cp => {
+    const count = cp.taxi.length + cp.takeoff.length + cp.enroute.length + cp.landing.length;
+    parts.push('<div class="fb" style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px">');
+    parts.push('<div><div style="font-size:13px;font-weight:600">🛠 '+cp.name+'</div><div style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+count+' exercises · ~'+(count*MIN_PER_EXERCISE)+' min</div></div>');
+    parts.push('<div style="display:flex;gap:10px">');
+    parts.push('<span style="cursor:pointer;font-size:14px" onclick="openProfileBuilder(\''+cp.id+'\')">✎</span>');
+    parts.push('<span style="cursor:pointer;font-size:14px;color:var(--red)" onclick="confirmDeleteCustomProfile(\''+cp.id+'\')">🗑</span>');
+    parts.push('</div></div>');
+  });
+  parts.push('<button class="btn btn-outline mt8" onclick="closeModal()">CLOSE</button>');
+  parts.push('</div></div>');
+  document.getElementById('modalRoot').innerHTML = parts.join('');
+}
+
+function confirmDeleteCustomProfile(id) {
+  const cp = ST.customProfiles.find(p => p.id === id);
+  if (!cp) return;
+  document.getElementById('modalRoot').innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()">' +
+    '<div class="modal-sheet">' +
+    '<div class="modal-handle"></div>' +
+    '<div class="modal-title">Delete "'+cp.name+'"?</div>' +
+    '<div class="modal-body" style="margin-bottom:14px">This permanently deletes the saved routine. Completed sessions logged with it stay in your history.</div>' +
+    '<button class="btn" style="background:var(--red);color:#fff" onclick="deleteCustomProfileConfirmed(\''+id+'\')">🗑 CONFIRM DELETE</button>' +
+    '<button class="btn btn-outline mt8" onclick="openProfileManager()">CANCEL</button>' +
+    '</div></div>';
+}
+async function deleteCustomProfileConfirmed(id) {
+  ST.customProfiles = ST.customProfiles.filter(p => p.id !== id);
+  if (ST.activeCustomProfileId === id) {
+    ST.activeCustomProfileId = null;
+    ST.muscleGroup = getRecommendedNext();
+  }
+  await saveCustomProfilesToDb();
+  closeModal();
+  renderPage();
+  showToast('Routine deleted.');
+}
+
 // ─── PREFLIGHT TAB ────────────────────────────────────────────────────────────
 async function renderPreflight(p) {
   // Auto-sync Oura in background if connected and data is stale (>30 min)
@@ -2218,8 +2416,8 @@ async function renderPreflight(p) {
   const adv   = hydroAdvice();
   const rawWk = getCombinedWorkout(ST.env, ST.muscleGroup);
   const profileIncomplete = !ST.sex;
-  const wk    = applyTimeFilter(getFilteredWorkout(rawWk), ST.timeAvailMin);
-  const fullSessionEx = getFilteredWorkout(rawWk);
+  const wk    = getActiveWorkout();
+  const fullSessionEx = ST.activeCustomProfileId ? wk : getFilteredWorkout(rawWk);
   const fullSessionCount = fullSessionEx ? (fullSessionEx.taxi.length+fullSessionEx.takeoff.length+fullSessionEx.enroute.length+fullSessionEx.landing.length) : 0;
   const fullSessionMin = fullSessionCount * MIN_PER_EXERCISE;
 
@@ -2338,14 +2536,23 @@ async function renderPreflight(p) {
   parts.push('<div class="section-label">MISSION PROFILE</div>');
   parts.push('<div class="mg-wrap">');
   MUSCLE_GROUPS.forEach(mg => {
-    const cls = 'mg-pill' + (ST.muscleGroup===mg?' sel':'') + (mg===recommended && ST.muscleGroup!==mg?' recommended':'');
-    parts.push('<div class="'+cls+'" onclick="ST.muscleGroup=\''+mg+'\';renderPage()">'+mg+(mg===recommended?' ★':'')+'</div>');
+    const builtinSel = !ST.activeCustomProfileId && ST.muscleGroup===mg;
+    const cls = 'mg-pill' + (builtinSel?' sel':'') + (mg===recommended && !builtinSel?' recommended':'');
+    parts.push('<div class="'+cls+'" onclick="selectMissionProfile(\''+mg+'\')">'+mg+(mg===recommended?' ★':'')+'</div>');
   });
+  ST.customProfiles.forEach(cp => {
+    const cls = 'mg-pill' + (ST.activeCustomProfileId===cp.id?' sel':'');
+    parts.push('<div class="'+cls+'" style="border-style:dashed" onclick="selectCustomProfile(\''+cp.id+'\')">🛠 '+cp.name+'</div>');
+  });
+  parts.push('<div class="mg-pill" style="border-style:dashed;color:var(--gold)" onclick="openProfileBuilder()">＋ Build Your Own</div>');
   parts.push('</div>');
+  if (ST.customProfiles.length) {
+    parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin:-6px 0 10px;cursor:pointer" onclick="openProfileManager()">✎ MANAGE SAVED ROUTINES</div>');
+  }
 
   // Flight plan preview
   if (wk) {
-    parts.push('<div class="section-label">FLIGHT PLAN PREVIEW — '+totalEx+' EXERCISES ('+levelLabel+(ST.fatigue!=='go'?' / '+fatigueLabel:'')+(ST.timeAvailMin?' / ⏱ '+ST.timeAvailMin+'min':'')+')</div>');
+    parts.push('<div class="section-label">FLIGHT PLAN PREVIEW — '+totalEx+' EXERCISES ('+(ST.activeCustomProfileId?'CUSTOM — AS SAVED':levelLabel+(ST.fatigue!=='go'?' / '+fatigueLabel:'')+(ST.timeAvailMin?' / ⏱ '+ST.timeAvailMin+'min':''))+')</div>');
     parts.push('<div class="card card-dark mb12"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
     [['🚕 TAXI',wk.taxi],['🛫 TAKEOFF',wk.takeoff],['✈️ EN ROUTE',wk.enroute],['🛬 LANDING',wk.landing]].forEach(([label,exs]) => {
       parts.push('<div style="background:var(--bg);border-radius:8px;padding:10px"><div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">'+label+'</div>');
@@ -2494,11 +2701,8 @@ function getCurrentExerciseId() {
 }
 
 function engageWorkout() {
-  const rawWk = getCombinedWorkout(ST.env, ST.muscleGroup);
-  if (!rawWk) { showToast('No workout available for this environment + muscle group.'); return; }
-  let wk = getFilteredWorkout(rawWk);
-  if (!wk) return;
-  wk = applyTimeFilter(wk, ST.timeAvailMin);
+  const wk = getActiveWorkout();
+  if (!wk) { showToast('No workout available for this selection.'); return; }
 
   ST.workout = wk;
   ST.sets = {};

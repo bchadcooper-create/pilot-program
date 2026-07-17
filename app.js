@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.14.4';
+const FCF_VERSION = 'v5.14.5';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -4747,15 +4747,6 @@ function renderProfile(p) {
   parts.push('<button class="btn btn-outline" onclick="exportCSV()">📊 Export CSV for AI Analysis</button>');
   parts.push('<button class="btn btn-outline mt8" onclick="showAIPromptModal()">📋 View & Copy AI Prompt</button>');
   parts.push('</div>');
-
-  // Custom exercises
-  if (ST.customExercises.length) {
-    parts.push('<div class="card mb12"><div class="section-label" style="margin-top:0">CUSTOM EXERCISES ('+ST.customExercises.length+')</div>');
-    ST.customExercises.forEach(c => {
-      parts.push('<div class="fb" style="padding:6px 0;border-bottom:1px solid var(--border)"><span style="font-size:12px">'+c.exercise.name+'</span><span style="font-size:10px;color:var(--muted)">'+c.muscleGroup+' · '+c.env+'</span></div>');
-    });
-    parts.push('</div>');
-  }
 
   // Safety disclaimer
   parts.push('<div class="card mb12"><div class="section-label" style="margin-top:0">SAFETY DISCLAIMER</div>');

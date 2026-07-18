@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.16.1';
+const FCF_VERSION = 'v5.16.2';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -1254,7 +1254,7 @@ function renderRoot() {
 
 function switchTab(tab) {
   ST.tab = tab;
-  const MORE_SUBVIEWS = ['profile','wisdom','devices','data'];
+  const MORE_SUBVIEWS = ['profile','wisdom','devices','data','badges'];
   const hl = MORE_SUBVIEWS.includes(tab) ? 'more' : tab;
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === hl));
   const tabbar = document.getElementById('tabbar');
@@ -1288,11 +1288,20 @@ const BADGES = [
   { id:'pr_25',        icon:'🏆', title:'Record Machine',   desc:'25 lifetime PRs',                        check:s => s.prCount >= 25 },
   { id:'down_5',       icon:'📉', title:'Lean Descent',     desc:'Down 5 lb from your first logged weight',check:s => s.weightLost >= 5 },
   { id:'logger_7',     icon:'📋', title:'Flight Recorder',  desc:'Log biometrics 7 days in a row',         check:s => s.bioStreak >= 7 },
+  { id:'century',      icon:'💯', title:'Century Club',     desc:'100 lifetime sets logged',               check:s => s.totalSets >= 100 },
+  { id:'iron_will',    icon:'🦾', title:'Iron Will',        desc:'15+ sets in a single session',           check:s => s.maxSetsInSession >= 15 },
+  { id:'redline',      icon:'🔴', title:'Redline',          desc:'Trained through NO-GO fatigue 3 times — showing up beats the mood you showed up in', check:s => s.nogoTrainedCount >= 3 },
+  { id:'all_weather',  icon:'🌍', title:'All-Weather',      desc:'Trained in Hotel Room, Hotel Gym, and Commercial Gym', check:s => s.envsTrained >= 3 },
+  { id:'early_bird',   icon:'🌅', title:'Early Bird',       desc:'Logged a workout before 6 AM',           check:s => s.earlyBirdCount >= 1 },
+  { id:'top_gun',      icon:'🎖️', title:'Top Gun',          desc:'Hold the #1 spot on any leaderboard',    check:null, live:true },
+  { id:'debrief',      icon:'💬', title:'Debrief',          desc:'Sent feedback to help improve the app',  check:null, live:true },
+  { id:'recruiter',    icon:'📡', title:'Recruiter',        desc:'Shared Flight Crew Fitness with someone (self-reported)', check:null, live:true },
 ];
 
 // Pure computation over session + biometric history — testable, no I/O.
 function computeBadgeStats(sessions, bioRows) {
-  const stats = { totalSessions: 0, best7Day: 0, best28Day: 0, prCount: 0, weightLost: 0, bioStreak: 0 };
+  const stats = { totalSessions: 0, best7Day: 0, best28Day: 0, prCount: 0, weightLost: 0, bioStreak: 0,
+    totalSets: 0, maxSetsInSession: 0, nogoTrainedCount: 0, envsTrained: 0, earlyBirdCount: 0 };
   const sorted = (sessions||[]).filter(s => s?.date).slice().sort((a,b) => new Date(a.date) - new Date(b.date));
   stats.totalSessions = sorted.length;
 
@@ -1312,10 +1321,13 @@ function computeBadgeStats(sessions, bioRows) {
   // Lifetime PR count: replay history in order; each strict improvement over
   // an established (non-zero) max for an exercise counts as one PR event.
   const maxes = {};
+  const envs = new Set();
   sorted.forEach(s => {
+    let sessionSets = 0;
     Object.keys(s.sets || {}).forEach(exId => {
       let sessionMax = 0;
       (s.sets[exId]||[]).forEach(set => {
+        sessionSets++;
         const w = parseFloat(set.weight);
         if (!isNaN(w) && w > sessionMax) sessionMax = w;
       });
@@ -1323,7 +1335,14 @@ function computeBadgeStats(sessions, bioRows) {
       if (maxes[exId] === undefined) { maxes[exId] = sessionMax; return; } // baseline, not a PR
       if (sessionMax > maxes[exId]) { stats.prCount++; maxes[exId] = sessionMax; }
     });
+    stats.totalSets += sessionSets;
+    if (sessionSets > stats.maxSetsInSession) stats.maxSetsInSession = sessionSets;
+    if (s.fatigue === 'nogo') stats.nogoTrainedCount++;
+    if (s.env) envs.add(s.env);
+    const hour = new Date(s.date).getHours();
+    if (hour < 6) stats.earlyBirdCount++;
   });
+  stats.envsTrained = envs.size;
 
   const bio = (bioRows||[]).filter(r => r?.logged_at).slice().sort((a,b) => new Date(a.logged_at) - new Date(b.logged_at));
   const weights = bio.map(r => parseFloat(r.weight_lb)).filter(w => !isNaN(w) && w > 0);
@@ -1349,18 +1368,51 @@ async function fetchBioRows() {
 }
 
 // Check all badges against current history; persist and announce new ones.
+// Directly award a single badge by id — used for badges triggered by a
+// specific action (feedback sent, share tapped, leaderboard rank achieved)
+// rather than replayed from history.
+async function awardLiveBadge(id) {
+  if (ST.badges[id]) return;
+  const b = BADGES.find(x => x.id === id);
+  if (!b) return;
+  ST.badges[id] = new Date().toISOString();
+  try {
+    const profile = (await dbGetProfile()) || {};
+    profile.badges = ST.badges;
+    await dbSetProfile(profile);
+  } catch(e) {}
+  showBigToast(b.icon + ' Badge earned: ' + b.title + '!', 'ok');
+}
+
+// Checks whether the user currently holds rank #1 on ANY leaderboard
+// exercise they have an entry for. One query per exercise they've PRed on
+// (typically a handful), only runs if they're actually listed.
+async function checkTopGunBadge() {
+  if (ST.badges.top_gun || !ST.user || !ST.username) return;
+  const exIds = Object.keys(ST.lbBests || {});
+  for (const exId of exIds) {
+    try {
+      const { data } = await withTimeout(SB.from('leaderboard_entries')
+        .select('user_id').eq('exercise_id', exId).order('weight_lb', { ascending: false }).limit(1));
+      if (data && data[0] && data[0].user_id === ST.user.id) { await awardLiveBadge('top_gun'); return; }
+    } catch(e) {}
+  }
+}
+
 async function awardBadges() {
   try {
     const bio = await fetchBioRows();
     const stats = computeBadgeStats(ST.sessionCache || [], bio);
-    const fresh = BADGES.filter(b => !ST.badges[b.id] && b.check(stats));
-    if (!fresh.length) return;
-    fresh.forEach(b => { ST.badges[b.id] = new Date().toISOString(); });
-    const profile = (await dbGetProfile()) || {};
-    profile.badges = ST.badges;
-    await dbSetProfile(profile);
-    fresh.forEach(b => showBigToast(b.icon + ' Badge earned: ' + b.title + '!', 'ok'));
+    const fresh = BADGES.filter(b => !b.live && !ST.badges[b.id] && b.check(stats));
+    if (fresh.length) {
+      fresh.forEach(b => { ST.badges[b.id] = new Date().toISOString(); });
+      const profile = (await dbGetProfile()) || {};
+      profile.badges = ST.badges;
+      await dbSetProfile(profile);
+      fresh.forEach(b => showBigToast(b.icon + ' Badge earned: ' + b.title + '!', 'ok'));
+    }
   } catch(e) {}
+  checkTopGunBadge().catch(() => {});
 }
 
 // ─── LEADERBOARD ─────────────────────────────────────────────────────────────
@@ -1566,6 +1618,7 @@ function renderPage() {
   else if (ST.tab === 'more')        renderMore(p);
   else if (ST.tab === 'devices')     renderDevices(p);
   else if (ST.tab === 'data')        renderData(p);
+  else if (ST.tab === 'badges')      renderBadges(p);
   else if (ST.tab === 'debrief')     renderDebrief(p);
 }
 
@@ -1769,6 +1822,7 @@ async function submitFeedback() {
     }
     closeModal();
     showBigToast('Feedback sent — thank you.', 'ok');
+    awardLiveBadge('debrief').catch(() => {});
   } catch(e) {
     console.warn('Feedback submission error:', e);
     showToast('Couldn\'t send feedback: '+e.message);
@@ -1776,6 +1830,7 @@ async function submitFeedback() {
 }
 
 function shareApp() {
+  awardLiveBadge('recruiter').catch(() => {});
   const url = window.location.origin + window.location.pathname;
   const shareData = {
     title: 'Flight Crew Fitness',
@@ -5343,24 +5398,6 @@ function renderProfile(p) {
   parts.push('<button class="btn btn-outline" onclick="saveBodyMetrics()">💾 Save Body Metrics</button>');
   parts.push('</div>');
 
-  // Badges
-  parts.push('<div class="card mb12">');
-  parts.push('<div class="section-label" style="margin-top:0">BADGES</div>');
-  const earnedCount = BADGES.filter(b => ST.badges[b.id]).length;
-  parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px">'+earnedCount+' of '+BADGES.length+' earned</div>');
-  parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
-  BADGES.forEach(b => {
-    const earned = ST.badges[b.id];
-    parts.push('<div style="border:1px solid '+(earned?'var(--gold)':'var(--border)')+';border-radius:8px;padding:10px;text-align:center'+(earned?'':';opacity:0.45')+'">');
-    parts.push('<div style="font-size:22px">'+(earned?b.icon:'🔒')+'</div>');
-    parts.push('<div style="font-size:11px;font-weight:700;margin-top:4px">'+b.title+'</div>');
-    parts.push('<div style="font-size:9px;color:var(--muted);margin-top:2px;line-height:1.4">'+b.desc+'</div>');
-    if (earned) parts.push('<div style="font-family:var(--mono);font-size:8px;color:var(--gold);margin-top:4px">'+new Date(earned).toLocaleDateString()+'</div>');
-    parts.push('</div>');
-  });
-  parts.push('</div>');
-  parts.push('</div>');
-
   // Mission objective (goal)
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">MISSION OBJECTIVE</div>');
@@ -5411,7 +5448,9 @@ function renderMore(p) {
     '<div><div style="font-size:14px;font-weight:600">'+title+'</div>' +
     '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+sub+'</div></div></div>' +
     '<div style="color:var(--muted)">→</div></div></div>';
-  parts.push(item('👤','Pilot Profile','Call sign, body metrics, objective, badges',"switchTab('profile')"));
+  const earnedCount = BADGES.filter(b => ST.badges[b.id]).length;
+  parts.push(item('👤','Pilot Profile','Call sign, body metrics, objective',"switchTab('profile')"));
+  parts.push(item('🏅','Badges',earnedCount+' of '+BADGES.length+' earned',"switchTab('badges')"));
   parts.push(item('⌚','Connected Devices','Oura Ring — more devices coming',"switchTab('devices')"));
   parts.push(item('📖','Flight Deck Wisdom','Daily training wisdom cards',"switchTab('wisdom')"));
   parts.push(item('📊','Data & Export','CSV export and AI analysis prompt',"switchTab('data')"));
@@ -5454,6 +5493,27 @@ function renderDevices(p) {
   }
   parts.push('</div>');
   parts.push('<div class="card mb12"><div style="font-size:11px;color:var(--muted);line-height:1.6">More device integrations (Whoop, Garmin, Apple Health) are on the roadmap.</div></div>');
+  p.innerHTML = parts.join('');
+}
+
+function renderBadges(p) {
+  const parts = [moreBackLink()];
+  parts.push('<div class="section-label" style="margin-top:0">BADGES</div>');
+  parts.push('<div class="card mb12">');
+  const earnedCount = BADGES.filter(b => ST.badges[b.id]).length;
+  parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px">'+earnedCount+' of '+BADGES.length+' earned</div>');
+  parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
+  BADGES.forEach(b => {
+    const earned = ST.badges[b.id];
+    parts.push('<div style="border:1px solid '+(earned?'var(--gold)':'var(--border)')+';border-radius:8px;padding:10px;text-align:center'+(earned?'':';opacity:0.45')+'">');
+    parts.push('<div style="font-size:22px">'+(earned?b.icon:'🔒')+'</div>');
+    parts.push('<div style="font-size:11px;font-weight:700;margin-top:4px">'+b.title+'</div>');
+    parts.push('<div style="font-size:9px;color:var(--muted);margin-top:2px;line-height:1.4">'+b.desc+'</div>');
+    if (earned) parts.push('<div style="font-family:var(--mono);font-size:8px;color:var(--gold);margin-top:4px">'+new Date(earned).toLocaleDateString()+'</div>');
+    parts.push('</div>');
+  });
+  parts.push('</div>');
+  parts.push('</div>');
   p.innerHTML = parts.join('');
 }
 

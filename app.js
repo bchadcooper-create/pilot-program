@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.15.6';
+const FCF_VERSION = 'v5.15.7';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -4275,6 +4275,36 @@ async function loadAndDrawCharts() {
     };
   }
 
+  // Centered rolling mean, null-tolerant (Oura rows can have gaps). Used to
+  // draw a readable trend line once a series spans weeks of noisy dailies.
+  function rollingMean(values, w) {
+    const half = Math.floor(w/2);
+    return values.map((v, i) => {
+      let s = 0, n2 = 0;
+      for (let j = Math.max(0, i-half); j <= Math.min(values.length-1, i+half); j++) {
+        const x = parseFloat(values[j]);
+        if (values[j] !== null && values[j] !== undefined && !isNaN(x)) { s += x; n2++; }
+      }
+      return n2 ? Math.round((s/n2)*10)/10 : null;
+    });
+  }
+  const SMOOTH_AT = 30; // above this many points, dailies become unreadable noise
+  // Replaces each raw data series with [faint raw underlay, bold 7-day trend].
+  // Reference lines (borderDash) pass through untouched.
+  function applyTrendSmoothing(labels, datasets) {
+    if (labels.length <= SMOOTH_AT) return datasets;
+    const out = [];
+    datasets.forEach(d => {
+      if (d.borderDash) { out.push(d); return; }
+      out.push({ ...d, label: (d.label||'')+' raw', borderColor: (d.borderColor||'#888')+'40',
+        backgroundColor: 'transparent', fill: false, borderWidth: 1, pointRadius: 0, pointHitRadius: 0 });
+      out.push({ ...d, data: rollingMean(d.data, 7), pointRadius: 0, borderWidth: 3, tension: 0.35, spanGaps: true });
+    });
+    return out;
+  }
+  // Hide the faint raw underlays from legends — they're context, not a series.
+  const legendFilter = (item) => !(item.text||'').endsWith(' raw');
+
   const OPTS = {
     responsive:true, maintainAspectRatio:false,
     plugins:{ legend:{ display:false } },
@@ -4289,19 +4319,20 @@ async function loadAndDrawCharts() {
     const key = 'c_'+id;
     if (ST.chartInst[key]) { try { ST.chartInst[key].destroy(); } catch(e){} }
     if (!labels.length) return; // nothing logged for this metric yet
-    // Adaptive density: with months of data, 4px dots merge into a solid blob
-    // on a phone screen. Shrink points (and slightly thin the line) as the
-    // series grows; ref lines set their own pointRadius:0 and are untouched.
-    const n = labels.length;
-    const pr = n > 90 ? 0 : n > 45 ? 1.5 : n > 21 ? 2.5 : 4;
-    const bw = n > 90 ? 2 : 2.5;
-    datasets.forEach(d => {
-      if (d.borderDash) return; // reference line — leave as-is
-      d.pointRadius = pr;
-      d.borderWidth = bw;
-      d.pointHitRadius = 8; // keep taps easy even when dots are tiny/hidden
-    });
-    ST.chartInst[key] = new Chart(canvas.getContext('2d'), { type:'line', data:{labels,datasets}, options:{...OPTS, plugins:{legend:{display:!!legendOn,labels:{font:{size:9,family:'Share Tech Mono'},color:'#64748b'}}}} });
+    datasets = applyTrendSmoothing(labels, datasets);
+    // Adaptive density for shorter (un-smoothed) series: shrink points as the
+    // series grows so dots don't merge into a blob on a phone screen.
+    if (labels.length <= SMOOTH_AT) {
+      const n = labels.length;
+      const pr = n > 21 ? 2.5 : 4;
+      datasets.forEach(d => {
+        if (d.borderDash) return; // reference line — leave as-is
+        d.pointRadius = pr;
+        d.borderWidth = 2.5;
+        d.pointHitRadius = 8;
+      });
+    }
+    ST.chartInst[key] = new Chart(canvas.getContext('2d'), { type:'line', data:{labels,datasets}, options:{...OPTS, plugins:{legend:{display:!!legendOn,labels:{filter:legendFilter,font:{size:9,family:'Share Tech Mono'},color:'#64748b'}}}} });
   }
   const refLine = (n,val,color) => ({ data:Array.from({length:n},()=>val), borderColor:color, borderDash:[4,3], pointRadius:0, fill:false });
 
@@ -4327,13 +4358,13 @@ async function loadAndDrawCharts() {
     if (bp.rows.length) {
       ST.chartInst['c_chartBP'] = new Chart(bpCanvas.getContext('2d'), {
         type:'line',
-        data:{ labels: bp.labels, datasets:[
+        data:{ labels: bp.labels, datasets: applyTrendSmoothing(bp.labels, [
           { data:bp.rows.map(d=>d.systolic_bp),  borderColor:'#ef4444', backgroundColor:'#ef444411', tension:0.35, fill:false, pointRadius:4, pointBackgroundColor:'#ef4444', label:'Systolic' },
           { data:bp.rows.map(d=>d.diastolic_bp), borderColor:'#f59e0b', backgroundColor:'#f59e0b11', tension:0.35, fill:false, pointRadius:4, pointBackgroundColor:'#f59e0b', label:'Diastolic' },
           { ...refLine(bp.rows.length,120,'#ef444455'), label:'Sys target (120)' },
           { ...refLine(bp.rows.length,80,'#f59e0b55'),  label:'Dia target (80)' },
-        ]},
-        options:{ ...OPTS, plugins:{ legend:{ display:true, labels:{font:{size:9,family:'Share Tech Mono'},color:'#64748b'} } } }
+        ])},
+        options:{ ...OPTS, plugins:{ legend:{ display:true, labels:{filter:legendFilter,font:{size:9,family:'Share Tech Mono'},color:'#64748b'} } } }
       });
     }
   }
@@ -4989,10 +5020,20 @@ function renderProfile(p) {
   parts.push('<option value="male"'+(ST.sex==='male'?' selected':'')+'>Male</option>');
   parts.push('<option value="female"'+(ST.sex==='female'?' selected':'')+'>Female</option>');
   parts.push('</select></div>');
-  const hFt = ST.heightIn ? Math.floor(ST.heightIn/12) : '';
-  const hIn = ST.heightIn ? Math.round((ST.heightIn%12)*10)/10 : '';
-  parts.push('<div class="field" style="margin-bottom:0"><label>Height (ft)</label><input id="bmFt" type="text" inputmode="numeric" placeholder="5" value="'+hFt+'"></div>');
-  parts.push('<div class="field" style="margin-bottom:0"><label>(in)</label><input id="bmIn" type="text" inputmode="decimal" placeholder="10" value="'+hIn+'"></div>');
+  const hFt = ST.heightIn ? Math.floor(ST.heightIn/12) : null;
+  const hIn = ST.heightIn ? Math.round(ST.heightIn%12) : null;
+  // Native selects render as a compact picker wheel on iOS — tidier than
+  // free-text entry for a value with exactly 4x12 sane combinations.
+  parts.push('<div class="field" style="margin-bottom:0"><label>Height</label><div style="display:flex;gap:6px">');
+  parts.push('<select id="bmFt" style="flex:1">');
+  parts.push('<option value=""'+(hFt===null?' selected':'')+'>— ft</option>');
+  for (let f=4; f<=7; f++) parts.push('<option value="'+f+'"'+(hFt===f?' selected':'')+'>'+f+' ft</option>');
+  parts.push('</select>');
+  parts.push('<select id="bmIn" style="flex:1">');
+  parts.push('<option value=""'+(hIn===null?' selected':'')+'>— in</option>');
+  for (let i2=0; i2<=11; i2++) parts.push('<option value="'+i2+'"'+(hIn===i2?' selected':'')+'>'+i2+' in</option>');
+  parts.push('</select>');
+  parts.push('</div></div>');
   parts.push('</div>');
   parts.push('<div class="field"><label>Age <span class="info-i" onclick="showBioInfo(\'age\')">i</span></label>');
   parts.push('<input id="bmAge" type="text" inputmode="numeric" placeholder="e.g. 42" value="'+(ST.age||'')+'"></div>');

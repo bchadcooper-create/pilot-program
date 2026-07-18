@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.15';
+const FCF_VERSION = 'v5.15.1';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -3255,7 +3255,17 @@ function swapExercise(exId, alt) {
     const setsCount = setsMatch ? Math.max(1, parseInt(setsMatch[1], 10)) : 3;
     const iType = alt.inputType || 'reps_weight';
     const isTimed = iType==='timed' || iType==='timed_bilateral';
-    const newEx = ex('swap_'+Date.now(), alt.name, alt.target, setsCount, alt.note||'Alternate exercise.', isTimed, iType);
+    // Reuse the exercise's real catalog id when the swap-in matches an
+    // existing exercise exactly — otherwise "Leg Press" swapped into one
+    // slot and "Leg Press" swapped into another (or logged from its normal
+    // base-catalog slot on a different day) would silently split into two
+    // unrelated histories, showing "first time logging" every time despite
+    // being the same exercise. Genuinely custom names get a stable,
+    // name-derived id instead of a timestamp, so repeated swaps of the same
+    // custom exercise also link correctly across sessions.
+    const catalogMatch = buildExerciseCatalog().find(e => e.name === alt.name);
+    const newId = catalogMatch ? catalogMatch.id : 'swap_' + slugify(alt.name);
+    const newEx = ex(newId, alt.name, alt.target, setsCount, alt.note||'Alternate exercise.', isTimed, iType);
     ST.workout[phase][idx] = newEx;
     ST.sets[newEx.id] =
       iType==='timed_bilateral' ? [{seconds_left:'',seconds_right:''}] :

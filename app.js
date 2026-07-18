@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.15.1';
+const FCF_VERSION = 'v5.15.2';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -1248,7 +1248,13 @@ function renderPage() {
   const p = document.getElementById('mainPage');
   if (!p) return;
   p.innerHTML = '';
-  if      (ST.tab === 'preflight') renderPreflight(p);
+  if (ST.tab === 'preflight') {
+    renderPreflight(p).catch(e => {
+      p.innerHTML = '<div class="section-label">PREFLIGHT BRIEFING — '+FCF_VERSION+'</div>' +
+        '<div class="card mb12"><div style="font-size:13px;color:var(--muted);margin-bottom:10px">Couldn\'t load your calendar — this can happen with no signal.</div>' +
+        '<button class="btn btn-outline" onclick="renderPage()">↻ Retry</button></div>';
+    });
+  }
   else if (ST.tab === 'flight')    renderFlight(p);
   else if (ST.tab === 'trends')    renderTrends(p);
   else if (ST.tab === 'wisdom')    renderWisdom(p);
@@ -1683,10 +1689,16 @@ async function loadCalendarRange() {
 
   try {
     const filter = ST.user ? SB.from('workout_sessions').select('*').eq('user_id', ST.user.id) : SB.from('workout_sessions').select('*');
-    const { data, error } = await filter
+    const query = filter
       .gte('started_at', windowStart.toISOString())
       .lte('started_at', today.toISOString())
       .order('started_at', { ascending: true });
+    // Some networks (airplane mode, dead layover wifi) don't fail fast — they
+    // just hang. Race against a timeout so we always fall through to the
+    // local cache below within a few seconds instead of leaving the caller
+    // waiting on a promise that may never settle.
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 6000));
+    const { data, error } = await Promise.race([query, timeout]);
     if (error) throw error;
     const sessions = (data||[]).map(r => r.session_data ? {...r.session_data, _key: r.session_key} : null).filter(Boolean);
     ST.calendarSessions[cacheKey] = { sessions, windowStart, windowEnd: today };

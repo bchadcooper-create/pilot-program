@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.15.4';
+const FCF_VERSION = 'v5.15.5';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -1321,11 +1321,19 @@ async function bootApp() {
     localStorage.setItem('fcf_profile_intro', '1');
     ST.tab = 'profile';
   }
-  ST.lastSession = await dbGetLastSession();
+  // Last-session fetch and session-cache load run in parallel with each
+  // other (they're independent); profile was already awaited above. Offline,
+  // this collapses several stacked 6s timeouts into a single 6s window.
+  const [lastSession] = await Promise.all([dbGetLastSession(), loadSessionCache()]);
+  ST.lastSession = lastSession;
+  // loadSessionCache appends lastSession itself only when it's already set —
+  // in parallel it may not have been, so ensure it's included here.
+  if (ST.lastSession && !ST.sessionCache.find(s => s.date === ST.lastSession.date)) {
+    ST.sessionCache.push(ST.lastSession);
+  }
   // Auto-select the recommended next mission profile so Preflight opens
   // pre-loaded with the right choice rather than always defaulting to Lower Body.
   ST.muscleGroup = getRecommendedNext();
-  await loadSessionCache();
   renderRoot();
   checkDB();
   // Auto-sync Oura on boot if connected — runs in background after render
@@ -1597,11 +1605,24 @@ function restoreTimerState() {
   } catch(e) {}
 }
 
+// Refresh anything served from offline fallbacks the moment connectivity
+// returns — otherwise the calendar (and sync indicator) stay frozen on the
+// offline snapshot until the user fully restarts the app.
+async function refreshOnReconnect() {
+  ST.calendarSessions = {};
+  try { await loadSessionCache(); } catch(e) {}
+  checkDB();
+  renderPage();
+}
+window.addEventListener('online', () => { refreshOnReconnect(); });
+
 // Resync all active timers the instant the app returns to the foreground.
 // iOS throttles/suspends setInterval while backgrounded, so on resume we
 // recalculate from the stored timestamps rather than trusting tick counts.
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
+  const calCached = ST.calendarSessions['range_'+CALENDAR_DAYS];
+  if (calCached?.offline && navigator.onLine !== false) refreshOnReconnect();
   if (ST.restTimer.active) tickRestTimer(ST.restTimer.exId);
   if (ST.stopwatch.active) tickStopwatch(ST.stopwatch.exId, ST.stopwatch.side||null);
   if (ST.nsdrTimer.active) tickNSDR(ST.nsdrTimer.exId);
@@ -1701,9 +1722,16 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
 // ─── COMPACT ROLLING CALENDAR (smooth continuous scroll, not week-paged) ─────
 const CALENDAR_DAYS = 28; // trailing window shown in the scrollable strip
 
+const CALENDAR_CACHE_KEY = 'fcf_calendar_cache';
 async function loadCalendarRange() {
   const cacheKey = 'range_'+CALENDAR_DAYS;
-  if (ST.calendarSessions[cacheKey]) return ST.calendarSessions[cacheKey];
+  const isOnline = (typeof navigator === 'undefined') || navigator.onLine !== false;
+  const cached = ST.calendarSessions[cacheKey];
+  // A result produced by the offline fallback is served from cache only
+  // while still offline — once connectivity returns, bypass it and refetch,
+  // otherwise the calendar stays frozen on the offline snapshot until a
+  // full app restart.
+  if (cached && !(cached.offline && isOnline)) return cached;
 
   const today = new Date();
   today.setHours(23,59,59,999);
@@ -1718,22 +1746,31 @@ async function loadCalendarRange() {
       .order('started_at', { ascending: true });
     // Some networks (airplane mode, dead layover wifi) don't fail fast — they
     // just hang. Race against a timeout so we always fall through to the
-    // local cache below within a few seconds instead of leaving the caller
+    // local fallback below within a few seconds instead of leaving the caller
     // waiting on a promise that may never settle.
     const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 6000));
     const { data, error } = await Promise.race([query, timeout]);
     if (error) throw error;
     const sessions = (data||[]).map(r => r.session_data ? {...r.session_data, _key: r.session_key} : null).filter(Boolean);
+    // Mirror the fetched window locally so a future cold offline launch can
+    // still show real training history — same pattern as the profile cache.
+    try { localStorage.setItem(CALENDAR_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), sessions })); } catch(e2) {}
     ST.calendarSessions[cacheKey] = { sessions, windowStart, windowEnd: today };
     return ST.calendarSessions[cacheKey];
   } catch(e) {
+    // Offline fallback: merge the last successfully-synced mirror with any
+    // sessions saved locally while offline, deduped (mirror copy wins).
+    let mirrored = [];
+    try { mirrored = (JSON.parse(localStorage.getItem(CALENDAR_CACHE_KEY)||'null')?.sessions) || []; } catch(e2) {}
     const keys = Object.keys(localStorage).filter(k => k.startsWith('fcf_session_'));
-    const all = keys.map(k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } }).filter(Boolean);
+    const locals = keys.map(k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e2){ return null; } }).filter(Boolean);
+    const seen = new Set(mirrored.map(s => s.date));
+    const all = [...mirrored, ...locals.filter(s => !seen.has(s.date))];
     const sessions = all.filter(s => {
       const t = new Date(s.date).getTime();
       return t >= windowStart.getTime() && t <= today.getTime();
-    });
-    const result = { sessions, windowStart, windowEnd: today };
+    }).sort((a,b) => new Date(a.date) - new Date(b.date));
+    const result = { sessions, windowStart, windowEnd: today, offline: true };
     ST.calendarSessions[cacheKey] = result;
     return result;
   }
@@ -2816,19 +2853,17 @@ function suggestNextWeight(exId, exName, phaseKey) {
 }
 async function loadSessionCache() {
   try {
-    // First try recent 90 days (sessions with started_at populated)
-    let sessions = await dbGetRecentSessions(90);
-    // Also fetch ALL sessions without date filter to catch older entries
-    // that were saved before started_at was added to the insert
-    if (ST.user) {
-      try {
-        const { data } = await withTimeout(SB.from('workout_sessions')
+    // Recent-90-days fetch and the full-history fetch (for older entries
+    // saved before started_at existed) are independent — run them in
+    // parallel so offline they share one timeout window instead of stacking.
+    const fullFetch = ST.user
+      ? withTimeout(SB.from('workout_sessions')
           .select('*').eq('user_id', ST.user.id)
-          .order('started_at', { ascending: true }));
-        if (data && data.length > sessions.length) {
-          sessions = data.map(r => r.session_data).filter(Boolean);
-        }
-      } catch(e) {}
+          .order('started_at', { ascending: true })).catch(() => ({ data: null }))
+      : Promise.resolve({ data: null });
+    let [sessions, { data }] = await Promise.all([dbGetRecentSessions(90), fullFetch]);
+    if (data && data.length > sessions.length) {
+      sessions = data.map(r => r.session_data).filter(Boolean);
     }
     // Also include lastSession which is always loaded
     if (ST.lastSession && !sessions.find(s => s.date === ST.lastSession.date)) {

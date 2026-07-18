@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.16.0';
+const FCF_VERSION = 'v5.16.1';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -1626,6 +1626,11 @@ async function bootApp() {
   if (ST.ouraConnected && ST.ouraAccessToken) {
     setTimeout(() => syncOuraData().catch(() => {}), 1500);
   }
+  // Badges only ever got checked as a side effect of a brand-new workout or
+  // biometric save — anyone with existing history never had it evaluated
+  // retroactively. Run it once per boot; awardBadges() already skips
+  // anything already earned, so this is safe and idempotent.
+  awardBadges();
 }
 
 async function checkDB() {

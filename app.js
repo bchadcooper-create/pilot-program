@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.15.3';
+const FCF_VERSION = 'v5.15.4';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -991,15 +991,25 @@ function withTimeout(promise, ms) {
   ]);
 }
 
+const PROFILE_CACHE_KEY = 'fcf_profile_cache';
 async function dbGetProfile() {
   if (!ST.user) return JSON.parse(localStorage.getItem('fcf_profile')||'null');
   try {
     const { data } = await withTimeout(SB.from('user_profiles').select('*').eq('user_id', ST.user.id).maybeSingle());
-    return data?.profile_data || null;
-  } catch(e) { return null; }
+    const profile = data?.profile_data || null;
+    if (profile) { try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile)); } catch(e) {} }
+    return profile;
+  } catch(e) {
+    // Network unreachable — fall back to the last successfully-fetched copy
+    // rather than returning null, which would silently blank out sex,
+    // height, age, injuries, and every other saved profile field on a cold
+    // offline launch even though the real data is untouched server-side.
+    try { return JSON.parse(localStorage.getItem(PROFILE_CACHE_KEY)||'null'); } catch(e2) { return null; }
+  }
 }
 async function dbSetProfile(p) {
   if (!ST.user) { localStorage.setItem('fcf_profile', JSON.stringify(p)); return; }
+  try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(p)); } catch(e) {}
   try {
     await withTimeout(SB.from('user_profiles').upsert({ user_id: ST.user.id, profile_data: p, updated_at: new Date().toISOString() }, { onConflict: 'user_id' }));
   } catch(e) {}

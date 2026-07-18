@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.15.2';
+const FCF_VERSION = 'v5.15.3';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -978,17 +978,30 @@ const BIO_INFO = {
 };
 
 // ─── DATABASE HELPERS ─────────────────────────────────────────────────────────
+// Races any promise against a timeout — used to wrap Supabase calls so a
+// dead connection (airplane mode, no signal) fails fast instead of hanging
+// indefinitely. Some networks don't reject a request promptly when there's
+// no route; they just never respond. Every function below that touches the
+// network during boot uses this, since a single hung call there would leave
+// the entire app un-rendered.
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms || 6000)),
+  ]);
+}
+
 async function dbGetProfile() {
   if (!ST.user) return JSON.parse(localStorage.getItem('fcf_profile')||'null');
   try {
-    const { data } = await SB.from('user_profiles').select('*').eq('user_id', ST.user.id).maybeSingle();
+    const { data } = await withTimeout(SB.from('user_profiles').select('*').eq('user_id', ST.user.id).maybeSingle());
     return data?.profile_data || null;
   } catch(e) { return null; }
 }
 async function dbSetProfile(p) {
   if (!ST.user) { localStorage.setItem('fcf_profile', JSON.stringify(p)); return; }
   try {
-    await SB.from('user_profiles').upsert({ user_id: ST.user.id, profile_data: p, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+    await withTimeout(SB.from('user_profiles').upsert({ user_id: ST.user.id, profile_data: p, updated_at: new Date().toISOString() }, { onConflict: 'user_id' }));
   } catch(e) {}
 }
 
@@ -1002,7 +1015,7 @@ async function dbGetRecentSessions(days) {
   const since = new Date(Date.now() - days*24*60*60*1000).toISOString();
   try {
     const filter = ST.user ? SB.from('workout_sessions').select('*').eq('user_id', ST.user.id) : SB.from('workout_sessions').select('*');
-    const { data, error } = await filter.gte('started_at', since).order('started_at', { ascending: true });
+    const { data, error } = await withTimeout(filter.gte('started_at', since).order('started_at', { ascending: true }));
     if (error) throw error;
     return (data||[]).map(r => r.session_data).filter(Boolean);
   } catch(e) {
@@ -1016,7 +1029,7 @@ async function dbGetRecentSessions(days) {
 async function dbGetLastSession() {
   try {
     const filter = ST.user ? SB.from('workout_sessions').select('*').eq('user_id', ST.user.id) : SB.from('workout_sessions').select('*');
-    const { data } = await filter.order('started_at', { ascending: false }).limit(2);
+    const { data } = await withTimeout(filter.order('started_at', { ascending: false }).limit(2));
     ST.prevSession = data?.[1]?.session_data || null;
     return data?.[0]?.session_data || null;
   } catch(e) {
@@ -1313,7 +1326,7 @@ async function bootApp() {
 
 async function checkDB() {
   try {
-    const { error } = await SB.from('weight_log').select('id').limit(1);
+    const { error } = await withTimeout(SB.from('weight_log').select('id').limit(1));
     if (error) throw error;
     const dot = document.getElementById('dbDot');
     const lbl = document.getElementById('dbStatus');
@@ -2799,9 +2812,9 @@ async function loadSessionCache() {
     // that were saved before started_at was added to the insert
     if (ST.user) {
       try {
-        const { data } = await SB.from('workout_sessions')
+        const { data } = await withTimeout(SB.from('workout_sessions')
           .select('*').eq('user_id', ST.user.id)
-          .order('started_at', { ascending: true });
+          .order('started_at', { ascending: true }));
         if (data && data.length > sessions.length) {
           sessions = data.map(r => r.session_data).filter(Boolean);
         }

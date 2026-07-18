@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.15.5';
+const FCF_VERSION = 'v5.15.6';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -73,6 +73,7 @@ const ST = {
 
   customExercises: [], // user-created exercises, persisted
   showAddExercise: false,
+  showCondOverride: false, // non-Oura: reveal manual GO/MARGINAL/NO-GO override
 
   restTimer: { active: false, seconds: 0, total: 0, exId: null, interval: null, startTs: 0, endTs: 0 },
   stopwatch:  { active: false, seconds: 0, interval: null, exId: null, side: null, startTs: 0, targetSec: null, chimed: false },
@@ -998,12 +999,14 @@ async function dbGetProfile() {
     const { data } = await withTimeout(SB.from('user_profiles').select('*').eq('user_id', ST.user.id).maybeSingle());
     const profile = data?.profile_data || null;
     if (profile) { try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile)); } catch(e) {} }
+    ST.profileFromCache = false;
     return profile;
   } catch(e) {
     // Network unreachable — fall back to the last successfully-fetched copy
     // rather than returning null, which would silently blank out sex,
     // height, age, injuries, and every other saved profile field on a cold
     // offline launch even though the real data is untouched server-side.
+    ST.profileFromCache = true;
     try { return JSON.parse(localStorage.getItem(PROFILE_CACHE_KEY)||'null'); } catch(e2) { return null; }
   }
 }
@@ -1286,33 +1289,42 @@ function renderPage() {
 }
 
 // ─── BOOT SEQUENCE ────────────────────────────────────────────────────────────
+function applyProfileToState(profile) {
+  if (!profile) return;
+  ST.level = profile.level || ST.level;
+  ST.goal  = profile.goal  || ST.goal;
+  ST.customExercises = (profile.customExercises || []).map(ce => {
+    if (ce?.exercise) {
+      ce.exercise.name = sanitizeUserText(ce.exercise.name);
+      ce.exercise.note = sanitizeUserText(ce.exercise.note);
+      ce.exercise.target = sanitizeUserText(ce.exercise.target) || '—';
+    }
+    return ce;
+  });
+  ST.ouraToken       = profile.ouraToken || '';
+  ST.ouraAccessToken  = profile.ouraAccessToken || null;
+  ST.ouraRefreshToken = profile.ouraRefreshToken || null;
+  ST.ouraConnected    = !!profile.ouraConnected;
+  ST.sex        = profile.sex || null;
+  ST.heightIn   = profile.heightIn || null;
+  ST.age        = profile.age || null;
+  ST.lastWeight = profile.lastWeight || null;
+  ST.injuries   = profile.injuries || [];
+  ST.customProfiles = (profile.customProfiles || []).map(cp => ({
+    ...cp,
+    name: sanitizeUserText(cp.name),
+  }));
+}
+
 async function bootApp() {
   ST.disclaimerAccepted = localStorage.getItem('fcf_disclaimer_accepted') === '1';
-  const profile = await dbGetProfile();
-  if (profile) {
-    ST.level = profile.level || ST.level;
-    ST.goal  = profile.goal  || ST.goal;
-    ST.customExercises = (profile.customExercises || []).map(ce => {
-      if (ce?.exercise) {
-        ce.exercise.name = sanitizeUserText(ce.exercise.name);
-        ce.exercise.note = sanitizeUserText(ce.exercise.note);
-        ce.exercise.target = sanitizeUserText(ce.exercise.target) || '—';
-      }
-      return ce;
-    });
-    ST.ouraToken       = profile.ouraToken || '';
-    ST.ouraAccessToken  = profile.ouraAccessToken || null;
-    ST.ouraRefreshToken = profile.ouraRefreshToken || null;
-    ST.ouraConnected    = !!profile.ouraConnected;
-    ST.sex        = profile.sex || null;
-    ST.heightIn   = profile.heightIn || null;
-    ST.age        = profile.age || null;
-    ST.lastWeight = profile.lastWeight || null;
-    ST.injuries   = profile.injuries || [];
-    ST.customProfiles = (profile.customProfiles || []).map(cp => ({
-      ...cp,
-      name: sanitizeUserText(cp.name),
-    }));
+  // All three boot fetches are independent — run them in ONE parallel window
+  // so a cold offline launch waits ~6s total, not stacked timeouts.
+  const [profile, lastSession] = await Promise.all([dbGetProfile(), dbGetLastSession(), loadSessionCache()]);
+  applyProfileToState(profile);
+  ST.lastSession = lastSession;
+  if (ST.lastSession && !ST.sessionCache.find(s => s.date === ST.lastSession.date)) {
+    ST.sessionCache.push(ST.lastSession);
   }
   restoreDailyInputs();
   // First-ever open with no profile info: land on Profile once so the user
@@ -1320,16 +1332,6 @@ async function bootApp() {
   if (!ST.sex && !localStorage.getItem('fcf_profile_intro')) {
     localStorage.setItem('fcf_profile_intro', '1');
     ST.tab = 'profile';
-  }
-  // Last-session fetch and session-cache load run in parallel with each
-  // other (they're independent); profile was already awaited above. Offline,
-  // this collapses several stacked 6s timeouts into a single 6s window.
-  const [lastSession] = await Promise.all([dbGetLastSession(), loadSessionCache()]);
-  ST.lastSession = lastSession;
-  // loadSessionCache appends lastSession itself only when it's already set —
-  // in parallel it may not have been, so ensure it's included here.
-  if (ST.lastSession && !ST.sessionCache.find(s => s.date === ST.lastSession.date)) {
-    ST.sessionCache.push(ST.lastSession);
   }
   // Auto-select the recommended next mission profile so Preflight opens
   // pre-loaded with the right choice rather than always defaulting to Lower Body.
@@ -1610,8 +1612,15 @@ function restoreTimerState() {
 // offline snapshot until the user fully restarts the app.
 async function refreshOnReconnect() {
   ST.calendarSessions = {};
-  try { await loadSessionCache(); } catch(e) {}
+  try {
+    // Re-fetch the profile too — if the app booted offline it hydrated from
+    // the local mirror (or nothing), and things like Oura connection state
+    // would otherwise stay stale until a full restart.
+    const [profile] = await Promise.all([dbGetProfile(), loadSessionCache()]);
+    applyProfileToState(profile);
+  } catch(e) {}
   checkDB();
+  if (ST.ouraConnected && ST.ouraAccessToken) syncOuraData().catch(() => {});
   renderPage();
 }
 window.addEventListener('online', () => { refreshOnReconnect(); });
@@ -1622,7 +1631,7 @@ window.addEventListener('online', () => { refreshOnReconnect(); });
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   const calCached = ST.calendarSessions['range_'+CALENDAR_DAYS];
-  if (calCached?.offline && navigator.onLine !== false) refreshOnReconnect();
+  if ((calCached?.offline || ST.profileFromCache) && navigator.onLine !== false) refreshOnReconnect();
   if (ST.restTimer.active) tickRestTimer(ST.restTimer.exId);
   if (ST.stopwatch.active) tickStopwatch(ST.stopwatch.exId, ST.stopwatch.side||null);
   if (ST.nsdrTimer.active) tickNSDR(ST.nsdrTimer.exId);
@@ -1672,6 +1681,10 @@ if ('serviceWorker' in navigator) {
 // Manual "check now" — used by the top-bar sync indicator.
 async function checkForAppUpdate() {
   if (!swRegistration) { showToast('Update check unavailable in this browser.'); return; }
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    showToast('📡 You\'re offline — reconnect to check for updates. The app keeps working normally in the meantime.');
+    return;
+  }
   showToast('Checking for updates…');
   try {
     await swRegistration.update();
@@ -1681,7 +1694,14 @@ async function checkForAppUpdate() {
       showToast('You\'re on the latest version ('+FCF_VERSION+' · '+FCF_BUILD+').');
     }
   } catch(e) {
-    showToast('Update check failed: '+e.message);
+    // Browsers report a failed script fetch with an unhelpful raw message
+    // ("Script ... load failed") — translate connectivity-shaped failures.
+    const msg = e.message || '';
+    if (/load failed|failed to fetch|networkerror|network error/i.test(msg)) {
+      showToast('📡 Couldn\'t reach the update server — you may be offline. The app keeps working normally.');
+    } else {
+      showToast('Update check failed: '+msg);
+    }
   }
 }
 
@@ -2516,28 +2536,43 @@ async function renderPreflight(p) {
   parts.push('<div class="section-label">PILOT CONDITION</div>');
   parts.push('<div class="card mb12">');
   parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">Your physical readiness today. This gates workout intensity — training through fatigue increases injury risk and impairs adaptation.</div>');
-  parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">');
-  parts.push('<div class="env-btn '+(ST.fatigue==='go'?'sel':'')+'" onclick="ST.fatigue=\'go\';renderPage()"><div class="ei">🟢</div><div class="el">GO</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Full protocol</div></div>');
-  parts.push('<div class="env-btn '+(ST.fatigue==='marginal'?'sel':'')+'" onclick="ST.fatigue=\'marginal\';renderPage()"><div class="ei">🟡</div><div class="el">MARGINAL</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Light only</div></div>');
-  parts.push('<div class="env-btn '+(ST.fatigue==='nogo'?'sel':'')+'" onclick="ST.fatigue=\'nogo\';renderPage()"><div class="ei">🔴</div><div class="el">NO-GO</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Mobility only</div></div>');
-  parts.push('</div>');
-  if (ST.fatigue === 'marginal') {
-    parts.push('<div class="alert alert-warn"><div class="alert-icon">⚠️</div><div>Heavy Takeoff phase removed. One light En Route exercise only.</div></div>');
-  } else if (ST.fatigue === 'nogo') {
-    parts.push('<div class="alert alert-danger"><div class="alert-icon">🔴</div><div>Only Taxi and Landing phases active. Training under significant fatigue increases injury risk — this is physiology, not weakness.</div></div>');
-  }
-  if (!ST.ouraConnected) {
-    parts.push('<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">');
-    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">No Oura connected — these help set today\'s Pilot Condition manually.</div>');
+
+  const condBtns =
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">' +
+    '<div class="env-btn '+(ST.fatigue==='go'?'sel':'')+'" onclick="ST.fatigue=\'go\';renderPage()"><div class="ei">🟢</div><div class="el">GO</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Full protocol</div></div>' +
+    '<div class="env-btn '+(ST.fatigue==='marginal'?'sel':'')+'" onclick="ST.fatigue=\'marginal\';renderPage()"><div class="ei">🟡</div><div class="el">MARGINAL</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Light only</div></div>' +
+    '<div class="env-btn '+(ST.fatigue==='nogo'?'sel':'')+'" onclick="ST.fatigue=\'nogo\';renderPage()"><div class="ei">🔴</div><div class="el">NO-GO</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Mobility only</div></div>' +
+    '</div>';
+
+  if (ST.ouraConnected) {
+    // Oura path: readiness score auto-suggests; the three buttons ARE the override.
+    parts.push(condBtns);
+  } else {
+    // Manual path: the 1-5 self-check is the single input — the condition it
+    // maps to shows as a result, with an override tucked behind a tap. One
+    // control, not two redundant ones.
     parts.push('<div class="field" style="margin-bottom:10px"><label>Sleep Last Night (hours) <span class="info-i" onclick="showBioInfo(\'sleepHours\')">i</span></label>');
     parts.push('<input type="text" inputmode="decimal" placeholder="e.g. 6.5" value="'+(ST.sleepHours||'')+'" oninput="ST.sleepHours=parseFloat(this.value)||null;persistDailyInputs()"></div>');
-    parts.push('<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">How recovered do you feel today? <span class="info-i" onclick="showBioInfo(\'readiness\')">i</span></label>');
-    parts.push('<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px">');
+    parts.push('<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">How recovered do you feel today? <span class="info-i" onclick="showBioInfo(\'readiness\')">i</span></label>');
+    parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.05em;margin-bottom:6px">1 = BARELY RECOVERED · 5 = FULLY RECOVERED</div>');
+    parts.push('<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:8px">');
     for (let i=1;i<=5;i++) {
       parts.push('<div class="env-btn" style="padding:8px 2px'+(ST.readiness===i?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="setReadiness('+i+')"><div style="font-size:15px;font-weight:700">'+i+'</div></div>');
     }
     parts.push('</div>');
+    const condMeta = {go:['🟢','GO — full protocol'], marginal:['🟡','MARGINAL — light only'], nogo:['🔴','NO-GO — mobility only']}[ST.fatigue];
+    parts.push('<div class="fb" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">');
+    parts.push('<div style="font-size:12px">Pilot Condition: <strong>'+condMeta[0]+' '+condMeta[1]+'</strong></div>');
+    parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);cursor:pointer" onclick="ST.showCondOverride=!ST.showCondOverride;renderPage()">'+(ST.showCondOverride?'HIDE':'OVERRIDE')+'</div>');
     parts.push('</div>');
+    if (ST.showCondOverride) parts.push(condBtns);
+    parts.push('<div style="font-size:10px;color:var(--muted);line-height:1.5">Connect your Oura Ring in Profile and this is set automatically from your readiness score each morning.</div>');
+  }
+
+  if (ST.fatigue === 'marginal') {
+    parts.push('<div class="alert alert-warn" style="margin-top:8px"><div class="alert-icon">⚠️</div><div>Heavy Takeoff phase removed. One light En Route exercise only.</div></div>');
+  } else if (ST.fatigue === 'nogo') {
+    parts.push('<div class="alert alert-danger" style="margin-top:8px"><div class="alert-icon">🔴</div><div>Only Taxi and Landing phases active. Training under significant fatigue increases injury risk — this is physiology, not weakness.</div></div>');
   }
   parts.push('</div>');
 

@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.15.7';
+const FCF_VERSION = 'v5.16.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -74,6 +74,12 @@ const ST = {
   customExercises: [], // user-created exercises, persisted
   showAddExercise: false,
   showCondOverride: false, // non-Oura: reveal manual GO/MARGINAL/NO-GO override
+  username: null,          // public leaderboard call sign — opt-in, null = not listed
+  badges: {},              // earned badges: {badgeId: earnedISODate}
+  lbBests: {},             // cached personal bests already on the leaderboard {exId: weight}
+  lbEx: null,              // leaderboard: selected exercise id (persisted per-device)
+  lbSex: 'all',            // leaderboard: 'all' | 'male' | 'female'
+  lbMode: 'weight',        // leaderboard: 'weight' | 'dots'
 
   restTimer: { active: false, seconds: 0, total: 0, exId: null, interval: null, startTs: 0, endTs: 0 },
   stopwatch:  { active: false, seconds: 0, interval: null, exId: null, side: null, startTs: 0, targetSec: null, chimed: false },
@@ -1248,7 +1254,9 @@ function renderRoot() {
 
 function switchTab(tab) {
   ST.tab = tab;
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  const MORE_SUBVIEWS = ['profile','wisdom','devices','data'];
+  const hl = MORE_SUBVIEWS.includes(tab) ? 'more' : tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === hl));
   const tabbar = document.getElementById('tabbar');
   if (tabbar) tabbar.style.display = (tab === 'debrief') ? 'none' : 'flex';
   renderPage();
@@ -1270,6 +1278,275 @@ function switchTab(tab) {
   page.scrollTop = 0;
 }
 
+// ─── BADGES ──────────────────────────────────────────────────────────────────
+const BADGES = [
+  { id:'first_flight', icon:'🛫', title:'First Flight',     desc:'Complete your first workout',            check:s => s.totalSessions >= 1 },
+  { id:'weekly_3',     icon:'📅', title:'Weekly Warrior',   desc:'3 workouts inside one week',             check:s => s.best7Day >= 3 },
+  { id:'month_solid',  icon:'🔥', title:'Month of Missions',desc:'12 workouts inside 28 days',             check:s => s.best28Day >= 12 },
+  { id:'first_pr',     icon:'⭐', title:'New Record',       desc:'Set your first PR',                      check:s => s.prCount >= 1 },
+  { id:'pr_5',         icon:'🏅', title:'PR Hunter',        desc:'5 lifetime PRs',                         check:s => s.prCount >= 5 },
+  { id:'pr_25',        icon:'🏆', title:'Record Machine',   desc:'25 lifetime PRs',                        check:s => s.prCount >= 25 },
+  { id:'down_5',       icon:'📉', title:'Lean Descent',     desc:'Down 5 lb from your first logged weight',check:s => s.weightLost >= 5 },
+  { id:'logger_7',     icon:'📋', title:'Flight Recorder',  desc:'Log biometrics 7 days in a row',         check:s => s.bioStreak >= 7 },
+];
+
+// Pure computation over session + biometric history — testable, no I/O.
+function computeBadgeStats(sessions, bioRows) {
+  const stats = { totalSessions: 0, best7Day: 0, best28Day: 0, prCount: 0, weightLost: 0, bioStreak: 0 };
+  const sorted = (sessions||[]).filter(s => s?.date).slice().sort((a,b) => new Date(a.date) - new Date(b.date));
+  stats.totalSessions = sorted.length;
+
+  // Best N-day window via two pointers over day-resolution timestamps.
+  const days = sorted.map(s => Math.floor(new Date(s.date).getTime() / 86400000));
+  const bestWindow = (span) => {
+    let best = 0, lo = 0;
+    for (let hi = 0; hi < days.length; hi++) {
+      while (days[hi] - days[lo] >= span) lo++;
+      best = Math.max(best, hi - lo + 1);
+    }
+    return best;
+  };
+  stats.best7Day  = bestWindow(7);
+  stats.best28Day = bestWindow(28);
+
+  // Lifetime PR count: replay history in order; each strict improvement over
+  // an established (non-zero) max for an exercise counts as one PR event.
+  const maxes = {};
+  sorted.forEach(s => {
+    Object.keys(s.sets || {}).forEach(exId => {
+      let sessionMax = 0;
+      (s.sets[exId]||[]).forEach(set => {
+        const w = parseFloat(set.weight);
+        if (!isNaN(w) && w > sessionMax) sessionMax = w;
+      });
+      if (sessionMax <= 0) return;
+      if (maxes[exId] === undefined) { maxes[exId] = sessionMax; return; } // baseline, not a PR
+      if (sessionMax > maxes[exId]) { stats.prCount++; maxes[exId] = sessionMax; }
+    });
+  });
+
+  const bio = (bioRows||[]).filter(r => r?.logged_at).slice().sort((a,b) => new Date(a.logged_at) - new Date(b.logged_at));
+  const weights = bio.map(r => parseFloat(r.weight_lb)).filter(w => !isNaN(w) && w > 0);
+  if (weights.length >= 2) stats.weightLost = Math.max(0, Math.round((weights[0] - weights[weights.length-1]) * 10) / 10);
+
+  // Longest run of consecutive calendar days with any biometric logged.
+  const bioDays = [...new Set(bio.map(r => Math.floor(new Date(r.logged_at).getTime() / 86400000)))].sort((a,b) => a-b);
+  let run = bioDays.length ? 1 : 0;
+  for (let i = 1; i < bioDays.length; i++) {
+    run = (bioDays[i] === bioDays[i-1] + 1) ? run + 1 : 1;
+    stats.bioStreak = Math.max(stats.bioStreak, run);
+  }
+  stats.bioStreak = Math.max(stats.bioStreak, run);
+  return stats;
+}
+
+async function fetchBioRows() {
+  if (!ST.user) { try { return JSON.parse(localStorage.getItem('fcf_bio')||'[]'); } catch(e) { return []; } }
+  try {
+    const { data } = await withTimeout(SB.from('weight_log').select('weight_lb,logged_at').eq('user_id', ST.user.id).order('logged_at', { ascending: true }));
+    return data || [];
+  } catch(e) { return []; }
+}
+
+// Check all badges against current history; persist and announce new ones.
+async function awardBadges() {
+  try {
+    const bio = await fetchBioRows();
+    const stats = computeBadgeStats(ST.sessionCache || [], bio);
+    const fresh = BADGES.filter(b => !ST.badges[b.id] && b.check(stats));
+    if (!fresh.length) return;
+    fresh.forEach(b => { ST.badges[b.id] = new Date().toISOString(); });
+    const profile = (await dbGetProfile()) || {};
+    profile.badges = ST.badges;
+    await dbSetProfile(profile);
+    fresh.forEach(b => showBigToast(b.icon + ' Badge earned: ' + b.title + '!', 'ok'));
+  } catch(e) {}
+}
+
+// ─── LEADERBOARD ─────────────────────────────────────────────────────────────
+// DOTS coefficient (2019, Tim Konertz) — the modern Wilks successor. Sex-
+// specific 4th-degree polynomial over bodyweight in kg; score = lift(kg) *
+// 500 / poly(bw). Calibrated for powerlifting totals; we apply it per-lift
+// as a fairness normalizer, which is the common informal use.
+function dotsScore(liftLb, bwLb, sex) {
+  if (!liftLb || !bwLb || (sex !== 'male' && sex !== 'female')) return null;
+  const LB2KG = 0.45359237;
+  let bw = bwLb * LB2KG;
+  // Clamp to the ranges DOTS was fit on — outside them the polynomial misbehaves.
+  bw = Math.min(Math.max(bw, 40), sex === 'female' ? 150 : 210);
+  const C = sex === 'female'
+    ? [-57.96288,  13.6175032, -0.1126655495, 0.0005158568, -0.0000010706]
+    : [-307.75076, 24.0900756, -0.1918759221, 0.0007391293, -0.000001093];
+  const poly = C[0] + C[1]*bw + C[2]*bw*bw + C[3]*bw**3 + C[4]*bw**4;
+  if (poly <= 0) return null;
+  return Math.round((liftLb * LB2KG) * 500 / poly * 10) / 10;
+}
+
+// Weighted barbell/dumbbell lifts where max-weight comparison is meaningful.
+// Canonical catalog ids — swap history resolution keeps these stable.
+const LEADERBOARD_EXERCISES = [
+  { id:'c_up_to1', name:'Barbell Bench Press' },
+  { id:'h_up_to1', name:'DB Bench Press' },
+  { id:'c_lb_to1', name:'Back Squat' },
+  { id:'c_ul_to1', name:'Conventional Deadlift' },
+  { id:'c_pp_to2', name:'Trap Bar Deadlift' },
+  { id:'c_lb_to2', name:'Romanian Deadlift' },
+  { id:'c_up_to2', name:'Standing Overhead Press' },
+  { id:'h_up_to2', name:'DB Overhead Press' },
+  { id:'c_lb_er2', name:'Leg Press' },
+  { id:'c_ul_to2', name:'Pendlay Row' },
+  { id:'h_ul_to2', name:'DB Row' },
+  { id:'c_ul_er4', name:'EZ Bar Curl' },
+  { id:'h_ul_er2', name:'DB Curl' },
+];
+const LB_ADMIN_EMAIL = 'b.chad.cooper@gmail.com';
+function isLbAdmin() { return !!(ST.user && (ST.user.email||'').toLowerCase() === LB_ADMIN_EMAIL); }
+
+function sessionMaxWeight(session, exId) {
+  const sets = session?.sets?.[exId];
+  if (!sets) return null;
+  let max = 0, reps = null;
+  sets.forEach(s => {
+    const w = parseFloat(s.weight);
+    if (!isNaN(w) && w > max) { max = w; reps = parseInt(s.reps) || null; }
+  });
+  return max > 0 ? { weight: max, reps } : null;
+}
+
+async function submitLeaderboardEntry(exId, name, best, achievedAt) {
+  const row = {
+    user_id: ST.user.id,
+    exercise_id: exId,
+    exercise_name: name,
+    weight_lb: best.weight,
+    reps: best.reps,
+    bodyweight_lb: ST.lastWeight || null,
+    sex: ST.sex || null,
+    username: ST.username,
+    dots: dotsScore(best.weight, ST.lastWeight, ST.sex),
+    achieved_at: achievedAt || new Date().toISOString(),
+  };
+  await withTimeout(SB.from('leaderboard_entries').upsert(row, { onConflict: 'user_id,exercise_id' }));
+  ST.lbBests[exId] = best.weight;
+}
+
+// After a workout saves: push any lift that beat the user's listed best.
+// Opt-in by design — no call sign, no submission, nothing leaves the device.
+async function submitLeaderboardPRs(session) {
+  if (!ST.user || !ST.username) return;
+  let improved = false;
+  for (const ex of LEADERBOARD_EXERCISES) {
+    const best = sessionMaxWeight(session, ex.id);
+    if (!best) continue;
+    if ((ST.lbBests[ex.id] || 0) >= best.weight) continue;
+    try { await submitLeaderboardEntry(ex.id, ex.name, best, session.date); improved = true; } catch(e) {}
+  }
+  if (improved) {
+    try { const profile = (await dbGetProfile()) || {}; profile.lbBests = ST.lbBests; await dbSetProfile(profile); } catch(e) {}
+  }
+}
+
+// First time a call sign is saved: place their existing history on the boards
+// so they don't start from zero despite months of logged lifts.
+async function backfillLeaderboard() {
+  if (!ST.user || !ST.username || !ST.sessionCache?.length) return;
+  const bests = {};
+  ST.sessionCache.forEach(s => {
+    LEADERBOARD_EXERCISES.forEach(ex => {
+      const m = sessionMaxWeight(s, ex.id);
+      if (m && m.weight > (bests[ex.id]?.weight || 0)) bests[ex.id] = { ...m, date: s.date };
+    });
+  });
+  let any = false;
+  for (const ex of LEADERBOARD_EXERCISES) {
+    if (!bests[ex.id]) continue;
+    if ((ST.lbBests[ex.id] || 0) >= bests[ex.id].weight) continue;
+    try { await submitLeaderboardEntry(ex.id, ex.name, bests[ex.id], bests[ex.id].date); any = true; } catch(e) {}
+  }
+  if (any) {
+    try { const profile = (await dbGetProfile()) || {}; profile.lbBests = ST.lbBests; await dbSetProfile(profile); } catch(e) {}
+    showToast('🏆 Your lift history is on the boards.');
+  }
+}
+
+function renderLeaderboard(p) {
+  const parts = [];
+  parts.push('<div class="section-label">LEADERBOARD</div>');
+  if (!ST.username) {
+    parts.push('<div class="card mb12" style="border-color:var(--gold)">');
+    parts.push('<div style="font-size:12px;line-height:1.6;margin-bottom:10px">🏆 <strong>Want on the boards?</strong> Set a call sign in More → Pilot Profile. No call sign = you\'re not listed — your lifts stay private.</div>');
+    parts.push('<button class="btn btn-outline" onclick="switchTab(\'profile\')">Set My Call Sign →</button>');
+    parts.push('</div>');
+  }
+  const savedEx = ST.lbEx || localStorage.getItem('fcf_lb_ex') || LEADERBOARD_EXERCISES[0].id;
+  ST.lbEx = LEADERBOARD_EXERCISES.find(e => e.id === savedEx) ? savedEx : LEADERBOARD_EXERCISES[0].id;
+  parts.push('<div class="card mb12">');
+  parts.push('<div class="field" style="margin-bottom:10px"><label>Exercise</label><select id="lbExSel" onchange="ST.lbEx=this.value;localStorage.setItem(\'fcf_lb_ex\',this.value);renderPage()">');
+  LEADERBOARD_EXERCISES.forEach(ex => parts.push('<option value="'+ex.id+'"'+(ST.lbEx===ex.id?' selected':'')+'>'+ex.name+'</option>'));
+  parts.push('</select></div>');
+  const segBtn = (key, val, label) =>
+    '<div class="env-btn" style="padding:8px 4px'+(ST[key]===val?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="ST.'+key+'=\''+val+'\';renderPage()"><div style="font-size:11px;font-weight:700">'+label+'</div></div>';
+  parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:8px">'+segBtn('lbSex','all','ALL')+segBtn('lbSex','male','MEN')+segBtn('lbSex','female','WOMEN')+'</div>');
+  parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'+segBtn('lbMode','weight','TOP WEIGHT')+segBtn('lbMode','dots','DOTS SCORE')+'</div>');
+  if (ST.lbMode === 'dots') parts.push('<div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5">DOTS normalizes for bodyweight and sex — a fair strength score across sizes. Needs bodyweight + sex on file.</div>');
+  parts.push('</div>');
+  parts.push('<div id="lbRows"><div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">Loading standings…</div></div>');
+  p.innerHTML = parts.join('');
+  loadLeaderboardRows();
+}
+
+async function loadLeaderboardRows() {
+  const el = document.getElementById('lbRows');
+  if (!el) return;
+  try {
+    let q = SB.from('leaderboard_entries').select('*').eq('exercise_id', ST.lbEx);
+    if (ST.lbSex !== 'all') q = q.eq('sex', ST.lbSex);
+    if (ST.lbMode === 'dots') q = q.not('dots','is',null).order('dots', { ascending: false });
+    else q = q.order('weight_lb', { ascending: false });
+    const { data, error } = await withTimeout(q.limit(50));
+    if (error) throw error;
+    if (!data || !data.length) {
+      el.innerHTML = '<div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">No entries yet for this lift — be the first on the board.</div>';
+      return;
+    }
+    const admin = isLbAdmin();
+    const parts = ['<div class="card mb12" style="padding:8px 0">'];
+    data.forEach((r, i) => {
+      const mine = ST.user && r.user_id === ST.user.id;
+      const val = ST.lbMode === 'dots' ? (r.dots||0).toFixed(1) : Math.round(r.weight_lb) + ' lb';
+      const sub = [];
+      if (r.reps) sub.push('×'+r.reps);
+      if (r.bodyweight_lb) sub.push('@ '+Math.round(r.bodyweight_lb)+' lb bw');
+      const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':'<span style="font-family:var(--mono);color:var(--muted)">'+(i+1)+'</span>';
+      parts.push('<div class="fb" style="padding:9px 14px'+(mine?';background:rgba(212,175,55,0.07)':'')+(i<data.length-1?';border-bottom:1px solid var(--border)':'')+'">');
+      parts.push('<div style="display:flex;align-items:center;gap:10px;min-width:0"><div style="width:24px;text-align:center;flex-shrink:0">'+medal+'</div>');
+      parts.push('<div style="min-width:0"><div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+sanitizeUserText(r.username)+(mine?' <span style="color:var(--gold);font-size:10px">YOU</span>':'')+'</div>');
+      parts.push('<div style="font-size:10px;color:var(--muted)">'+sub.join(' · ')+'</div></div></div>');
+      parts.push('<div style="display:flex;align-items:center;gap:8px;flex-shrink:0"><span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--gold)">'+val+'</span>');
+      if (admin) parts.push('<button class="btn-ghost" style="font-size:12px;padding:4px 6px" onclick="adminDeleteLbEntry(\''+r.id+'\',\''+sanitizeUserText(r.username).replace(/\'/g,'')+'\')">🗑</button>');
+      parts.push('</div></div>');
+    });
+    parts.push('</div>');
+    el.innerHTML = parts.join('');
+  } catch(e) {
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    el.innerHTML = '<div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">'+(offline
+      ? '📡 Leaderboards need a connection — reconnect to see standings.'
+      : 'Couldn\'t load standings. If this persists, the leaderboard table may not be set up yet.')+'</div>';
+  }
+}
+
+async function adminDeleteLbEntry(id, uname) {
+  if (!isLbAdmin()) return;
+  if (!confirm('Delete '+uname+'\'s entry from this board? This can\'t be undone.')) return;
+  try {
+    const { error } = await withTimeout(SB.from('leaderboard_entries').delete().eq('id', id));
+    if (error) throw error;
+    showToast('Entry removed.');
+    loadLeaderboardRows();
+  } catch(e) { showToast('Delete failed: '+(e.message||'unknown error')); }
+}
+
 function renderPage() {
   const p = document.getElementById('mainPage');
   if (!p) return;
@@ -1281,11 +1558,15 @@ function renderPage() {
         '<button class="btn btn-outline" onclick="renderPage()">↻ Retry</button></div>';
     });
   }
-  else if (ST.tab === 'flight')    renderFlight(p);
-  else if (ST.tab === 'trends')    renderTrends(p);
-  else if (ST.tab === 'wisdom')    renderWisdom(p);
-  else if (ST.tab === 'profile')   renderProfile(p);
-  else if (ST.tab === 'debrief')   renderDebrief(p);
+  else if (ST.tab === 'flight')      renderFlight(p);
+  else if (ST.tab === 'trends')      renderTrends(p);
+  else if (ST.tab === 'wisdom')      renderWisdom(p);
+  else if (ST.tab === 'profile')     renderProfile(p);
+  else if (ST.tab === 'leaderboard') renderLeaderboard(p);
+  else if (ST.tab === 'more')        renderMore(p);
+  else if (ST.tab === 'devices')     renderDevices(p);
+  else if (ST.tab === 'data')        renderData(p);
+  else if (ST.tab === 'debrief')     renderDebrief(p);
 }
 
 // ─── BOOT SEQUENCE ────────────────────────────────────────────────────────────
@@ -1310,6 +1591,9 @@ function applyProfileToState(profile) {
   ST.age        = profile.age || null;
   ST.lastWeight = profile.lastWeight || null;
   ST.injuries   = profile.injuries || [];
+  ST.username   = profile.username || null;
+  ST.badges     = profile.badges || {};
+  ST.lbBests    = profile.lbBests || {};
   ST.customProfiles = (profile.customProfiles || []).map(cp => ({
     ...cp,
     name: sanitizeUserText(cp.name),
@@ -2687,13 +2971,21 @@ async function saveBodyMetrics() {
   ST.sex = sexEl?.value || null;
   ST.heightIn = (ft || inches) ? ft*12 + inches : null;
   ST.age = parseInt(ageEl?.value) || null;
+  const unameEl = document.getElementById('bmUsername');
+  const rawUname = (unameEl?.value || '').trim().replace(/[^A-Za-z0-9_\- ]/g, '').slice(0, 20);
+  const hadUsername = !!ST.username;
+  ST.username = rawUname || null;
   const profile = (await dbGetProfile()) || {};
   const hadSex = !!profile.sex;
+  profile.username = ST.username;
   profile.sex = ST.sex;
   profile.heightIn = ST.heightIn;
   profile.age = ST.age;
   await dbSetProfile(profile);
   showToast('Body metrics saved.');
+  // Call sign just set for the first time: put their existing lift history
+  // on the boards so months of logged work isn't invisible.
+  if (!hadUsername && ST.username) backfillLeaderboard().catch(() => {});
   renderPage();
   // First time sex is set: offer (once) to switch to the suggested emphasis
   // objective. History is untouched either way.
@@ -4133,6 +4425,8 @@ async function setTheChocks() {
   clearWorkoutState();
   ST.tab = 'debrief';
   renderPage();
+  submitLeaderboardPRs(session).catch(() => {});
+  awardBadges();
 }
 
 // ─── TRENDS TAB ───────────────────────────────────────────────────────────────
@@ -4232,6 +4526,7 @@ async function saveBio() {
       }
       localStorage.setItem('fcf_bio', JSON.stringify(local));
     }
+    awardBadges();
   } catch(e) { showBigToast('Could not save — check connection.','warn'); }
 
   if (wt) {
@@ -5002,8 +5297,8 @@ function buildPhotoTimelineHTML() {
 
 // ─── PROFILE TAB ──────────────────────────────────────────────────────────────
 function renderProfile(p) {
-  const parts = [];
-  parts.push('<div class="section-label">PILOT PROFILE</div>');
+  const parts = [moreBackLink()];
+  parts.push('<div class="section-label" style="margin-top:0">PILOT PROFILE</div>');
 
   // Account card
   parts.push('<div class="card mb12">');
@@ -5037,7 +5332,28 @@ function renderProfile(p) {
   parts.push('</div>');
   parts.push('<div class="field"><label>Age <span class="info-i" onclick="showBioInfo(\'age\')">i</span></label>');
   parts.push('<input id="bmAge" type="text" inputmode="numeric" placeholder="e.g. 42" value="'+(ST.age||'')+'"></div>');
+  parts.push('<div class="field"><label>Call Sign — Leaderboard Name</label>');
+  parts.push('<input id="bmUsername" type="text" maxlength="20" placeholder="e.g. MaverickPHX" value="'+(ST.username||'')+'">');
+  parts.push('<div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.5">Shown publicly on the leaderboards. Leave blank to stay off the boards — your lifts stay private either way until you set one.</div></div>');
   parts.push('<button class="btn btn-outline" onclick="saveBodyMetrics()">💾 Save Body Metrics</button>');
+  parts.push('</div>');
+
+  // Badges
+  parts.push('<div class="card mb12">');
+  parts.push('<div class="section-label" style="margin-top:0">BADGES</div>');
+  const earnedCount = BADGES.filter(b => ST.badges[b.id]).length;
+  parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px">'+earnedCount+' of '+BADGES.length+' earned</div>');
+  parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
+  BADGES.forEach(b => {
+    const earned = ST.badges[b.id];
+    parts.push('<div style="border:1px solid '+(earned?'var(--gold)':'var(--border)')+';border-radius:8px;padding:10px;text-align:center'+(earned?'':';opacity:0.45')+'">');
+    parts.push('<div style="font-size:22px">'+(earned?b.icon:'🔒')+'</div>');
+    parts.push('<div style="font-size:11px;font-weight:700;margin-top:4px">'+b.title+'</div>');
+    parts.push('<div style="font-size:9px;color:var(--muted);margin-top:2px;line-height:1.4">'+b.desc+'</div>');
+    if (earned) parts.push('<div style="font-family:var(--mono);font-size:8px;color:var(--gold);margin-top:4px">'+new Date(earned).toLocaleDateString()+'</div>');
+    parts.push('</div>');
+  });
+  parts.push('</div>');
   parts.push('</div>');
 
   // Mission objective (goal)
@@ -5072,7 +5388,41 @@ function renderProfile(p) {
   parts.push('<div style="font-size:11px;color:var(--muted);line-height:1.6"><strong style="color:var(--text)">'+freq.days+' days/week</strong> recommended — '+freq.split+'. '+freq.note+'</div>');
   parts.push('</div>');
 
-  // Oura Ring — OAuth2
+  p.innerHTML = parts.join('');
+
+}
+
+// ─── MORE MENU + SUB-VIEWS ───────────────────────────────────────────────────
+function moreBackLink() {
+  return '<button class="btn-ghost" style="font-size:12px;padding:6px 0;margin-bottom:8px" onclick="switchTab(\'more\')">← Menu</button>';
+}
+
+function renderMore(p) {
+  const parts = [];
+  parts.push('<div class="section-label">MISSION SYSTEMS</div>');
+  const item = (icon, title, sub, onclick) =>
+    '<div class="card mb12" style="cursor:pointer" onclick="'+onclick+'"><div class="fb">' +
+    '<div style="display:flex;align-items:center;gap:12px"><div style="font-size:22px">'+icon+'</div>' +
+    '<div><div style="font-size:14px;font-weight:600">'+title+'</div>' +
+    '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+sub+'</div></div></div>' +
+    '<div style="color:var(--muted)">→</div></div></div>';
+  parts.push(item('👤','Pilot Profile','Call sign, body metrics, objective, badges',"switchTab('profile')"));
+  parts.push(item('⌚','Connected Devices','Oura Ring — more devices coming',"switchTab('devices')"));
+  parts.push(item('📖','Flight Deck Wisdom','Daily training wisdom cards',"switchTab('wisdom')"));
+  parts.push(item('📊','Data & Export','CSV export and AI analysis prompt',"switchTab('data')"));
+
+  parts.push('<div class="card mb12">');
+  parts.push('<button class="btn btn-outline" onclick="shareApp()">📤 Share Flight Crew Fitness</button>');
+  parts.push('<button class="btn btn-outline mt8" onclick="showFeedbackModal()">💬 Send Feedback</button>');
+  parts.push('</div>');
+
+  parts.push('<div class="card mb12"><div class="disclaimer-banner">Flight Crew Fitness is a training tool, not medical advice. Consult a physician before beginning any new exercise program. Exercise at your own risk and within your own physical limits.</div></div>');
+  parts.push('<button class="btn btn-red-outline" onclick="doSignOut()">Sign Out</button>');
+  p.innerHTML = parts.join('');
+}
+
+function renderDevices(p) {
+  const parts = [moreBackLink()];
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">OURA RING INTEGRATION</div>');
   if (ST.ouraConnected && ST.ouraScore !== null) {
@@ -5098,8 +5448,12 @@ function renderProfile(p) {
     parts.push('<button class="btn btn-outline" onclick="connectOura()">Connect Oura Ring →</button>');
   }
   parts.push('</div>');
+  parts.push('<div class="card mb12"><div style="font-size:11px;color:var(--muted);line-height:1.6">More device integrations (Whoop, Garmin, Apple Health) are on the roadmap.</div></div>');
+  p.innerHTML = parts.join('');
+}
 
-  // Export
+function renderData(p) {
+  const parts = [moreBackLink()];
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">EXPORT DATA</div>');
   parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Export all workout sessions and biometrics as a CSV — one row per set, with date context and biometric data joined by date. Optimized for AI analysis.</div>');
@@ -5107,23 +5461,7 @@ function renderProfile(p) {
   parts.push('<button class="btn btn-outline" onclick="exportCSV()">📊 Export CSV for AI Analysis</button>');
   parts.push('<button class="btn btn-outline mt8" onclick="showAIPromptModal()">📋 View & Copy AI Prompt</button>');
   parts.push('</div>');
-
-  // Safety disclaimer
-  parts.push('<div class="card mb12"><div class="section-label" style="margin-top:0">SAFETY DISCLAIMER</div>');
-  parts.push('<div class="disclaimer-banner">Flight Crew Fitness is a training tool, not medical advice. Consult a physician before beginning any new exercise program. Exercise at your own risk and within your own physical limits.</div>');
-  parts.push('</div>');
-
-  // Share app
-  parts.push('<div class="card mb12">');
-  parts.push('<div class="section-label" style="margin-top:0">SHARE APP</div>');
-  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Invite a fellow pilot or crew member to try Flight Crew Fitness.</div>');
-  parts.push('<button class="btn btn-outline" onclick="shareApp()">📤 Share Flight Crew Fitness</button>');
-  parts.push('<button class="btn btn-outline mt8" onclick="showFeedbackModal()">💬 Send Feedback</button>');
-  parts.push('</div>');
-
-  parts.push('<button class="btn btn-red-outline" onclick="doSignOut()">Sign Out</button>');
   p.innerHTML = parts.join('');
-
 }
 
 async function saveOuraToken() {

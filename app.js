@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.17.0';
+const FCF_VERSION = 'v5.17.1';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -204,7 +204,7 @@ function updateHydrationUI() {
   persistDailyInputs();
 }
 
-const MUSCLE_GROUPS = ['Lower Body','Upper Push','Upper Pull','Power / Plyo','Full Body','Longevity','Cardio'];
+const MUSCLE_GROUPS = ['Lower Body','Upper Push','Upper Pull','Power / Plyo','Full Body','Longevity','Cardio','Run'];
 
 // ─── EXERCISE BUILDER ─────────────────────────────────────────────────────────
 // rest: suggested rest in seconds for the heaviest set in this exercise (phase-aware default applied separately)
@@ -1783,6 +1783,48 @@ async function logRunningVolume(session) {
   try { await withTimeout(SB.from('running_log').upsert(row, { onConflict: 'user_id,run_at' })); } catch(e) {}
 }
 
+
+// Run mission profile: dynamic mobility -> the run itself (reusing the SAME
+// exercise IDs already wired into the running leaderboard, so a run logged
+// here counts automatically) -> static cooldown stretches. No takeoff phase
+// — empty phases are already handled gracefully as "skipped" everywhere.
+// Deliberately left out of every GOAL_OVERLAYS rotation order: going for a
+// run is something a pilot opts into that day, not something the app should
+// algorithmically schedule into a strength rotation.
+WORKOUTS.comm['Run'] = {
+  taxi: [
+    ex('c_rn_t1','Leg Swings (Front & Side)','2x10/leg',2,'Dynamic — hold a wall or rail. Warms hips before running; skip static stretching here.',true,'timed'),
+    ex('c_rn_t2','Walking High Knees','2x20yd',2,'Gentle pace, drive knees up. Raises heart rate and primes hip flexors.',false,'reps_only'),
+  ],
+  takeoff: [],
+  enroute: [
+    ex('c_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace — speak in full sentences. Log distance for the leaderboard.',true,'timed_distance'),
+    ex('c_ca_er5','Outdoor Run','20-40 min',1,'Any pace, any route. Log distance for the leaderboard.',true,'timed_distance'),
+  ],
+  landing: [
+    ex('c_rn_l1','Standing Calf Stretch','2x30s/leg',2,'Wall lean, back leg straight. Runners load calves heavily.',true,'timed_bilateral'),
+    ex('c_rn_l2','Standing Hamstring Stretch','2x30s/leg',2,'Heel on a low step, hinge forward.',true,'timed_bilateral'),
+    ex('c_rn_l3','Kneeling Hip Flexor Stretch','2x30s/leg',2,'Half-kneeling lunge, squeeze the glute. Running tightens hip flexors more than most people expect.',true,'timed_bilateral'),
+  ],
+};
+WORKOUTS.hotel['Run'] = {
+  taxi: WORKOUTS.comm['Run'].taxi,
+  takeoff: [],
+  enroute: [
+    ex('h_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace. Log distance for the leaderboard.',true,'timed_distance'),
+    ex('h_ca_er5','Outdoor Run','20-40 min',1,'Any pace, any route. Log distance for the leaderboard.',true,'timed_distance'),
+  ],
+  landing: WORKOUTS.comm['Run'].landing,
+};
+WORKOUTS.room['Run'] = {
+  taxi: WORKOUTS.comm['Run'].taxi,
+  takeoff: [],
+  enroute: [
+    ex('r_ca_er4','Outdoor Run','20-40 min',1,'Any pace, any route. Log distance for the leaderboard.',true,'timed_distance'),
+  ],
+  landing: WORKOUTS.comm['Run'].landing,
+};
+
 function renderPage() {
   const p = document.getElementById('mainPage');
   if (!p) return;
@@ -2350,7 +2392,7 @@ function buildCalendarHTML(rangeData) {
     parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted)">'+dow+'</div>');
     parts.push('<div style="font-size:13px;font-weight:600;margin-top:2px">'+dateNum+'</div>');
     if (hasWorkout) {
-      const icon = {'Lower Body':'🦵','Upper Push':'💪','Upper Pull':'🎯','Power / Plyo':'⚡','Full Body':'🔥','Longevity':'🌿','Cardio':'❤️'}[day.session.muscle_group] || '✓';
+      const icon = {'Lower Body':'🦵','Upper Push':'💪','Upper Pull':'🎯','Power / Plyo':'⚡','Full Body':'🔥','Longevity':'🌿','Cardio':'❤️','Run':'🏃'}[day.session.muscle_group] || '✓';
       parts.push('<div style="font-size:13px;margin-top:2px">'+icon+'</div>');
     } else {
       parts.push('<div style="font-size:12px;color:var(--muted);margin-top:3px">+</div>');

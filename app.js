@@ -3,14 +3,14 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.17.1';
+const FCF_VERSION = 'v5.17.2';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
 // Replace OURA_CLIENT_ID with your actual Client ID from cloud.ouraring.com/oauth/applications
 // The client secret lives ONLY in the Supabase Edge Function (oura-auth) — never here.
 const OURA_CLIENT_ID   = 'deb737ed-9343-407a-b993-9907bc101800';
-const OURA_REDIRECT_URI = 'https://bchadcooper-create.github.io/pilot-program/';
+const OURA_REDIRECT_URI = 'https://flightcrew.fit/';
 const OURA_EDGE_FN      = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/oura-auth';
 const FEEDBACK_EDGE_FN  = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/feedback-submit';
 const OURA_SCOPES       = 'daily personal'; // readiness, sleep, activity, personal info

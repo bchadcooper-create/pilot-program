@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.16.2';
+const FCF_VERSION = 'v5.17.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -77,6 +77,8 @@ const ST = {
   username: null,          // public leaderboard call sign — opt-in, null = not listed
   badges: {},              // earned badges: {badgeId: earnedISODate}
   lbBests: {},             // cached personal bests already on the leaderboard {exId: weight}
+  runBest: 0,               // cached personal best single-run distance (mi)
+  runBoard: 'longest',       // running leaderboard: 'longest' | 'monthly'
   lbEx: null,              // leaderboard: selected exercise id (persisted per-device)
   lbSex: 'all',            // leaderboard: 'all' | 'male' | 'female'
   lbMode: 'weight',        // leaderboard: 'weight' | 'dots'
@@ -383,9 +385,10 @@ WORKOUTS.comm['Cardio'] = {
     ex('c_ca_to2','Assault Bike Intervals','8×30s',8,'All-out 30 seconds, 60s easy spin. Log calories or RPM as the rep value.',false,'reps_only'),
   ],
   enroute: [
-    ex('c_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace — speak in full sentences.',true,'timed'),
+    ex('c_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace — speak in full sentences. Log distance for the leaderboard.',true,'timed_distance'),
     ex('c_ca_er3','Walking','30-45 min',1,'Zone 1-2 steady pace. Great low-impact active recovery.',true,'timed'),
     ex('c_ca_er4','Treadmill','30 min',1,'Any steady treadmill session — walk, incline, or run.',true,'timed'),
+    ex('c_ca_er5','Outdoor Run','20-40 min',1,'Any pace, any route. Log distance for the leaderboard.',true,'timed_distance'),
     ex('c_ca_er2','Step-Up','3×15/leg',3,'Active recovery strength.'),
   ],
   landing: [
@@ -477,9 +480,10 @@ WORKOUTS.hotel['Cardio'] = {
     ex('h_ca_to2','Stationary Bike Intervals','6×45s',6,'High resistance, hard effort. Log resistance level or watts as the rep value.',false,'reps_only'),
   ],
   enroute: [
-    ex('h_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace.',true,'timed'),
+    ex('h_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace. Log distance for the leaderboard.',true,'timed_distance'),
     ex('h_ca_er3','Walking','30-45 min',1,'Zone 1-2 steady pace. Great low-impact active recovery.',true,'timed'),
     ex('h_ca_er4','Treadmill','30 min',1,'Any steady treadmill session — walk, incline, or run.',true,'timed'),
+    ex('h_ca_er5','Outdoor Run','20-40 min',1,'Any pace, any route. Log distance for the leaderboard.',true,'timed_distance'),
     ex('h_ca_er2','Step-Up','3×15/leg',3,'Active recovery strength.'),
   ],
   landing: WORKOUTS.comm['Cardio'].landing,
@@ -583,6 +587,7 @@ WORKOUTS.room['Cardio'] = {
     ex('r_ca_er1','Jump Lunge','4×10/leg',4,'Explosive alternating.',false,'reps_only'),
     ex('r_ca_er3','Walking','30-45 min',1,'Outside or hotel corridors. Zone 1-2 steady pace.',true,'timed'),
     ex('r_ca_er2','Mountain Climbers','4×30s',4,'Fast feet.',true,'timed'),
+    ex('r_ca_er4','Outdoor Run','20-40 min',1,'Any pace, any route. Log distance for the leaderboard.',true,'timed_distance'),
   ],
   landing: WORKOUTS.comm['Cardio'].landing,
 };
@@ -1515,9 +1520,26 @@ async function backfillLeaderboard() {
     if ((ST.lbBests[ex.id] || 0) >= bests[ex.id].weight) continue;
     try { await submitLeaderboardEntry(ex.id, ex.name, bests[ex.id], bests[ex.id].date); any = true; } catch(e) {}
   }
+  // Running: submit best-ever single run + log every historical run for volume
+  let bestRun = null;
+  ST.sessionCache.forEach(s => {
+    const run = sessionRunningDistance(s);
+    if (run && (!bestRun || run.miles > bestRun.miles)) bestRun = { ...run, date: s.date };
+    if (run) { logRunningVolume(s).catch(() => {}); }
+  });
+  if (bestRun && bestRun.miles > (ST.runBest || 0)) {
+    try {
+      await withTimeout(SB.from('running_pr_entries').upsert({
+        user_id: ST.user.id, username: ST.username, sex: ST.sex || null,
+        distance_mi: bestRun.miles, duration_sec: bestRun.seconds || null, achieved_at: bestRun.date,
+      }, { onConflict: 'user_id' }));
+      ST.runBest = bestRun.miles;
+      any = true;
+    } catch(e) {}
+  }
   if (any) {
-    try { const profile = (await dbGetProfile()) || {}; profile.lbBests = ST.lbBests; await dbSetProfile(profile); } catch(e) {}
-    showToast('🏆 Your lift history is on the boards.');
+    try { const profile = (await dbGetProfile()) || {}; profile.lbBests = ST.lbBests; profile.runBest = ST.runBest; await dbSetProfile(profile); } catch(e) {}
+    showToast('🏆 Your history is on the boards.');
   }
 }
 
@@ -1526,18 +1548,37 @@ function renderLeaderboard(p) {
   parts.push('<div class="section-label">LEADERBOARD</div>');
   if (!ST.username) {
     parts.push('<div class="card mb12" style="border-color:var(--gold)">');
-    parts.push('<div style="font-size:12px;line-height:1.6;margin-bottom:10px">🏆 <strong>Want on the boards?</strong> Set a call sign in More → Pilot Profile. No call sign = you\'re not listed — your lifts stay private.</div>');
+    parts.push('<div style="font-size:12px;line-height:1.6;margin-bottom:10px">🏆 <strong>Want on the boards?</strong> Set a call sign in More → Pilot Profile. No call sign = you\'re not listed — your lifts and runs stay private.</div>');
     parts.push('<button class="btn btn-outline" onclick="switchTab(\'profile\')">Set My Call Sign →</button>');
     parts.push('</div>');
   }
+  const segBtn = (key, val, label) =>
+    '<div class="env-btn" style="padding:8px 4px'+(ST[key]===val?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="ST.'+key+'=\''+val+'\';renderPage()"><div style="font-size:11px;font-weight:700">'+label+'</div></div>';
+
+  const category = ST.lbCategory || 'strength';
+  parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:12px">' +
+    '<div class="env-btn" style="padding:10px 4px'+(category==='strength'?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="ST.lbCategory=\'strength\';renderPage()"><div style="font-size:12px;font-weight:700">🏋️ STRENGTH</div></div>' +
+    '<div class="env-btn" style="padding:10px 4px'+(category==='running'?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="ST.lbCategory=\'running\';renderPage()"><div style="font-size:12px;font-weight:700">🏃 RUNNING</div></div>' +
+    '</div>');
+
+  if (category === 'running') {
+    parts.push('<div class="card mb12">');
+    parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px">'+segBtn('runBoard','longest','LONGEST RUN')+segBtn('runBoard','monthly','THIS MONTH')+'</div>');
+    parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">'+segBtn('lbSex','all','ALL')+segBtn('lbSex','male','MEN')+segBtn('lbSex','female','WOMEN')+'</div>');
+    if (ST.runBoard === 'monthly') parts.push('<div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5">Total distance logged this calendar month. Resets on the 1st.</div>');
+    parts.push('</div>');
+    parts.push('<div id="lbRows"><div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">Loading standings…</div></div>');
+    p.innerHTML = parts.join('');
+    loadRunningRows();
+    return;
+  }
+
   const savedEx = ST.lbEx || localStorage.getItem('fcf_lb_ex') || LEADERBOARD_EXERCISES[0].id;
   ST.lbEx = LEADERBOARD_EXERCISES.find(e => e.id === savedEx) ? savedEx : LEADERBOARD_EXERCISES[0].id;
   parts.push('<div class="card mb12">');
   parts.push('<div class="field" style="margin-bottom:10px"><label>Exercise</label><select id="lbExSel" onchange="ST.lbEx=this.value;localStorage.setItem(\'fcf_lb_ex\',this.value);renderPage()">');
   LEADERBOARD_EXERCISES.forEach(ex => parts.push('<option value="'+ex.id+'"'+(ST.lbEx===ex.id?' selected':'')+'>'+ex.name+'</option>'));
   parts.push('</select></div>');
-  const segBtn = (key, val, label) =>
-    '<div class="env-btn" style="padding:8px 4px'+(ST[key]===val?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="ST.'+key+'=\''+val+'\';renderPage()"><div style="font-size:11px;font-weight:700">'+label+'</div></div>';
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:8px">'+segBtn('lbSex','all','ALL')+segBtn('lbSex','male','MEN')+segBtn('lbSex','female','WOMEN')+'</div>');
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'+segBtn('lbMode','weight','TOP WEIGHT')+segBtn('lbMode','dots','DOTS SCORE')+'</div>');
   if (ST.lbMode === 'dots') parts.push('<div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5">DOTS normalizes for bodyweight and sex — a fair strength score across sizes. Needs bodyweight + sex on file.</div>');
@@ -1588,6 +1629,90 @@ async function loadLeaderboardRows() {
   }
 }
 
+function formatMiPace(distanceMi, seconds) {
+  const parts = [Math.round(distanceMi*100)/100+' mi'];
+  if (seconds > 0) {
+    const paceSecPerMi = seconds / distanceMi;
+    const m = Math.floor(paceSecPerMi/60), s = Math.round(paceSecPerMi%60);
+    parts.push(m+':'+String(s).padStart(2,'0')+'/mi');
+  }
+  return parts.join(' · ');
+}
+
+async function loadRunningRows() {
+  const el = document.getElementById('lbRows');
+  if (!el) return;
+  try {
+    if (ST.runBoard === 'longest') {
+      let q = SB.from('running_pr_entries').select('*');
+      if (ST.lbSex !== 'all') q = q.eq('sex', ST.lbSex);
+      const { data, error } = await withTimeout(q.order('distance_mi', { ascending: false }).limit(50));
+      if (error) throw error;
+      renderRunningRows(el, (data||[]).map(r => ({
+        id: r.id, user_id: r.user_id, username: r.username,
+        display: formatMiPace(r.distance_mi, r.duration_sec), table: 'running_pr_entries',
+      })));
+    } else {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      let q = SB.from('running_log').select('user_id,username,sex,distance_mi').gte('run_at', monthStart);
+      if (ST.lbSex !== 'all') q = q.eq('sex', ST.lbSex);
+      const { data, error } = await withTimeout(q.limit(2000));
+      if (error) throw error;
+      // No GROUP BY in the client query builder — sum client-side. Volume is
+      // low enough (one row per logged run) that this is simpler and safer
+      // than standing up a database view for a small user base.
+      const totals = {};
+      (data||[]).forEach(r => {
+        if (!totals[r.user_id]) totals[r.user_id] = { user_id: r.user_id, username: r.username, miles: 0 };
+        totals[r.user_id].miles += parseFloat(r.distance_mi) || 0;
+      });
+      const rows = Object.values(totals).sort((a,b) => b.miles - a.miles).slice(0, 50);
+      renderRunningRows(el, rows.map(r => ({
+        id: null, user_id: r.user_id, username: r.username,
+        display: (Math.round(r.miles*100)/100)+' mi', table: null,
+      })));
+    }
+  } catch(e) {
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    el.innerHTML = '<div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">'+(offline
+      ? '📡 Leaderboards need a connection — reconnect to see standings.'
+      : 'Couldn\'t load standings. If this persists, the running_pr_entries / running_log tables may not be set up yet.')+'</div>';
+  }
+}
+
+function renderRunningRows(el, rows) {
+  if (!rows.length) {
+    el.innerHTML = '<div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">No runs logged yet for this board — be the first.</div>';
+    return;
+  }
+  const admin = isLbAdmin();
+  const parts = ['<div class="card mb12" style="padding:8px 0">'];
+  rows.forEach((r, i) => {
+    const mine = ST.user && r.user_id === ST.user.id;
+    const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':'<span style="font-family:var(--mono);color:var(--muted)">'+(i+1)+'</span>';
+    parts.push('<div class="fb" style="padding:9px 14px'+(mine?';background:rgba(212,175,55,0.07)':'')+(i<rows.length-1?';border-bottom:1px solid var(--border)':'')+'">');
+    parts.push('<div style="display:flex;align-items:center;gap:10px;min-width:0"><div style="width:24px;text-align:center;flex-shrink:0">'+medal+'</div>');
+    parts.push('<div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+sanitizeUserText(r.username)+(mine?' <span style="color:var(--gold);font-size:10px">YOU</span>':'')+'</div></div>');
+    parts.push('<div style="display:flex;align-items:center;gap:8px;flex-shrink:0"><span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--gold)">'+r.display+'</span>');
+    if (admin && r.table && r.id) parts.push('<button class="btn-ghost" style="font-size:12px;padding:4px 6px" onclick="adminDeleteRunEntry(\''+r.table+'\',\''+r.id+'\',\''+sanitizeUserText(r.username).replace(/\'/g,'')+'\')">🗑</button>');
+    parts.push('</div></div>');
+  });
+  parts.push('</div>');
+  el.innerHTML = parts.join('');
+}
+
+async function adminDeleteRunEntry(table, id, uname) {
+  if (!isLbAdmin()) return;
+  if (!confirm('Delete '+uname+'\'s entry from this board? This can\'t be undone.')) return;
+  try {
+    const { error } = await withTimeout(SB.from(table).delete().eq('id', id));
+    if (error) throw error;
+    showToast('Entry removed.');
+    loadRunningRows();
+  } catch(e) { showToast('Delete failed: '+(e.message||'unknown error')); }
+}
+
 async function adminDeleteLbEntry(id, uname) {
   if (!isLbAdmin()) return;
   if (!confirm('Delete '+uname+'\'s entry from this board? This can\'t be undone.')) return;
@@ -1597,6 +1722,65 @@ async function adminDeleteLbEntry(id, uname) {
     showToast('Entry removed.');
     loadLeaderboardRows();
   } catch(e) { showToast('Delete failed: '+(e.message||'unknown error')); }
+}
+
+// ─── RUNNING LEADERBOARD ──────────────────────────────────────────────────────
+// Deliberately excludes Walking and the generic walk/incline/run Treadmill —
+// those aren't a running-effort metric, and including them would let
+// low-intensity recovery activity dominate a board meant to reflect running.
+const RUNNING_EXERCISES = ['c_ca_er1','h_ca_er1','c_ca_er5','h_ca_er5','r_ca_er4'];
+
+// Sum of distance logged for running exercises in one session — a session's
+// "run" for the day. Summed rather than maxed so a run logged as a few
+// segments still counts as one continuous effort, matching how the exercise
+// notes describe it ("20 min" of steady running, not intervals).
+function sessionRunningDistance(session) {
+  let miles = 0, seconds = 0;
+  RUNNING_EXERCISES.forEach(exId => {
+    (session?.sets?.[exId] || []).forEach(s => {
+      const m = parseFloat(s.miles);
+      const sec = parseFloat(s.seconds);
+      if (!isNaN(m) && m > 0) miles += m;
+      if (!isNaN(sec) && sec > 0) seconds += sec;
+    });
+  });
+  return miles > 0 ? { miles: Math.round(miles*100)/100, seconds } : null;
+}
+
+// Board 1: longest single run ever — one row per user, upserted only when
+// beaten, same pattern as the lift PR boards.
+async function submitRunningPR(session) {
+  if (!ST.user || !ST.username) return;
+  const run = sessionRunningDistance(session);
+  if (!run) return;
+  if ((ST.runBest || 0) >= run.miles) return;
+  const row = {
+    user_id: ST.user.id, username: ST.username, sex: ST.sex || null,
+    distance_mi: run.miles, duration_sec: run.seconds || null,
+    achieved_at: session.date || new Date().toISOString(),
+  };
+  await withTimeout(SB.from('running_pr_entries').upsert(row, { onConflict: 'user_id' }));
+  ST.runBest = run.miles;
+  const profile = (await dbGetProfile()) || {};
+  profile.runBest = ST.runBest;
+  await dbSetProfile(profile);
+}
+
+// Board 2: total distance this month — every run is logged as its own row,
+// keyed by the session's own timestamp so re-saving the same workout can't
+// double-count it; the monthly total is a live SUM computed at read time,
+// not a running counter, so there's no month-boundary reset logic to get
+// wrong and no risk of an increment being applied twice.
+async function logRunningVolume(session) {
+  if (!ST.user || !ST.username) return;
+  const run = sessionRunningDistance(session);
+  if (!run) return;
+  const row = {
+    user_id: ST.user.id, username: ST.username, sex: ST.sex || null,
+    distance_mi: run.miles, duration_sec: run.seconds || null,
+    run_at: session.date || new Date().toISOString(),
+  };
+  try { await withTimeout(SB.from('running_log').upsert(row, { onConflict: 'user_id,run_at' })); } catch(e) {}
 }
 
 function renderPage() {
@@ -1647,6 +1831,7 @@ function applyProfileToState(profile) {
   ST.username   = profile.username || null;
   ST.badges     = profile.badges || {};
   ST.lbBests    = profile.lbBests || {};
+  ST.runBest    = profile.runBest || 0;
   ST.customProfiles = (profile.customProfiles || []).map(cp => ({
     ...cp,
     name: sanitizeUserText(cp.name),
@@ -2435,6 +2620,7 @@ function buildExerciseCatalog() {
 // Third element marks minute-display fields: shown/entered as minutes,
 // stored as seconds so existing data and the CSV export stay consistent.
 function edFieldsFor(exDef) {
+  if (exDef.inputType === 'timed_distance') return [['seconds','Time','min'],['miles','Distance','mi']];
   if (exDef.inputType === 'timed_bilateral') return [['seconds_left','Left','min'],['seconds_right','Right','min']];
   if (exDef.timed || exDef.inputType === 'timed' || exDef.inputType === 'nsdr') return [['seconds','Time','min']];
   if (exDef.inputType === 'reps_only') return [['reps','Reps','reps']];
@@ -3173,6 +3359,8 @@ function engageWorkout() {
       ST.sets[exItem.id] = [{ seconds: '' }];
     } else if (exItem.inputType === 'timed_bilateral' || (exItem.timed && exItem.target?.includes('/side'))) {
       ST.sets[exItem.id] = [{ seconds_left: '', seconds_right: '' }];
+    } else if (exItem.inputType === 'timed_distance') {
+      ST.sets[exItem.id] = [{ seconds: '', miles: '' }];
     } else if (exItem.timed) {
       ST.sets[exItem.id] = [{ seconds: '' }];
     } else if (exItem.inputType === 'reps_height') {
@@ -3726,6 +3914,7 @@ function swapExercise(exId, alt) {
     ST.workout[phase][idx] = newEx;
     ST.sets[newEx.id] =
       iType==='timed_bilateral' ? [{seconds_left:'',seconds_right:''}] :
+      iType==='timed_distance'  ? [{seconds:'',miles:''}] :
       iType==='timed'           ? [{seconds:''}] :
       iType==='reps_only'       ? Array.from({length:setsCount},()=>({reps:''})) :
       iType==='reps_height'     ? Array.from({length:setsCount},()=>({reps:'',height:''})) :
@@ -4232,7 +4421,7 @@ async function saveCustomExercise() {
   // Add to current active workout (enroute slot) immediately
   if (ST.workout) {
     ST.workout.enroute.push(newEx);
-    const blankSet = inputType==='timed' ? {seconds:''} : inputType==='reps_only' ? {reps:''} : {reps:'',weight:''};
+    const blankSet = inputType==='timed_distance' ? {seconds:'',miles:''} : inputType==='timed' ? {seconds:''} : inputType==='reps_only' ? {reps:''} : {reps:'',weight:''};
     ST.sets[id] = Array.from({ length: setsCount }, () => ({...blankSet}));
   }
 
@@ -4486,6 +4675,8 @@ async function setTheChocks() {
   ST.tab = 'debrief';
   renderPage();
   submitLeaderboardPRs(session).catch(() => {});
+  submitRunningPR(session).catch(() => {});
+  logRunningVolume(session).catch(() => {});
   awardBadges();
 }
 

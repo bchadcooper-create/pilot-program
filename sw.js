@@ -1,11 +1,11 @@
 // Flight Crew Fitness — Service Worker
-// Version: 5.17.2
-const CACHE = 'fcf-v5-17-2';
+// Version: 5.17.3
+const CACHE = 'fcf-v5-17-3';
 const CORE = [
-  '/pilot-program/',
-  '/pilot-program/index.html',
-  '/pilot-program/app.js',
-  '/pilot-program/manifest.json',
+  './',
+  './index.html',
+  './app.js',
+  './manifest.json',
 ];
 
 self.addEventListener('install', e => {
@@ -63,7 +63,7 @@ self.addEventListener('fetch', e => {
         return res;
       }).catch(() => {
         if (e.request.mode === 'navigate') {
-          return caches.match('/pilot-program/index.html');
+          return caches.match('./index.html');
         }
       });
     })

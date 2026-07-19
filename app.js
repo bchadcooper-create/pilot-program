@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.17.3';
+const FCF_VERSION = 'v5.17.4';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2213,7 +2213,7 @@ document.addEventListener('visibilitychange', () => {
 let swRegistration = null;
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').then(reg => {
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
     swRegistration = reg;
 
     // A new worker was found and finished installing while one was already

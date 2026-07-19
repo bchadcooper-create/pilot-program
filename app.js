@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.17.5';
+const FCF_VERSION = 'v5.18.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -4199,6 +4199,10 @@ function buildExCard(exItem, phaseKey) {
         parts.push('<div class="set-hint">reps / lb</div></div>');
       });
       parts.push('</div></div><div class="swipe-hint">← swipe for all sets</div><button class="btn-ghost" style="font-size:11px;margin-top:6px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button>');
+      const autoreg = autoregSuggestion(exItem, sets);
+      if (autoreg) {
+        parts.push('<div class="fb" style="background:var(--bg3);border:1px solid var(--blue);border-radius:8px;padding:9px 12px;margin-top:8px;align-items:flex-start"><div style="font-size:12px;line-height:1.5;color:var(--text)">🎯 '+autoreg.text+'</div></div>');
+      }
       if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
         parts.push(buildRestTimerWidget(exItem.id, phaseKey));
       }
@@ -4322,6 +4326,40 @@ function formatStopwatch(sec) {
 // stopwatch press represents a single round), '5 min', or '30-45 min' (takes
 // the lower bound). Returns null when no confident duration can be read
 // (e.g. '1 round'), in which case no completion chime is scheduled.
+// Extracts the per-set rep target from strings like '3×10', '4×8/leg',
+// '2×15/side', or '10 reps'. Rep ranges ('4×8-12') take the lower bound —
+// same convention as parseTargetSeconds uses for time ranges.
+function parseTargetReps(target) {
+  if (!target) return null;
+  let m = target.match(/[×x]\s*(\d+)/);
+  if (m) return parseInt(m[1], 10);
+  m = target.match(/(\d+)\s*reps?\b/i);
+  if (m) return parseInt(m[1], 10);
+  return null;
+}
+
+// Looks at the most recently completed set (the last one with a reps value
+// entered) and, if it came in meaningfully under target, returns a plain-
+// language suggestion for the next set. Returns null when on target, when
+// no valid target can be parsed, or when nothing's been logged yet.
+function autoregSuggestion(exItem, sets) {
+  const target = parseTargetReps(exItem.target);
+  if (!target || target <= 0) return null;
+  let last = null;
+  for (let i = sets.length - 1; i >= 0; i--) {
+    if (sets[i].reps !== '' && sets[i].reps !== undefined && sets[i].reps !== null) { last = sets[i]; break; }
+  }
+  const actual = last ? parseInt(last.reps) : NaN;
+  if (isNaN(actual)) return null;
+  const missedBy = target - actual;
+  if (missedBy <= 0) return null; // hit or beat target — nothing to say
+  const missedPct = missedBy / target;
+  if (missedPct <= 0.2) {
+    return { tone: 'minor', text: 'Came in at '+actual+'/'+target+' — close. Hold the same weight and take a bit more rest before the next set.' };
+  }
+  return { tone: 'major', text: 'Came in at '+actual+'/'+target+'. That\'s a real miss, not just an off rep — drop the weight roughly 5-10% for the next set so you can actually hit the target range.' };
+}
+
 function parseTargetSeconds(target) {
   if (!target) return null;
   let m = target.match(/(\d+)\s*s(?!\w)/);

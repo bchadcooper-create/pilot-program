@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.18.2';
+const FCF_VERSION = 'v5.18.3';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -3424,6 +3424,30 @@ async function renderPreflight(p) {
   scrollCalendarToToday();
 }
 
+// Reported bug: typing body metrics, then clicking Mission Objective or
+// Fitness Level (unrelated buttons on the same Profile screen) wiped the
+// just-typed values, because those clicks re-render the whole page from
+// ST.* without ever reading the in-progress DOM input first. This captures
+// it defensively — falls back to the existing value on anything blank or
+// unparsed, so it never actively clears something the user didn't touch.
+function syncBodyMetricsFieldsToState() {
+  const sexEl = document.getElementById('bmSex');
+  const ftEl = document.getElementById('bmFt');
+  const inEl = document.getElementById('bmIn');
+  const ageEl = document.getElementById('bmAge');
+  const unameEl = document.getElementById('bmUsername');
+  if (!sexEl && !ftEl && !ageEl && !unameEl) return; // not currently on this screen
+  if (sexEl && sexEl.value) ST.sex = sexEl.value;
+  const ft = ftEl ? parseInt(ftEl.value) || 0 : 0;
+  const inches = inEl ? parseInt(inEl.value) || 0 : 0;
+  if (ft || inches) ST.heightIn = ft * 12 + inches;
+  if (ageEl) { const a = parseInt(ageEl.value); if (!isNaN(a)) ST.age = a; }
+  if (unameEl && unameEl.value) {
+    const raw = unameEl.value.trim().replace(/[^A-Za-z0-9_\- ]/g, '').slice(0, 20);
+    if (raw) ST.username = raw;
+  }
+}
+
 async function saveBodyMetrics() {
   const sexEl = document.getElementById('bmSex');
   const ftEl = document.getElementById('bmFt');
@@ -5854,7 +5878,7 @@ function renderProfile(p) {
     // Sex-tagged emphasis goals only show for the matching profile (or if already selected)
     if (g.suggestFor && g.suggestFor !== ST.sex && ST.goal !== gid) return;
     const suggested = g.suggestFor && g.suggestFor === ST.sex;
-    parts.push('<div class="env-btn '+(ST.goal===gid?'sel':'')+'" style="position:relative" onclick="ST.goal=\''+gid+'\';ST.muscleGroup=getRecommendedNext();saveGoalLevel();renderPage()">');
+    parts.push('<div class="env-btn '+(ST.goal===gid?'sel':'')+'" style="position:relative" onclick="syncBodyMetricsFieldsToState();ST.goal=\''+gid+'\';ST.muscleGroup=getRecommendedNext();saveGoalLevel();renderPage()">');
     if (suggested) parts.push('<div style="position:absolute;top:4px;right:4px;font-family:var(--mono);font-size:7px;letter-spacing:0.06em;color:var(--gold);border:1px solid var(--gold);border-radius:4px;padding:1px 4px">SUGGESTED</div>');
     parts.push('<div class="ei">'+g.icon+'</div><div class="el">'+g.label+'</div>');
     parts.push('<div style="font-size:9px;color:var(--muted);margin-top:3px;line-height:1.3">'+g.desc+'</div>');
@@ -5867,9 +5891,9 @@ function renderProfile(p) {
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">FITNESS LEVEL</div>');
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">');
-  parts.push('<div class="env-btn '+(ST.level==='beginner'?'sel':'')+'" onclick="ST.level=\'beginner\';saveGoalLevel();renderPage()"><div class="ei">🌱</div><div class="el">BEGINNER</div></div>');
-  parts.push('<div class="env-btn '+(ST.level==='intermediate'?'sel':'')+'" onclick="ST.level=\'intermediate\';saveGoalLevel();renderPage()"><div class="ei">⚡</div><div class="el">INTERMED.</div></div>');
-  parts.push('<div class="env-btn '+(ST.level==='advanced'?'sel':'')+'" onclick="ST.level=\'advanced\';saveGoalLevel();renderPage()"><div class="ei">🔥</div><div class="el">ADVANCED</div></div>');
+  parts.push('<div class="env-btn '+(ST.level==='beginner'?'sel':'')+'" onclick="syncBodyMetricsFieldsToState();ST.level=\'beginner\';saveGoalLevel();renderPage()"><div class="ei">🌱</div><div class="el">BEGINNER</div></div>');
+  parts.push('<div class="env-btn '+(ST.level==='intermediate'?'sel':'')+'" onclick="syncBodyMetricsFieldsToState();ST.level=\'intermediate\';saveGoalLevel();renderPage()"><div class="ei">⚡</div><div class="el">INTERMED.</div></div>');
+  parts.push('<div class="env-btn '+(ST.level==='advanced'?'sel':'')+'" onclick="syncBodyMetricsFieldsToState();ST.level=\'advanced\';saveGoalLevel();renderPage()"><div class="ei">🔥</div><div class="el">ADVANCED</div></div>');
   parts.push('</div>');
   const freq = FREQUENCY_GUIDE[ST.level];
   parts.push('<div class="divider"></div>');

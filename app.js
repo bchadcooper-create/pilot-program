@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.18.3';
+const FCF_VERSION = 'v5.19.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -1361,7 +1361,7 @@ function renderRoot() {
 
 function switchTab(tab) {
   ST.tab = tab;
-  const MORE_SUBVIEWS = ['profile','wisdom','devices','data','badges'];
+  const MORE_SUBVIEWS = ['profile','wisdom','devices','data','badges','superuser'];
   const hl = MORE_SUBVIEWS.includes(tab) ? 'more' : tab;
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === hl));
   const tabbar = document.getElementById('tabbar');
@@ -1559,7 +1559,8 @@ const LEADERBOARD_EXERCISES = [
   { id:'h_ul_er2', name:'DB Curl' },
 ];
 const LB_ADMIN_EMAIL = 'b.chad.cooper@gmail.com';
-function isLbAdmin() { return !!(ST.user && (ST.user.email||'').toLowerCase() === LB_ADMIN_EMAIL); }
+function isSuperUser() { return !!(ST.user && (ST.user.email||'').toLowerCase() === LB_ADMIN_EMAIL); }
+function isLbAdmin() { return isSuperUser(); } // kept as an alias — used elsewhere for leaderboard moderation
 
 function sessionMaxWeight(session, exId) {
   const sets = session?.sets?.[exId];
@@ -1947,6 +1948,7 @@ function renderPage() {
   else if (ST.tab === 'devices')     renderDevices(p);
   else if (ST.tab === 'data')        renderData(p);
   else if (ST.tab === 'badges')      renderBadges(p);
+  else if (ST.tab === 'superuser')   renderSuperUser(p);
   else if (ST.tab === 'debrief')     renderDebrief(p);
 }
 
@@ -5924,6 +5926,9 @@ function renderMore(p) {
   parts.push(item('⌚','Connected Devices','Oura Ring — more devices coming',"switchTab('devices')"));
   parts.push(item('📖','Flight Deck Wisdom','Daily training wisdom cards',"switchTab('wisdom')"));
   parts.push(item('📊','Data & Export','CSV export and AI analysis prompt',"switchTab('data')"));
+  if (isSuperUser()) {
+    parts.push(item('🛡️','Super User','Activity report — real usage, not signups',"switchTab('superuser')"));
+  }
 
   parts.push('<div class="card mb12">');
   parts.push('<button class="btn btn-outline" onclick="shareApp()">📤 Share Flight Crew Fitness</button>');
@@ -5964,6 +5969,52 @@ function renderDevices(p) {
   parts.push('</div>');
   parts.push('<div class="card mb12"><div style="font-size:11px;color:var(--muted);line-height:1.6">More device integrations (Whoop, Garmin, Apple Health) are on the roadmap.</div></div>');
   p.innerHTML = parts.join('');
+}
+
+async function loadSuperUserStats() {
+  const el = document.getElementById('suStats');
+  if (!el) return;
+  try {
+    const { data, error } = await withTimeout(SB.from('workout_sessions').select('user_id,started_at').limit(20000));
+    if (error) throw error;
+    const now = Date.now();
+    const DAY = 86400000;
+    const seenAll = new Set(), seen7 = new Set(), seen30 = new Set();
+    let sessions7 = 0, sessions30 = 0;
+    (data || []).forEach(r => {
+      if (!r.user_id) return;
+      seenAll.add(r.user_id);
+      const t = new Date(r.started_at).getTime();
+      if (isNaN(t)) return;
+      const ageDays = (now - t) / DAY;
+      if (ageDays <= 7)  { seen7.add(r.user_id); sessions7++; }
+      if (ageDays <= 30) { seen30.add(r.user_id); sessions30++; }
+    });
+    const stat = (n, lbl) => '<div class="stat-box"><div class="stat-val">'+n+'</div><div class="stat-lbl">'+lbl+'</div></div>';
+    el.innerHTML =
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">' +
+      stat(seen7.size, 'Active — 7 Days') + stat(seen30.size, 'Active — 30 Days') +
+      '</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+      stat(sessions7, 'Sessions — 7 Days') + stat(seenAll.size, 'All-Time Active Users') +
+      '</div>';
+  } catch(e) {
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    el.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px">'+(offline
+      ? '📡 Needs a connection to load.'
+      : 'Couldn\'t load — the admin read policy on workout_sessions may not be set up yet.')+'</div>';
+  }
+}
+
+function renderSuperUser(p) {
+  if (!isSuperUser()) { p.innerHTML = '<div class="section-label">NOT AUTHORIZED</div>'; return; }
+  const parts = [moreBackLink()];
+  parts.push('<div class="section-label" style="margin-top:0">SUPER USER — ACTIVITY REPORT</div>');
+  parts.push('<div class="card mb12">');
+  parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">"Active" means a real logged workout, not just an account existing — a truer signal than raw signups, which aren\'t readable from the app at all.</div>');
+  parts.push('<div id="suStats" style="text-align:center;color:var(--muted);font-size:12px">Loading…</div>');
+  parts.push('</div>');
+  p.innerHTML = parts.join('');
+  loadSuperUserStats();
 }
 
 function renderBadges(p) {

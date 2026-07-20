@@ -1,5 +1,6 @@
 // Supabase Edge Function: feedback-submit
-// Takes in-app feedback and files it as a GitHub Issue on the pilot-program repo.
+// Takes in-app feedback and files it as a GitHub Issue on the pilot-program repo,
+// then sends a direct email notification via Mailtrap (best-effort, non-blocking).
 // The GitHub token never leaves this function — it is stored as a Supabase
 // secret (GITHUB_FEEDBACK_TOKEN) and is scoped to Issues: write only, nothing else.
 //
@@ -7,6 +8,8 @@
 //   supabase functions deploy feedback-submit --no-verify-jwt
 // Set secrets with:
 //   supabase secrets set GITHUB_FEEDBACK_TOKEN=your_fine_grained_pat_here
+//   supabase secrets set MAILTRAP_API_TOKEN=your_mailtrap_api_token
+//   supabase secrets set ADMIN_NOTIFY_EMAIL=your_email_here
 //
 // GitHub token setup (do this once):
 //   1. github.com → Settings → Developer settings → Personal access tokens → Fine-grained tokens
@@ -15,7 +18,10 @@
 //   4. Set an expiration and copy the token into the secret above
 //
 // GitHub already emails/notifies the repo owner whenever a new Issue is opened —
-// that's the "trigger" for knowing feedback came in. No extra code needed for that part.
+// that's one notification channel automatically, no extra code needed for it.
+// MAILTRAP_API_TOKEN is the same token already generated for Supabase's custom
+// SMTP setup (Mailtrap → Sending Domains → flightcrew.fit → Integrations →
+// Transactional Stream → API) — reuse it rather than creating a second one.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -92,6 +98,31 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: ghData.message || "Failed to file feedback.", detail: ghData }), {
         status: ghRes.status, headers: { ...CORS, "Content-Type": "application/json" }
       });
+    }
+
+    // Notify the admin directly by email — best-effort. GitHub already emails
+    // the repo owner on new Issues by default, but that can get buried in a
+    // busy inbox; this is a second, more prominent channel specifically for
+    // feedback, using the same Mailtrap account already configured for
+    // Supabase auth emails. A failure here never blocks the actual feedback
+    // submission, which has already succeeded by this point.
+    const MAILTRAP_TOKEN = Deno.env.get("MAILTRAP_API_TOKEN") || "";
+    const ADMIN_EMAIL = Deno.env.get("ADMIN_NOTIFY_EMAIL") || "";
+    if (MAILTRAP_TOKEN && ADMIN_EMAIL) {
+      try {
+        await fetch("https://send.api.mailtrap.io/api/send", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${MAILTRAP_TOKEN}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from: { email: "noreply@flightcrew.fit", name: "Flight Crew Fitness" },
+            to: [{ email: ADMIN_EMAIL }],
+            subject: `New feedback — Issue #${ghData.number}`,
+            text: bodyLines.join("\n") + `\n\nView on GitHub: ${ghData.html_url}`,
+          }),
+        });
+      } catch (e) {
+        // Swallow — feedback already succeeded, the email is a bonus.
+      }
     }
 
     return new Response(JSON.stringify({ success: true, issue_number: ghData.number }), {

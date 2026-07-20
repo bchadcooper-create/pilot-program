@@ -29,6 +29,7 @@ const ST = {
   user: null,
   showLanding: true,
   authMode: 'signin', // 'signin' | 'signup'
+  authView: 'default', // 'default' | 'forgot' | 'recovery'
   authErr: '',
   authInfo: '',
   ouraToken: '',
@@ -41,7 +42,7 @@ const ST = {
   photoAllMeta: null,
   photoUrlCache: {},
   photoShowCount: 24,
-  authInfo: '',
+  showInstallPrompt: false,
 
   tab: 'preflight',
   env: 'comm',
@@ -1167,6 +1168,8 @@ function renderLanding(root) {
 
 // ─── AUTH SCREEN ──────────────────────────────────────────────────────────────
 function renderAuth(root) {
+  if (ST.authView === 'recovery') return renderPasswordRecovery(root);
+  if (ST.authView === 'forgot') return renderForgotPassword(root);
   const isSignup = ST.authMode === 'signup';
   const parts = [];
   parts.push('<div class="landing" style="display:flex;flex-direction:column;justify-content:center">');
@@ -1182,9 +1185,81 @@ function renderAuth(root) {
   parts.push('<div class="field"><label>Password</label><input type="password" id="auth_pass" placeholder="'+(isSignup?'Choose a password (min 6 chars)':'Your password')+'" autocomplete="'+(isSignup?'new-password':'current-password')+'"></div>');
   if (isSignup) parts.push('<div class="field"><label>Confirm Password</label><input type="password" id="auth_pass2" placeholder="Re-enter your password" autocomplete="new-password"></div>');
   parts.push('<button class="btn btn-gold mt8" onclick="handleAuthSubmit()">'+(isSignup?'Create Account →':'Sign In →')+'</button>');
+  if (!isSignup) parts.push('<button class="btn-ghost mt8" style="display:block;width:100%;text-align:center;font-size:12px" onclick="ST.authView=\'forgot\';ST.authErr=\'\';ST.authInfo=\'\';renderRoot()">Forgot password?</button>');
   parts.push('<button class="btn-ghost mt12" style="display:block;width:100%;text-align:center" onclick="ST.showLanding=true;renderRoot()">← Back</button>');
   parts.push('</div></div>');
   root.innerHTML = parts.join('');
+}
+
+function renderForgotPassword(root) {
+  const parts = [];
+  parts.push('<div class="landing" style="display:flex;flex-direction:column;justify-content:center">');
+  parts.push('<div class="auth-wrap">');
+  parts.push('<div style="text-align:center;margin-bottom:24px"><div class="landing-logo">✈ FLIGHT CREW FITNESS</div></div>');
+  parts.push('<div style="font-size:14px;font-weight:700;margin-bottom:4px">Reset your password</div>');
+  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Enter the email you signed up with — we\'ll send a link to set a new password.</div>');
+  if (ST.authInfo) parts.push('<div class="alert alert-ok mt8"><div class="alert-icon">✅</div><div>'+ST.authInfo+'</div></div>');
+  if (ST.authErr)  parts.push('<div class="alert alert-danger mt8"><div class="alert-icon">⚠️</div><div>'+ST.authErr+'</div></div>');
+  parts.push('<div class="field"><label>Email</label><input type="email" id="forgot_email" placeholder="you@example.com" autocomplete="email"></div>');
+  parts.push('<button class="btn btn-gold mt8" onclick="handleForgotPassword()">Send Reset Link →</button>');
+  parts.push('<button class="btn-ghost mt12" style="display:block;width:100%;text-align:center" onclick="ST.authView=\'default\';ST.authErr=\'\';ST.authInfo=\'\';renderRoot()">← Back to Sign In</button>');
+  parts.push('</div></div>');
+  root.innerHTML = parts.join('');
+}
+
+async function handleForgotPassword() {
+  const email = document.getElementById('forgot_email')?.value?.trim();
+  if (!email || !email.includes('@')) { ST.authErr = 'Enter a valid email address.'; ST.authInfo = ''; renderRoot(); return; }
+  try {
+    const redirectTo = window.location.origin + window.location.pathname;
+    const { error } = await withTimeout(SB.auth.resetPasswordForEmail(email, { redirectTo }));
+    if (error) throw error;
+    // Deliberately vague about whether the account exists — confirming or
+    // denying an email is registered is a real (if minor) privacy leak.
+    ST.authErr = '';
+    ST.authInfo = 'If an account exists for that email, a reset link is on its way. Check your inbox.';
+    renderRoot();
+  } catch(e) {
+    ST.authInfo = '';
+    ST.authErr = 'Couldn\'t send the reset email right now: ' + (e.message || 'unknown error');
+    renderRoot();
+  }
+}
+
+function renderPasswordRecovery(root) {
+  const parts = [];
+  parts.push('<div class="landing" style="display:flex;flex-direction:column;justify-content:center">');
+  parts.push('<div class="auth-wrap">');
+  parts.push('<div style="text-align:center;margin-bottom:24px"><div class="landing-logo">✈ FLIGHT CREW FITNESS</div></div>');
+  parts.push('<div style="font-size:14px;font-weight:700;margin-bottom:14px">Set a new password</div>');
+  if (ST.authErr) parts.push('<div class="alert alert-danger mt8"><div class="alert-icon">⚠️</div><div>'+ST.authErr+'</div></div>');
+  parts.push('<div class="field"><label>New Password</label><input type="password" id="recovery_pass" placeholder="Min 6 characters" autocomplete="new-password"></div>');
+  parts.push('<div class="field"><label>Confirm New Password</label><input type="password" id="recovery_pass2" placeholder="Re-enter your new password" autocomplete="new-password"></div>');
+  parts.push('<button class="btn btn-gold mt8" onclick="handlePasswordRecovery()">Set New Password →</button>');
+  parts.push('</div></div>');
+  root.innerHTML = parts.join('');
+}
+
+async function handlePasswordRecovery() {
+  const pass = document.getElementById('recovery_pass')?.value;
+  const pass2 = document.getElementById('recovery_pass2')?.value;
+  if (!pass || pass.length < 6) { ST.authErr = 'Password must be at least 6 characters.'; renderRoot(); return; }
+  if (pass !== pass2) { ST.authErr = 'Passwords do not match — please re-enter.'; renderRoot(); return; }
+  try {
+    const { error } = await withTimeout(SB.auth.updateUser({ password: pass }));
+    if (error) throw error;
+    // The recovery link already establishes a valid session — carry straight
+    // into the app instead of bouncing back to a sign-in form.
+    ST.authView = 'default';
+    window.history.replaceState(null, '', window.location.pathname);
+    ST.user = await checkAuth();
+    ST.authed = !!ST.user;
+    if (ST.authed) { showToast('Password updated.'); await bootApp(); }
+    else { ST.showLanding = false; ST.authMode = 'signin'; ST.authInfo = 'Password updated — sign in with your new password.'; renderRoot(); }
+  } catch(e) {
+    ST.authErr = 'Couldn\'t update your password: ' + (e.message || 'unknown error');
+    renderRoot();
+  }
 }
 
 async function handleAuthSubmit() {
@@ -1925,6 +2000,8 @@ async function bootApp() {
   // retroactively. Run it once per boot; awardBadges() already skips
   // anything already earned, so this is safe and idempotent.
   awardBadges();
+  maybeShowInstallPrompt();
+  if (ST.showInstallPrompt) renderPage();
 }
 
 async function checkDB() {
@@ -2223,6 +2300,63 @@ document.addEventListener('visibilitychange', () => {
   if (ST.tab === 'flight') renderFlight(document.getElementById('mainPage'));
 });
 
+// ─── ADD TO HOME SCREEN ───────────────────────────────────────────────────────
+// iOS Safari has no API to trigger 'Add to Home Screen' programmatically —
+// Apple doesn't expose one — so the best a web app can do there is show
+// clear instructions. Android/Chrome DOES support a real one-tap install via
+// the captured beforeinstallprompt event, which we grab as early as possible
+// since it can only be used once and only if captured before the user acts.
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+});
+
+function isStandalonePWA() {
+  return window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+}
+function isIOSSafari() {
+  const ua = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+  const isSafari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|Chrome/.test(ua);
+  return isIOS && isSafari;
+}
+
+function maybeShowInstallPrompt() {
+  if (isStandalonePWA()) return; // already installed — nothing to prompt
+  if (localStorage.getItem('fcf_install_prompt_dismissed') === '1') return;
+  if (!isIOSSafari() && !deferredInstallPrompt) return; // no path to install on this browser
+  ST.showInstallPrompt = true;
+}
+
+function dismissInstallPrompt() {
+  ST.showInstallPrompt = false;
+  localStorage.setItem('fcf_install_prompt_dismissed', '1');
+  renderPage();
+}
+
+async function triggerInstall() {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  try { await deferredInstallPrompt.userChoice; } catch(e) {}
+  deferredInstallPrompt = null;
+  dismissInstallPrompt();
+}
+
+function renderInstallPrompt() {
+  if (!ST.showInstallPrompt) return '';
+  const parts = ['<div class="card mb12" style="border-color:var(--gold)">'];
+  parts.push('<div class="fb" style="align-items:flex-start;margin-bottom:8px"><div style="font-size:13px;font-weight:700">📲 Get the full-screen app experience</div><div class="btn-ghost" style="font-size:16px;padding:0 4px" onclick="dismissInstallPrompt()">✕</div></div>');
+  if (deferredInstallPrompt) {
+    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">Install Flight Crew Fitness on your home screen — opens instantly, no browser bar, works offline.</div>');
+    parts.push('<button class="btn btn-outline" onclick="triggerInstall()">Install App</button>');
+  } else {
+    parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.6">Add this to your home screen so it opens like a real app — full screen, no browser bar, works offline:<br><br>1. Tap the <strong>Share</strong> icon <span style="font-family:var(--mono)">⬆️</span> at the bottom of Safari<br>2. Scroll down and tap <strong>Add to Home Screen</strong><br>3. Tap <strong>Add</strong></div>');
+  }
+  parts.push('</div>');
+  return parts.join('');
+}
+
 // ─── INITIALIZATION ───────────────────────────────────────────────────────────
 let swRegistration = null;
 
@@ -2291,6 +2425,18 @@ async function checkForAppUpdate() {
 }
 
 async function initApp() {
+  // Password recovery link (Supabase sets #...&type=recovery in the hash) —
+  // checked via the hash specifically so this can never collide with the
+  // Oura OAuth callback below, which uses a ?code= query parameter instead.
+  if (window.location.hash.includes('type=recovery')) {
+    ST.user = await checkAuth(); // establishes the temporary recovery session
+    ST.authed = !!ST.user;
+    ST.showLanding = false;
+    ST.authView = 'recovery';
+    renderRoot();
+    return;
+  }
+
   // Check for Oura OAuth callback before anything else
   if (window.location.search.includes('code=')) {
     ST.user = await checkAuth();
@@ -3085,6 +3231,7 @@ async function deleteCustomProfileConfirmed(id) {
 
 // ─── PREFLIGHT TAB ────────────────────────────────────────────────────────────
 async function renderPreflight(p) {
+  const installPromptHtml = renderInstallPrompt();
   // Auto-sync Oura in background if connected and data is stale (>30 min)
   if (ST.ouraConnected && ST.ouraAccessToken && (Date.now() - (ST.ouraLastSync||0)) > 1800000) {
     syncOuraData().catch(() => {});
@@ -3106,6 +3253,7 @@ async function renderPreflight(p) {
 
   const parts = [];
   parts.push('<div class="section-label">PREFLIGHT BRIEFING — '+FCF_VERSION+'</div>');
+  parts.push(installPromptHtml);
   if (profileIncomplete) {
     parts.push('<div class="card mb12" style="border-color:var(--gold);cursor:pointer" onclick="switchTab(\'profile\')">');
     parts.push('<div class="fb"><div><div style="font-size:13px;font-weight:600">👤 Complete your profile</div>');

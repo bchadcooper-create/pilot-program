@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.1';
+const FCF_VERSION = 'v5.19.2';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -4831,23 +4831,50 @@ function showGuide(exId) {
 }
 
 // ─── MET VALUES FOR CALORIE ESTIMATION ───────────────────────────────────────
-const MET_VALUES = {
-  taxi: 2.5, takeoff: 6.0, enroute: 5.0, landing: 2.0,
-};
+// Exercise-specific MET values (standard exercise-physiology estimates) —
+// replaces the old single-MET-per-phase model, which couldn't tell a slow
+// walk from a hard run just because both happened to sit in "enroute".
+function exerciseMET(exItem) {
+  if (RUNNING_EXERCISES.includes(exItem.id) || exItem.inputType === 'timed_distance') return 8.0; // running
+  if (exItem.inputType === 'nsdr') return 1.5; // lying down
+  if (exItem.inputType === 'timed_bilateral') return 2.8; // stretches/holds
+  if (exItem.name && /walk/i.test(exItem.name)) return 3.5; // walking specifically
+  if (exItem.inputType === 'reps_height' || exItem.inputType === 'reps_distance') return 7.5; // jump/sprint tests
+  if (exItem.timed) return 3.0; // other timed holds (planks etc.)
+  if (exItem.inputType === 'reps_only') return 6.0; // bodyweight circuits
+  return 5.5; // reps_weight (default) — resistance training
+}
 
-function estimateCalories(wk, bodyWeightLb, durationMinutes) {
+// No explicit duration on a reps/weight set (rest isn't tracked) — a rough,
+// commonly-used estimate of actual working time per set, excluding rest.
+const ASSUMED_SET_SECONDS = 45;
+
+// Computes both total logged minutes and estimated calories from what was
+// ACTUALLY entered — real seconds for timed exercises, an estimate for
+// reps-based sets — rather than a fixed phase-time assumption rescaled by
+// how long the app happened to be open. Bodyweight is a real input (falls
+// back to 180lb only when nothing is on file).
+function computeSessionEffort(wk, sessionSets, bodyWeightLb) {
   const bwKg = (bodyWeightLb || 180) * 0.4536;
-  const phaseMinutes = { taxi: 5, takeoff: 15, enroute: 15, landing: 5 };
-  let totalCal = 0, totalMin = 0;
-  ['taxi','takeoff','enroute','landing'].forEach(phase => {
-    if (wk[phase] && wk[phase].length) {
-      const mins = phaseMinutes[phase] || 5;
-      totalCal += MET_VALUES[phase] * bwKg * (mins/60);
-      totalMin += mins;
-    }
+  const allEx = [...(wk.taxi||[]), ...(wk.takeoff||[]), ...(wk.enroute||[]), ...(wk.landing||[])];
+  let totalSeconds = 0, totalCal = 0;
+  allEx.forEach(exItem => {
+    const sets = (sessionSets && sessionSets[exItem.id]) || [];
+    const met = exerciseMET(exItem);
+    let exSeconds = 0;
+    sets.forEach(s => {
+      if (s.seconds) exSeconds += parseFloat(s.seconds) || 0;
+      else if (s.seconds_left || s.seconds_right) exSeconds += (parseFloat(s.seconds_left)||0) + (parseFloat(s.seconds_right)||0);
+      else if (s.reps || s.weight || s.height || s.distance) exSeconds += ASSUMED_SET_SECONDS;
+    });
+    totalSeconds += exSeconds;
+    totalCal += met * bwKg * (exSeconds / 3600);
   });
-  if (durationMinutes && totalMin > 0) totalCal = totalCal * (durationMinutes/totalMin);
-  return Math.round(totalCal);
+  return { minutes: Math.round(totalSeconds / 60), calories: Math.round(totalCal) };
+}
+
+function estimateCalories(wk, bodyWeightLb, sessionSets) {
+  return computeSessionEffort(wk, sessionSets, bodyWeightLb).calories;
 }
 
 // ─── WORKOUT SUMMARY / DEBRIEF ────────────────────────────────────────────────
@@ -4903,14 +4930,14 @@ function buildWorkoutSummary(session, allExDefs, weeklySessions, bodyWeightLb) {
   const landingIds = (session.workoutSnapshot?.landing || []).map(e => e.id);
   const landingLogged = landingIds.length ? landingIds.some(id => (sets[id]||[]).some(s => s.reps||s.weight||s.seconds||s.seconds_left||s.seconds_right)) : null;
 
-  const estCalories = estimateCalories(session.workoutSnapshot || {taxi:[],takeoff:[],enroute:[],landing:[]}, bodyWeightLb, session.durationMinutes);
+  const effort = computeSessionEffort(session.workoutSnapshot || {taxi:[],takeoff:[],enroute:[],landing:[]}, sets, bodyWeightLb);
 
   return {
     totalSets, totalReps, totalVolume: Math.round(totalVolume),
     completedExCount, totalPlanned, completionPct,
     prHits, sessionsThisWeek, targetDays,
-    landingLogged, estCalories,
-    durationMinutes: session.durationMinutes || null,
+    landingLogged, estCalories: effort.calories,
+    durationMinutes: effort.minutes,
   };
 }
 
@@ -4952,8 +4979,11 @@ async function setTheChocks() {
   const logged = allEx.filter(exItem => ST.sets[exItem.id]?.some(s => s.reps||s.weight||s.seconds||s.height||s.distance||s.seconds_left||s.seconds_right));
   if (logged.length === 0) { showToast('Log at least one exercise before setting the chocks.'); return; }
 
-  const startedAt = ST.workoutStartedAt || Date.now();
-  const durationMinutes = Math.max(1, Math.round((Date.now() - startedAt) / 60000));
+  // Logged duration, not wall-clock time spent with the app open — the two
+  // can be wildly different for cardio logged after the fact (a 50-minute
+  // walk entered in a few seconds of typing), which is exactly what was
+  // collapsing both the displayed duration and the calorie estimate.
+  const durationMinutes = computeSessionEffort(wk, ST.sets, ST.lastWeight).minutes;
 
   const session = {
     date: new Date().toISOString(),

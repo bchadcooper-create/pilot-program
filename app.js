@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.18.1';
+const FCF_VERSION = 'v5.18.2';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -1321,6 +1321,19 @@ function renderRoot() {
   const topbar = document.getElementById('topbar');
   const tabbar = document.getElementById('tabbar');
   const page = document.getElementById('mainPage');
+
+  // A password-recovery session is real (Supabase requires it to allow
+  // updateUser({password})) but must NOT be treated as a normal login —
+  // this check has to come before the authed check below, or a valid
+  // recovery link skips straight past setting a new password into the
+  // full authenticated app.
+  if (ST.authView === 'recovery') {
+    topbar.style.display = 'none';
+    tabbar.style.display = 'none';
+    page.style.padding = '0';
+    renderPasswordRecovery(page);
+    return;
+  }
 
   if (!ST.authed) {
     topbar.style.display = 'none';

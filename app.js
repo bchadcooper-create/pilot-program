@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.3';
+const FCF_VERSION = 'v5.19.4';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -255,6 +255,10 @@ WORKOUTS.comm['Lower Body'] = {
     ex('c_lb_er2','Leg Press','3×12',3,'Moderate weight. Full ROM — don\'t lock knees.'),
     ex('c_lb_er3','Standing Calf Raise','4×12',4,'Full ROM — stretch at bottom, pause at top.'),
     ex('c_lb_er4','Lateral Band Walk','2×15/side',2,'Band above knees. Stay low. Activates glute med.',false,'reps_only'),
+    ex('c_lb_er5','Leg Extension (Machine)','3×15',3,'Seated machine. Squeeze at the top, control the negative. Quad isolation.'),
+    ex('c_lb_er6','Seated Leg Curl (Machine)','3×12',3,'Pad above the heel, full stretch at the bottom. Hamstring isolation.'),
+    ex('c_lb_er7','Standing Calf Raise (Machine)','4×15',4,'Shoulder pads or plate-loaded — full ROM, pause at the top and stretch at the bottom.'),
+    ex('c_lb_er8','Glute Kickback (Machine)','3×12/leg',3,'Foot on the platform, drive back and squeeze the glute — don\'t hyperextend the lower back.'),
   ],
   landing: [
     ex('c_lb_l1','Pigeon Pose','90s/side',1,'External hip rotation stretch. Hold completely still.',true,'timed_bilateral'),
@@ -278,6 +282,9 @@ WORKOUTS.comm['Upper Push'] = {
     ex('c_up_er2','Close Grip Bench','3×8',3,'Hands shoulder-width. Tricep emphasis.'),
     ex('c_up_er3','Lateral Raise','3×15',3,'Light and strict — no momentum.'),
     ex('c_up_er4','DB Tricep Overhead','3×12',3,'Both hands on one DB. Full stretch at top.'),
+    ex('c_up_er5','Incline Chest Press (Machine)','3×10',3,'Seated, pads set to mid-chest height. Controlled tempo — no bouncing off the bottom.'),
+    ex('c_up_er6','Decline Chest Press (Machine)','3×10',3,'Seated, pads angled downward. Targets lower chest — full extension without locking the elbows hard.'),
+    ex('c_up_er7','Pec Fly (Machine)','3×15',3,'Seated, arms slightly bent throughout. Squeeze at full contraction, control the stretch back.'),
   ],
   landing: [
     ex('c_up_l1','Doorframe Chest Stretch','60s/side',1,'Arm at 90° in doorframe, rotate body away.',true,'timed_bilateral'),
@@ -3183,8 +3190,58 @@ function bpFilter(section, q) {
   matches.forEach((e, i) => {
     parts.push('<div style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:5px;cursor:pointer;font-size:13px" onclick="bpAdd(\''+section+'\','+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+(e.target||'')+'</span></div>');
   });
-  if (!matches.length) parts.push('<div style="font-size:11px;color:var(--muted);padding:4px 2px">No catalog match. Add it as a custom exercise from the Flight tab first, then it will appear here.</div>');
+  if (!matches.length) {
+    parts.push('<div style="font-size:11px;color:var(--muted);padding:4px 2px 8px">No catalog match for "'+sanitizeUserText(q)+'".</div>');
+    parts.push('<button class="btn btn-outline" style="font-size:12px" onclick="bpShowCreateForm(\''+section+'\',\''+q.replace(/\'/g,'')+'\')">+ Create "'+sanitizeUserText(q)+'" as a new exercise</button>');
+  }
   box.innerHTML = parts.join('');
+}
+
+// Inline exercise creation directly inside the builder's empty search
+// state — the old flow told the user to "add it from the Flight tab first"
+// with no link and no way back, meaning the actual "how" was never
+// answered. This creates it, saves it for future searches too (same
+// ST.customExercises list saveCustomExercise uses from the Flight tab),
+// and drops it straight into the section being edited.
+function bpShowCreateForm(section, q) {
+  const box = document.getElementById('bpResults_'+section);
+  if (!box) return;
+  const name = sanitizeUserText(q);
+  box.innerHTML =
+    '<div style="border:1px solid var(--gold);border-radius:8px;padding:10px;margin-top:4px">' +
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">New exercise</div>' +
+    '<div class="field" style="margin-bottom:6px"><input type="text" id="bpNewName_'+section+'" value="'+name+'" placeholder="Exercise name"></div>' +
+    '<div class="field-row" style="margin-bottom:8px">' +
+    '<div class="field"><input type="text" id="bpNewTarget_'+section+'" placeholder="Target (e.g. 3\u00d712)"></div>' +
+    '<div class="field"><select id="bpNewType_'+section+'"><option value="reps_weight">Reps + Weight</option><option value="reps_only">Reps Only</option><option value="timed">Timed (min)</option></select></div>' +
+    '</div>' +
+    '<button class="btn btn-gold" style="font-size:12px" onclick="bpSaveCustomExercise(\''+section+'\')">Add to Routine</button>' +
+    '<button class="btn-ghost mt8" style="display:block;width:100%;text-align:center;font-size:12px" onclick="document.getElementById(\'bpResults_'+section+'\').innerHTML=\'\'">Cancel</button>' +
+    '</div>';
+}
+
+async function bpSaveCustomExercise(section) {
+  const name = sanitizeUserText(document.getElementById('bpNewName_'+section)?.value?.trim());
+  if (!name) { showToast('Enter an exercise name.'); return; }
+  const target = sanitizeUserText(document.getElementById('bpNewTarget_'+section)?.value?.trim()) || '\u2014';
+  const inputType = document.getElementById('bpNewType_'+section)?.value || 'reps_weight';
+  const setsMatch = target.match(/^(\d+)\s*[x\u00d7]/i);
+  const setsCount = setsMatch ? Math.max(1, parseInt(setsMatch[1], 10)) : 3;
+
+  const id = 'custom_' + Date.now();
+  const newEx = ex(id, name, target, setsCount, 'User-created exercise.', inputType==='timed', inputType);
+  newEx.custom = true;
+
+  ST.customExercises.push({ env: ST.env, muscleGroup: ST.muscleGroup, exercise: newEx });
+  try {
+    const profile = (await dbGetProfile()) || {};
+    profile.customExercises = ST.customExercises;
+    await dbSetProfile(profile);
+  } catch(e) {}
+
+  ST.buildProfile[section].push(JSON.parse(JSON.stringify(newEx)));
+  showToast('\u2705 "'+name+'" created and added.');
+  renderProfileBuilder();
 }
 function bpAdd(section, matchIdx, q) {
   const chosen = new Set([...ST.buildProfile.taxi, ...ST.buildProfile.takeoff, ...ST.buildProfile.enroute, ...ST.buildProfile.landing].map(e => e.id));
@@ -3714,10 +3771,23 @@ async function loadSessionCache() {
 
 // ─── ALTERNATE EXERCISE SYSTEM ───────────────────────────────────────────────
 const ALTERNATES = {
+  'Standing Calf Stretch': [
+    {name:'Seated Calf Stretch (Strap or Towel)',target:'2×30s/leg',note:'Same muscle, no wall needed — good for a hotel room floor.',inputType:'timed_bilateral'},
+    {name:'Downward Dog Calf Pumps',target:'2×10/leg',note:'Alternating heel drives. Dynamic instead of static, works well as a warmup too.',inputType:'reps_only'},
+  ],
+  'Standing Hamstring Stretch': [
+    {name:'Seated Forward Fold',target:'2×30s',note:'No step needed — floor-based, same hamstring line.',inputType:'timed'},
+    {name:'Lying Hamstring Stretch (Strap)',target:'2×30s/leg',note:'Strap or towel around the foot, lying on your back. Easier to control intensity.',inputType:'timed_bilateral'},
+  ],
+  'Kneeling Hip Flexor Stretch': [
+    {name:'Standing Hip Flexor Stretch',target:'2×30s/leg',note:'No floor contact needed — works in a hotel room or aircraft galley.',inputType:'timed_bilateral'},
+    {name:'Couch Stretch',target:'2×30s/leg',note:'Deeper hip flexor and quad stretch using a couch, bed, or wall.',inputType:'timed_bilateral'},
+  ],
   'Back Squat': [
     {name:'Goblet Squat (Heavy)',target:'4×10',note:'DB front-loaded squat. Less spinal compression.'},
     {name:'Hack Squat (Machine)',target:'4×10',note:'Machine substitute. Quad dominant, adjustable load.'},
     {name:'Leg Press',          target:'4×12',note:'Seated machine. Good if knees or back are an issue.'},
+    {name:'Smith Machine Squat',target:'4×8', note:'Fixed bar path — good when the rack is busy or you want less stabilizer demand.'},
   ],
   'Romanian Deadlift': [
     {name:'DB Romanian Deadlift',target:'4×10',note:'Same hip hinge, dumbbells if no barbell available.'},
@@ -3738,6 +3808,7 @@ const ALTERNATES = {
     {name:'DB Bench Press',     target:'4×10',note:'Greater ROM. Often easier on shoulders.'},
     {name:'Machine Chest Press',target:'4×12',note:'Shoulder-friendly machine alternative.'},
     {name:'Close Grip Bench',   target:'4×8', note:'More tricep emphasis. Same pressing stimulus.'},
+    {name:'Smith Machine Bench Press',target:'4×8',note:'Fixed bar path — good when the rack is busy or you\'re training without a spotter.'},
   ],
   'Standing Overhead Press': [
     {name:'DB Overhead Press',  target:'4×8', note:'Independent arms. Easier shoulder position.'},
@@ -4119,12 +4190,26 @@ function showAlternates(exId, exName, phaseKey) {
   root.innerHTML = parts.join('');
 }
 
+function isStretchLikeExercise(exItem) {
+  if (!exItem) return false;
+  if (exItem.inputType === 'timed_bilateral' || exItem.inputType === 'nsdr') return true;
+  return !!(exItem.timed && /stretch|mobility|foam roll/i.test(exItem.name||''));
+}
+
 function swapFilterExercises(exId, q) {
   const box = document.getElementById('swapSearchResults');
   if (!box) return;
   q = (q||'').trim().toLowerCase();
   if (!q) { box.innerHTML = ''; return; }
-  const matches = buildExerciseCatalog().filter(e => exerciseMatchesQuery(e.name, q)).slice(0, 6);
+  const allEx = ST.workout ? [...ST.workout.taxi,...ST.workout.takeoff,...ST.workout.enroute,...ST.workout.landing] : [];
+  const swappingOutStretch = isStretchLikeExercise(allEx.find(e => e.id === exId));
+  const allMatches = buildExerciseCatalog().filter(e => exerciseMatchesQuery(e.name, q));
+  // Substituting a stretch: show other stretches/holds first, then fill any
+  // remaining slots with the rest — rather than an undifferentiated list
+  // where a strength exercise for the same body part outranks nothing.
+  const matches = swappingOutStretch
+    ? [...allMatches.filter(isStretchLikeExercise), ...allMatches.filter(e => !isStretchLikeExercise(e))].slice(0, 6)
+    : allMatches.slice(0, 6);
   const parts = [];
   matches.forEach((e, i) => {
     parts.push('<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:13px" onclick="swapAddCatalogExercise(\''+exId+'\','+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+(e.target||'')+'</span></div>');

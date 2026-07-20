@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.0';
+const FCF_VERSION = 'v5.19.1';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2933,6 +2933,22 @@ function renderSessionEditor() {
   document.getElementById('modalRoot').innerHTML = parts.join('');
 }
 
+// Live-workout equivalent of edSetValMin (which already does this correctly
+// for the edit-past-session screen) — converts a typed minutes value into
+// genuine stored seconds, keeping the underlying data model (MET estimates,
+// running-leaderboard pace, formatSetPerformance) unchanged and correct.
+function liveSetValMin(exId, i, field, value) {
+  const sets = ST.sets[exId];
+  if (!sets || !sets[i]) return;
+  const mins = parseFloat(value);
+  sets[i][field] = (isNaN(mins) || mins <= 0) ? '' : String(Math.round(mins * 60));
+  persistWorkoutState();
+}
+
+function isMinuteScale(exItem) {
+  return /min/i.test(exItem.target || '');
+}
+
 function edSetVal(exId, i, field, value) {
   const sets = ST.editSession.session.sets[exId];
   if (sets && sets[i]) sets[i][field] = value;
@@ -4337,6 +4353,34 @@ function buildExCard(exItem, phaseKey) {
       parts.push(buildStopwatchWidget(exItem.id, 'right', exItem.target));
       parts.push('</div>');
       parts.push('</div>');
+    } else if (exItem.inputType === 'timed_distance') {
+      // Was falling through to the generic seconds-only branch below with no
+      // distance field shown at all — meaning Treadmill/Outdoor Run could
+      // never actually feed the running leaderboard from a live workout.
+      const valMin = sets[0]?.seconds ? Math.round((parseFloat(sets[0].seconds)/60)*10)/10 : '';
+      const valMi = sets[0]?.miles || '';
+      parts.push('<div class="timed-box '+(valMin?'ok':'')+'" id="tb_'+exItem.id+'">');
+      parts.push('<div style="display:flex;gap:8px">');
+      parts.push('<div style="flex:1"><div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">TIME</div>');
+      parts.push('<input class="timed-inp" type="text" inputmode="decimal" placeholder="0" value="'+valMin+'" oninput="liveSetValMin(\''+exItem.id+'\',0,\'seconds\',this.value);document.getElementById(\'tb_'+exItem.id+'\').className=\'timed-box\'+(this.value?\' ok\':\'\');">');
+      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">min</div></div>');
+      parts.push('<div style="flex:1"><div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">DISTANCE</div>');
+      parts.push('<input class="timed-inp" type="text" inputmode="decimal" placeholder="0" value="'+valMi+'" oninput="ST.sets[\''+exItem.id+'\'][0].miles=this.value;persistWorkoutState()">');
+      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">mi</div></div>');
+      parts.push('</div></div>');
+    } else if (exItem.timed && isMinuteScale(exItem)) {
+      // Reported bug: Walking, Treadmill, and similar 20-45 min activities
+      // forced entry in raw seconds (e.g. typing "1200" for 20 minutes) —
+      // genuinely impractical for something this length. Detected via the
+      // exercise's own target string ("30 min" vs "30s") rather than a
+      // blanket change, so short holds/stretches correctly keep seconds.
+      const valMin = sets[0]?.seconds ? Math.round((parseFloat(sets[0].seconds)/60)*10)/10 : '';
+      parts.push('<div class="timed-box '+(valMin?'ok':'')+'" id="tb_'+exItem.id+'">');
+      parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">TOTAL TIME</div>');
+      parts.push('<input class="timed-inp" type="text" inputmode="decimal" placeholder="0" value="'+valMin+'" oninput="liveSetValMin(\''+exItem.id+'\',0,\'seconds\',this.value);document.getElementById(\'tb_'+exItem.id+'\').className=\'timed-box\'+(this.value?\' ok\':\'\');">');
+      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">min</div>');
+      parts.push('</div>');
+      parts.push(buildStopwatchWidget(exItem.id, null, exItem.target));
     } else if (exItem.timed) {
       const val = sets[0]?.seconds || '';
       parts.push('<div class="timed-box '+(val?'ok':'')+'" id="tb_'+exItem.id+'">');

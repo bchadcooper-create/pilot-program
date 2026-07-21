@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.6';
+const FCF_VERSION = 'v5.19.7';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -75,6 +75,10 @@ const ST = {
   customExercises: [], // user-created exercises, persisted
   showAddExercise: false,
   showCondOverride: false, // non-Oura: reveal manual GO/MARGINAL/NO-GO override
+  showChangePlan: false,   // Preflight: reveal Mission Profile / Time / Environment picker
+  showConditionDetail: false, // Preflight: reveal the readiness input itself, not just the result
+  showInjuryDetail: false,    // Preflight: reveal the body-region grid
+  showCalendarDetail: false,  // Preflight: reveal the training calendar strip
   username: null,          // public leaderboard call sign — opt-in, null = not listed
   badges: {},              // earned badges: {badgeId: earnedISODate}
   lbBests: {},             // cached personal bests already on the leaderboard {exId: weight}
@@ -3407,6 +3411,14 @@ async function renderPreflight(p) {
   const totalEx = wk ? (wk.taxi.length+wk.takeoff.length+wk.enroute.length+wk.landing.length) : 0;
   const recommended = getRecommendedNext();
 
+  // A first-timer with zero logged history sees everything expanded, same as
+  // before this rework — nothing is hidden before they've learned where
+  // things are. Anyone with real history gets the collapsed, low-friction
+  // daily view: settings that rarely change collapse to a one-line summary,
+  // daily check-ins (condition, injury) collapse to a one-line status, and
+  // the training calendar tucks behind a toggle instead of a permanent strip.
+  const isNewUser = !ST.sessionCache || ST.sessionCache.length === 0;
+
   const parts = [];
   parts.push('<div class="section-label">PREFLIGHT BRIEFING — '+FCF_VERSION+'</div>');
   parts.push(installPromptHtml);
@@ -3418,90 +3430,172 @@ async function renderPreflight(p) {
     parts.push('</div>');
   }
 
-  // Training calendar (rolling window, smooth scroll)
-  const rangeData = await loadCalendarRange();
-  parts.push(buildCalendarHTML(rangeData));
+  // ── HERO: today's plan + engage, always the first thing after any banners ──
+  const planName = ST.activeCustomProfileId
+    ? '🛠 ' + (ST.customProfiles.find(cp => cp.id === ST.activeCustomProfileId)?.name || 'Custom Routine')
+    : ST.muscleGroup;
+  const envLabel = {room:'Hotel Room',hotel:'Hotel Gym',comm:'Commercial Gym'}[ST.env];
+  const planSummary = envLabel + (ST.timeAvailMin ? ' · '+ST.timeAvailMin+' min' : ' · Full Session') + (totalEx ? ' · '+totalEx+' exercises' : '');
 
-  // Pilot condition
-  parts.push('<div class="section-label">PILOT CONDITION</div>');
-  parts.push('<div class="card mb12">');
-  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">Your physical readiness today. This gates workout intensity — training through fatigue increases injury risk and impairs adaptation.</div>');
-
-  const condBtns =
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">' +
-    '<div class="env-btn '+(ST.fatigue==='go'?'sel':'')+'" onclick="ST.fatigue=\'go\';renderPage()"><div class="ei">🟢</div><div class="el">GO</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Full protocol</div></div>' +
-    '<div class="env-btn '+(ST.fatigue==='marginal'?'sel':'')+'" onclick="ST.fatigue=\'marginal\';renderPage()"><div class="ei">🟡</div><div class="el">MARGINAL</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Light only</div></div>' +
-    '<div class="env-btn '+(ST.fatigue==='nogo'?'sel':'')+'" onclick="ST.fatigue=\'nogo\';renderPage()"><div class="ei">🔴</div><div class="el">NO-GO</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Mobility only</div></div>' +
-    '</div>';
-
-  if (ST.ouraConnected) {
-    // Oura path: readiness score auto-suggests; the three buttons ARE the override.
-    parts.push(condBtns);
+  if (wk) {
+    parts.push('<div class="card mb12" style="border-color:var(--gold);background:linear-gradient(160deg, rgba(201,168,76,0.08), var(--bg3))">');
+    parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--gold);letter-spacing:0.1em;margin-bottom:6px">TODAY\'S MISSION</div>');
+    parts.push('<div style="font-size:19px;font-weight:800;margin-bottom:4px">'+planName+'</div>');
+    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px">'+planSummary+(ST.activeCustomProfileId?'':' · '+levelLabel+(ST.fatigue!=='go'?' / '+fatigueLabel:''))+'</div>');
+    parts.push('<button class="btn btn-gold" onclick="engageWorkout()">⚡ ENGAGE WORKOUT</button>');
+    parts.push('</div>');
   } else {
-    // Manual path: the 1-5 self-check is the single input — the condition it
-    // maps to shows as a result, with an override tucked behind a tap. One
-    // control, not two redundant ones.
-    parts.push('<div class="field" style="margin-bottom:10px"><label>Sleep Last Night (hours) <span class="info-i" onclick="showBioInfo(\'sleepHours\')">i</span></label>');
-    parts.push('<input type="text" inputmode="decimal" placeholder="e.g. 6.5" value="'+(ST.sleepHours||'')+'" oninput="ST.sleepHours=parseFloat(this.value)||null;persistDailyInputs()"></div>');
-    parts.push('<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">How recovered do you feel today? <span class="info-i" onclick="showBioInfo(\'readiness\')">i</span></label>');
-    parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.05em;margin-bottom:6px">1 = BARELY RECOVERED · 5 = FULLY RECOVERED</div>');
-    parts.push('<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:8px">');
-    for (let i=1;i<=5;i++) {
-      parts.push('<div class="env-btn" style="padding:8px 2px'+(ST.readiness===i?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="setReadiness('+i+')"><div style="font-size:15px;font-weight:700">'+i+'</div></div>');
-    }
-    parts.push('</div>');
-    const condMeta = {go:['🟢','GO — full protocol'], marginal:['🟡','MARGINAL — light only'], nogo:['🔴','NO-GO — mobility only']}[ST.fatigue];
-    parts.push('<div class="fb" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">');
-    parts.push('<div style="font-size:12px">Pilot Condition: <strong>'+condMeta[0]+' '+condMeta[1]+'</strong></div>');
-    parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);cursor:pointer" onclick="ST.showCondOverride=!ST.showCondOverride;renderPage()">'+(ST.showCondOverride?'HIDE':'OVERRIDE')+'</div>');
-    parts.push('</div>');
-    if (ST.showCondOverride) parts.push(condBtns);
-    parts.push('<div style="font-size:10px;color:var(--muted);line-height:1.5">Connect your Oura Ring in Profile and this is set automatically from your readiness score each morning.</div>');
+    parts.push('<div class="alert alert-info mb12"><div class="alert-icon">ℹ️</div><div>Select a mission profile below to generate your flight plan.</div></div>');
   }
 
-  if (ST.fatigue === 'marginal') {
-    parts.push('<div class="alert alert-warn" style="margin-top:8px"><div class="alert-icon">⚠️</div><div>Heavy Takeoff phase removed. One light En Route exercise only.</div></div>');
-  } else if (ST.fatigue === 'nogo') {
-    parts.push('<div class="alert alert-danger" style="margin-top:8px"><div class="alert-icon">🔴</div><div>Only Taxi and Landing phases active. Training under significant fatigue increases injury risk — this is physiology, not weakness.</div></div>');
-  }
+  // "Change Plan" — collapses Mission Profile / Time / Environment, the
+  // things that rarely change day to day, into one summary line with an
+  // explicit way to open them. Auto-expanded for new users and for anyone
+  // who hasn't picked anything yet (nothing to summarize otherwise).
+  const showPlan = ST.showChangePlan || isNewUser || !wk;
+  parts.push('<div class="edit-row-fb" style="display:flex;justify-content:space-between;align-items:center;padding:2px 2px 12px;font-size:11px;color:var(--muted)" onclick="ST.showChangePlan=!ST.showChangePlan;renderPage()">');
+  parts.push('<span>'+(ST.activeCustomProfileId ? 'Custom routine, used as saved.' : 'Same as your usual plan.')+'</span>');
+  parts.push('<span style="font-family:var(--mono);color:var(--gold);cursor:pointer">'+(showPlan?'HIDE ▴':'CHANGE PLAN ▾')+'</span>');
   parts.push('</div>');
 
-  // Injury flag
-  parts.push('<div class="section-label">INJURY FLAG <span class="info-i" onclick="showBioInfo(\'injury\')">i</span></div>');
-  parts.push('<div class="card mb12">');
-  if (ST.injuries.length) {
-    parts.push('<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">');
-    ST.injuries.forEach(r => {
-      parts.push('<div style="display:flex;align-items:center;gap:6px;background:rgba(245,158,11,0.1);border:1px solid var(--amber);border-radius:16px;padding:4px 10px;font-size:11px;color:var(--amber)">'+INJURY_REGIONS[r].label+' <span style="cursor:pointer" onclick="toggleInjury(\''+r+'\')">✕</span></div>');
+  if (showPlan) {
+    parts.push('<div class="section-label">MISSION PROFILE</div>');
+    parts.push('<div class="mg-wrap">');
+    MUSCLE_GROUPS.forEach(mg => {
+      const builtinSel = !ST.activeCustomProfileId && ST.muscleGroup===mg;
+      const cls = 'mg-pill' + (builtinSel?' sel':'') + (mg===recommended && !builtinSel?' recommended':'');
+      parts.push('<div class="'+cls+'" onclick="selectMissionProfile(\''+mg+'\')">'+mg+(mg===recommended?' ★':'')+'</div>');
+    });
+    ST.customProfiles.forEach(cp => {
+      const cls = 'mg-pill' + (ST.activeCustomProfileId===cp.id?' sel':'');
+      parts.push('<div class="'+cls+'" style="border-style:dashed" onclick="selectCustomProfile(\''+cp.id+'\')">🛠 '+cp.name+'</div>');
+    });
+    parts.push('<div class="mg-pill" style="border-style:dashed;color:var(--gold)" onclick="openProfileBuilder()">＋ Build Your Own</div>');
+    parts.push('</div>');
+    if (ST.customProfiles.length) {
+      parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin:-6px 0 10px;cursor:pointer" onclick="openProfileManager()">✎ MANAGE SAVED ROUTINES</div>');
+    }
+
+    parts.push('<div class="section-label">TIME AVAILABLE <span class="info-i" onclick="showBioInfo(\'timeAvail\')">i</span></div>');
+    parts.push('<div class="card mb12">');
+    parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">');
+    [15,30,45,60,null].forEach(m => {
+      const sel = ST.timeAvailMin === m;
+      parts.push('<div class="env-btn'+(sel?' sel':'')+'" style="padding:10px" onclick="ST.timeAvailMin='+(m===null?'null':m)+';persistDailyInputs();renderPage()"><div style="font-size:12px;font-weight:600">'+(m===null?'Full Session':m+' min')+'</div>'+(m===null?'<div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:2px">~'+fullSessionMin+' min</div>':'')+'</div>');
     });
     parts.push('</div>');
-  } else {
-    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px">No regions flagged. Tap a region below if something\'s bothering you today.</div>');
+    parts.push('</div>');
+    parts.push('<div class="section-label">MISSION ENVIRONMENT</div>');
+    parts.push('<div class="env-toggle">');
+    parts.push('<div class="env-btn '+(ST.env==='room'?'sel':'')+'" onclick="ST.env=\'room\';renderPage()"><div class="ei">🛏️</div><div class="el">HOTEL ROOM</div></div>');
+    parts.push('<div class="env-btn '+(ST.env==='hotel'?'sel':'')+'" onclick="ST.env=\'hotel\';renderPage()"><div class="ei">🏨</div><div class="el">HOTEL GYM</div></div>');
+    parts.push('<div class="env-btn '+(ST.env==='comm'?'sel':'')+'" onclick="ST.env=\'comm\';renderPage()"><div class="ei">🏋️</div><div class="el">COMM GYM</div></div>');
+    parts.push('</div>');
+
+    // Detailed phase-by-phase preview only shown while the plan editor is
+    // open — informational once you've already seen it, not a decision.
+    if (wk) {
+      parts.push('<div class="section-label">FLIGHT PLAN PREVIEW — '+totalEx+' EXERCISES ('+(ST.activeCustomProfileId?'CUSTOM — AS SAVED':levelLabel+(ST.fatigue!=='go'?' / '+fatigueLabel:'')+(ST.timeAvailMin?' / ⏱ '+ST.timeAvailMin+'min':''))+')</div>');
+      parts.push('<div class="card card-dark mb12"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
+      [['🚕 TAXI',wk.taxi],['🛫 TAKEOFF',wk.takeoff],['✈️ EN ROUTE',wk.enroute],['🛬 LANDING',wk.landing]].forEach(([label,exs]) => {
+        parts.push('<div style="background:var(--bg);border-radius:8px;padding:10px"><div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">'+label+'</div>');
+        if (!exs.length) parts.push('<div style="font-size:11px;color:var(--muted);font-style:italic">— skipped —</div>');
+        else exs.forEach(e => parts.push('<div style="font-size:11px;color:'+(e.swappedForInjury?'var(--blue)':e.injuryCaution?'var(--amber)':'var(--text)')+';margin-bottom:3px">· '+e.name+(e.swappedForInjury?' 🩹':e.injuryCaution?' ⚠️':'')+'</div>'));
+        parts.push('</div>');
+      });
+      parts.push('</div></div>');
+    }
   }
-  parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">');
-  Object.keys(INJURY_REGIONS).forEach(r => {
-    const on = ST.injuries.includes(r);
-    parts.push('<div class="env-btn" style="padding:8px'+(on?';border-color:var(--amber);background:rgba(245,158,11,0.08)':'')+'" onclick="toggleInjury(\''+r+'\')"><div style="font-size:11px">'+INJURY_REGIONS[r].label+'</div></div>');
-  });
-  parts.push('</div>');
+
+  // ── Pilot Condition — one-line status by default, full input on tap ──
+  const condMetaLine = {go:['🟢','GO'], marginal:['🟡','MARGINAL'], nogo:['🔴','NO-GO']}[ST.fatigue];
+  const showCond = ST.showConditionDetail || isNewUser;
+  parts.push('<div class="card mb12" style="cursor:pointer" onclick="ST.showConditionDetail=!ST.showConditionDetail;renderPage()">');
+  parts.push('<div class="fb"><div style="font-size:13px">'+condMetaLine[0]+' Pilot Condition: <strong>'+condMetaLine[1]+'</strong></div><div style="font-family:var(--mono);font-size:10px;color:var(--gold)">'+(showCond?'HIDE ▴':'ADJUST ▾')+'</div></div>');
   parts.push('</div>');
 
-  // Time available
-  parts.push('<div class="section-label">TIME AVAILABLE <span class="info-i" onclick="showBioInfo(\'timeAvail\')">i</span></div>');
-  parts.push('<div class="card mb12">');
-  parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">');
-  [15,30,45,60,null].forEach(m => {
-    const sel = ST.timeAvailMin === m;
-    parts.push('<div class="env-btn'+(sel?' sel':'')+'" style="padding:10px" onclick="ST.timeAvailMin='+(m===null?'null':m)+';persistDailyInputs();renderPage()"><div style="font-size:12px;font-weight:600">'+(m===null?'Full Session':m+' min')+'</div>'+(m===null?'<div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:2px">~'+fullSessionMin+' min</div>':'')+'</div>');
-  });
+  if (showCond) {
+    parts.push('<div class="card mb12">');
+    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">Your physical readiness today. This gates workout intensity — training through fatigue increases injury risk and impairs adaptation.</div>');
+
+    const condBtns =
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">' +
+      '<div class="env-btn '+(ST.fatigue==='go'?'sel':'')+'" onclick="ST.fatigue=\'go\';renderPage()"><div class="ei">🟢</div><div class="el">GO</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Full protocol</div></div>' +
+      '<div class="env-btn '+(ST.fatigue==='marginal'?'sel':'')+'" onclick="ST.fatigue=\'marginal\';renderPage()"><div class="ei">🟡</div><div class="el">MARGINAL</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Light only</div></div>' +
+      '<div class="env-btn '+(ST.fatigue==='nogo'?'sel':'')+'" onclick="ST.fatigue=\'nogo\';renderPage()"><div class="ei">🔴</div><div class="el">NO-GO</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Mobility only</div></div>' +
+      '</div>';
+
+    if (ST.ouraConnected) {
+      // Oura path: readiness score auto-suggests; the three buttons ARE the override.
+      parts.push(condBtns);
+    } else {
+      // Manual path: the 1-5 self-check is the single input — the condition it
+      // maps to shows as a result, with an override tucked behind a tap. One
+      // control, not two redundant ones.
+      parts.push('<div class="field" style="margin-bottom:10px"><label>Sleep Last Night (hours) <span class="info-i" onclick="showBioInfo(\'sleepHours\')">i</span></label>');
+      parts.push('<input type="text" inputmode="decimal" placeholder="e.g. 6.5" value="'+(ST.sleepHours||'')+'" oninput="ST.sleepHours=parseFloat(this.value)||null;persistDailyInputs()"></div>');
+      parts.push('<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">How recovered do you feel today? <span class="info-i" onclick="showBioInfo(\'readiness\')">i</span></label>');
+      parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.05em;margin-bottom:6px">1 = BARELY RECOVERED · 5 = FULLY RECOVERED</div>');
+      parts.push('<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:8px">');
+      for (let i=1;i<=5;i++) {
+        parts.push('<div class="env-btn" style="padding:8px 2px'+(ST.readiness===i?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="setReadiness('+i+')"><div style="font-size:15px;font-weight:700">'+i+'</div></div>');
+      }
+      parts.push('</div>');
+      const condMeta = {go:['🟢','GO — full protocol'], marginal:['🟡','MARGINAL — light only'], nogo:['🔴','NO-GO — mobility only']}[ST.fatigue];
+      parts.push('<div class="fb" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">');
+      parts.push('<div style="font-size:12px">Pilot Condition: <strong>'+condMeta[0]+' '+condMeta[1]+'</strong></div>');
+      parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);cursor:pointer" onclick="ST.showCondOverride=!ST.showCondOverride;renderPage()">'+(ST.showCondOverride?'HIDE':'OVERRIDE')+'</div>');
+      parts.push('</div>');
+      if (ST.showCondOverride) parts.push(condBtns);
+      parts.push('<div style="font-size:10px;color:var(--muted);line-height:1.5">Connect your Oura Ring in Profile and this is set automatically from your readiness score each morning.</div>');
+    }
+
+    if (ST.fatigue === 'marginal') {
+      parts.push('<div class="alert alert-warn" style="margin-top:8px"><div class="alert-icon">⚠️</div><div>Heavy Takeoff phase removed. One light En Route exercise only.</div></div>');
+    } else if (ST.fatigue === 'nogo') {
+      parts.push('<div class="alert alert-danger" style="margin-top:8px"><div class="alert-icon">🔴</div><div>Only Taxi and Landing phases active. Training under significant fatigue increases injury risk — this is physiology, not weakness.</div></div>');
+    }
+    parts.push('</div>');
+  }
+
+  // ── Injury Flag — one-line status by default, region grid on tap ──
+  const showInjury = ST.showInjuryDetail || isNewUser;
+  parts.push('<div class="card mb12" style="cursor:pointer" onclick="ST.showInjuryDetail=!ST.showInjuryDetail;renderPage()">');
+  if (ST.injuries.length) {
+    parts.push('<div class="fb"><div style="font-size:13px">🩹 '+ST.injuries.map(r=>INJURY_REGIONS[r].label).join(', ')+'</div><div style="font-family:var(--mono);font-size:10px;color:var(--gold)">'+(showInjury?'HIDE ▴':'EDIT ▾')+'</div></div>');
+  } else {
+    parts.push('<div class="fb"><div style="font-size:13px;color:var(--muted)">🩹 No injuries flagged</div><div style="font-family:var(--mono);font-size:10px;color:var(--gold)">'+(showInjury?'HIDE ▴':'FLAG ▾')+'</div></div>');
+  }
   parts.push('</div>');
-  parts.push('</div>');
-  parts.push('<div class="section-label">MISSION ENVIRONMENT</div>');
-  parts.push('<div class="env-toggle">');
-  parts.push('<div class="env-btn '+(ST.env==='room'?'sel':'')+'" onclick="ST.env=\'room\';renderPage()"><div class="ei">🛏️</div><div class="el">HOTEL ROOM</div></div>');
-  parts.push('<div class="env-btn '+(ST.env==='hotel'?'sel':'')+'" onclick="ST.env=\'hotel\';renderPage()"><div class="ei">🏨</div><div class="el">HOTEL GYM</div></div>');
-  parts.push('<div class="env-btn '+(ST.env==='comm'?'sel':'')+'" onclick="ST.env=\'comm\';renderPage()"><div class="ei">🏋️</div><div class="el">COMM GYM</div></div>');
-  parts.push('</div>');
+
+  if (showInjury) {
+    parts.push('<div class="section-label">INJURY FLAG <span class="info-i" onclick="showBioInfo(\'injury\')">i</span></div>');
+    parts.push('<div class="card mb12">');
+    if (ST.injuries.length) {
+      parts.push('<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">');
+      ST.injuries.forEach(r => {
+        parts.push('<div style="display:flex;align-items:center;gap:6px;background:rgba(245,158,11,0.1);border:1px solid var(--amber);border-radius:16px;padding:4px 10px;font-size:11px;color:var(--amber)">'+INJURY_REGIONS[r].label+' <span style="cursor:pointer" onclick="toggleInjury(\''+r+'\')">✕</span></div>');
+      });
+      parts.push('</div>');
+    } else {
+      parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px">No regions flagged. Tap a region below if something\'s bothering you today.</div>');
+    }
+    parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">');
+    Object.keys(INJURY_REGIONS).forEach(r => {
+      const on = ST.injuries.includes(r);
+      parts.push('<div class="env-btn" style="padding:8px'+(on?';border-color:var(--amber);background:rgba(245,158,11,0.08)':'')+'" onclick="toggleInjury(\''+r+'\')"><div style="font-size:11px">'+INJURY_REGIONS[r].label+'</div></div>');
+    });
+    parts.push('</div>');
+    parts.push('</div>');
+  }
+
+  // ── Training calendar — tucked behind a toggle instead of a permanent strip ──
+  const showCal = ST.showCalendarDetail || isNewUser;
+  parts.push('<div class="fb" style="cursor:pointer;padding:10px 2px" onclick="ST.showCalendarDetail=!ST.showCalendarDetail;renderPage()"><div style="font-size:12px;color:var(--muted)">📅 Training Calendar</div><div style="font-family:var(--mono);font-size:10px;color:var(--gold)">'+(showCal?'HIDE ▴':'VIEW ▾')+'</div></div>');
+  if (showCal) {
+    const rangeData = await loadCalendarRange();
+    parts.push(buildCalendarHTML(rangeData));
+  }
 
   // Hydration
   parts.push('<div class="section-label">HYDRATION PAYLOAD</div>');
@@ -3529,42 +3623,8 @@ async function renderPreflight(p) {
     parts.push('</div>');
   }
 
-  // Mission profile
-  parts.push('<div class="section-label">MISSION PROFILE</div>');
-  parts.push('<div class="mg-wrap">');
-  MUSCLE_GROUPS.forEach(mg => {
-    const builtinSel = !ST.activeCustomProfileId && ST.muscleGroup===mg;
-    const cls = 'mg-pill' + (builtinSel?' sel':'') + (mg===recommended && !builtinSel?' recommended':'');
-    parts.push('<div class="'+cls+'" onclick="selectMissionProfile(\''+mg+'\')">'+mg+(mg===recommended?' ★':'')+'</div>');
-  });
-  ST.customProfiles.forEach(cp => {
-    const cls = 'mg-pill' + (ST.activeCustomProfileId===cp.id?' sel':'');
-    parts.push('<div class="'+cls+'" style="border-style:dashed" onclick="selectCustomProfile(\''+cp.id+'\')">🛠 '+cp.name+'</div>');
-  });
-  parts.push('<div class="mg-pill" style="border-style:dashed;color:var(--gold)" onclick="openProfileBuilder()">＋ Build Your Own</div>');
-  parts.push('</div>');
-  if (ST.customProfiles.length) {
-    parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin:-6px 0 10px;cursor:pointer" onclick="openProfileManager()">✎ MANAGE SAVED ROUTINES</div>');
-  }
-
-  // Flight plan preview
-  if (wk) {
-    parts.push('<div class="section-label">FLIGHT PLAN PREVIEW — '+totalEx+' EXERCISES ('+(ST.activeCustomProfileId?'CUSTOM — AS SAVED':levelLabel+(ST.fatigue!=='go'?' / '+fatigueLabel:'')+(ST.timeAvailMin?' / ⏱ '+ST.timeAvailMin+'min':''))+')</div>');
-    parts.push('<div class="card card-dark mb12"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
-    [['🚕 TAXI',wk.taxi],['🛫 TAKEOFF',wk.takeoff],['✈️ EN ROUTE',wk.enroute],['🛬 LANDING',wk.landing]].forEach(([label,exs]) => {
-      parts.push('<div style="background:var(--bg);border-radius:8px;padding:10px"><div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">'+label+'</div>');
-      if (!exs.length) parts.push('<div style="font-size:11px;color:var(--muted);font-style:italic">— skipped —</div>');
-      else exs.forEach(e => parts.push('<div style="font-size:11px;color:'+(e.swappedForInjury?'var(--blue)':e.injuryCaution?'var(--amber)':'var(--text)')+';margin-bottom:3px">· '+e.name+(e.swappedForInjury?' 🩹':e.injuryCaution?' ⚠️':'')+'</div>'));
-      parts.push('</div>');
-    });
-    parts.push('</div></div>');
-    parts.push('<button class="btn btn-gold" onclick="engageWorkout()">⚡ ENGAGE WORKOUT</button>');
-  } else {
-    parts.push('<div class="alert alert-info"><div class="alert-icon">ℹ️</div><div>Select a mission profile above to generate your flight plan.</div></div>');
-  }
-
   p.innerHTML = parts.join('');
-  scrollCalendarToToday();
+  if (showCal) scrollCalendarToToday();
 }
 
 // Reported bug: typing body metrics, then clicking Mission Objective or

@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.8';
+const FCF_VERSION = 'v5.19.9';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -3243,9 +3243,18 @@ function renderProfileBuilder() {
     parts.push('<input type="text" placeholder="Search to add…" oninput="bpFilter(\''+section+'\',this.value)" autocomplete="off" style="margin-bottom:6px">');
     parts.push('<div id="bpResults_'+section+'"></div>');
     const chosenIds = new Set([...bp.taxi, ...bp.takeoff, ...bp.enroute, ...bp.landing].map(e => e.id));
+    // Warmup/Stretching and Cooldown Stretches only show relevant content in
+    // the dropdown — the search box next to it still searches the whole
+    // catalog for anyone with an unusual need, this only narrows the browse list.
+    const dropdownPool = bpSearchSource().filter(e => {
+      if (chosenIds.has(e.id)) return false;
+      if (section === 'taxi') return isWarmupOrMobilityExercise(e);
+      if (section === 'landing') return isStretchLikeExercise(e);
+      return true;
+    });
     parts.push('<select onchange="bpAddFromDropdown(\''+section+'\',this.value);this.value=\'\'" style="margin-top:6px">');
     parts.push('<option value="">— Or browse to add —</option>');
-    bpSearchSource().filter(e => !chosenIds.has(e.id)).forEach(e => {
+    dropdownPool.forEach(e => {
       parts.push('<option value="'+e.id+'">'+e.name+'</option>');
     });
     parts.push('</select>');
@@ -4334,6 +4343,24 @@ function showAlternates(exId, exName, phaseKey) {
   parts.push('<button class="btn btn-outline mt8" onclick="closeModal()">CANCEL</button>');
   parts.push('</div></div>');
   root.innerHTML = parts.join('');
+}
+
+// Genuine dynamic-warmup/mobility movements — curated from what actually
+// appears in taxi (warmup) phases across the real catalog, deliberately
+// excluding entries like "DB Bench Press" or "Kettlebell Goblet Squat
+// (Heavy)" that occupy a taxi slot only because of goal-overlay reassignment,
+// not because they're actually warmup content. Combined with
+// isStretchLikeExercise() for the full "Warmup / Stretching" filter.
+const WARMUP_MOBILITY_NAMES = new Set([
+  'Ankle Circles + Dorsiflexion', 'Arm Circles (progressive)', 'Band Pull-Apart',
+  'Brisk Walk Ramp-Up', 'Cat-Cow', 'Dead Bug', 'Full Mobility Circuit',
+  'Hip 90/90', 'Jump Rope / Ankle Bouncing', 'Lateral Band Walk',
+  'Leg Swings (Front & Side)', 'Prone Y-T-W Raises', 'Scapular Pullup',
+  'Thoracic Extension (chair)', 'Walking High Knees', 'Wall Slide',
+  'Kettlebell Goblet Squat (Warmup)',
+]);
+function isWarmupOrMobilityExercise(exItem) {
+  return isStretchLikeExercise(exItem) || WARMUP_MOBILITY_NAMES.has(exItem.name);
 }
 
 function isStretchLikeExercise(exItem) {

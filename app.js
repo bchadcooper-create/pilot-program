@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.7';
+const FCF_VERSION = 'v5.19.8';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -3242,6 +3242,13 @@ function renderProfileBuilder() {
     });
     parts.push('<input type="text" placeholder="Search to add…" oninput="bpFilter(\''+section+'\',this.value)" autocomplete="off" style="margin-bottom:6px">');
     parts.push('<div id="bpResults_'+section+'"></div>');
+    const chosenIds = new Set([...bp.taxi, ...bp.takeoff, ...bp.enroute, ...bp.landing].map(e => e.id));
+    parts.push('<select onchange="bpAddFromDropdown(\''+section+'\',this.value);this.value=\'\'" style="margin-top:6px">');
+    parts.push('<option value="">— Or browse to add —</option>');
+    bpSearchSource().filter(e => !chosenIds.has(e.id)).forEach(e => {
+      parts.push('<option value="'+e.id+'">'+e.name+'</option>');
+    });
+    parts.push('</select>');
     parts.push('</div>');
   });
 
@@ -3319,6 +3326,17 @@ function bpAdd(section, matchIdx, q) {
   const chosen = new Set([...ST.buildProfile.taxi, ...ST.buildProfile.takeoff, ...ST.buildProfile.enroute, ...ST.buildProfile.landing].map(e => e.id));
   const matches = bpSearchSource().filter(e => exerciseMatchesQuery(e.name, q.toLowerCase()) && !chosen.has(e.id)).slice(0, 5);
   const exDef = matches[matchIdx];
+  if (!exDef) return;
+  ST.buildProfile[section].push(JSON.parse(JSON.stringify(exDef)));
+  renderProfileBuilder();
+}
+// Dropdown alternative to searching — browsing the full catalog directly,
+// for anyone who'd rather scroll a list than know what to type.
+function bpAddFromDropdown(section, exId) {
+  if (!exId) return;
+  const chosen = new Set([...ST.buildProfile.taxi, ...ST.buildProfile.takeoff, ...ST.buildProfile.enroute, ...ST.buildProfile.landing].map(e => e.id));
+  if (chosen.has(exId)) return;
+  const exDef = bpSearchSource().find(e => e.id === exId);
   if (!exDef) return;
   ST.buildProfile[section].push(JSON.parse(JSON.stringify(exDef)));
   renderProfileBuilder();

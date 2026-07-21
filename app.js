@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.4';
+const FCF_VERSION = 'v5.19.5';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -4319,7 +4319,7 @@ function renderFlight(p) {
   parts.push(buildAddExerciseCard());
 
   parts.push('<div style="height:16px"></div>');
-  parts.push('<button class="btn btn-green" onclick="setTheChocks()">🔒 SET THE CHOCKS</button>');
+  parts.push('<button class="btn btn-green" onclick="confirmSetChocks()">🔒 SET THE CHOCKS — FINISH WORKOUT</button>');
 
   p.innerHTML = parts.join('');
 }
@@ -5054,6 +5054,30 @@ function buildDebriefMessages(summary) {
   }
 
   return msgs;
+}
+
+// SET THE CHOCKS ends the whole workout in one tap with no undo — a real
+// consequence, not just a label to learn. Reported: an accidental tap ended
+// a session with exercises still unlogged, with zero warning beforehand.
+// This interrupts only when the workout is genuinely incomplete; a fully
+// finished session still ends in one tap, unchanged.
+function confirmSetChocks() {
+  const wk = ST.workout;
+  if (!wk) return;
+  const allEx = [...wk.taxi,...wk.takeoff,...wk.enroute,...wk.landing];
+  const done = allEx.filter(exItem => ST.sets[exItem.id]?.some(s => s.reps||s.weight||s.seconds||s.height||s.distance||s.seconds_left||s.seconds_right)).length;
+  if (done >= allEx.length) { setTheChocks(); return; }
+  const remaining = allEx.length - done;
+  const root = document.getElementById('modalRoot');
+  root.innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()">' +
+    '<div class="modal-sheet">' +
+    '<div class="modal-handle"></div>' +
+    '<div class="modal-title">Finish this workout now?</div>' +
+    '<div class="modal-body" style="margin-bottom:14px">You still have '+remaining+' exercise'+(remaining===1?'':'s')+' left ('+done+'/'+allEx.length+' done). Setting the chocks finishes and saves the workout as-is — anything not logged won\'t be recorded.</div>' +
+    '<button class="btn btn-green" onclick="closeModal();setTheChocks()">🔒 Finish Anyway</button>' +
+    '<button class="btn btn-outline mt8" onclick="closeModal()">Keep Training</button>' +
+    '</div></div>';
 }
 
 // ─── SET THE CHOCKS (formerly "Secure Flight") ───────────────────────────────

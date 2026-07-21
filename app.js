@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.5';
+const FCF_VERSION = 'v5.19.6';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -259,6 +259,9 @@ WORKOUTS.comm['Lower Body'] = {
     ex('c_lb_er6','Seated Leg Curl (Machine)','3×12',3,'Pad above the heel, full stretch at the bottom. Hamstring isolation.'),
     ex('c_lb_er7','Standing Calf Raise (Machine)','4×15',4,'Shoulder pads or plate-loaded — full ROM, pause at the top and stretch at the bottom.'),
     ex('c_lb_er8','Glute Kickback (Machine)','3×12/leg',3,'Foot on the platform, drive back and squeeze the glute — don\'t hyperextend the lower back.'),
+    ex('c_lb_er9','Seated Calf Raise (Machine)','4×15',4,'Knees bent under the pad — targets the soleus, distinct from standing calf raises which emphasize the gastrocnemius.'),
+    ex('c_lb_er10','Hip Abduction (Machine)','3×15',3,'Seated, push knees outward against the pads. Glute medius — often neglected but key for hip stability.'),
+    ex('c_lb_er11','Hip Adduction (Machine)','3×15',3,'Seated, squeeze knees together against the pads. Inner thigh — commonly skipped but balances the abductors.'),
   ],
   landing: [
     ex('c_lb_l1','Pigeon Pose','90s/side',1,'External hip rotation stretch. Hold completely still.',true,'timed_bilateral'),
@@ -285,6 +288,8 @@ WORKOUTS.comm['Upper Push'] = {
     ex('c_up_er5','Incline Chest Press (Machine)','3×10',3,'Seated, pads set to mid-chest height. Controlled tempo — no bouncing off the bottom.'),
     ex('c_up_er6','Decline Chest Press (Machine)','3×10',3,'Seated, pads angled downward. Targets lower chest — full extension without locking the elbows hard.'),
     ex('c_up_er7','Pec Fly (Machine)','3×15',3,'Seated, arms slightly bent throughout. Squeeze at full contraction, control the stretch back.'),
+    ex('c_up_er8','Cable Tricep Pushdown','3×15',3,'Elbows pinned to your sides — the whole rep should come from the elbow, not the shoulder.'),
+    ex('c_up_er9','Assisted Dip (Machine)','3×10',3,'Counterweight assists the lift — lean forward slightly for more chest emphasis.'),
   ],
   landing: [
     ex('c_up_l1','Doorframe Chest Stretch','60s/side',1,'Arm at 90° in doorframe, rotate body away.',true,'timed_bilateral'),
@@ -308,6 +313,8 @@ WORKOUTS.comm['Upper Pull'] = {
     ex('c_ul_er2','Seated Cable Row','3×12',3,'Retract fully at the end — shoulder blades together.'),
     ex('c_ul_er3','Face Pull','3×20',3,'Cable at face height. Pull to forehead, elbows high and wide.'),
     ex('c_ul_er4','EZ Bar Curl','3×12',3,'Strict — no swing. Control the eccentric.'),
+    ex('c_ul_er6','Assisted Pull-Up (Machine)','3×8',3,'Counterweight assists the lift — dial in just enough assistance to hit real reps with good form.'),
+    ex('c_ul_er7','T-Bar Row (Machine)','3×10',3,'Chest supported, pull to the lower ribs. Removes lower-back strain compared to a free-standing barbell row.'),
     ex('c_ul_er5','Preacher Curl','3×12',3,'Arm braced on the pad — isolates the biceps by removing shoulder swing entirely.'),
   ],
   landing: [
@@ -2786,6 +2793,67 @@ const EXERCISE_SYNONYMS = {
   'pigeon stretch': 'Pigeon Pose',
   'cat cow': 'Cat-Cow',
   'cat cow stretch': 'Cat-Cow',
+
+  // Machine exercises — common shorthand, abbreviations, and equipment names
+  'leg press machine': 'Leg Press',
+  'leg extension': 'Leg Extension (Machine)',
+  'leg extensions': 'Leg Extension (Machine)',
+  'quad extension': 'Leg Extension (Machine)',
+  'quad extensions': 'Leg Extension (Machine)',
+  'leg curl': 'Seated Leg Curl (Machine)',
+  'leg curls': 'Seated Leg Curl (Machine)',
+  'hamstring curl': 'Seated Leg Curl (Machine)',
+  'hamstring curl machine': 'Seated Leg Curl (Machine)',
+  'ham curl': 'Seated Leg Curl (Machine)',
+  'calf raise machine': 'Standing Calf Raise (Machine)',
+  'standing calf machine': 'Standing Calf Raise (Machine)',
+  'seated calf machine': 'Seated Calf Raise (Machine)',
+  'seated calf raise': 'Seated Calf Raise (Machine)',
+  'glute machine': 'Glute Kickback (Machine)',
+  'glute kickback machine': 'Glute Kickback (Machine)',
+  'cable kickback': 'Glute Kickback (Machine)',
+  'hip abduction': 'Hip Abduction (Machine)',
+  'hip abductor': 'Hip Abduction (Machine)',
+  'abductor machine': 'Hip Abduction (Machine)',
+  'hip adduction': 'Hip Adduction (Machine)',
+  'hip adductor': 'Hip Adduction (Machine)',
+  'adductor machine': 'Hip Adduction (Machine)',
+  'inner thigh machine': 'Hip Adduction (Machine)',
+  'machine fly': 'Pec Fly (Machine)',
+  'machine flys': 'Pec Fly (Machine)',
+  'machine flies': 'Pec Fly (Machine)',
+  'pec deck': 'Pec Fly (Machine)',
+  'chest fly machine': 'Pec Fly (Machine)',
+  'machine incline press': 'Incline Chest Press (Machine)',
+  'incline press machine': 'Incline Chest Press (Machine)',
+  'machine decline press': 'Decline Chest Press (Machine)',
+  'decline press machine': 'Decline Chest Press (Machine)',
+  'machine chest press': 'Incline Chest Press (Machine)',
+  'tricep pushdown': 'Cable Tricep Pushdown',
+  'tricep push down': 'Cable Tricep Pushdown',
+  'rope pushdown': 'Cable Tricep Pushdown',
+  'cable pushdown': 'Cable Tricep Pushdown',
+  'assisted dip': 'Assisted Dip (Machine)',
+  'assisted dip machine': 'Assisted Dip (Machine)',
+  'dip machine': 'Assisted Dip (Machine)',
+  'assisted pullup': 'Assisted Pull-Up (Machine)',
+  'assisted pull up': 'Assisted Pull-Up (Machine)',
+  'assisted pull-up machine': 'Assisted Pull-Up (Machine)',
+  'pullup machine': 'Assisted Pull-Up (Machine)',
+  't bar row': 'T-Bar Row (Machine)',
+  'tbar row': 'T-Bar Row (Machine)',
+  't-bar row machine': 'T-Bar Row (Machine)',
+  'smith squat': 'Smith Machine Squat',
+  'smith machine squats': 'Smith Machine Squat',
+  'smith bench': 'Smith Machine Bench Press',
+  'smith machine bench': 'Smith Machine Bench Press',
+  'hack squat': 'Hack Squat (Machine)',
+  'lat pull': 'Lat Pulldown',
+  'lat pulldown machine': 'Lat Pulldown',
+  'pulldown': 'Lat Pulldown',
+  'cable row': 'Seated Cable Row',
+  'seated row': 'Seated Cable Row',
+  'seated row machine': 'Seated Cable Row',
 };
 
 // Query normalization: expand common abbreviations both directions so a

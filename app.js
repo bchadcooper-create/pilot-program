@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.12';
+const FCF_VERSION = 'v5.19.13';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -5147,10 +5147,15 @@ function showGuide(exId) {
 // replaces the old single-MET-per-phase model, which couldn't tell a slow
 // walk from a hard run just because both happened to sit in "enroute".
 function exerciseMET(exItem) {
+  // Checked BEFORE the running/timed_distance fallback below — Walking was
+  // upgraded to timed_distance in v5.19.11 (to enable distance logging), and
+  // without this ordering it would incorrectly match the running check too,
+  // crediting a walk with a runner's calorie burn (MET 8.0 instead of 3.5,
+  // a 2.3x inflation — exactly the reported bug).
+  if (exItem.name && /walk/i.test(exItem.name)) return 3.5; // walking specifically
   if (RUNNING_EXERCISES.includes(exItem.id) || exItem.inputType === 'timed_distance') return 8.0; // running
   if (exItem.inputType === 'nsdr') return 1.5; // lying down
   if (exItem.inputType === 'timed_bilateral') return 2.8; // stretches/holds
-  if (exItem.name && /walk/i.test(exItem.name)) return 3.5; // walking specifically
   if (exItem.inputType === 'reps_height' || exItem.inputType === 'reps_distance') return 7.5; // jump/sprint tests
   if (exItem.timed) return 3.0; // other timed holds (planks etc.)
   if (exItem.inputType === 'reps_only') return 6.0; // bodyweight circuits

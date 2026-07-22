@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.11';
+const FCF_VERSION = 'v5.19.12';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -3072,13 +3072,40 @@ function edRemoveExercise(exId) {
   renderSessionEditor();
 }
 
+// Relevance ranking for search results — the previous approach filtered the
+// catalog and truncated to N results in whatever order the catalog happened
+// to be in (roughly alphabetical), so an exact match like "Walking" for the
+// query "walk" could rank behind five unrelated partial matches ("Brisk Walk
+// Ramp-Up", "Farmer Carry" via synonym, etc.) and get cut off by the limit
+// entirely, even though the search itself was matching correctly. Lower
+// number = more relevant = shown first.
+function exerciseSearchRank(name, query) {
+  const n = (name||'').toLowerCase();
+  const q = (query||'').toLowerCase().trim();
+  if (n === q) return 0;               // exact match
+  if (n.startsWith(q)) return 1;       // name starts with what was typed
+  const words = n.split(/[\s\/\-\(\)]+/).filter(Boolean);
+  if (words.includes(q)) return 2;     // a whole word in the name matches
+  if (n.includes(q)) return 3;         // substring match anywhere
+  return 4;                            // matched only via synonym/fuzzy logic
+}
+// Single shared implementation of filter -> rank -> limit, used by every
+// search UI's display function AND its paired "add by index" handler, so
+// the two can never disagree about what result index N actually refers to.
+function rankedExerciseMatches(pool, q, excludeIds, limit) {
+  return pool
+    .filter(e => exerciseMatchesQuery(e.name, q) && !excludeIds.has(e.id))
+    .sort((a, b) => exerciseSearchRank(a.name, q) - exerciseSearchRank(b.name, q))
+    .slice(0, limit);
+}
+
 function edFilterExercises(q) {
   const box = document.getElementById('edSearchResults');
   if (!box) return;
   q = (q||'').trim().toLowerCase();
   if (!q) { box.innerHTML = ''; return; }
   const existing = new Set(ST.editSession.exList.map(e => e.id));
-  const matches = buildExerciseCatalog().filter(e => exerciseMatchesQuery(e.name, q) && !existing.has(e.id)).slice(0, 6);
+  const matches = rankedExerciseMatches(buildExerciseCatalog(), q, existing, 6);
   const parts = [];
   matches.forEach((e, i) => {
     parts.push('<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:13px" onclick="edAddCatalogExercise('+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+(e.target||'')+'</span></div>');
@@ -3094,7 +3121,7 @@ function edFilterExercises(q) {
 }
 function edAddCatalogExercise(matchIdx, q) {
   const existing = new Set(ST.editSession.exList.map(e => e.id));
-  const matches = buildExerciseCatalog().filter(e => exerciseMatchesQuery(e.name, q.toLowerCase()) && !existing.has(e.id)).slice(0, 6);
+  const matches = rankedExerciseMatches(buildExerciseCatalog(), q, existing, 6);
   const exDef = matches[matchIdx];
   if (!exDef) return;
   edPushExercise(exDef);
@@ -3291,7 +3318,7 @@ function bpFilter(section, q) {
   q = (q||'').trim().toLowerCase();
   if (!q) { box.innerHTML = ''; return; }
   const chosen = new Set([...ST.buildProfile.taxi, ...ST.buildProfile.takeoff, ...ST.buildProfile.enroute, ...ST.buildProfile.landing].map(e => e.id));
-  const matches = bpSearchSource().filter(e => exerciseMatchesQuery(e.name, q) && !chosen.has(e.id)).slice(0, 5);
+  const matches = rankedExerciseMatches(bpSearchSource(), q, chosen, 5);
   const parts = [];
   matches.forEach((e, i) => {
     parts.push('<div style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:5px;cursor:pointer;font-size:13px" onclick="bpAdd(\''+section+'\','+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+(e.target||'')+'</span></div>');
@@ -3351,7 +3378,7 @@ async function bpSaveCustomExercise(section) {
 }
 function bpAdd(section, matchIdx, q) {
   const chosen = new Set([...ST.buildProfile.taxi, ...ST.buildProfile.takeoff, ...ST.buildProfile.enroute, ...ST.buildProfile.landing].map(e => e.id));
-  const matches = bpSearchSource().filter(e => exerciseMatchesQuery(e.name, q.toLowerCase()) && !chosen.has(e.id)).slice(0, 5);
+  const matches = rankedExerciseMatches(bpSearchSource(), q, chosen, 5);
   const exDef = matches[matchIdx];
   if (!exDef) return;
   ST.buildProfile[section].push(JSON.parse(JSON.stringify(exDef)));
@@ -4387,20 +4414,29 @@ function isStretchLikeExercise(exItem) {
   return !!(exItem.timed && /stretch|mobility|foam roll/i.test(exItem.name||''));
 }
 
+// Shared by swapFilterExercises (display) and swapAddCatalogExercise (add by
+// index) so they can never disagree about what result index N refers to —
+// previously swapAddCatalogExercise used a plain filter+slice while the
+// display used stretch-biased ordering, meaning tapping a result could add a
+// different exercise than the one actually shown at that position.
+function rankedSwapMatches(exId, q, limit) {
+  const allEx = ST.workout ? [...ST.workout.taxi,...ST.workout.takeoff,...ST.workout.enroute,...ST.workout.landing] : [];
+  const swappingOutStretch = isStretchLikeExercise(allEx.find(e => e.id === exId));
+  const allMatches = buildExerciseCatalog().filter(e => exerciseMatchesQuery(e.name, q));
+  const byRelevance = (a, b) => exerciseSearchRank(a.name, q) - exerciseSearchRank(b.name, q);
+  if (swappingOutStretch) {
+    return [...allMatches.filter(isStretchLikeExercise).sort(byRelevance),
+            ...allMatches.filter(e => !isStretchLikeExercise(e)).sort(byRelevance)].slice(0, limit);
+  }
+  return allMatches.sort(byRelevance).slice(0, limit);
+}
+
 function swapFilterExercises(exId, q) {
   const box = document.getElementById('swapSearchResults');
   if (!box) return;
   q = (q||'').trim().toLowerCase();
   if (!q) { box.innerHTML = ''; return; }
-  const allEx = ST.workout ? [...ST.workout.taxi,...ST.workout.takeoff,...ST.workout.enroute,...ST.workout.landing] : [];
-  const swappingOutStretch = isStretchLikeExercise(allEx.find(e => e.id === exId));
-  const allMatches = buildExerciseCatalog().filter(e => exerciseMatchesQuery(e.name, q));
-  // Substituting a stretch: show other stretches/holds first, then fill any
-  // remaining slots with the rest — rather than an undifferentiated list
-  // where a strength exercise for the same body part outranks nothing.
-  const matches = swappingOutStretch
-    ? [...allMatches.filter(isStretchLikeExercise), ...allMatches.filter(e => !isStretchLikeExercise(e))].slice(0, 6)
-    : allMatches.slice(0, 6);
+  const matches = rankedSwapMatches(exId, q, 6);
   const parts = [];
   matches.forEach((e, i) => {
     parts.push('<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:13px" onclick="swapAddCatalogExercise(\''+exId+'\','+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+(e.target||'')+'</span></div>');
@@ -4409,7 +4445,7 @@ function swapFilterExercises(exId, q) {
   box.innerHTML = parts.join('');
 }
 function swapAddCatalogExercise(exId, matchIdx, q) {
-  const matches = buildExerciseCatalog().filter(e => exerciseMatchesQuery(e.name, q.toLowerCase())).slice(0, 6);
+  const matches = rankedSwapMatches(exId, q.toLowerCase(), 6);
   const exDef = matches[matchIdx];
   if (!exDef) return;
   swapExercise(exId, { name: exDef.name, target: exDef.target, note: exDef.note||'Swapped from catalog.', inputType: exDef.inputType });

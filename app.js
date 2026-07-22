@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.10';
+const FCF_VERSION = 'v5.19.11';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -409,7 +409,7 @@ WORKOUTS.comm['Cardio'] = {
   ],
   enroute: [
     ex('c_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace — speak in full sentences. Log distance for the leaderboard.',true,'timed_distance'),
-    ex('c_ca_er3','Walking','30-45 min',1,'Zone 1-2 steady pace. Great low-impact active recovery.',true,'timed'),
+    ex('c_ca_er3','Walking','30-45 min',1,'Zone 1-2 steady pace. Great low-impact active recovery. Log distance if you tracked it.',true,'timed_distance'),
     ex('c_ca_er4','Treadmill','30 min',1,'Any steady treadmill session — walk, incline, or run.',true,'timed'),
     ex('c_ca_er5','Outdoor Run','20-40 min',1,'Any pace, any route. Log distance for the leaderboard.',true,'timed_distance'),
     ex('c_ca_er2','Step-Up','3×15/leg',3,'Active recovery strength.'),
@@ -507,7 +507,7 @@ WORKOUTS.hotel['Cardio'] = {
   ],
   enroute: [
     ex('h_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace. Log distance for the leaderboard.',true,'timed_distance'),
-    ex('h_ca_er3','Walking','30-45 min',1,'Zone 1-2 steady pace. Great low-impact active recovery.',true,'timed'),
+    ex('h_ca_er3','Walking','30-45 min',1,'Zone 1-2 steady pace. Great low-impact active recovery. Log distance if you tracked it.',true,'timed_distance'),
     ex('h_ca_er4','Treadmill','30 min',1,'Any steady treadmill session — walk, incline, or run.',true,'timed'),
     ex('h_ca_er5','Outdoor Run','20-40 min',1,'Any pace, any route. Log distance for the leaderboard.',true,'timed_distance'),
     ex('h_ca_er2','Step-Up','3×15/leg',3,'Active recovery strength.'),
@@ -618,7 +618,7 @@ WORKOUTS.room['Cardio'] = {
   ],
   enroute: [
     ex('r_ca_er1','Jump Lunge','4×10/leg',4,'Explosive alternating.',false,'reps_only'),
-    ex('r_ca_er3','Walking','30-45 min',1,'Outside or hotel corridors. Zone 1-2 steady pace.',true,'timed'),
+    ex('r_ca_er3','Walking','30-45 min',1,'Outside or hotel corridors. Zone 1-2 steady pace. Log distance if you tracked it.',true,'timed_distance'),
     ex('r_ca_er2','Mountain Climbers','4×30s',4,'Fast feet.',true,'timed'),
     ex('r_ca_er4','Outdoor Run','20-40 min',1,'Any pace, any route. Log distance for the leaderboard.',true,'timed_distance'),
   ],
@@ -2892,7 +2892,11 @@ function expandSearchQuery(q) {
 function exerciseMatchesQuery(canonicalName, rawQuery) {
   if (!canonicalName || !rawQuery) return false;
   const nameLower = canonicalName.toLowerCase();
-  const variants = expandSearchQuery(rawQuery);
+  // Lowercased here, not just at some call sites — mobile keyboards
+  // auto-capitalize the first letter of a text field by default, so a user
+  // typing "walk" often sees "Walk" on screen. Relying on every caller to
+  // remember .toLowerCase() first is exactly how this stayed inconsistent.
+  const variants = expandSearchQuery(rawQuery.toLowerCase());
 
   // Word-order-independent match: every word in the query must appear
   // somewhere in the name, regardless of order. This is what lets "dumbbell

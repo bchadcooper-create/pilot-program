@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.9';
+const FCF_VERSION = 'v5.19.10';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -289,6 +289,7 @@ WORKOUTS.comm['Upper Push'] = {
     ex('c_up_er2','Close Grip Bench','3×8',3,'Hands shoulder-width. Tricep emphasis.'),
     ex('c_up_er3','Lateral Raise','3×15',3,'Light and strict — no momentum.'),
     ex('c_up_er4','DB Tricep Overhead','3×12',3,'Both hands on one DB. Full stretch at top.'),
+    ex('c_up_er10','Push-Up','3×15',3,'Standard form — hands under shoulders, straight line head to heels. Good bodyweight finisher regardless of equipment access.',false,'reps_only'),
     ex('c_up_er5','Incline Chest Press (Machine)','3×10',3,'Seated, pads set to mid-chest height. Controlled tempo — no bouncing off the bottom.'),
     ex('c_up_er6','Decline Chest Press (Machine)','3×10',3,'Seated, pads angled downward. Targets lower chest — full extension without locking the elbows hard.'),
     ex('c_up_er7','Pec Fly (Machine)','3×15',3,'Seated, arms slightly bent throughout. Squeeze at full contraction, control the stretch back.'),
@@ -365,6 +366,8 @@ WORKOUTS.comm['Full Body'] = {
     ex('c_fb_er2','Weighted Pullups','3×6',3,'Add weight if bodyweight is easy.'),
     ex('c_fb_er3','Overhead Press','3×8',3,'Moderate. Standing.'),
     ex('c_fb_er4','Single Leg Split Squat','3×8/leg',3,'Unilateral leg accessory.',false,'reps_only'),
+    ex('c_fb_er5','Sit-Up','3×20',3,'Classic ab exercise, no equipment needed.',false,'reps_only'),
+    ex('c_fb_er6','Bicycle Crunch','3×20/side',3,'Opposite elbow to opposite knee, controlled — not a race.',false,'reps_only'),
   ],
   landing: [
     ex('c_fb_l1','Full Body Stretch Circuit','5 min',1,'Child\'s pose → pigeon each side → lat hang → chest doorframe.',true,'timed'),
@@ -398,6 +401,7 @@ WORKOUTS.comm['Longevity'] = {
 WORKOUTS.comm['Cardio'] = {
   taxi: [
     ex('c_ca_t1','Brisk Walk Ramp-Up','3 min',1,'Start slow, build pace.',true,'timed'),
+    ex('c_ca_t2','Jumping Jacks','2×30s',2,'Classic full-body warmup, zero equipment. Raises heart rate before the main cardio effort.',true,'timed'),
   ],
   takeoff: [
     ex('c_ca_to1','Rowing Machine Intervals','6×500m',6,'Hard effort. Log your 500m split in seconds as the rep value for each interval.',false,'reps_only'),
@@ -442,6 +446,7 @@ WORKOUTS.hotel['Upper Push'] = {
     ex('h_up_er2','DB Lateral Raise','3×15',3,'Light and strict.'),
     ex('h_up_er3','DB Tricep Overhead','3×12',3,'Both hands on one DB.'),
     ex('h_up_er4','DB Front Raise','3×12',3,'Alternating. Light weight.'),
+    ex('h_up_er5','Push-Up','3×15',3,'Standard form — hands under shoulders, straight line head to heels. No equipment needed.',false,'reps_only'),
   ],
   landing: WORKOUTS.comm['Upper Push'].landing,
 };
@@ -456,7 +461,7 @@ WORKOUTS.hotel['Upper Pull'] = {
     ex('h_ul_er2','DB Curl','3×12',3,'Controlled eccentric.'),
     ex('h_ul_er4','DB Preacher Curl','3×12',3,'Brace the back of your arm against an incline bench set upright.'),
     ex('h_ul_er3','Bent-Over DB Face Pull','3×15',3,'Light DBs.'),
-    ex('h_ul_er4','DB Hammer Curl','3×12',3,'Neutral grip.'),
+    ex('h_ul_er5','DB Hammer Curl','3×12',3,'Neutral grip.'),
   ],
   landing: WORKOUTS.comm['Upper Pull'].landing,
 };
@@ -485,6 +490,8 @@ WORKOUTS.hotel['Full Body'] = {
     ex('h_fb_er2','DB Overhead Press','3×8',3,'Standing.'),
     ex('h_fb_er3','Single Leg Split Squat','3×8/leg',3,'Unilateral leg.',false,'reps_only'),
     ex('h_fb_er4','DB Row','3×10/side',3,'Back.'),
+    ex('h_fb_er5','Sit-Up','3×20',3,'Classic ab exercise, no equipment needed.',false,'reps_only'),
+    ex('h_fb_er6','Bicycle Crunch','3×20/side',3,'Opposite elbow to opposite knee, controlled — not a race.',false,'reps_only'),
   ],
   landing: [
     ex('h_fb_l1','Full Body Stretch','5 min',1,'Child\'s pose → pigeon → lat hang → chest stretch.',true,'timed'),
@@ -520,6 +527,7 @@ WORKOUTS.room['Lower Body'] = {
     ex('r_lb_er2','Single-Leg Glute Bridge','3×15/leg',3,'Drive through heel.',false,'reps_only'),
     ex('r_lb_er3','Calf Raise (step)','4×20',4,'Use a stair or book stack.',false,'reps_only'),
     ex('r_lb_er4','Reverse Lunge','3×12/leg',3,'Step back, drive through front heel.',false,'reps_only'),
+    ex('r_lb_er5','Bodyweight Squat','3×20',3,'Standard two-legged squat, full depth. The baseline version if pistol squats or split squats are too advanced.',false,'reps_only'),
   ],
   landing: WORKOUTS.comm['Lower Body'].landing,
 };
@@ -534,6 +542,7 @@ WORKOUTS.room['Upper Push'] = {
     ex('r_up_er2','Chair Dips','3×max',3,'Tricep focus.',false,'reps_only'),
     ex('r_up_er3','Decline Pushup','3×12',3,'Feet on bed.',false,'reps_only'),
     ex('r_up_er4','Plank','3×60s',3,'Straight line head to heels.',true,'timed'),
+    ex('r_up_er5','Push-Up','3×15',3,'Standard form — hands under shoulders, straight line head to heels. The baseline version, no variation needed.',false,'reps_only'),
   ],
   landing: WORKOUTS.comm['Upper Push'].landing,
 };
@@ -576,6 +585,9 @@ WORKOUTS.room['Full Body'] = {
     ex('r_fb_er2','Single Leg Split Squat','3×10/leg',3,'Unilateral leg.',false,'reps_only'),
     ex('r_fb_er3','Pike Pushup','3×10',3,'Overhead push pattern.',false,'reps_only'),
     ex('r_fb_er4','Superman Hold','3×30s',3,'Posterior chain and back.',true,'timed'),
+    ex('r_fb_er5','Sit-Up','3×20',3,'Feet anchored under bed or door if needed. Classic ab exercise, zero equipment.',false,'reps_only'),
+    ex('r_fb_er6','Flutter Kicks','3×30s',3,'Lying on back, small rapid alternating leg kicks. Lower ab and hip flexor focus.',false,'reps_only'),
+    ex('r_fb_er7','Russian Twist','3×20',3,'Seated, lean back slightly, rotate side to side. Add a book or water bottle for resistance.',false,'reps_only'),
   ],
   landing: [
     ex('r_fb_l1','Full Body Stretch','5 min',1,'Child\'s pose → pigeon → doorframe chest → neck mobility.',true,'timed'),
@@ -593,6 +605,8 @@ WORKOUTS.room['Longevity'] = {
     ex('r_lg_er2','Slow Pushup','3×8',3,'4s down, 2s pause.',false,'reps_only'),
     ex('r_lg_er3','Dead Bug','3×8/side',3,'Core stability.',false,'reps_only'),
     ex('r_lg_er4','Bird Dog','3×10/side',3,'Opposite arm-leg.',false,'reps_only'),
+    ex('r_lg_er5','Scissor Kicks','3×20',3,'Lying on back, legs straight, cross over in a scissor motion. Keep lower back pressed to the floor.',false,'reps_only'),
+    ex('r_lg_er6','Leg Raise','3×15',3,'Lying on back, legs straight, raise to vertical and lower with control. Hands under lower back if needed for support.',false,'reps_only'),
   ],
   landing: WORKOUTS.comm['Longevity'].landing,
 };

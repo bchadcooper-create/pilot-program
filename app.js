@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.22';
+const FCF_VERSION = 'v5.19.23';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2919,10 +2919,10 @@ async function showCalendarDay(isoDate) {
   parts.push('<div class="modal-bg" onclick="if(event.target===this)closeModal()">');
   parts.push('<div class="modal-sheet">');
   parts.push('<div class="modal-handle"></div>');
-  parts.push('<div class="modal-title">'+session.muscle_group+'</div>');
-  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:14px">'+sessionDate.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+'</div>');
+  parts.push('<div class="modal-title">'+session.muscle_group+(session.importedFromOura ? ' <span style="font-size:11px;color:var(--blue);font-weight:400">📱 via Oura</span>' : '')+'</div>');
+  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:14px">'+sessionDate.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+' at '+sessionDate.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})+'</div>');
   parts.push('<div class="stat-row">');
-  parts.push('<div class="stat-box"><div class="stat-val">'+(session.durationMinutes||'—')+'</div><div class="stat-lbl">Minutes</div></div>');
+  parts.push('<div class="stat-box"><div class="stat-val">'+(summary.durationMinutes||'—')+'</div><div class="stat-lbl">Minutes</div></div>');
   parts.push('<div class="stat-box"><div class="stat-val">'+summary.totalSets+'</div><div class="stat-lbl">Sets</div></div>');
   parts.push('<div class="stat-box"><div class="stat-val">'+summary.estCalories+'</div><div class="stat-lbl">Calories</div></div>');
   parts.push('</div>');
@@ -6854,8 +6854,29 @@ function renderSuperUser(p) {
   parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">"Active" means a real logged workout, not just an account existing — a truer signal than raw signups, which aren\'t readable from the app at all.</div>');
   parts.push('<div id="suStats" style="text-align:center;color:var(--muted);font-size:12px">Loading…</div>');
   parts.push('</div>');
+  parts.push('<div class="card mb12">');
+  parts.push('<div class="section-label" style="margin-top:0">TEMP: RAW OURA WORKOUT DUMP</div>');
+  parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">One-time diagnostic — an auto-detected treadmill run imported with no duration. Dumps the raw Oura workout data for the last 3 days to see exactly what fields an auto-detected session actually has, compared to a manually-confirmed one.</div>');
+  parts.push('<button class="btn btn-outline" onclick="dumpRawOuraWorkouts()">🔬 Dump Raw Workout Data</button>');
+  parts.push('<div id="ouraDumpResults" style="margin-top:10px;font-family:var(--mono);font-size:9px;color:var(--muted);word-break:break-all;white-space:pre-wrap"></div>');
+  parts.push('</div>');
   p.innerHTML = parts.join('');
   loadSuperUserStats();
+}
+
+async function dumpRawOuraWorkouts() {
+  const box = document.getElementById('ouraDumpResults');
+  if (!box) return;
+  if (!ST.ouraAccessToken) { box.innerHTML = 'Connect Oura Ring first.'; return; }
+  box.innerHTML = 'Loading…';
+  const today = new Date().toISOString().slice(0,10);
+  const threeDaysAgo = new Date(Date.now()-3*86400000).toISOString().slice(0,10);
+  try {
+    const res = await ouraFetch('workout?start_date='+threeDaysAgo+'&end_date='+today);
+    box.innerHTML = JSON.stringify(res?.data || [], null, 2);
+  } catch(e) {
+    box.innerHTML = 'Error: ' + (e.message || 'failed');
+  }
 }
 
 function renderBadges(p) {

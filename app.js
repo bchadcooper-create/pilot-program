@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.17';
+const FCF_VERSION = 'v5.19.18';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -1962,6 +1962,77 @@ const RUNNING_EXERCISES = ['c_ca_er1','h_ca_er1','c_ca_er5','h_ca_er5','r_ca_er4
 // "run" for the day. Summed rather than maxed so a run logged as a few
 // segments still counts as one continuous effort, matching how the exercise
 // notes describe it ("20 min" of steady running, not intervals).
+// Classifies a chronological series as improving/flat/declining by
+// comparing the average of the older half against the newer half — simpler
+// and more robust to single-session noise than a point-to-point comparison.
+// higherIsBetter distinguishes weight (higher = stronger) from pace
+// (lower = faster), so the semantic label is always "improving," never a
+// literal "up" that would be backwards for pace.
+function classifyTrend(values, higherIsBetter) {
+  if (!values || values.length < 4) return { status: 'insufficient', changePct: 0 };
+  const mid = Math.floor(values.length / 2);
+  const older = values.slice(0, mid), newer = values.slice(mid);
+  const avgOlder = older.reduce((a,b)=>a+b,0) / older.length;
+  const avgNewer = newer.reduce((a,b)=>a+b,0) / newer.length;
+  const changePct = avgOlder === 0 ? 0 : ((avgNewer - avgOlder) / avgOlder) * 100;
+  let status;
+  if (Math.abs(changePct) < 3) status = 'flat';
+  else if ((changePct > 0) === !!higherIsBetter) status = 'improving';
+  else status = 'declining';
+  return { status, changePct: Math.round(changePct * 10) / 10 };
+}
+
+// Tracks weight trend per DISTINCT EXERCISE NAME appearing in a Takeoff
+// slot across session history — not a hardcoded lift per muscle group,
+// since the actual Takeoff lift differs by environment (Back Squat in a
+// commercial gym vs. a bodyweight pistol squat in a hotel room aren't
+// comparable). Scoped to Takeoff specifically: that's the phase kept
+// consistent session to session for exactly this reason, unlike Enroute,
+// which now rotates through a larger pool by design and wouldn't give
+// clean repeated data points for any single exercise.
+function getPrimaryLiftTrends(sessionCache) {
+  const byName = {};
+  (sessionCache || []).forEach(s => {
+    const wk = s.workoutSnapshot;
+    if (!wk || !wk.takeoff) return;
+    const sets = s.sets || {};
+    wk.takeoff.forEach(exItem => {
+      const exSets = sets[exItem.id] || [];
+      const weights = exSets.map(st => parseFloat(st.weight)).filter(w => !isNaN(w) && w > 0);
+      if (!weights.length) return;
+      const topWeight = Math.max(...weights);
+      if (!byName[exItem.name]) byName[exItem.name] = [];
+      byName[exItem.name].push({ date: s.date, weight: topWeight });
+    });
+  });
+  const results = [];
+  Object.keys(byName).forEach(name => {
+    const points = byName[name].sort((a,b) => new Date(a.date) - new Date(b.date));
+    if (points.length < 4) return;
+    const trend = classifyTrend(points.map(p => p.weight), true);
+    results.push({ name, trend, first: points[0].weight, current: points[points.length-1].weight, sessionsCount: points.length });
+  });
+  return results;
+}
+
+// Running pace trend (seconds per mile — lower is better/faster).
+function getRunningPaceTrend(sessionCache) {
+  const points = [];
+  (sessionCache || []).forEach(s => {
+    const dist = sessionRunningDistance(s);
+    if (dist && dist.miles > 0 && dist.seconds > 0) points.push({ date: s.date, pace: dist.seconds / dist.miles });
+  });
+  points.sort((a,b) => new Date(a.date) - new Date(b.date));
+  if (points.length < 4) return null;
+  const trend = classifyTrend(points.map(p => p.pace), false);
+  return { trend, first: points[0].pace, current: points[points.length-1].pace, sessionsCount: points.length };
+}
+
+function formatPace(secPerMile) {
+  const m = Math.floor(secPerMile / 60), s = Math.round(secPerMile % 60);
+  return m + ':' + String(s).padStart(2,'0') + '/mi';
+}
+
 function sessionRunningDistance(session) {
   let miles = 0, seconds = 0;
   RUNNING_EXERCISES.forEach(exId => {
@@ -5554,6 +5625,30 @@ function renderTrends(p) {
   parts.push('</div>');
 
   parts.push('<div class="section-label">TRENDS</div>');
+
+  // Strength/performance trends — Takeoff lifts specifically (kept
+  // consistent session to session by design) and running pace. Shown only
+  // once there's enough real history; no chart needed for a simple
+  // improving/flat/declining read, which is what was actually asked for.
+  const liftTrends = getPrimaryLiftTrends(ST.sessionCache);
+  const runTrend = getRunningPaceTrend(ST.sessionCache);
+  if (liftTrends.length || runTrend) {
+    parts.push('<div class="card mb12">');
+    parts.push('<div class="section-label" style="margin-top:0">STRENGTH &amp; PERFORMANCE</div>');
+    const statusMeta = { improving: ['↑','var(--green)'], flat: ['→','var(--muted)'], declining: ['↓','var(--amber)'] };
+    liftTrends.forEach(lt => {
+      const [arrow, color] = statusMeta[lt.trend.status];
+      parts.push('<div class="fb mb8"><div style="font-size:13px">🏋️ '+lt.name+'</div><div style="font-size:12px;text-align:right"><span style="color:'+color+'">'+arrow+' '+lt.current+' lb</span><div style="font-family:var(--mono);font-size:9px;color:var(--muted)">'+lt.sessionsCount+' sessions'+(lt.trend.status!=='flat'?' · '+(lt.trend.changePct>0?'+':'')+lt.trend.changePct+'%':'')+'</div></div></div>');
+    });
+    if (runTrend) {
+      const [arrow, color] = statusMeta[runTrend.trend.status];
+      parts.push('<div class="fb mb8"><div style="font-size:13px">🏃 Running Pace</div><div style="font-size:12px;text-align:right"><span style="color:'+color+'">'+arrow+' '+formatPace(runTrend.current)+'</span><div style="font-family:var(--mono);font-size:9px;color:var(--muted)">'+runTrend.sessionsCount+' runs'+(runTrend.trend.status!=='flat'?' · '+(runTrend.trend.changePct>0?'+':'')+runTrend.trend.changePct+'%':'')+'</div></div></div>');
+    }
+    parts.push('</div>');
+  } else {
+    parts.push('<div class="alert alert-info mb12"><div class="alert-icon">📈</div><div>Strength and pace trends will show up here once you\'ve logged the same primary lift or a few runs across several sessions.</div></div>');
+  }
+
   [['chartWt','BODY WEIGHT (lb)'],['chartWaist','WAIST (in)'],['chartBP','BLOOD PRESSURE (mmHg)'],['chartGluc','FASTING GLUCOSE (mg/dL)']].forEach(([id,label]) => {
     parts.push('<div class="card mb8"><div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:6px">'+label+'</div><div class="chart-wrap"><canvas id="'+id+'"></canvas></div></div>');
   });

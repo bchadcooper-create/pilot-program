@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.24';
+const FCF_VERSION = 'v5.19.25';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -44,6 +44,7 @@ const ST = {
   photoShowCount: 24,
   showInstallPrompt: false,
   flightSchedule: null, flightScheduleRaw: null, scheduleEnvNote: null,
+  ouraDismissedIds: [], ouraImportQueue: [],
 
   tab: 'preflight',
   env: 'comm',
@@ -2154,6 +2155,7 @@ function applyProfileToState(profile) {
   ST.level = profile.level || ST.level;
   ST.goal  = profile.goal  || ST.goal;
   ST.flightSchedule = profile.flightSchedule || null;
+  ST.ouraDismissedIds = profile.ouraDismissedIds || [];
   ST.flightScheduleRaw = profile.flightScheduleRaw || null;
   ST.customExercises = (profile.customExercises || []).map(ce => {
     if (ce?.exercise) {
@@ -6394,8 +6396,10 @@ async function syncOuraWorkouts() {
   try { res = await ouraFetch('workout?start_date='+weekAgo+'&end_date='+today); } catch(e) { return; }
   const events = filterOuraInternalOverlaps(res?.data || []);
   ST.ouraImportQueue = ST.ouraImportQueue || [];
+  ST.ouraDismissedIds = ST.ouraDismissedIds || [];
   for (const ev of events) {
     if (findExistingOuraImport(ev.id, ST.sessionCache)) continue;
+    if (ST.ouraDismissedIds.includes(ev.id)) continue;
     const exDef = mapOuraActivityToExercise(ev);
     const similar = findSimilarSession(ev, ST.sessionCache);
     if (similar) {
@@ -6437,7 +6441,21 @@ function showOuraDuplicateConfirm() {
 async function resolveOuraDuplicate(choice) {
   if (!ST.ouraImportQueue || !ST.ouraImportQueue.length) return;
   const { event, exDef } = ST.ouraImportQueue.shift();
-  if (choice === 'import') await importOuraWorkout(event, exDef);
+  if (choice === 'import') {
+    await importOuraWorkout(event, exDef);
+  } else {
+    // "Skip" must be remembered permanently — otherwise this exact same
+    // event gets re-fetched and re-flagged as ambiguous on every future
+    // sync, asking the identical question forever, which is exactly what
+    // was reported happening three times in a row.
+    ST.ouraDismissedIds = ST.ouraDismissedIds || [];
+    if (!ST.ouraDismissedIds.includes(event.id)) ST.ouraDismissedIds.push(event.id);
+    try {
+      const profile = (await dbGetProfile()) || {};
+      profile.ouraDismissedIds = ST.ouraDismissedIds;
+      await dbSetProfile(profile);
+    } catch(e) {}
+  }
   closeModal();
   if (ST.ouraImportQueue.length) showOuraDuplicateConfirm();
   else renderPage();

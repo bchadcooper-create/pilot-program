@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.15';
+const FCF_VERSION = 'v5.19.16';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2128,6 +2128,44 @@ function applyScheduleEnvironmentSuggestion() {
   }
 }
 
+// Sums actual flight-leg time overlapping TODAY's local calendar day —
+// correctly handles a flight that starts before midnight and ends after it,
+// only counting the portion that falls on today. Returns null specifically
+// when the schedule doesn't cover today at all (out of date / not uploaded
+// far enough), so the caller knows not to guess — as opposed to a real 0,
+// which means the schedule covers today and there's genuinely no flying.
+function computeTodaysFlightHours(scheduleEvents) {
+  if (!scheduleEvents || !scheduleEvents.length) return null;
+  const now = new Date();
+  const dayStart = new Date(now); dayStart.setHours(0,0,0,0);
+  const dayEnd = new Date(now); dayEnd.setHours(23,59,59,999);
+  const coversToday = scheduleEvents.some(e => {
+    const s = new Date(e.start).getTime(), en = new Date(e.end).getTime();
+    return en > dayStart.getTime() && s < dayEnd.getTime();
+  });
+  if (!coversToday) return null;
+  let totalMs = 0;
+  scheduleEvents.filter(e => e.type === 'flight').forEach(e => {
+    const s = new Date(e.start).getTime(), en = new Date(e.end).getTime();
+    const overlapStart = Math.max(s, dayStart.getTime());
+    const overlapEnd = Math.min(en, dayEnd.getTime());
+    if (overlapEnd > overlapStart) totalMs += (overlapEnd - overlapStart);
+  });
+  return Math.round((totalMs / 3600000) * 10) / 10;
+}
+
+// Auto-fills Flight Hours from the schedule — respects an existing manual
+// entry made today (flightHrsTouched persists per-day via
+// persistDailyInputs), so this never overwrites something already typed in,
+// including from an earlier session the same day.
+function applyScheduleFlightHours() {
+  if (ST.flightHrsTouched) return;
+  const hrs = computeTodaysFlightHours(ST.flightSchedule);
+  if (hrs === null) return;
+  ST.flightHrs = hrs;
+  ST.flightHrsRaw = String(hrs);
+}
+
 async function bootApp() {
   ST.disclaimerAccepted = localStorage.getItem('fcf_disclaimer_accepted') === '1';
   // All three boot fetches are independent — run them in ONE parallel window
@@ -2140,6 +2178,7 @@ async function bootApp() {
   }
   restoreDailyInputs();
   applyScheduleEnvironmentSuggestion();
+  applyScheduleFlightHours();
   // First-ever open with no profile info: land on Profile once so the user
   // sets sex + objective before their first mission. Flag persists locally.
   if (!ST.sex && !localStorage.getItem('fcf_profile_intro')) {
@@ -3785,6 +3824,9 @@ async function renderPreflight(p) {
   // Hydration
   parts.push('<div class="section-label">HYDRATION PAYLOAD</div>');
   parts.push('<div class="card mb12">');
+  if (!ST.flightHrsTouched && ST.flightSchedule && computeTodaysFlightHours(ST.flightSchedule) !== null) {
+    parts.push('<div style="font-size:10px;color:var(--muted);margin-bottom:6px">📅 Flight hours auto-filled from your schedule — edit if it\'s off.</div>');
+  }
   parts.push('<div class="field-row" style="margin-bottom:10px">');
   parts.push('<div class="field" style="margin-bottom:0"><label>Flight Hours Today</label>');
   parts.push('<input type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="'+ST.flightHrsRaw+'" placeholder="0 = no-fly day" oninput="ST.flightHrsRaw=this.value;ST.flightHrs=parseFloat(this.value)||0;ST.flightHrsTouched=true;updateHydrationUI()"></div>');

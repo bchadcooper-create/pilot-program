@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.18';
+const FCF_VERSION = 'v5.19.19';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -6678,8 +6678,44 @@ function renderSuperUser(p) {
   parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">"Active" means a real logged workout, not just an account existing — a truer signal than raw signups, which aren\'t readable from the app at all.</div>');
   parts.push('<div id="suStats" style="text-align:center;color:var(--muted);font-size:12px">Loading…</div>');
   parts.push('</div>');
+  parts.push('<div class="card mb12">');
+  parts.push('<div class="section-label" style="margin-top:0">TEMP: OURA ENDPOINT TEST</div>');
+  parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">One-time diagnostic — tests whether workout and meal data logged directly in the Oura app are readable through the connected API. Not a permanent feature.</div>');
+  parts.push('<button class="btn btn-outline" onclick="testOuraEndpoints()">🔬 Test My Oura Data</button>');
+  parts.push('<div id="ouraTestResults" style="margin-top:10px"></div>');
+  parts.push('</div>');
   p.innerHTML = parts.join('');
   loadSuperUserStats();
+}
+
+async function testOuraEndpoints() {
+  const box = document.getElementById('ouraTestResults');
+  if (!box) return;
+  if (!ST.ouraAccessToken) { box.innerHTML = '<div style="font-size:12px;color:var(--amber)">Connect Oura Ring first.</div>'; return; }
+  box.innerHTML = '<div style="font-size:12px;color:var(--muted)">Testing…</div>';
+  const today = new Date().toISOString().slice(0,10);
+  const yesterday = new Date(Date.now()-86400000).toISOString().slice(0,10);
+  const range = 'start_date='+yesterday+'&end_date='+today;
+  // workout is confirmed real; tag/enhanced_tag are the most likely place
+  // meal data would surface if exposed at all (Oura's self-reported-event
+  // system); meal/meals/nutrition are direct guesses worth ruling out.
+  const candidates = ['workout','tag','enhanced_tag','meal','meals','nutrition'];
+  const results = [];
+  for (const ep of candidates) {
+    try {
+      const res = await ouraFetch(ep+'?'+range);
+      const count = res?.data?.length || 0;
+      results.push({ endpoint: ep, ok: true, count, sample: count ? JSON.stringify(res.data[res.data.length-1]).slice(0,300) : null });
+    } catch(e) {
+      results.push({ endpoint: ep, ok: false, error: e.message || 'failed' });
+    }
+  }
+  const rows = results.map(r => {
+    if (!r.ok) return '<div style="margin-bottom:8px"><b>'+r.endpoint+'</b>: <span style="color:var(--amber)">'+r.error+'</span></div>';
+    if (r.count === 0) return '<div style="margin-bottom:8px"><b>'+r.endpoint+'</b>: <span style="color:var(--muted)">reachable, 0 entries today/yesterday</span></div>';
+    return '<div style="margin-bottom:8px"><b>'+r.endpoint+'</b>: <span style="color:var(--green)">'+r.count+' entries</span><div style="font-family:var(--mono);font-size:9px;color:var(--muted);word-break:break-all;margin-top:2px">'+r.sample+'</div></div>';
+  }).join('');
+  box.innerHTML = '<div style="font-size:12px">'+rows+'</div>';
 }
 
 function renderBadges(p) {

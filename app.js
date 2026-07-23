@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.16';
+const FCF_VERSION = 'v5.19.17';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -6495,7 +6495,7 @@ function renderMore(p) {
   parts.push(item('🏅','Badges',earnedCount+' of '+BADGES.length+' earned',"switchTab('badges')"));
   parts.push(item('⌚','Connected Devices','Oura Ring — more devices coming',"switchTab('devices')"));
   parts.push(item('📖','Flight Deck Wisdom','Daily training wisdom cards',"switchTab('wisdom')"));
-  parts.push(item('📊','Data & Export','CSV export and AI analysis prompt',"switchTab('data')"));
+  parts.push(item('📊','Data & Import/Export','Flight schedule import, CSV export, AI prompt',"switchTab('data')"));
   if (isSuperUser()) {
     parts.push(item('🛡️','Super User','Activity report — real usage, not signups',"switchTab('superuser')"));
   }

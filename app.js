@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.19';
+const FCF_VERSION = 'v5.19.20';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -13,7 +13,7 @@ const OURA_CLIENT_ID   = 'deb737ed-9343-407a-b993-9907bc101800';
 const OURA_REDIRECT_URI = 'https://flightcrew.fit/';
 const OURA_EDGE_FN      = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/oura-auth';
 const FEEDBACK_EDGE_FN  = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/feedback-submit';
-const OURA_SCOPES       = 'daily personal'; // readiness, sleep, activity, personal info
+const OURA_SCOPES       = 'daily personal workout tag'; // readiness, sleep, activity, personal info, workouts, tags
 // Supabase anon key sent as auth header — required when Edge Function JWT verification is enabled
 const SB_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRueGt5ZHhieWloZ3NpY3Riemp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3ODk4MTEsImV4cCI6MjA5NjM2NTgxMX0.oLUGuorQkbQ_u679NpE8FGBVAUmVE1K_rxl8q4B0n7k';
 

@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.21';
+const FCF_VERSION = 'v5.19.22';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -6241,12 +6241,27 @@ const OURA_TOAST_KEY = 'fcf_oura_toast_date';
 // precisely; anything unrecognized falls back to a generic, non-lossy entry
 // using Oura's own activity name — Oura supports 40-50+ possible activity
 // types, so a safe fallback matters more than exhaustive enumeration.
+// Turns Oura's raw activity string into a readable label — handles both
+// camelCase ("strengthTraining") and snake_case ("open_water_swimming"),
+// since Oura's own data uses camelCase, which the original formatting
+// (underscore-only) didn't account for and produced "strengthTraining"
+// unchanged in the confirmation prompt.
+function humanizeOuraActivity(raw) {
+  if (!raw) return 'Activity';
+  return raw
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, c => c.toUpperCase());
+}
+
 function mapOuraActivityToExercise(ouraEvent) {
   const activity = (ouraEvent.activity || '').toLowerCase();
   const hasDistance = ouraEvent.distance && ouraEvent.distance > 0;
   if (activity === 'walking') return { id: 'c_ca_er3', name: 'Walking', inputType: 'timed_distance', timed: true };
   if (activity === 'running' || activity === 'jogging') return { id: 'c_ca_er5', name: 'Outdoor Run', inputType: 'timed_distance', timed: true };
-  const label = ouraEvent.activity ? ouraEvent.activity.replace(/_/g,' ').replace(/\b\w/g, c=>c.toUpperCase()) : 'Activity';
+  const label = humanizeOuraActivity(ouraEvent.activity);
   return {
     id: 'oura_' + activity.replace(/[^a-z0-9]/g,'_'),
     name: label + ' (via Oura)',
@@ -6363,15 +6378,25 @@ async function syncOuraWorkouts() {
 
 function showOuraDuplicateConfirm() {
   if (!ST.ouraImportQueue || !ST.ouraImportQueue.length) return;
-  const { event } = ST.ouraImportQueue[0];
+  const { event, similar } = ST.ouraImportQueue[0];
   const mins = Math.round((new Date(event.end_datetime) - new Date(event.start_datetime)) / 60000);
-  const label = (event.activity||'activity').replace(/_/g,' ');
+  const label = humanizeOuraActivity(event.activity);
+  const eventDate = new Date(event.start_datetime);
+  const dateStr = eventDate.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
+  const timeStr = eventDate.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+  let similarStr = 'something already logged that day';
+  if (similar) {
+    const simDate = new Date(similar.date);
+    const simTime = simDate.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+    const simLabel = similar.muscle_group || 'a workout';
+    similarStr = 'a "'+simLabel+'" session logged at '+simTime+(similar.durationMinutes ? ' ('+similar.durationMinutes+' min)' : '');
+  }
   const root = document.getElementById('modalRoot');
   root.innerHTML =
     '<div class="modal-bg"><div class="modal-sheet">' +
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">Possible duplicate</div>' +
-    '<div class="modal-body" style="margin-bottom:14px">Oura logged a '+mins+'-minute '+label+' that overlaps with something already in your history. Same workout, or a separate one?</div>' +
+    '<div class="modal-body" style="margin-bottom:14px">Oura logged a '+mins+'-minute '+label+' on <strong>'+dateStr+'</strong> at '+timeStr+'. This overlaps with '+similarStr+'. Same workout, or a separate one?</div>' +
     '<button class="btn btn-outline" onclick="resolveOuraDuplicate(\'skip\')">Already logged — skip this one</button>' +
     '<button class="btn btn-gold mt8" onclick="resolveOuraDuplicate(\'import\')">Different workout — import it too</button>' +
     '</div></div>';

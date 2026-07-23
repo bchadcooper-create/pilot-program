@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.23';
+const FCF_VERSION = 'v5.19.24';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -6354,13 +6354,45 @@ async function importOuraWorkout(ouraEvent, exDef) {
 // anything already imported, silently auto-imports anything with no
 // time-overlap conflict, and queues a confirmation prompt for anything
 // that looks like it might already be logged some other way.
+// Oura can produce its own overlapping entries for the same real workout —
+// e.g. a manually-logged session and a ring-auto-detected one covering part
+// of the same time window. Filters those to the longer, more complete
+// entry before anything gets compared against FCF's own history, so a
+// same-source duplicate never even reaches the FCF-vs-Oura check, let alone
+// gets imported twice under two different Oura ids.
+function filterOuraInternalOverlaps(events) {
+  const withDuration = events
+    .map(e => ({ event: e, start: new Date(e.start_datetime).getTime(), end: new Date(e.end_datetime).getTime() }))
+    .filter(e => !isNaN(e.start) && !isNaN(e.end) && e.end > e.start)
+    .sort((a,b) => (b.end-b.start) - (a.end-a.start)); // longest first
+  const kept = [];
+  withDuration.forEach(candidate => {
+    const overlapsKept = kept.some(k => {
+      const overlapStart = Math.max(candidate.start, k.start);
+      const overlapEnd = Math.min(candidate.end, k.end);
+      const overlapMs = Math.max(0, overlapEnd - overlapStart);
+      const candidateDuration = candidate.end - candidate.start;
+      // More than half of the shorter/candidate event's own time is inside
+      // an already-kept, longer event — almost certainly the same workout.
+      return candidateDuration > 0 && (overlapMs / candidateDuration) > 0.5;
+    });
+    if (!overlapsKept) kept.push(candidate);
+  });
+  // Events with unparseable dates are kept as-is — validity is checked later.
+  const invalidEvents = events.filter(e => {
+    const s = new Date(e.start_datetime).getTime(), en = new Date(e.end_datetime).getTime();
+    return isNaN(s) || isNaN(en) || en <= s;
+  });
+  return [...kept.map(k => k.event), ...invalidEvents];
+}
+
 async function syncOuraWorkouts() {
   if (!ST.user || !ST.ouraAccessToken) return;
   const today = new Date().toISOString().slice(0,10);
   const weekAgo = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
   let res;
   try { res = await ouraFetch('workout?start_date='+weekAgo+'&end_date='+today); } catch(e) { return; }
-  const events = res?.data || [];
+  const events = filterOuraInternalOverlaps(res?.data || []);
   ST.ouraImportQueue = ST.ouraImportQueue || [];
   for (const ev of events) {
     if (findExistingOuraImport(ev.id, ST.sessionCache)) continue;

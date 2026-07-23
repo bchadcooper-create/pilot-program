@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.20';
+const FCF_VERSION = 'v5.19.21';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -6236,6 +6236,156 @@ async function importHistoricalOura(days) {
 
 // Step 5: Full sync — pulls readiness, sleep, activity; stores in Supabase
 const OURA_TOAST_KEY = 'fcf_oura_toast_date';
+// ─── OURA WORKOUT IMPORT ────────────────────────────────────────────────────
+// Maps an Oura-logged activity to an FCF exercise. Covers the common cases
+// precisely; anything unrecognized falls back to a generic, non-lossy entry
+// using Oura's own activity name — Oura supports 40-50+ possible activity
+// types, so a safe fallback matters more than exhaustive enumeration.
+function mapOuraActivityToExercise(ouraEvent) {
+  const activity = (ouraEvent.activity || '').toLowerCase();
+  const hasDistance = ouraEvent.distance && ouraEvent.distance > 0;
+  if (activity === 'walking') return { id: 'c_ca_er3', name: 'Walking', inputType: 'timed_distance', timed: true };
+  if (activity === 'running' || activity === 'jogging') return { id: 'c_ca_er5', name: 'Outdoor Run', inputType: 'timed_distance', timed: true };
+  const label = ouraEvent.activity ? ouraEvent.activity.replace(/_/g,' ').replace(/\b\w/g, c=>c.toUpperCase()) : 'Activity';
+  return {
+    id: 'oura_' + activity.replace(/[^a-z0-9]/g,'_'),
+    name: label + ' (via Oura)',
+    inputType: hasDistance ? 'timed_distance' : 'timed',
+    timed: true,
+  };
+}
+
+// Has this exact Oura workout already been imported? The only fully
+// reliable dedup signal — checked by Oura's own unique event id, stored on
+// the imported session, so re-syncing (deliberately or accidentally
+// twice) can never create a second copy of the same event.
+function findExistingOuraImport(ouraId, sessionCache) {
+  return (sessionCache || []).find(s => s.ouraWorkoutId === ouraId) || null;
+}
+
+// Fuzzy duplicate check for the harder case Chad specifically asked about:
+// the same physical workout logged manually in FCF AND separately detected
+// in Oura, with no shared id to match on. Flags an overlapping time window
+// as a likely duplicate rather than silently importing a second copy or
+// silently skipping something that might genuinely be different — real
+// ambiguity gets a prompt, not a guess in either direction.
+function findSimilarSession(ouraEvent, sessionCache) {
+  const ouraStart = new Date(ouraEvent.start_datetime).getTime();
+  const ouraEnd = new Date(ouraEvent.end_datetime).getTime();
+  if (isNaN(ouraStart) || isNaN(ouraEnd)) return null;
+  return (sessionCache || []).find(s => {
+    if (s.ouraWorkoutId) return false; // already-imported sessions are handled by the exact-id check instead
+    const sStart = new Date(s.date).getTime();
+    if (isNaN(sStart)) return false;
+    const sMinutes = s.durationMinutes || 30;
+    const sEnd = sStart + sMinutes * 60000;
+    const slackMs = 20 * 60000; // logging rarely starts/ends at the exact same second as the real activity
+    return (ouraStart - slackMs) <= sEnd && (ouraEnd + slackMs) >= sStart;
+  }) || null;
+}
+
+function buildSessionFromOuraWorkout(ouraEvent, exDef) {
+  const startMs = new Date(ouraEvent.start_datetime).getTime();
+  const endMs = new Date(ouraEvent.end_datetime).getTime();
+  const seconds = Math.max(0, Math.round((endMs - startMs) / 1000));
+  const miles = ouraEvent.distance ? Math.round((ouraEvent.distance / 1609.34) * 100) / 100 : 0;
+  const setEntry = exDef.inputType === 'timed_distance' ? { seconds: String(seconds), miles: String(miles) } : { seconds: String(seconds) };
+  return {
+    date: ouraEvent.start_datetime,
+    env: 'comm',
+    muscle_group: 'Cardio',
+    goal: ST.goal, fatigue: 'go', level: ST.level,
+    sets: { [exDef.id]: [setEntry] },
+    flight_hrs: null, water_in: null,
+    durationMinutes: Math.round(seconds / 60),
+    // Oura's own calorie figure is real heart-rate-sensor data — more
+    // accurate than FCF's MET-based estimate for an activity FCF never
+    // actually observed, so it's used as-is rather than recomputed.
+    estCalories: ouraEvent.calories ? Math.round(ouraEvent.calories) : null,
+    workoutSnapshot: { taxi: [], takeoff: [], enroute: [exDef], landing: [] },
+    ouraWorkoutId: ouraEvent.id,
+    ouraActivity: ouraEvent.activity,
+    importedFromOura: true,
+  };
+}
+
+// Saves an Oura-derived session as if manually logged: database, session
+// cache (so calendar/history/badges all pick it up automatically), and
+// leaderboard submission if the mapped exercise is running-eligible.
+async function importOuraWorkout(ouraEvent, exDef) {
+  const session = buildSessionFromOuraWorkout(ouraEvent, exDef);
+  try {
+    const { error } = await SB.from('workout_sessions').insert([{
+      user_id: ST.user?.id || null,
+      session_key: 'oura_' + ouraEvent.id,
+      session_data: session,
+      workout_key: session.muscle_group,
+      started_at: session.date,
+    }]);
+    if (error) throw error;
+  } catch(e) {
+    localStorage.setItem('fcf_session_oura_' + ouraEvent.id, JSON.stringify(session));
+  }
+  if (!ST.sessionCache.find(s => s.ouraWorkoutId === ouraEvent.id)) ST.sessionCache.push(session);
+  if (RUNNING_EXERCISES.includes(exDef.id)) {
+    await submitRunningPR(session).catch(()=>{});
+    await logRunningVolume(session).catch(()=>{});
+  }
+  awardBadges();
+  return session;
+}
+
+// Orchestrates the sync: fetches recent Oura workouts, silently skips
+// anything already imported, silently auto-imports anything with no
+// time-overlap conflict, and queues a confirmation prompt for anything
+// that looks like it might already be logged some other way.
+async function syncOuraWorkouts() {
+  if (!ST.user || !ST.ouraAccessToken) return;
+  const today = new Date().toISOString().slice(0,10);
+  const weekAgo = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
+  let res;
+  try { res = await ouraFetch('workout?start_date='+weekAgo+'&end_date='+today); } catch(e) { return; }
+  const events = res?.data || [];
+  ST.ouraImportQueue = ST.ouraImportQueue || [];
+  for (const ev of events) {
+    if (findExistingOuraImport(ev.id, ST.sessionCache)) continue;
+    const exDef = mapOuraActivityToExercise(ev);
+    const similar = findSimilarSession(ev, ST.sessionCache);
+    if (similar) {
+      if (!ST.ouraImportQueue.find(q => q.event.id === ev.id)) ST.ouraImportQueue.push({ event: ev, exDef, similar });
+    } else {
+      await importOuraWorkout(ev, exDef);
+    }
+  }
+  if (ST.ouraImportQueue.length) showOuraDuplicateConfirm();
+  else renderPage();
+}
+
+function showOuraDuplicateConfirm() {
+  if (!ST.ouraImportQueue || !ST.ouraImportQueue.length) return;
+  const { event } = ST.ouraImportQueue[0];
+  const mins = Math.round((new Date(event.end_datetime) - new Date(event.start_datetime)) / 60000);
+  const label = (event.activity||'activity').replace(/_/g,' ');
+  const root = document.getElementById('modalRoot');
+  root.innerHTML =
+    '<div class="modal-bg"><div class="modal-sheet">' +
+    '<div class="modal-handle"></div>' +
+    '<div class="modal-title">Possible duplicate</div>' +
+    '<div class="modal-body" style="margin-bottom:14px">Oura logged a '+mins+'-minute '+label+' that overlaps with something already in your history. Same workout, or a separate one?</div>' +
+    '<button class="btn btn-outline" onclick="resolveOuraDuplicate(\'skip\')">Already logged — skip this one</button>' +
+    '<button class="btn btn-gold mt8" onclick="resolveOuraDuplicate(\'import\')">Different workout — import it too</button>' +
+    '</div></div>';
+}
+
+async function resolveOuraDuplicate(choice) {
+  if (!ST.ouraImportQueue || !ST.ouraImportQueue.length) return;
+  const { event, exDef } = ST.ouraImportQueue.shift();
+  if (choice === 'import') await importOuraWorkout(event, exDef);
+  closeModal();
+  if (ST.ouraImportQueue.length) showOuraDuplicateConfirm();
+  else renderPage();
+}
+
 async function syncOuraData(force) {
   if (!ST.user || !ST.ouraAccessToken) {
     showBigToast('Connect Oura Ring first.','warn');
@@ -6251,6 +6401,7 @@ async function syncOuraData(force) {
       ouraFetch('daily_sleep?start_date='+yesterday+'&end_date='+today).catch(()=>null),
       ouraFetch('daily_activity?start_date='+yesterday+'&end_date='+today).catch(()=>null),
     ]);
+    syncOuraWorkouts().catch(()=>{});
 
     const readinessItem = readiness?.data?.[readiness.data.length-1];
     const sleepItem     = sleep?.data?.[sleep.data.length-1];
@@ -6678,44 +6829,8 @@ function renderSuperUser(p) {
   parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">"Active" means a real logged workout, not just an account existing — a truer signal than raw signups, which aren\'t readable from the app at all.</div>');
   parts.push('<div id="suStats" style="text-align:center;color:var(--muted);font-size:12px">Loading…</div>');
   parts.push('</div>');
-  parts.push('<div class="card mb12">');
-  parts.push('<div class="section-label" style="margin-top:0">TEMP: OURA ENDPOINT TEST</div>');
-  parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">One-time diagnostic — tests whether workout and meal data logged directly in the Oura app are readable through the connected API. Not a permanent feature.</div>');
-  parts.push('<button class="btn btn-outline" onclick="testOuraEndpoints()">🔬 Test My Oura Data</button>');
-  parts.push('<div id="ouraTestResults" style="margin-top:10px"></div>');
-  parts.push('</div>');
   p.innerHTML = parts.join('');
   loadSuperUserStats();
-}
-
-async function testOuraEndpoints() {
-  const box = document.getElementById('ouraTestResults');
-  if (!box) return;
-  if (!ST.ouraAccessToken) { box.innerHTML = '<div style="font-size:12px;color:var(--amber)">Connect Oura Ring first.</div>'; return; }
-  box.innerHTML = '<div style="font-size:12px;color:var(--muted)">Testing…</div>';
-  const today = new Date().toISOString().slice(0,10);
-  const yesterday = new Date(Date.now()-86400000).toISOString().slice(0,10);
-  const range = 'start_date='+yesterday+'&end_date='+today;
-  // workout is confirmed real; tag/enhanced_tag are the most likely place
-  // meal data would surface if exposed at all (Oura's self-reported-event
-  // system); meal/meals/nutrition are direct guesses worth ruling out.
-  const candidates = ['workout','tag','enhanced_tag','meal','meals','nutrition'];
-  const results = [];
-  for (const ep of candidates) {
-    try {
-      const res = await ouraFetch(ep+'?'+range);
-      const count = res?.data?.length || 0;
-      results.push({ endpoint: ep, ok: true, count, sample: count ? JSON.stringify(res.data[res.data.length-1]).slice(0,300) : null });
-    } catch(e) {
-      results.push({ endpoint: ep, ok: false, error: e.message || 'failed' });
-    }
-  }
-  const rows = results.map(r => {
-    if (!r.ok) return '<div style="margin-bottom:8px"><b>'+r.endpoint+'</b>: <span style="color:var(--amber)">'+r.error+'</span></div>';
-    if (r.count === 0) return '<div style="margin-bottom:8px"><b>'+r.endpoint+'</b>: <span style="color:var(--muted)">reachable, 0 entries today/yesterday</span></div>';
-    return '<div style="margin-bottom:8px"><b>'+r.endpoint+'</b>: <span style="color:var(--green)">'+r.count+' entries</span><div style="font-family:var(--mono);font-size:9px;color:var(--muted);word-break:break-all;margin-top:2px">'+r.sample+'</div></div>';
-  }).join('');
-  box.innerHTML = '<div style="font-size:12px">'+rows+'</div>';
 }
 
 function renderBadges(p) {

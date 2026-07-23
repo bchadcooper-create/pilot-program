@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.14';
+const FCF_VERSION = 'v5.19.15';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -43,6 +43,7 @@ const ST = {
   photoUrlCache: {},
   photoShowCount: 24,
   showInstallPrompt: false,
+  flightSchedule: null, flightScheduleRaw: null, scheduleEnvNote: null,
 
   tab: 'preflight',
   env: 'comm',
@@ -1060,6 +1061,75 @@ function withTimeout(promise, ms) {
 }
 
 const PROFILE_CACHE_KEY = 'fcf_profile_cache';
+// Converts ICS's "basic" datetime format (20260601T120800Z, no separators)
+// into standard ISO-8601 (2026-06-01T12:08:00Z) that JS's Date constructor
+// can actually parse. The trailing Z means UTC per the ICS spec — comparing
+// two Date objects afterward is timezone-safe regardless of what timezone
+// the device happens to be in, since Date stores an absolute instant.
+function parseICSDateTime(raw) {
+  if (!raw) return null;
+  const m = raw.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)$/);
+  if (!m) return null;
+  const iso = `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}${m[7]}`;
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Parses a MobileCCI-style .ics export into classified events. Deliberately
+// reads only DTSTART/DTEND/SUMMARY/UID — never the DESCRIPTION "Time:" text,
+// which uses a different, non-Z-suffixed time reference that doesn't match
+// the authoritative UTC start/end and would silently misclassify events if
+// relied on.
+function parseFlightScheduleICS(icsText) {
+  if (!icsText) return [];
+  // Un-fold ICS line continuations: a line starting with a single space is
+  // a continuation of the previous line, per RFC5545.
+  const unfolded = icsText.replace(/\r?\n[ \t]/g, '');
+  const lines = unfolded.split(/\r?\n/);
+  const events = [];
+  let cur = null;
+  lines.forEach(line => {
+    if (line === 'BEGIN:VEVENT') { cur = {}; return; }
+    if (line === 'END:VEVENT') { if (cur) events.push(cur); cur = null; return; }
+    if (!cur) return;
+    const idx = line.indexOf(':');
+    if (idx === -1) return;
+    const key = line.slice(0, idx).split(';')[0]; // strip any ;PARAM= suffix
+    const val = line.slice(idx + 1);
+    if (key === 'UID') cur.uid = val;
+    else if (key === 'DTSTART') cur.start = parseICSDateTime(val);
+    else if (key === 'DTEND') cur.end = parseICSDateTime(val);
+    else if (key === 'SUMMARY') cur.summary = val;
+  });
+
+  return events.filter(e => e.start && e.end && e.summary).map(e => {
+    let type = 'other', airport = null;
+    if (/^Layover /.test(e.summary)) {
+      type = 'layover';
+      const m = e.summary.match(/^Layover (\w+)/);
+      airport = m ? m[1] : null;
+    } else if (/^Flight /.test(e.summary)) {
+      type = 'flight';
+    } else if (/^Duty free period$/.test(e.summary)) {
+      type = 'dutyfree';
+    }
+    return { uid: e.uid, start: e.start.toISOString(), end: e.end.toISOString(), summary: e.summary, type, airport };
+  });
+}
+
+// What's happening RIGHT NOW according to the stored schedule — checked
+// against the device's actual current instant, so it's correct regardless
+// of which timezone the device is currently in.
+function getCurrentScheduleStatus(scheduleEvents) {
+  if (!scheduleEvents || !scheduleEvents.length) return null;
+  const now = Date.now();
+  const active = scheduleEvents.find(e => {
+    const s = new Date(e.start).getTime(), en = new Date(e.end).getTime();
+    return now >= s && now <= en;
+  });
+  return active || null;
+}
+
 async function dbGetProfile() {
   if (!ST.user) return JSON.parse(localStorage.getItem('fcf_profile')||'null');
   try {
@@ -2012,6 +2082,8 @@ function applyProfileToState(profile) {
   if (!profile) return;
   ST.level = profile.level || ST.level;
   ST.goal  = profile.goal  || ST.goal;
+  ST.flightSchedule = profile.flightSchedule || null;
+  ST.flightScheduleRaw = profile.flightScheduleRaw || null;
   ST.customExercises = (profile.customExercises || []).map(ce => {
     if (ce?.exercise) {
       ce.exercise.name = sanitizeUserText(ce.exercise.name);
@@ -2039,6 +2111,23 @@ function applyProfileToState(profile) {
   }));
 }
 
+// Auto-suggests Mission Environment from the flight schedule, once per
+// boot — not on every render, so a manual change made during this same
+// session is never silently overwritten. ST.scheduleEnvNote records WHY for
+// Preflight to show transparently rather than changing things quietly.
+function applyScheduleEnvironmentSuggestion() {
+  ST.scheduleEnvNote = null;
+  if (!ST.flightSchedule) return;
+  const status = getCurrentScheduleStatus(ST.flightSchedule);
+  if (status?.type === 'layover') {
+    ST.env = 'hotel';
+    ST.scheduleEnvNote = '📅 Layover in ' + (status.airport||'') + ' today — set to Hotel Gym.';
+  } else if (status?.type === 'dutyfree') {
+    ST.env = 'comm';
+    ST.scheduleEnvNote = '📅 Duty-free day today — set to Commercial Gym.';
+  }
+}
+
 async function bootApp() {
   ST.disclaimerAccepted = localStorage.getItem('fcf_disclaimer_accepted') === '1';
   // All three boot fetches are independent — run them in ONE parallel window
@@ -2050,6 +2139,7 @@ async function bootApp() {
     ST.sessionCache.push(ST.lastSession);
   }
   restoreDailyInputs();
+  applyScheduleEnvironmentSuggestion();
   // First-ever open with no profile info: land on Profile once so the user
   // sets sex + objective before their first mission. Flag persists locally.
   if (!ST.sex && !localStorage.getItem('fcf_profile_intro')) {
@@ -3549,7 +3639,7 @@ async function renderPreflight(p) {
   // who hasn't picked anything yet (nothing to summarize otherwise).
   const showPlan = ST.showChangePlan || isNewUser || !wk;
   parts.push('<div class="edit-row-fb" style="display:flex;justify-content:space-between;align-items:center;padding:2px 2px 12px;font-size:11px;color:var(--muted)" onclick="ST.showChangePlan=!ST.showChangePlan;renderPage()">');
-  parts.push('<span>'+(ST.activeCustomProfileId ? 'Custom routine, used as saved.' : 'Same as your usual plan.')+'</span>');
+  parts.push('<span>'+(ST.scheduleEnvNote || (ST.activeCustomProfileId ? 'Custom routine, used as saved.' : 'Same as your usual plan.'))+'</span>');
   parts.push('<span style="font-family:var(--mono);color:var(--gold);cursor:pointer">'+(showPlan?'HIDE ▴':'CHANGE PLAN ▾')+'</span>');
   parts.push('</div>');
 
@@ -6479,6 +6569,19 @@ function renderBadges(p) {
 function renderData(p) {
   const parts = [moreBackLink()];
   parts.push('<div class="card mb12">');
+  parts.push('<div class="section-label" style="margin-top:0">FLIGHT SCHEDULE</div>');
+  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Upload your crew schedule as an .ics file — Preflight will automatically default your Mission Environment based on whether you\'re on a layover or at home today, and it stays available here to re-download alongside your CSV export.</div>');
+  if (ST.flightSchedule && ST.flightSchedule.length) {
+    const dates = ST.flightSchedule.map(e => new Date(e.start)).sort((a,b)=>a-b);
+    const first = dates[0].toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    const last = dates[dates.length-1].toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    parts.push('<div style="font-size:11px;color:var(--green);margin-bottom:8px">✅ Schedule loaded — covers '+first+' to '+last+' ('+ST.flightSchedule.length+' events)</div>');
+    parts.push('<button class="btn btn-outline" onclick="downloadFlightScheduleICS()">📅 Download My Uploaded Schedule</button>');
+  }
+  parts.push('<input type="file" id="icsFileInput" accept=".ics" style="display:none" onchange="handleICSUpload(this.files[0])">');
+  parts.push('<button class="btn btn-outline mt8" onclick="document.getElementById(\'icsFileInput\').click()">'+(ST.flightSchedule?.length ? '🔄 Replace Schedule' : '📤 Upload .ics Schedule')+'</button>');
+  parts.push('</div>');
+  parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">EXPORT DATA</div>');
   parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Export all workout sessions and biometrics as a CSV — one row per set, with date context and biometric data joined by date. Optimized for AI analysis.</div>');
   parts.push('<div style="font-size:11px;color:var(--gold);margin-bottom:10px;line-height:1.5">💡 Recommended: export and review weekly. Daily exports are too noisy to show real trends; monthly is often too late to catch a stall early.</div>');
@@ -6486,6 +6589,35 @@ function renderData(p) {
   parts.push('<button class="btn btn-outline mt8" onclick="showAIPromptModal()">📋 View & Copy AI Prompt</button>');
   parts.push('</div>');
   p.innerHTML = parts.join('');
+}
+
+async function handleICSUpload(file) {
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const events = parseFlightScheduleICS(text);
+    if (!events.length) { showBigToast('Couldn\'t find any events in that file — check it\'s the right export.', 'warn'); return; }
+    ST.flightSchedule = events;
+    ST.flightScheduleRaw = text;
+    const profile = (await dbGetProfile()) || {};
+    profile.flightSchedule = events;
+    profile.flightScheduleRaw = text;
+    await dbSetProfile(profile);
+    showBigToast('✅ Schedule loaded — '+events.length+' events.', 'ok');
+    renderPage();
+  } catch(e) {
+    showBigToast('Couldn\'t read that file — make sure it\'s a valid .ics export.', 'warn');
+  }
+}
+
+function downloadFlightScheduleICS() {
+  if (!ST.flightScheduleRaw) return;
+  const blob = new Blob([ST.flightScheduleRaw], { type: 'text/calendar' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'my_flight_schedule.ics';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 async function saveOuraToken() {

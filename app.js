@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.13';
+const FCF_VERSION = 'v5.19.14';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -756,20 +756,43 @@ function applyTimeFilter(wk, minutes) {
   return { taxi: wk.taxi, takeoff, enroute, landing: wk.landing };
 }
 
+// Rotates through a larger exercise pool across successive sessions of the
+// same muscle group, instead of always returning the same fixed first N —
+// without this, anything past index N in a catalog (calf raises, leg curls,
+// leg extensions, hip abduction/adduction) could never actually appear in a
+// real programmed workout, even though it exists and is well-populated.
+// Cycles in non-overlapping windows so coverage of the whole pool is
+// guaranteed over time, not left to chance the way random shuffling would.
+function rotatedSlice(pool, count, rotationIndex) {
+  if (!pool || pool.length <= count) return pool || [];
+  const startIdx = (rotationIndex * count) % pool.length;
+  const result = [];
+  for (let i = 0; i < count; i++) result.push(pool[(startIdx + i) % pool.length]);
+  return result;
+}
+
 function getFilteredWorkout(rawWk) {
   if (!rawWk) return null;
+  // How many times this exact muscle group has been trained before — the
+  // rotation advances one full window each time, so it's driven by actual
+  // usage rather than calendar date (which would drift out of sync with
+  // real training frequency if sessions get skipped or bunched up).
+  const rotationIndex = (ST.sessionCache || []).filter(s => s.muscle_group === ST.muscleGroup).length;
   if (ST.fatigue === 'nogo') {
     return { taxi: rawWk.taxi, takeoff: [], enroute: [], landing: rawWk.landing };
   }
   if (ST.fatigue === 'marginal') {
-    return { taxi: rawWk.taxi, takeoff: [], enroute: rawWk.enroute.slice(0,1), landing: rawWk.landing };
+    return { taxi: rawWk.taxi, takeoff: [], enroute: rotatedSlice(rawWk.enroute, 1, rotationIndex), landing: rawWk.landing };
   }
   const lim = LEVEL_EX[ST.level] || LEVEL_EX.intermediate;
   return {
-    taxi:    rawWk.taxi.slice(0, lim.taxi),
+    taxi:    rotatedSlice(rawWk.taxi, lim.taxi, rotationIndex),
+    // Takeoff (primary compound lifts) deliberately stays a fixed slice —
+    // you want to track progressive overload on the same squat/deadlift
+    // variation session to session, not have it swap out from under you.
     takeoff: rawWk.takeoff.slice(0, lim.takeoff),
-    enroute: rawWk.enroute.slice(0, lim.enroute),
-    landing: rawWk.landing.slice(0, lim.landing),
+    enroute: rotatedSlice(rawWk.enroute, lim.enroute, rotationIndex),
+    landing: rotatedSlice(rawWk.landing, lim.landing, rotationIndex),
   };
 }
 

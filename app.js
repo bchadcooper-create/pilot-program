@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.26';
+const FCF_VERSION = 'v5.19.27';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -12,6 +12,7 @@ const FCF_BUILD   = '20260711';
 const OURA_CLIENT_ID   = 'deb737ed-9343-407a-b993-9907bc101800';
 const OURA_REDIRECT_URI = 'https://flightcrew.fit/';
 const OURA_EDGE_FN      = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/oura-auth';
+const USDA_EDGE_FN      = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/usda-food';
 const FEEDBACK_EDGE_FN  = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/feedback-submit';
 const OURA_SCOPES       = 'daily personal workout tag'; // readiness, sleep, activity, personal info, workouts, tags
 // Supabase anon key sent as auth header — required when Edge Function JWT verification is enabled
@@ -2144,6 +2145,7 @@ function renderPage() {
   else if (ST.tab === 'more')        renderMore(p);
   else if (ST.tab === 'devices')     renderDevices(p);
   else if (ST.tab === 'data')        renderData(p);
+  else if (ST.tab === 'nutrition')   renderNutrition(p);
   else if (ST.tab === 'badges')      renderBadges(p);
   else if (ST.tab === 'superuser')   renderSuperUser(p);
   else if (ST.tab === 'debrief')     renderDebrief(p);
@@ -6831,6 +6833,7 @@ function renderMore(p) {
   parts.push(item('⌚','Connected Devices','Oura Ring — more devices coming',"switchTab('devices')"));
   parts.push(item('📖','Flight Deck Wisdom','Daily training wisdom cards',"switchTab('wisdom')"));
   parts.push(item('📊','Data & Import/Export','Flight schedule import, CSV export, AI prompt',"switchTab('data')"));
+  parts.push(item('🍽️','Nutrition Log','Log meals, search foods, track macros',"switchTab('nutrition')"));
   if (isSuperUser()) {
     parts.push(item('🛡️','Super User','Activity report — real usage, not signups',"switchTab('superuser')"));
   }
@@ -6941,6 +6944,310 @@ async function dumpRawOuraWorkouts() {
   } catch(e) {
     box.innerHTML = 'Error: ' + (e.message || 'failed');
   }
+}
+
+// ─── NUTRITION LOGGING (foundation — manual entry + USDA lookup) ──────────
+async function usdaFetch(action, params) {
+  try {
+    const res = await fetch(USDA_EDGE_FN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer '+SB_ANON_KEY },
+      body: JSON.stringify({ action, ...params }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch(e) { return null; }
+}
+
+// USDA nutrient names/shapes vary between the search and lookup endpoints,
+// and across Branded/Foundation/SR Legacy data types — matched by NAME
+// (case-insensitive, several accepted aliases per macro) rather than
+// trusting one exact numeric ID to hold across every response shape.
+const USDA_NUTRIENT_ALIASES = {
+  calories: ['energy'],
+  protein: ['protein'],
+  fat: ['total lipid', 'total fat'],
+  carbs: ['carbohydrate, by difference', 'carbohydrate'],
+  fiber: ['fiber, total dietary', 'total dietary fiber', 'fiber'],
+  sugar: ['sugars, total', 'total sugars', 'sugars'],
+};
+
+function extractUSDANutrients(foodDetail) {
+  const list = foodDetail?.foodNutrients || [];
+  const result = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 };
+  const found = new Set();
+  list.forEach(n => {
+    const name = (n.nutrient?.name || n.nutrientName || n.name || '').toLowerCase();
+    const value = n.amount ?? n.value;
+    if (!name || value == null) return;
+    Object.keys(USDA_NUTRIENT_ALIASES).forEach(key => {
+      if (found.has(key)) return;
+      if (USDA_NUTRIENT_ALIASES[key].some(alias => name.includes(alias))) {
+        result[key] = Math.round((parseFloat(value) || 0) * 10) / 10;
+        found.add(key);
+      }
+    });
+  });
+  return result;
+}
+
+function usdaReferenceLabel(food) {
+  if (food.servingSize && food.servingSizeUnit) return food.servingSize + ' ' + food.servingSizeUnit;
+  return '100 g';
+}
+
+async function searchUSDAFoods(query) {
+  if (!query || query.trim().length < 2) return [];
+  const res = await usdaFetch('search', { query: query.trim() });
+  const foods = res?.foods || [];
+  return foods.slice(0, 12).map(f => ({
+    fdcId: f.fdcId,
+    description: f.description,
+    brandName: f.brandOwner || f.brandName || null,
+    servingSize: f.servingSize || null,
+    servingSizeUnit: f.servingSizeUnit || null,
+    nutrients: extractUSDANutrients(f),
+  }));
+}
+
+async function getUSDAFoodDetail(fdcId) {
+  const res = await usdaFetch('lookup', { fdcId });
+  if (!res || res.error) return null;
+  return {
+    fdcId: res.fdcId,
+    description: res.description,
+    servingSize: res.servingSize || null,
+    servingSizeUnit: res.servingSizeUnit || null,
+    nutrients: extractUSDANutrients(res),
+  };
+}
+
+function scaleNutrients(nutrients, multiplier) {
+  const m = parseFloat(multiplier) || 0;
+  const out = {};
+  Object.keys(nutrients).forEach(k => { out[k] = Math.round(nutrients[k] * m * 10) / 10; });
+  return out;
+}
+
+function sumMealNutrients(items) {
+  const totals = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 };
+  (items || []).forEach(item => {
+    Object.keys(totals).forEach(k => { totals[k] = Math.round((totals[k] + (item.nutrients?.[k] || 0)) * 10) / 10; });
+  });
+  return totals;
+}
+
+async function saveMealLog(mealType, items, loggedAt) {
+  if (!items || !items.length) return null;
+  const mealData = { mealType, items, totals: sumMealNutrients(items) };
+  const row = { user_id: ST.user?.id || null, logged_at: loggedAt || new Date().toISOString(), meal_type: mealType, meal_data: mealData };
+  try {
+    const { data, error } = await SB.from('meal_logs').insert([row]).select();
+    if (error) throw error;
+    const saved = data?.[0] || { ...row, id: 'local_'+Date.now() };
+    ST.todaysMeals = ST.todaysMeals || [];
+    ST.todaysMeals.push(saved);
+    return saved;
+  } catch(e) {
+    return null;
+  }
+}
+
+async function loadTodaysMeals() {
+  if (!ST.user) { ST.todaysMeals = []; return; }
+  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
+  try {
+    const { data, error } = await SB.from('meal_logs')
+      .select('*').eq('user_id', ST.user.id)
+      .gte('logged_at', dayStart.toISOString())
+      .order('logged_at', { ascending: true });
+    if (error) throw error;
+    ST.todaysMeals = data || [];
+  } catch(e) {
+    ST.todaysMeals = ST.todaysMeals || [];
+  }
+}
+
+async function deleteMealLog(id) {
+  try { await SB.from('meal_logs').delete().eq('id', id); } catch(e) {}
+  ST.todaysMeals = (ST.todaysMeals || []).filter(m => m.id !== id);
+  renderPage();
+}
+
+async function renderNutrition(p) {
+  await loadTodaysMeals();
+  const parts = [moreBackLink()];
+  parts.push('<div class="section-label" style="margin-top:0">NUTRITION LOG — TODAY</div>');
+
+  const meals = ST.todaysMeals || [];
+  if (!meals.length) {
+    parts.push('<div class="alert alert-info mb12"><div class="alert-icon">🍽️</div><div>Nothing logged yet today.</div></div>');
+  } else {
+    const dayTotals = sumMealNutrients(meals.flatMap(m => m.meal_data.items));
+    parts.push('<div class="card mb12">');
+    parts.push('<div class="fb"><div style="font-size:13px;font-weight:600">Today\'s Totals</div><div style="font-size:12px;color:var(--muted)">'+dayTotals.calories+' cal · P'+dayTotals.protein+'g · C'+dayTotals.carbs+'g · F'+dayTotals.fat+'g</div></div>');
+    parts.push('</div>');
+    ['breakfast','lunch','dinner','snack'].forEach(type => {
+      const typeMeals = meals.filter(m => m.meal_type === type);
+      if (!typeMeals.length) return;
+      parts.push('<div class="section-label">'+type.toUpperCase()+'</div>');
+      typeMeals.forEach(m => {
+        const t = m.meal_data.totals;
+        parts.push('<div class="card mb12">');
+        m.meal_data.items.forEach(item => {
+          parts.push('<div class="fb" style="margin-bottom:4px"><span style="font-size:13px">'+item.description+'</span><span style="font-size:11px;color:var(--muted)">'+item.nutrients.calories+' cal</span></div>');
+        });
+        parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">Total: '+t.calories+' cal · P'+t.protein+'g · C'+t.carbs+'g · F'+t.fat+'g</div>');
+        parts.push('<button class="btn-ghost" style="font-size:11px;margin-top:6px" onclick="deleteMealLog(\''+m.id+'\')">🗑️ Remove</button>');
+        parts.push('</div>');
+      });
+    });
+  }
+
+  parts.push('<button class="btn btn-gold mt8" onclick="openMealBuilder()">+ Log a Meal</button>');
+  parts.push('<div id="mealBuilderRoot"></div>');
+  p.innerHTML = parts.join('');
+}
+
+function openMealBuilder() {
+  ST.mealBuilder = { mealType: 'snack', items: [] };
+  renderMealBuilder();
+}
+
+function closeMealBuilder() {
+  ST.mealBuilder = null;
+  const box = document.getElementById('mealBuilderRoot');
+  if (box) box.innerHTML = '';
+}
+
+function renderMealBuilder() {
+  const box = document.getElementById('mealBuilderRoot');
+  if (!box || !ST.mealBuilder) return;
+  const mb = ST.mealBuilder;
+  const parts = [];
+  parts.push('<div class="card mb12">');
+  parts.push('<div class="section-label" style="margin-top:0">LOG A MEAL</div>');
+  parts.push('<div class="field"><label>Meal Type</label><select onchange="ST.mealBuilder.mealType=this.value">');
+  ['breakfast','lunch','dinner','snack'].forEach(t => parts.push('<option value="'+t+'"'+(mb.mealType===t?' selected':'')+'>'+t[0].toUpperCase()+t.slice(1)+'</option>'));
+  parts.push('</select></div>');
+
+  if (mb.items.length) {
+    parts.push('<div style="margin:10px 0">');
+    mb.items.forEach((item, i) => {
+      parts.push('<div class="fb" style="margin-bottom:4px"><span style="font-size:13px">'+item.description+'</span><button class="btn-ghost" style="font-size:11px" onclick="ST.mealBuilder.items.splice('+i+',1);renderMealBuilder()">✕</button></div>');
+    });
+    const runningTotals = sumMealNutrients(mb.items);
+    parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">Running total: '+runningTotals.calories+' cal · P'+runningTotals.protein+'g · C'+runningTotals.carbs+'g · F'+runningTotals.fat+'g</div>');
+    parts.push('</div>');
+  }
+
+  parts.push('<input type="text" id="foodSearchInput" placeholder="Search a food (e.g. chicken breast)..." oninput="filterUSDASearch(this.value)">');
+  parts.push('<div id="usdaSearchResults"></div>');
+  parts.push('<button class="btn-ghost mt8" onclick="showManualFoodEntry()">Can\'t find it? Enter manually</button>');
+  parts.push('<div id="manualFoodEntryRoot"></div>');
+
+  parts.push('<div class="fb mt8">');
+  parts.push('<button class="btn-outline" onclick="closeMealBuilder()">Cancel</button>');
+  parts.push('<button class="btn btn-gold" '+(mb.items.length?'':'disabled')+' onclick="finishMealBuilder()">Save Meal</button>');
+  parts.push('</div>');
+  parts.push('</div>');
+  box.innerHTML = parts.join('');
+}
+
+async function finishMealBuilder() {
+  if (!ST.mealBuilder || !ST.mealBuilder.items.length) return;
+  await saveMealLog(ST.mealBuilder.mealType, ST.mealBuilder.items);
+  ST.mealBuilder = null;
+  renderPage();
+}
+
+let usdaSearchDebounce = null;
+function filterUSDASearch(query) {
+  clearTimeout(usdaSearchDebounce);
+  const box = document.getElementById('usdaSearchResults');
+  if (!box) return;
+  if (!query || query.trim().length < 2) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-top:6px">Searching…</div>';
+  usdaSearchDebounce = setTimeout(async () => {
+    const results = await searchUSDAFoods(query);
+    if (!document.getElementById('usdaSearchResults')) return; // builder closed mid-search
+    if (!results.length) { box.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-top:6px">No matches — try manual entry below.</div>'; return; }
+    box.innerHTML = results.map((f,i) =>
+      '<div class="card" style="padding:8px;margin-top:6px;cursor:pointer" onclick="selectUSDAFood('+i+')"><div style="font-size:13px">'+f.description+(f.brandName?' <span style="color:var(--muted);font-size:11px">('+f.brandName+')</span>':'')+'</div><div style="font-size:11px;color:var(--muted)">'+f.nutrients.calories+' cal per '+usdaReferenceLabel(f)+'</div></div>'
+    ).join('');
+    window._usdaLastResults = results;
+  }, 350);
+}
+
+async function selectUSDAFood(idx) {
+  const picked = window._usdaLastResults?.[idx];
+  if (!picked) return;
+  const box = document.getElementById('usdaSearchResults');
+  if (box) box.innerHTML = '<div style="font-size:11px;color:var(--muted)">Loading full details…</div>';
+  const detail = await getUSDAFoodDetail(picked.fdcId) || picked;
+  window._usdaPendingFood = detail;
+  if (box) box.innerHTML =
+    '<div class="card mt8"><div style="font-size:13px;margin-bottom:6px">'+detail.description+'</div>' +
+    '<div class="field"><label>Servings (1 = '+usdaReferenceLabel(detail)+')</label>' +
+    '<input type="text" inputmode="decimal" id="usdaServingMult" value="1" oninput="updateUSDAPreview()"></div>' +
+    '<div id="usdaPreviewNutrients" style="font-size:11px;color:var(--muted);margin:6px 0"></div>' +
+    '<button class="btn btn-outline" onclick="addUSDAFoodToMeal()">Add to Meal</button></div>';
+  updateUSDAPreview();
+}
+
+function updateUSDAPreview() {
+  const food = window._usdaPendingFood;
+  const box = document.getElementById('usdaPreviewNutrients');
+  if (!food || !box) return;
+  const mult = document.getElementById('usdaServingMult')?.value || 1;
+  const scaled = scaleNutrients(food.nutrients, mult);
+  box.innerHTML = scaled.calories+' cal · P'+scaled.protein+'g · C'+scaled.carbs+'g · F'+scaled.fat+'g · Fiber '+scaled.fiber+'g · Sugar '+scaled.sugar+'g';
+}
+
+function addUSDAFoodToMeal() {
+  const food = window._usdaPendingFood;
+  if (!food || !ST.mealBuilder) return;
+  const mult = document.getElementById('usdaServingMult')?.value || 1;
+  ST.mealBuilder.items.push({
+    description: sanitizeUserText(food.description) + (parseFloat(mult) !== 1 ? ' ('+mult+'x)' : ''),
+    nutrients: scaleNutrients(food.nutrients, mult),
+    source: 'usda', fdcId: food.fdcId,
+  });
+  document.getElementById('foodSearchInput').value = '';
+  document.getElementById('usdaSearchResults').innerHTML = '';
+  window._usdaPendingFood = null;
+  renderMealBuilder();
+}
+
+function showManualFoodEntry() {
+  const box = document.getElementById('manualFoodEntryRoot');
+  if (!box) return;
+  box.innerHTML =
+    '<div class="card mt8">' +
+    '<input type="text" id="manualFoodName" placeholder="Food name" class="mb8">' +
+    '<div class="field-row">' +
+    '<div class="field"><label>Calories</label><input type="text" inputmode="numeric" id="manualCal"></div>' +
+    '<div class="field"><label>Protein (g)</label><input type="text" inputmode="decimal" id="manualProtein"></div>' +
+    '</div>' +
+    '<div class="field-row">' +
+    '<div class="field"><label>Carbs (g)</label><input type="text" inputmode="decimal" id="manualCarbs"></div>' +
+    '<div class="field"><label>Fat (g)</label><input type="text" inputmode="decimal" id="manualFat"></div>' +
+    '</div>' +
+    '<button class="btn btn-outline mt8" onclick="addManualFoodToMeal()">Add to Meal</button>' +
+    '</div>';
+}
+
+function addManualFoodToMeal() {
+  const name = sanitizeUserText(document.getElementById('manualFoodName')?.value?.trim());
+  if (!name) return;
+  const num = id => parseFloat(document.getElementById(id)?.value) || 0;
+  ST.mealBuilder.items.push({
+    description: name,
+    nutrients: { calories: num('manualCal'), protein: num('manualProtein'), carbs: num('manualCarbs'), fat: num('manualFat'), fiber: 0, sugar: 0 },
+    source: 'manual',
+  });
+  document.getElementById('manualFoodEntryRoot').innerHTML = '';
+  renderMealBuilder();
 }
 
 function renderBadges(p) {

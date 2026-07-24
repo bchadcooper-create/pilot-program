@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.25';
+const FCF_VERSION = 'v5.19.26';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -6388,13 +6388,27 @@ function filterOuraInternalOverlaps(events) {
   return [...kept.map(k => k.event), ...invalidEvents];
 }
 
+// Below this, an Oura-detected activity reads more like incidental
+// movement (walking to the car, a bathroom trip) than a real workout worth
+// cluttering someone's training history with — a real product choice, not
+// a data-correctness one, so kept as a clearly-named, easy-to-find constant.
+const MIN_OURA_IMPORT_MINUTES = 10;
+
 async function syncOuraWorkouts() {
   if (!ST.user || !ST.ouraAccessToken) return;
   const today = new Date().toISOString().slice(0,10);
   const weekAgo = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
   let res;
   try { res = await ouraFetch('workout?start_date='+weekAgo+'&end_date='+today); } catch(e) { return; }
-  const events = filterOuraInternalOverlaps(res?.data || []);
+  const overlapFiltered = filterOuraInternalOverlaps(res?.data || []);
+  // Applied AFTER overlap-collapsing, not before — a short entry that's
+  // actually the same real workout as a longer overlapping one should still
+  // get absorbed by that logic; this only removes genuinely short,
+  // standalone activities that remain short even after that merge.
+  const events = overlapFiltered.filter(ev => {
+    const mins = (new Date(ev.end_datetime) - new Date(ev.start_datetime)) / 60000;
+    return !isNaN(mins) && mins >= MIN_OURA_IMPORT_MINUTES;
+  });
   ST.ouraImportQueue = ST.ouraImportQueue || [];
   ST.ouraDismissedIds = ST.ouraDismissedIds || [];
   for (const ev of events) {

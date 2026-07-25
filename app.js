@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.27';
+const FCF_VERSION = 'v5.19.28';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -7000,12 +7000,24 @@ async function searchUSDAFoods(query) {
   if (!query || query.trim().length < 2) return [];
   const res = await usdaFetch('search', { query: query.trim() });
   const foods = res?.foods || [];
-  return foods.slice(0, 12).map(f => ({
+  // Generic (Foundation/SR Legacy) entries surface first — for an everyday
+  // query like "chicken", people usually want the plain generic version,
+  // not a specific packaged product's exact-string-matched brand name,
+  // even though USDA's own relevance ranking tends to favor the latter.
+  // Stable sort preserves USDA's relative ordering within each group.
+  const sorted = [...foods].sort((a, b) => {
+    const aGeneric = a.dataType === 'Foundation' || a.dataType === 'SR Legacy';
+    const bGeneric = b.dataType === 'Foundation' || b.dataType === 'SR Legacy';
+    if (aGeneric === bGeneric) return 0;
+    return aGeneric ? -1 : 1;
+  });
+  return sorted.slice(0, 12).map(f => ({
     fdcId: f.fdcId,
     description: f.description,
     brandName: f.brandOwner || f.brandName || null,
     servingSize: f.servingSize || null,
     servingSizeUnit: f.servingSizeUnit || null,
+    dataType: f.dataType || null,
     nutrients: extractUSDANutrients(f),
   }));
 }

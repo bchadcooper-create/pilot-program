@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.30';
+const FCF_VERSION = 'v5.19.31';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -6394,7 +6394,19 @@ function filterOuraInternalOverlaps(events) {
 // movement (walking to the car, a bathroom trip) than a real workout worth
 // cluttering someone's training history with — a real product choice, not
 // a data-correctness one, so kept as a clearly-named, easy-to-find constant.
+// Below these, an Oura-detected activity reads more like incidental
+// movement than a real workout worth putting in someone's training
+// history. Walking has its own higher floor because it's by far the most
+// common source of short incidental entries (walking to the car, through a
+// terminal) — a 12-minute strength session is plausibly real training, a
+// 12-minute walk usually isn't.
 const MIN_OURA_IMPORT_MINUTES = 10;
+const MIN_OURA_WALK_MINUTES = 20;
+
+function minImportMinutesFor(activity) {
+  return /walk/i.test(activity || '') ? MIN_OURA_WALK_MINUTES : MIN_OURA_IMPORT_MINUTES;
+}
+
 
 async function syncOuraWorkouts() {
   if (!ST.user || !ST.ouraAccessToken) return;
@@ -6409,7 +6421,7 @@ async function syncOuraWorkouts() {
   // standalone activities that remain short even after that merge.
   const events = overlapFiltered.filter(ev => {
     const mins = (new Date(ev.end_datetime) - new Date(ev.start_datetime)) / 60000;
-    return !isNaN(mins) && mins >= MIN_OURA_IMPORT_MINUTES;
+    return !isNaN(mins) && mins >= minImportMinutesFor(ev.activity);
   });
   ST.ouraImportQueue = ST.ouraImportQueue || [];
   ST.ouraDismissedIds = ST.ouraDismissedIds || [];

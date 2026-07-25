@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.28';
+const FCF_VERSION = 'v5.19.29';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -6998,18 +6998,24 @@ function usdaReferenceLabel(food) {
 
 async function searchUSDAFoods(query) {
   if (!query || query.trim().length < 2) return [];
+  const q = query.trim().toLowerCase();
   const res = await usdaFetch('search', { query: query.trim() });
   const foods = res?.foods || [];
-  // Generic (Foundation/SR Legacy) entries surface first — for an everyday
-  // query like "chicken", people usually want the plain generic version,
-  // not a specific packaged product's exact-string-matched brand name,
-  // even though USDA's own relevance ranking tends to favor the latter.
-  // Stable sort preserves USDA's relative ordering within each group.
+  // Two sort tiers: (1) generic before branded — an everyday query usually
+  // wants the plain version, not a specific packaged product; (2) within
+  // each tier, results whose description actually STARTS WITH the search
+  // term rank first — without this, "Bologna, chicken, pork" or
+  // "Frankfurter, chicken" can outrank more useful plain entries just
+  // because both merely CONTAIN the word somewhere. Stable sort preserves
+  // USDA's own relevance ordering within each resulting group.
   const sorted = [...foods].sort((a, b) => {
     const aGeneric = a.dataType === 'Foundation' || a.dataType === 'SR Legacy';
     const bGeneric = b.dataType === 'Foundation' || b.dataType === 'SR Legacy';
-    if (aGeneric === bGeneric) return 0;
-    return aGeneric ? -1 : 1;
+    if (aGeneric !== bGeneric) return aGeneric ? -1 : 1;
+    const aStarts = (a.description || '').toLowerCase().startsWith(q);
+    const bStarts = (b.description || '').toLowerCase().startsWith(q);
+    if (aStarts !== bStarts) return aStarts ? -1 : 1;
+    return 0;
   });
   return sorted.slice(0, 12).map(f => ({
     fdcId: f.fdcId,
@@ -7159,8 +7165,8 @@ function renderMealBuilder() {
   parts.push('<div id="manualFoodEntryRoot"></div>');
 
   parts.push('<div class="fb mt8">');
-  parts.push('<button class="btn-outline" onclick="closeMealBuilder()">Cancel</button>');
-  parts.push('<button class="btn btn-gold" '+(mb.items.length?'':'disabled')+' onclick="finishMealBuilder()">Save Meal</button>');
+  parts.push('<button class="btn btn-outline" style="flex:1;margin-right:8px" onclick="closeMealBuilder()">Cancel</button>');
+  parts.push('<button class="btn btn-gold" style="flex:1" '+(mb.items.length?'':'disabled')+' onclick="finishMealBuilder()">Save Meal</button>');
   parts.push('</div>');
   parts.push('</div>');
   box.innerHTML = parts.join('');

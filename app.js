@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.45';
+const FCF_VERSION = 'v5.19.46';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -49,6 +49,7 @@ const ST = {
   ouraSteps: null, ouraActiveCal: null,
   nutritionGoals: null, goalDraft: 'maintain', trainDaysDraft: '3-4',
   manualTargetsOpen: false, manualCal: '', manualProtein: '', manualCarbs: '', manualFat: '', manualTargetsWarning: null,
+  sleepBaselineScore: null,
 
   tab: 'today',
   env: 'comm',
@@ -1865,6 +1866,11 @@ function renderLeaderboard(p) {
   // its full, filterable standings below.
   parts.push('<div class="section-label" style="margin-top:0">AT A GLANCE</div>');
   parts.push('<div id="lbGlance" class="mb12"><div class="card" style="text-align:center;color:var(--muted);font-size:11px">Loading…</div></div>');
+
+  parts.push('<div class="section-label">BADGES</div>');
+  parts.push('<div class="card mb12">');
+  parts.push(buildBadgesGridHTML());
+  parts.push('</div>');
 
   parts.push('<div class="section-label">FULL BOARD</div>');
 
@@ -7535,6 +7541,29 @@ function mergeAdjacentEvents(events) {
   return merged;
 }
 
+// Oura can revise the day's sleep score upward after a nap. This tracks
+// the first score seen in THIS APP SESSION as a baseline and flags a later,
+// meaningfully higher reading as a likely nap — deliberately in-memory
+// only, not persisted across app closes, which keeps it simple and testable.
+// Honest limitation: check Today, close the app, nap, reopen, and there's
+// no prior in-session reading left to compare against, so it won't fire in
+// that specific sequence — it needs the app to stay open (or come back to
+// the foreground) across the before/after.
+const NAP_SCORE_JUMP = 8; // meaningful enough to not be noise/rounding
+function checkForNapRecovery(currentSleepScore) {
+  if (currentSleepScore === null || currentSleepScore === undefined) return null;
+  if (ST.sleepBaselineScore === null || ST.sleepBaselineScore === undefined) {
+    ST.sleepBaselineScore = currentSleepScore;
+    return null;
+  }
+  if (currentSleepScore - ST.sleepBaselineScore >= NAP_SCORE_JUMP) {
+    const jump = { from: ST.sleepBaselineScore, to: currentSleepScore };
+    ST.sleepBaselineScore = currentSleepScore; // don't keep re-firing on the same jump
+    return jump;
+  }
+  return null;
+}
+
 function getTodayContext() {
   const now = new Date();
   const sched = scheduleContextForToday(ST.flightSchedule, now);
@@ -7543,11 +7572,13 @@ function getTodayContext() {
   const g = ST.nutritionGoals && ST.nutritionGoals.mode !== 'none' ? ST.nutritionGoals : null;
   const todayStr = now.toISOString().slice(0,10);
   const workoutToday = (ST.sessionCache || []).some(s => (s.date||'').slice(0,10) === todayStr);
+  const sleepScore = ST.ouraData?.sleep_score ?? null;
   return {
     now, hour: now.getHours(),
     sched,
-    oura: { readiness: ST.ouraScore ?? null, sleep: ST.ouraData?.sleep_score ?? null,
-            activity: ST.ouraData?.activity_score ?? null, steps: ST.ouraSteps ?? null },
+    oura: { readiness: ST.ouraScore ?? null, sleep: sleepScore,
+            activity: ST.ouraData?.activity_score ?? null, steps: ST.ouraSteps ?? null,
+            napDetected: checkForNapRecovery(sleepScore) },
     nutrition: { consumed, goals: g, mealCount: meals.length,
                  proteinPct: g && g.protein ? Math.round((consumed.protein / g.protein) * 100) : null,
                  caloriePct: g && g.calories ? Math.round((consumed.calories / g.calories) * 100) : null },
@@ -7584,6 +7615,17 @@ function buildTodayBriefing(ctx) {
     return { tone:'rest', headline:'Readiness is low — take it easy',
       body:'Readiness at '+readiness+'. A hard session today costs more than it returns. Stretching, an easy walk, or a nap if there\'s time before your next report.',
       action:{ label:'Start a light session', fn:"switchTab('preflight')" } };
+  }
+
+  // 2b. A same-day sleep-score jump (a nap) while readiness now reads
+  // decent enough to reasonably consider training — acknowledges what just
+  // happened instead of proceeding to the other rules as if nothing did.
+  // Framed as a question, not a directive: only the person actually knows
+  // if the nap was enough.
+  if (oura.napDetected) {
+    return { tone:'go', headline:'Nice nap — feeling recharged?',
+      body:'Sleep score just went from '+oura.napDetected.from+' to '+oura.napDetected.to+'. That\'s real recovery. If you\'re feeling it, this could be a good window to train.',
+      action:{ label:'Start a workout', fn:"switchTab('preflight')" } };
   }
 
   // 3. Long duty yesterday is a real recovery cost even when readiness looks fine.
@@ -8032,7 +8074,11 @@ function saveQuickWater() {
   ST.waterIn = parseFloat(val) || 0;
   persistDailyInputs();
   closeModal();
-  if (ST.tab === 'preflight') updateHydrationUI();
+  // Whatever screen is currently showing gets refreshed with the new
+  // value — this used to only special-case Preflight, so Today (and
+  // anywhere else reading ST.waterIn) kept showing stale data even though
+  // the state itself had updated correctly.
+  renderPage();
 }
 
 function openMealBuilder() {
@@ -8163,7 +8209,7 @@ function showManualFoodEntry() {
   if (!box) return;
   box.innerHTML =
     '<div class="card mt8">' +
-    '<input type="text" id="manualFoodName" placeholder="Food name" class="mb8">' +
+    '<div class="field"><input type="text" id="manualFoodName" placeholder="Food name"></div>' +
     '<div class="field-row">' +
     '<div class="field"><label>Calories</label><input type="text" inputmode="numeric" id="manualCal"></div>' +
     '<div class="field"><label>Protein (g)</label><input type="text" inputmode="decimal" id="manualProtein"></div>' +
@@ -8172,7 +8218,7 @@ function showManualFoodEntry() {
     '<div class="field"><label>Carbs (g)</label><input type="text" inputmode="decimal" id="manualCarbs"></div>' +
     '<div class="field"><label>Fat (g)</label><input type="text" inputmode="decimal" id="manualFat"></div>' +
     '</div>' +
-    '<button class="btn btn-outline mt8" onclick="addManualFoodToMeal()">Add to Meal</button>' +
+    '<button class="btn btn-gold mt8" onclick="addManualFoodToMeal()">Add to Meal</button>' +
     '</div>';
 }
 
@@ -8189,10 +8235,10 @@ function addManualFoodToMeal() {
   renderMealBuilder();
 }
 
-function renderBadges(p) {
-  const parts = [moreBackLink()];
-  parts.push('<div class="section-label" style="margin-top:0">BADGES</div>');
-  parts.push('<div class="card mb12">');
+// Shared between the standalone Badges screen and the summary embedded in
+// Ranks — one implementation instead of two copies that could drift apart.
+function buildBadgesGridHTML() {
+  const parts = [];
   const earnedCount = BADGES.filter(b => ST.badges[b.id]).length;
   parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px">'+earnedCount+' of '+BADGES.length+' earned</div>');
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
@@ -8206,6 +8252,14 @@ function renderBadges(p) {
     parts.push('</div>');
   });
   parts.push('</div>');
+  return parts.join('');
+}
+
+function renderBadges(p) {
+  const parts = [moreBackLink()];
+  parts.push('<div class="section-label" style="margin-top:0">BADGES</div>');
+  parts.push('<div class="card mb12">');
+  parts.push(buildBadgesGridHTML());
   parts.push('</div>');
   p.innerHTML = parts.join('');
 }

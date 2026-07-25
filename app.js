@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.38';
+const FCF_VERSION = 'v5.19.39';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -50,7 +50,7 @@ const ST = {
   nutritionGoals: null, goalDraft: 'maintain', trainDaysDraft: '3-4',
   manualTargetsOpen: false, manualCal: '', manualProtein: '', manualCarbs: '', manualFat: '', manualTargetsWarning: null,
 
-  tab: 'preflight',
+  tab: 'today',
   env: 'comm',
   flightHrs: 0,
   flightHrsRaw: '',
@@ -1497,23 +1497,25 @@ function switchTab(tab) {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === hl));
   const tabbar = document.getElementById('tabbar');
   if (tabbar) tabbar.style.display = (tab === 'debrief') ? 'none' : 'flex';
-  renderPage();
+  const renderPromise = renderPage();
 
   const page = document.getElementById('mainPage');
-  if (!page) return;
-  if (tab === 'flight') {
-    const curId = getCurrentExerciseId();
-    const el = curId ? document.getElementById('excard_'+curId) : null;
-    if (el) {
-      ST.expanded[curId] = true;
-      renderPage();
-      requestAnimationFrame(() => {
-        document.getElementById('excard_'+curId)?.scrollIntoView({ block: 'start' });
-      });
-      return;
+  if (page) {
+    if (tab === 'flight') {
+      const curId = getCurrentExerciseId();
+      const el = curId ? document.getElementById('excard_'+curId) : null;
+      if (el) {
+        ST.expanded[curId] = true;
+        renderPage();
+        requestAnimationFrame(() => {
+          document.getElementById('excard_'+curId)?.scrollIntoView({ block: 'start' });
+        });
+        return renderPromise;
+      }
     }
+    page.scrollTop = 0;
   }
-  page.scrollTop = 0;
+  return renderPromise;
 }
 
 // ─── BADGES ──────────────────────────────────────────────────────────────────
@@ -2149,7 +2151,7 @@ function renderPage() {
   else if (ST.tab === 'more')        renderMore(p);
   else if (ST.tab === 'devices')     renderDevices(p);
   else if (ST.tab === 'data')        renderData(p);
-  else if (ST.tab === 'nutrition')   renderNutrition(p);
+  else if (ST.tab === 'nutrition')   return renderNutrition(p);
   else if (ST.tab === 'fuelplan')    renderNutritionGoalsSetup(p);
   else if (ST.tab === 'today')       { loadTodaysMeals().then(()=>renderToday(p)).catch(()=>renderToday(p)); }
   else if (ST.tab === 'badges')      renderBadges(p);
@@ -3733,6 +3735,7 @@ async function renderPreflight(p) {
   const isNewUser = !ST.sessionCache || ST.sessionCache.length === 0;
 
   const parts = [];
+  parts.push('<button class="btn-ghost" style="font-size:12px;margin-bottom:10px" onclick="switchTab(\'today\')">← Back to Today</button>');
   parts.push('<div class="section-label">PREFLIGHT BRIEFING — '+FCF_VERSION+'</div>');
   parts.push(installPromptHtml);
   if (profileIncomplete) {
@@ -4766,6 +4769,7 @@ function renderFlight(p) {
   const pct = Math.round(done / Math.max(allEx.length,1) * 100);
 
   const parts = [];
+  parts.push('<button class="btn-ghost" style="font-size:12px;margin-bottom:6px" onclick="switchTab(\'today\')">← Back to Today</button>');
   parts.push('<div class="section-label">ACTIVE FLIGHT — '+ST.muscleGroup.toUpperCase()+'</div>');
   parts.push('<div class="card card-dark mb12">');
   parts.push('<div class="fb mb8"><span style="font-family:var(--mono);font-size:11px;color:var(--muted)">MISSION PROGRESS</span><span style="font-family:var(--mono);font-size:11px;color:var(--gold)">'+done+'/'+allEx.length+' EXERCISES</span></div>');
@@ -6865,7 +6869,6 @@ function renderMore(p) {
   parts.push(item('📖','Flight Deck Wisdom','Daily training wisdom cards',"switchTab('wisdom')"));
   parts.push(item('📊','Data & Import/Export','Flight schedule import, CSV export, AI prompt',"switchTab('data')"));
   parts.push(item('🍽️','Nutrition Log','Log meals, search foods, track macros',"switchTab('nutrition')"));
-  parts.push(item('🌅','Today','Daily briefing — schedule, readiness, fuel',"switchTab('today')"));
   if (isSuperUser()) {
     parts.push(item('🛡️','Super User','Activity report — real usage, not signups',"switchTab('superuser')"));
   }
@@ -7805,6 +7808,56 @@ async function renderNutrition(p) {
   }
 
   p.innerHTML = parts.join('');
+}
+
+// ─── QUICK ACTIONS (the "+" tab-bar button) ────────────────────────────────
+function openQuickActions() {
+  const root = document.getElementById('modalRoot');
+  if (!root) return;
+  root.innerHTML =
+    '<div class="modal-bg"><div class="modal-sheet">' +
+    '<div class="modal-handle"></div>' +
+    '<div class="modal-title">Quick Actions</div>' +
+    '<button class="btn btn-gold mb8" onclick="closeModal();switchTab(\'preflight\')">⚡ Start a Workout</button>' +
+    '<button class="btn btn-outline mb8" onclick="quickLogMeal()">🍽️ Log a Meal</button>' +
+    '<button class="btn btn-outline mb8" onclick="closeModal();switchTab(\'trends\')">⚖️ Log Weight / BP / Glucose</button>' +
+    '<button class="btn btn-outline" onclick="openQuickWaterLog()">💧 Log Water</button>' +
+    '</div></div>';
+}
+
+// Closes the sheet, navigates to Nutrition, and only opens the meal builder
+// once that screen's async render has actually finished — switchTab/
+// renderPage now return their render promise specifically so this can be
+// awaited properly instead of guessing with a timeout.
+async function quickLogMeal() {
+  closeModal();
+  await switchTab('nutrition');
+  openMealBuilder();
+}
+
+// Self-contained — doesn't navigate anywhere, just updates the same
+// waterIn/waterInRaw state Preflight's hydration section already uses, so
+// whichever screen you're on when you close this reflects the real number.
+function openQuickWaterLog() {
+  const root = document.getElementById('modalRoot');
+  if (!root) return;
+  root.innerHTML =
+    '<div class="modal-bg"><div class="modal-sheet">' +
+    '<div class="modal-handle"></div>' +
+    '<div class="modal-title">Log Water</div>' +
+    '<div class="field"><label>Liters consumed</label><input type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" id="quickWaterInput" value="'+(ST.waterInRaw||'')+'" placeholder="e.g. 1.2"></div>' +
+    '<button class="btn btn-gold mt8" onclick="saveQuickWater()">Save</button>' +
+    '<button class="btn-ghost" onclick="closeModal()">Cancel</button>' +
+    '</div></div>';
+}
+
+function saveQuickWater() {
+  const val = document.getElementById('quickWaterInput')?.value || '';
+  ST.waterInRaw = val;
+  ST.waterIn = parseFloat(val) || 0;
+  persistDailyInputs();
+  closeModal();
+  if (ST.tab === 'preflight') updateHydrationUI();
 }
 
 function openMealBuilder() {

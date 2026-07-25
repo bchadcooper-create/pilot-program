@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.41';
+const FCF_VERSION = 'v5.19.42';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2144,7 +2144,7 @@ function renderPage() {
     });
   }
   else if (ST.tab === 'flight')      renderFlight(p);
-  else if (ST.tab === 'trends')      renderTrends(p);
+  else if (ST.tab === 'trends')      return renderTrends(p);
   else if (ST.tab === 'wisdom')      renderWisdom(p);
   else if (ST.tab === 'profile')     renderProfile(p);
   else if (ST.tab === 'leaderboard') renderLeaderboard(p);
@@ -3905,13 +3905,8 @@ async function renderPreflight(p) {
     parts.push('</div>');
   }
 
-  // ── Training calendar — tucked behind a toggle instead of a permanent strip ──
-  const showCal = ST.showCalendarDetail || isNewUser;
-  parts.push('<div class="fb" style="cursor:pointer;padding:10px 2px" onclick="ST.showCalendarDetail=!ST.showCalendarDetail;renderPage()"><div style="font-size:12px;color:var(--muted)">📅 Training Calendar</div><div style="font-family:var(--mono);font-size:10px;color:var(--gold)">'+(showCal?'HIDE ▴':'VIEW ▾')+'</div></div>');
-  if (showCal) {
-    const rangeData = await loadCalendarRange();
-    parts.push(buildCalendarHTML(rangeData));
-  }
+  // Training calendar moved to Trends — that's the review screen now;
+  // Preflight's job is launching a session quickly, not looking back.
 
   // Hydration
   parts.push('<div class="section-label">HYDRATION PAYLOAD</div>');
@@ -3943,7 +3938,6 @@ async function renderPreflight(p) {
   }
 
   p.innerHTML = parts.join('');
-  if (showCal) scrollCalendarToToday();
 }
 
 // Reported bug: typing body metrics, then clicking Mission Objective or
@@ -5625,9 +5619,58 @@ async function setTheChocks() {
 }
 
 // ─── TRENDS TAB ───────────────────────────────────────────────────────────────
-function renderTrends(p) {
+// Loads meal logs across a real date range, not just today — needed for
+// the fuel trend, which classifyTrend can't do anything with off a single day.
+async function loadRecentMealLogs(days) {
+  if (!ST.user) return [];
+  const since = new Date(Date.now() - (days||14)*86400000).toISOString();
+  try {
+    const { data, error } = await SB.from('meal_logs')
+      .select('*').eq('user_id', ST.user.id)
+      .gte('logged_at', since)
+      .order('logged_at', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  } catch(e) { return []; }
+}
+
+// Groups logged meals by calendar day and classifies a protein-adherence
+// trend over the period — reuses classifyTrend, the same function already
+// driving the strength/pace trends, so every trend indicator in the app
+// shares one implementation rather than three subtly different ones.
+function getFuelTrends(mealLogs, goals) {
+  if (!goals || goals.mode === 'none') return null;
+  const byDay = {};
+  (mealLogs || []).forEach(m => {
+    const day = new Date(m.logged_at).toDateString();
+    if (!byDay[day]) byDay[day] = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+    const t = m.meal_data?.totals || {};
+    byDay[day].calories += t.calories || 0;
+    byDay[day].protein += t.protein || 0;
+    byDay[day].carbs += t.carbs || 0;
+    byDay[day].fat += t.fat || 0;
+  });
+  const days = Object.keys(byDay).sort((a,b) => new Date(a) - new Date(b));
+  if (days.length < 4) return { daysLogged: days.length, trend: null };
+
+  const proteinPcts = days.map(d => goals.protein > 0 ? (byDay[d].protein / goals.protein) * 100 : 0);
+  const trend = classifyTrend(proteinPcts, true); // higher % of protein target = improving
+  const avgProteinPct = Math.round(proteinPcts.reduce((a,b)=>a+b, 0) / proteinPcts.length);
+  const avgCalories = Math.round(days.reduce((sum,d) => sum + byDay[d].calories, 0) / days.length);
+  return { daysLogged: days.length, trend, avgProteinPct, avgCalories };
+}
+
+async function renderTrends(p) {
   const parts = [];
   parts.push('<div class="section-label">BIOMETRICS LOG &amp; TRENDS</div>');
+
+  // Training calendar — moved here from Preflight. Trends is the review
+  // screen; Preflight's job is launching a session quickly, not looking
+  // back, so the calendar belongs here and always visible, not behind a
+  // collapse toggle.
+  const rangeData = await loadCalendarRange();
+  parts.push('<div class="section-label" style="margin-top:0">📅 TRAINING CALENDAR</div>');
+  parts.push(buildCalendarHTML(rangeData));
 
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">LOG TODAY\'S DATA</div>');
@@ -5647,6 +5690,24 @@ function renderTrends(p) {
   parts.push('</div>');
 
   parts.push('<div class="section-label">TRENDS</div>');
+
+  // Fuel trends — protein adherence and average calories over the logging
+  // history, only shown once real targets exist to trend against.
+  const recentMeals = await loadRecentMealLogs(14);
+  const fuelTrend = getFuelTrends(recentMeals, ST.nutritionGoals);
+  if (fuelTrend) {
+    parts.push('<div class="card mb12">');
+    parts.push('<div class="section-label" style="margin-top:0">FUEL</div>');
+    if (fuelTrend.trend) {
+      const statusMeta2 = { improving: ['↑','var(--green)'], flat: ['→','var(--muted)'], declining: ['↓','var(--amber)'] };
+      const [arrow2, color2] = statusMeta2[fuelTrend.trend.status];
+      parts.push('<div class="fb mb8"><div style="font-size:13px">🥩 Protein adherence</div><div style="font-size:12px;text-align:right"><span style="color:'+color2+'">'+arrow2+' '+fuelTrend.avgProteinPct+'% of target</span><div style="font-family:var(--mono);font-size:9px;color:var(--muted)">'+fuelTrend.daysLogged+' days logged</div></div></div>');
+      parts.push('<div class="fb"><div style="font-size:13px">🔥 Avg calories/day</div><div style="font-family:var(--mono);font-size:12px">'+fuelTrend.avgCalories.toLocaleString()+'</div></div>');
+    } else {
+      parts.push('<div style="font-size:12px;color:var(--muted)">'+fuelTrend.daysLogged+' day(s) logged so far — a trend needs at least 4 days of history.</div>');
+    }
+    parts.push('</div>');
+  }
 
   // Strength/performance trends — Takeoff lifts specifically (kept
   // consistent session to session by design) and running pace. Shown only
@@ -5689,6 +5750,7 @@ function renderTrends(p) {
   parts.push('</div>');
 
   p.innerHTML = parts.join('');
+  scrollCalendarToToday();
   setTimeout(() => loadAndDrawCharts(), 50);
   // Load fresh signed URLs after render — patches only the photo section, not the whole page
   if (ST.user) setTimeout(() => loadPhotoTimeline().catch(()=>{}), 100);

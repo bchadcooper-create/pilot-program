@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.31';
+const FCF_VERSION = 'v5.19.32';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -46,6 +46,7 @@ const ST = {
   showInstallPrompt: false,
   flightSchedule: null, flightScheduleRaw: null, scheduleEnvNote: null,
   ouraDismissedIds: [], ouraImportQueue: [],
+  nutritionGoals: null, goalDraft: 'maintain', trainDaysDraft: '3-4',
 
   tab: 'preflight',
   env: 'comm',
@@ -2146,6 +2147,7 @@ function renderPage() {
   else if (ST.tab === 'devices')     renderDevices(p);
   else if (ST.tab === 'data')        renderData(p);
   else if (ST.tab === 'nutrition')   renderNutrition(p);
+  else if (ST.tab === 'fuelplan')    renderNutritionGoalsSetup(p);
   else if (ST.tab === 'badges')      renderBadges(p);
   else if (ST.tab === 'superuser')   renderSuperUser(p);
   else if (ST.tab === 'debrief')     renderDebrief(p);
@@ -2158,6 +2160,7 @@ function applyProfileToState(profile) {
   ST.goal  = profile.goal  || ST.goal;
   ST.flightSchedule = profile.flightSchedule || null;
   ST.ouraDismissedIds = profile.ouraDismissedIds || [];
+  ST.nutritionGoals = profile.nutritionGoals || null;
   ST.flightScheduleRaw = profile.flightScheduleRaw || null;
   ST.customExercises = (profile.customExercises || []).map(ce => {
     if (ce?.exercise) {
@@ -7132,10 +7135,163 @@ async function deleteMealLog(id) {
   renderPage();
 }
 
+// ─── NUTRITION TARGETS ──────────────────────────────────────────────────
+// Mifflin-St Jeor — the most widely validated BMR equation for general use.
+// Returns null rather than guessing when any input is missing, so the caller
+// prompts for real data instead of showing a target built on defaults.
+function calculateBMR(sex, weightLb, heightIn, age) {
+  const w = parseFloat(weightLb), h = parseFloat(heightIn), a = parseInt(age);
+  if (!w || !h || !a || !sex) return null;
+  const kg = w * 0.45359237, cm = h * 2.54;
+  const base = (10 * kg) + (6.25 * cm) - (5 * a);
+  return Math.round(sex === 'female' ? base - 161 : base + 5);
+}
+
+// Training days per week -> activity multiplier. Deliberately conservative:
+// pilots spend long stretches seated on duty, so the sedentary baseline is
+// more honest than assuming an active day just because they're not home.
+const ACTIVITY_MULTIPLIERS = { '1-2': 1.375, '3-4': 1.55, '5-6': 1.725, daily: 1.9 };
+
+function calculateTDEE(bmr, trainingDays) {
+  if (!bmr) return null;
+  return Math.round(bmr * (ACTIVITY_MULTIPLIERS[trainingDays] || 1.375));
+}
+
+// Guardrails are enforced HERE, not in the UI, so they can't be bypassed by
+// a different entry point later:
+//   - the deficit is capped, not user-configurable
+//   - the result can never land below BMR, whatever the math says
+const MAX_DAILY_DEFICIT = 500;   // ≈1 lb/week, the well-established safe rate
+const MAX_DAILY_SURPLUS = 300;   // lean gain; more than this is mostly fat
+
+function calculateNutritionTargets(mode, tdee, bmr, weightLb) {
+  if (mode === 'none' || !tdee || !bmr) return null;
+  let calories;
+  if (mode === 'fatloss')      calories = tdee - MAX_DAILY_DEFICIT;
+  else if (mode === 'muscle')  calories = tdee + MAX_DAILY_SURPLUS;
+  else                         calories = tdee;
+
+  // Hard floor. Eating below resting metabolic rate isn't a more aggressive
+  // plan, it's a worse one — so this clamps regardless of what the
+  // arithmetic above produced.
+  const flooredAtBMR = calories < bmr;
+  if (flooredAtBMR) calories = bmr;
+
+  const w = parseFloat(weightLb) || 0;
+  // Protein stays high in a deficit specifically to protect lean mass, which
+  // is the whole point of training while losing fat.
+  const proteinPerLb = mode === 'maintain' ? 0.8 : 1.0;
+  const protein = Math.round(w * proteinPerLb);
+  const fatPct = mode === 'fatloss' ? 0.30 : mode === 'muscle' ? 0.25 : 0.28;
+  const fat = Math.round((calories * fatPct) / 9);
+  const carbs = Math.max(0, Math.round((calories - (protein * 4) - (fat * 9)) / 4));
+
+  return { calories: Math.round(calories), protein, carbs, fat, bmr, tdee, mode, flooredAtBMR };
+}
+
+function nutritionGoalsComplete() {
+  return !!(ST.sex && ST.age && ST.heightIn && ST.lastWeight);
+}
+
+async function saveNutritionGoals(targets) {
+  ST.nutritionGoals = targets ? { ...targets, setAt: new Date().toISOString() } : { mode: 'none', setAt: new Date().toISOString() };
+  try {
+    const profile = (await dbGetProfile()) || {};
+    profile.nutritionGoals = ST.nutritionGoals;
+    await dbSetProfile(profile);
+  } catch(e) {}
+}
+
+function renderNutritionGoalsSetup(p) {
+  const parts = [moreBackLink()];
+  parts.push('<div class="section-label" style="margin-top:0">FUEL PLAN SETUP</div>');
+
+  if (!nutritionGoalsComplete()) {
+    parts.push('<div class="alert alert-info mb12"><div class="alert-icon">📋</div><div>Targets are calculated from your sex, age, height, and weight. Add those in Pilot Profile first and come back — nothing here works off guessed numbers.</div></div>');
+    parts.push('<button class="btn btn-outline" onclick="switchTab(\'profile\')">Go to Pilot Profile →</button>');
+    p.innerHTML = parts.join('');
+    return;
+  }
+
+  const bmr = calculateBMR(ST.sex, ST.lastWeight, ST.heightIn, ST.age);
+  parts.push('<div class="card mb12">');
+  parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:4px">At rest your body uses about <strong style="color:var(--text)">'+bmr+' calories</strong> a day. Everything below builds from that.</div>');
+  parts.push('</div>');
+
+  parts.push('<div class="section-label">WHAT ARE YOU TRAINING FOR?</div>');
+  parts.push('<div class="card mb12">');
+  const goalOpts = [
+    ['maintain','Maintain &amp; fuel training','Eat to support the work you\'re already doing.'],
+    ['muscle','Build muscle','A modest surplus, weighted toward protein.'],
+    ['fatloss','Lose fat gradually','A controlled deficit that protects your strength.'],
+    ['none','Just track, no targets','Log meals and see the numbers. No goals, no targets.'],
+  ];
+  goalOpts.forEach(([val,label,desc]) => {
+    const on = (ST.goalDraft || 'maintain') === val;
+    parts.push('<div onclick="ST.goalDraft=\''+val+'\';renderPage()" style="padding:12px;border:1px solid '+(on?'var(--gold)':'var(--border)')+';border-radius:9px;margin-bottom:8px;cursor:pointer;background:'+(on?'rgba(201,168,76,0.07)':'transparent')+'">');
+    parts.push('<div style="font-size:14px;font-weight:600;color:'+(on?'var(--gold)':'var(--text)')+'">'+label+'</div>');
+    parts.push('<div style="font-size:11px;color:var(--muted);margin-top:3px">'+desc+'</div>');
+    parts.push('</div>');
+  });
+  parts.push('</div>');
+
+  if ((ST.goalDraft || 'maintain') !== 'none') {
+    parts.push('<div class="section-label">TRAINING DAYS PER WEEK</div>');
+    parts.push('<div class="card mb12"><div class="field" style="margin-bottom:0"><select onchange="ST.trainDaysDraft=this.value;renderPage()">');
+    [['1-2','1–2 days'],['3-4','3–4 days'],['5-6','5–6 days'],['daily','Most days']].forEach(([v,l]) => {
+      parts.push('<option value="'+v+'"'+((ST.trainDaysDraft||'3-4')===v?' selected':'')+'>'+l+'</option>');
+    });
+    parts.push('</select></div></div>');
+
+    const tdee = calculateTDEE(bmr, ST.trainDaysDraft || '3-4');
+    const t = calculateNutritionTargets(ST.goalDraft || 'maintain', tdee, bmr, ST.lastWeight);
+    if (t) {
+      parts.push('<div class="section-label">YOUR STARTING TARGETS</div>');
+      parts.push('<div class="card mb12">');
+      parts.push('<div style="text-align:center;padding:6px 0 14px"><div style="font-family:var(--mono);font-size:38px;color:var(--gold);line-height:1">'+t.calories.toLocaleString()+'</div><div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.18em;margin-top:5px">CALORIES / DAY</div></div>');
+      [['PROTEIN',t.protein,'var(--gold)'],['CARBS',t.carbs,'var(--blue)'],['FAT',t.fat,'var(--teal)']].forEach(([n,v,c]) => {
+        parts.push('<div class="fb" style="margin-bottom:7px"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--muted)">'+n+'</span><span style="font-family:var(--mono);font-size:13px;color:'+c+'">'+v+'g</span></div>');
+      });
+      parts.push('<div style="font-size:11px;color:var(--muted);line-height:1.65;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">');
+      if (t.mode === 'fatloss') parts.push('A '+MAX_DAILY_DEFICIT+'-calorie deficit, which is roughly a pound a week. Protein stays high on purpose — that\'s what protects the strength you\'re building while you lose fat.');
+      else if (t.mode === 'muscle') parts.push('A '+MAX_DAILY_SURPLUS+'-calorie surplus — enough to build, small enough that most of it isn\'t fat. Protein is set to support recovery between sessions.');
+      else parts.push('Matched to what you\'re burning, so you\'re fueling your training rather than running it on empty.');
+      parts.push('</div>');
+      if (t.flooredAtBMR) {
+        parts.push('<div style="font-size:11px;color:var(--amber);line-height:1.6;margin-top:10px">Held at your resting metabolic rate. The deficit math would have gone lower, but eating below what your body uses at rest isn\'t a faster plan, just a worse one.</div>');
+      }
+      parts.push('</div>');
+      parts.push('<button class="btn btn-gold" onclick="saveNutritionGoals('+JSON.stringify(t).replace(/"/g,'&quot;')+').then(()=>{switchTab(\'nutrition\')})">Use These Targets</button>');
+    }
+  } else {
+    parts.push('<div class="alert alert-info mb12"><div class="alert-icon">👍</div><div>No targets set. You\'ll still see calories and macros for everything you log — just without a goal attached.</div></div>');
+    parts.push('<button class="btn btn-gold" onclick="saveNutritionGoals(null).then(()=>{switchTab(\'nutrition\')})">Log Without Targets</button>');
+  }
+
+  parts.push('<div style="font-size:10px;color:var(--muted);line-height:1.6;margin-top:14px;text-align:center">A starting point, not a prescription. Adjust anytime, and talk to a doctor or dietitian for anything specific to you.</div>');
+  p.innerHTML = parts.join('');
+}
+
 async function renderNutrition(p) {
   await loadTodaysMeals();
   const parts = [moreBackLink()];
   parts.push('<div class="section-label" style="margin-top:0">NUTRITION LOG — TODAY</div>');
+
+  const g = ST.nutritionGoals;
+  if (!g) {
+    parts.push('<div class="card mb12"><div style="font-size:13px;font-weight:600;margin-bottom:6px">Set up your fuel plan</div><div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px">Calorie and macro targets built from your own biometrics — or skip targets entirely and just log what you eat.</div><button class="btn btn-gold" onclick="switchTab(\'fuelplan\')">Set Up Fuel Plan</button></div>');
+  } else if (g.mode !== 'none') {
+    const dayT = sumMealNutrients((ST.todaysMeals||[]).flatMap(m => m.meal_data.items));
+    parts.push('<div class="card mb12">');
+    parts.push('<div class="fb" style="align-items:baseline;margin-bottom:12px"><span style="font-family:var(--mono);font-size:26px;color:var(--text)">'+Math.round(dayT.calories).toLocaleString()+'</span><span style="font-family:var(--mono);font-size:11px;color:var(--muted)">OF '+g.calories.toLocaleString()+' KCAL</span></div>');
+    [['PROTEIN',dayT.protein,g.protein,'var(--gold)'],['CARBS',dayT.carbs,g.carbs,'var(--blue)'],['FAT',dayT.fat,g.fat,'var(--teal)']].forEach(([n,have,goal,col]) => {
+      const pct = goal > 0 ? Math.min(100, (have/goal)*100) : 0;
+      parts.push('<div style="margin-bottom:10px"><div class="fb" style="margin-bottom:4px"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--muted)">'+n+'</span><span style="font-family:var(--mono);font-size:11px">'+Math.round(have)+'<span style="color:var(--muted)">/'+goal+'g</span></span></div>');
+      parts.push('<div style="height:4px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+col+';border-radius:2px"></div></div></div>');
+    });
+    parts.push('<button class="btn-ghost" style="font-size:11px;margin-top:4px" onclick="switchTab(\'fuelplan\')">Adjust targets</button>');
+    parts.push('</div>');
+  }
 
   const meals = ST.todaysMeals || [];
   if (!meals.length) {

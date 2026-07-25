@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.40';
+const FCF_VERSION = 'v5.19.41';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -7893,21 +7893,34 @@ function renderMealBuilder() {
     parts.push('</div>');
   }
 
-  parts.push('<input type="text" id="foodSearchInput" placeholder="Search a food (e.g. chicken breast)..." oninput="filterUSDASearch(this.value)">');
+  parts.push('<div class="field"><input type="text" id="foodSearchInput" placeholder="Search a food (e.g. chicken breast)..." oninput="filterUSDASearch(this.value)"></div>');
   parts.push('<div id="usdaSearchResults"></div>');
   parts.push('<button class="btn-ghost mt8" onclick="showManualFoodEntry()">Can\'t find it? Enter manually</button>');
   parts.push('<div id="manualFoodEntryRoot"></div>');
 
   parts.push('<div class="fb mt8">');
   parts.push('<button class="btn btn-outline" style="flex:1;margin-right:8px" onclick="closeMealBuilder()">Cancel</button>');
-  parts.push('<button class="btn btn-gold" style="flex:1" '+(mb.items.length?'':'disabled')+' onclick="finishMealBuilder()">Save Meal</button>');
+  parts.push('<button class="btn btn-gold" style="flex:1" '+((mb.items.length || window._usdaPendingFood)?'':'disabled')+' onclick="finishMealBuilder()">Save Meal</button>');
   parts.push('</div>');
   parts.push('</div>');
   box.innerHTML = parts.join('');
 }
 
 async function finishMealBuilder() {
-  if (!ST.mealBuilder || !ST.mealBuilder.items.length) return;
+  if (!ST.mealBuilder) return;
+  // A food that's been searched, selected, and is sitting in preview —
+  // with real macros already showing on screen — but not yet explicitly
+  // added via "Add to Meal" is a completely reasonable thing to expect
+  // Save to include. Requiring a separate confirm tap for the one item
+  // someone is actively looking at was producing a silently disabled
+  // button with no explanation.
+  if (window._usdaPendingFood && document.getElementById('usdaServingMult')) {
+    addUSDAFoodToMeal();
+  }
+  if (!ST.mealBuilder.items.length) {
+    showBigToast('Add at least one food before saving.', 'warn');
+    return;
+  }
   await saveMealLog(ST.mealBuilder.mealType, ST.mealBuilder.items);
   ST.mealBuilder = null;
   renderPage();

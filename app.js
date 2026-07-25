@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.32';
+const FCF_VERSION = 'v5.19.33';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -46,6 +46,7 @@ const ST = {
   showInstallPrompt: false,
   flightSchedule: null, flightScheduleRaw: null, scheduleEnvNote: null,
   ouraDismissedIds: [], ouraImportQueue: [],
+  ouraSteps: null, ouraActiveCal: null,
   nutritionGoals: null, goalDraft: 'maintain', trainDaysDraft: '3-4',
 
   tab: 'preflight',
@@ -2148,6 +2149,7 @@ function renderPage() {
   else if (ST.tab === 'data')        renderData(p);
   else if (ST.tab === 'nutrition')   renderNutrition(p);
   else if (ST.tab === 'fuelplan')    renderNutritionGoalsSetup(p);
+  else if (ST.tab === 'today')       { loadTodaysMeals().then(()=>renderToday(p)).catch(()=>renderToday(p)); }
   else if (ST.tab === 'badges')      renderBadges(p);
   else if (ST.tab === 'superuser')   renderSuperUser(p);
   else if (ST.tab === 'debrief')     renderDebrief(p);
@@ -6546,6 +6548,11 @@ async function syncOuraData(force) {
     const label     = score >= 70 ? '🟢 GO' : score >= 60 ? '🟡 MARGINAL' : '🔴 NO-GO';
     ST.fatigue    = condition;
     ST.ouraScore  = score;
+    // daily_activity was already being fetched for its score; steps and
+    // active calories were being discarded. Held in state only (not a new
+    // DB column) since a fresh sync repopulates them anyway.
+    ST.ouraSteps  = activityItem?.steps ?? null;
+    ST.ouraActiveCal = activityItem?.active_calories ?? null;
     ST.ouraData   = row;
 
     // Show the sync result once per day for automatic background syncs — a
@@ -6849,6 +6856,7 @@ function renderMore(p) {
   parts.push(item('📖','Flight Deck Wisdom','Daily training wisdom cards',"switchTab('wisdom')"));
   parts.push(item('📊','Data & Import/Export','Flight schedule import, CSV export, AI prompt',"switchTab('data')"));
   parts.push(item('🍽️','Nutrition Log','Log meals, search foods, track macros',"switchTab('nutrition')"));
+  parts.push(item('🌅','Today','Daily briefing — schedule, readiness, fuel',"switchTab('today')"));
   if (isSuperUser()) {
     parts.push(item('🛡️','Super User','Activity report — real usage, not signups',"switchTab('superuser')"));
   }
@@ -7200,6 +7208,233 @@ async function saveNutritionGoals(targets) {
     profile.nutritionGoals = ST.nutritionGoals;
     await dbSetProfile(profile);
   } catch(e) {}
+}
+
+// ─── TODAY BRIEFING ─────────────────────────────────────────────────────
+// Everything here is deterministic and derived from data the app already
+// holds — no network call, no API cost, works offline in a terminal or at
+// altitude, which is the whole point of not making this AI-generated.
+
+function scheduleContextForToday(schedule, now) {
+  const ctx = { hasSchedule: false, todayEvents: [], current: null, nextDuty: null,
+                lastDutyEndedAt: null, freeMinutesUntilDuty: null, layoverAirport: null,
+                tomorrowFirstDuty: null, yesterdayDutyHours: 0, flightsToday: 0 };
+  if (!schedule || !schedule.length) return ctx;
+  ctx.hasSchedule = true;
+  const t = now.getTime();
+  const dayStart = new Date(now); dayStart.setHours(0,0,0,0);
+  const dayEnd = new Date(now); dayEnd.setHours(23,59,59,999);
+  const yStart = new Date(dayStart.getTime() - 86400000);
+  const tomorrowStart = new Date(dayStart.getTime() + 86400000);
+  const tomorrowEnd = new Date(dayEnd.getTime() + 86400000);
+
+  schedule.forEach(e => {
+    const s = new Date(e.start).getTime(), en = new Date(e.end).getTime();
+    if (isNaN(s) || isNaN(en)) return;
+    if (en > dayStart.getTime() && s < dayEnd.getTime()) {
+      ctx.todayEvents.push(e);
+      if (e.type === 'flight') ctx.flightsToday++;
+      if (t >= s && t <= en) {
+        ctx.current = e;
+        if (e.type === 'layover') ctx.layoverAirport = e.airport;
+      }
+      if (e.type === 'flight' && s > t && (!ctx.nextDuty || s < new Date(ctx.nextDuty.start).getTime())) ctx.nextDuty = e;
+      if (e.type === 'flight' && en < t && (!ctx.lastDutyEndedAt || en > ctx.lastDutyEndedAt)) ctx.lastDutyEndedAt = en;
+    }
+    // Yesterday's total flight time — the recovery-debt signal
+    if (e.type === 'flight' && en > yStart.getTime() && s < dayStart.getTime()) {
+      const os = Math.max(s, yStart.getTime()), oe = Math.min(en, dayStart.getTime());
+      if (oe > os) ctx.yesterdayDutyHours += (oe - os) / 3600000;
+    }
+    if (e.type === 'flight' && s >= tomorrowStart.getTime() && s <= tomorrowEnd.getTime()) {
+      if (!ctx.tomorrowFirstDuty || s < new Date(ctx.tomorrowFirstDuty.start).getTime()) ctx.tomorrowFirstDuty = e;
+    }
+  });
+  ctx.yesterdayDutyHours = Math.round(ctx.yesterdayDutyHours * 10) / 10;
+  if (ctx.nextDuty) ctx.freeMinutesUntilDuty = Math.round((new Date(ctx.nextDuty.start).getTime() - t) / 60000);
+  return ctx;
+}
+
+function getTodayContext() {
+  const now = new Date();
+  const sched = scheduleContextForToday(ST.flightSchedule, now);
+  const meals = ST.todaysMeals || [];
+  const consumed = sumMealNutrients(meals.flatMap(m => m.meal_data?.items || []));
+  const g = ST.nutritionGoals && ST.nutritionGoals.mode !== 'none' ? ST.nutritionGoals : null;
+  const todayStr = now.toISOString().slice(0,10);
+  const workoutToday = (ST.sessionCache || []).some(s => (s.date||'').slice(0,10) === todayStr);
+  return {
+    now, hour: now.getHours(),
+    sched,
+    oura: { readiness: ST.ouraScore ?? null, sleep: ST.ouraData?.sleep_score ?? null,
+            activity: ST.ouraData?.activity_score ?? null, steps: ST.ouraSteps ?? null },
+    nutrition: { consumed, goals: g, mealCount: meals.length,
+                 proteinPct: g && g.protein ? Math.round((consumed.protein / g.protein) * 100) : null,
+                 caloriePct: g && g.calories ? Math.round((consumed.calories / g.calories) * 100) : null },
+    training: { workoutToday },
+    water: ST.waterIn || 0,
+  };
+}
+
+// Returns the single most useful thing right now, plus its tone. Ordered by
+// priority — the first matching rule wins, so a low-readiness day never gets
+// a "go train hard" headline just because a gap happens to exist.
+function buildTodayBriefing(ctx) {
+  const { sched, oura, training, hour } = ctx;
+  const readiness = oura.readiness;
+  const gapMin = sched.freeMinutesUntilDuty;
+
+  // 1. Mid-duty — no training suggestion is useful here.
+  if (sched.current && sched.current.type === 'flight') {
+    return { tone:'neutral', headline:'On duty',
+      body:'Mid-leg. Water and standing when you can beats anything you\'d gain from planning a session right now.',
+      action:null };
+  }
+
+  // 2. Low readiness overrides an available window. Rest is the recommendation.
+  if (readiness !== null && readiness < 60) {
+    return { tone:'rest', headline:'Readiness is low — take it easy',
+      body:'Readiness at '+readiness+'. A hard session today costs more than it returns. Stretching, an easy walk, or a nap if there\'s time before your next report.',
+      action:{ label:'Start a light session', fn:"switchTab('preflight')" } };
+  }
+
+  // 3. Long duty yesterday is a real recovery cost even when readiness looks fine.
+  if (sched.yesterdayDutyHours >= 8 && !training.workoutToday) {
+    return { tone:'ease', headline:'Yesterday was a long day',
+      body:sched.yesterdayDutyHours+' hours of flying yesterday. Something moderate today — mobility or a walk — will do more for you than pushing hard.',
+      action:{ label:'Start a session', fn:"switchTab('preflight')" } };
+  }
+
+  // 4. Already trained — shift to completing the day well.
+  if (training.workoutToday) {
+    const shortProtein = ctx.nutrition.goals && ctx.nutrition.consumed.protein < ctx.nutrition.goals.protein * 0.75;
+    return { tone:'go', headline:'Session logged',
+      body: shortProtein
+        ? 'Work\'s done. You\'re still well short on protein, and that\'s the piece that turns the session into progress.'
+        : 'Work\'s done. Keep water up through the rest of the day and protect your sleep window tonight.',
+      action: shortProtein ? { label:'Log a meal', fn:"switchTab('nutrition')" } : null };
+  }
+
+  // 5. A real window before the next report.
+  if (gapMin !== null && gapMin >= 45) {
+    const hrs = Math.floor(gapMin/60), mins = gapMin%60;
+    const gapStr = hrs > 0 ? hrs+'h '+(mins?mins+'m':'') : gapMin+' min';
+    const marginal = readiness !== null && readiness < 70;
+    return { tone: marginal ? 'ease' : 'go',
+      headline:'You have '+gapStr.trim()+' before your next flight',
+      body: marginal
+        ? 'Readiness at '+readiness+' — enough time to train, but keep the intensity honest rather than chasing a PR.'
+        : (sched.layoverAirport ? 'On a layover in '+sched.layoverAirport+'. ' : '') + 'Good window for a full session.',
+      action:{ label:'Start a workout', fn:"switchTab('preflight')" } };
+  }
+
+  // 6. A short window — worth naming honestly rather than pretending it's enough.
+  if (gapMin !== null && gapMin > 0 && gapMin < 45) {
+    return { tone:'neutral', headline:'Tight window — '+gapMin+' min',
+      body:'Not enough for a full session without rushing it. A brisk walk through the terminal or some mobility work fits better.',
+      action:null };
+  }
+
+  // 7. Evening with an early report tomorrow — sleep is the highest-value move.
+  if (sched.tomorrowFirstDuty && hour >= 19) {
+    const rt = new Date(sched.tomorrowFirstDuty.start);
+    return { tone:'rest', headline:'Early report tomorrow',
+      body:'First leg at '+rt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})+'. Sleep is the highest-return thing left on today\'s list.',
+      action:null };
+  }
+
+  // 8. Nothing scheduled — the best day of the week to train properly.
+  if (sched.hasSchedule && !sched.todayEvents.length) {
+    return { tone:'go', headline:'No duty today',
+      body:'Nothing on the schedule. Best chance this week for a full session with real equipment.',
+      action:{ label:'Start a workout', fn:"switchTab('preflight')" } };
+  }
+
+  // 9. Fallback — still actionable, never a dead end.
+  return { tone:'neutral', headline: hour < 11 ? 'Good morning' : hour < 17 ? 'Afternoon check-in' : 'Evening check-in',
+    body: ST.flightSchedule ? 'Nothing pressing on the schedule right now.' : 'Upload your crew schedule in Data & Import/Export and this gets a lot more specific.',
+    action:{ label:'Start a workout', fn:"switchTab('preflight')" } };
+}
+
+// The "what's still open today" list — separate from the headline so it can
+// show alongside any recommendation without competing with it.
+function buildTodayGaps(ctx) {
+  const gaps = [];
+  const { nutrition, training, water, hour } = ctx;
+  if (!nutrition.mealCount && hour >= 11) gaps.push({ icon:'🍽️', text:'Nothing logged yet today', fn:"switchTab('nutrition')" });
+  else if (nutrition.goals && nutrition.proteinPct !== null && nutrition.proteinPct < 70 && hour >= 15) {
+    gaps.push({ icon:'🥩', text:'Protein at '+nutrition.proteinPct+'% of target', fn:"switchTab('nutrition')" });
+  }
+  if (!training.workoutToday && hour >= 18) gaps.push({ icon:'💪', text:'No session logged today', fn:"switchTab('preflight')" });
+  if (water < 1.5 && hour >= 14) gaps.push({ icon:'💧', text:'Water is light so far', fn:"switchTab('preflight')" });
+  return gaps;
+}
+
+function renderToday(p) {
+  const ctx = getTodayContext();
+  const brief = buildTodayBriefing(ctx);
+  const gaps = buildTodayGaps(ctx);
+  const toneColor = { go:'var(--green)', ease:'var(--amber)', rest:'var(--blue)', neutral:'var(--muted)' }[brief.tone];
+  const parts = [];
+
+  parts.push('<div class="fb" style="align-items:baseline;margin-bottom:14px">');
+  parts.push('<span style="font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--muted)">'+ctx.now.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'}).toUpperCase()+'</span>');
+  if (ctx.oura.steps !== null) parts.push('<span style="font-family:var(--mono);font-size:12px;color:var(--text)">'+ctx.oura.steps.toLocaleString()+' <span style="font-size:9px;color:var(--muted);letter-spacing:.1em">STEPS</span></span>');
+  parts.push('</div>');
+
+  if (ST.ouraConnected && ctx.oura.readiness !== null) {
+    parts.push('<div class="stat-row" style="margin-bottom:16px">');
+    [['READINESS',ctx.oura.readiness],['SLEEP',ctx.oura.sleep],['ACTIVITY',ctx.oura.activity]].forEach(([l,v]) => {
+      const col = v === null ? 'var(--muted)' : v >= 85 ? 'var(--green)' : v >= 70 ? 'var(--text)' : v >= 60 ? 'var(--amber)' : 'var(--red)';
+      parts.push('<div class="stat-box"><div class="stat-val" style="color:'+col+'">'+(v ?? '—')+'</div><div class="stat-lbl">'+l+'</div></div>');
+    });
+    parts.push('</div>');
+  }
+
+  parts.push('<div class="card mb12" style="border-left:3px solid '+toneColor+'">');
+  parts.push('<div style="font-size:17px;font-weight:600;letter-spacing:-.01em;margin-bottom:7px">'+brief.headline+'</div>');
+  parts.push('<div style="font-size:13px;color:var(--muted);line-height:1.65">'+brief.body+'</div>');
+  if (brief.action) parts.push('<button class="btn btn-gold" style="margin-top:14px" onclick="'+brief.action.fn+'">'+brief.action.label+'</button>');
+  parts.push('</div>');
+
+  if (ctx.sched.todayEvents.length) {
+    parts.push('<div class="section-label">TODAY\'S SCHEDULE</div>');
+    parts.push('<div class="card mb12">');
+    ctx.sched.todayEvents.slice(0,6).forEach(e => {
+      const s = new Date(e.start), en = new Date(e.end);
+      const isNow = ctx.sched.current && ctx.sched.current.uid === e.uid;
+      parts.push('<div class="fb" style="padding:7px 0;'+(isNow?'':'opacity:.72')+'">');
+      parts.push('<span style="font-family:var(--mono);font-size:11px;color:'+(isNow?'var(--gold)':'var(--muted)')+'">'+s.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false})+'–'+en.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false})+'</span>');
+      parts.push('<span style="font-size:12px;text-align:right">'+e.summary+'</span>');
+      parts.push('</div>');
+    });
+    parts.push('</div>');
+  }
+
+  const n = ctx.nutrition;
+  if (n.goals) {
+    parts.push('<div class="section-label">FUEL</div>');
+    parts.push('<div class="card mb12">');
+    parts.push('<div class="fb" style="align-items:baseline;margin-bottom:10px"><span style="font-family:var(--mono);font-size:22px">'+Math.round(n.consumed.calories).toLocaleString()+'</span><span style="font-family:var(--mono);font-size:10px;color:var(--muted)">OF '+n.goals.calories.toLocaleString()+' KCAL</span></div>');
+    [['PROTEIN',n.consumed.protein,n.goals.protein,'var(--gold)'],['CARBS',n.consumed.carbs,n.goals.carbs,'var(--blue)'],['FAT',n.consumed.fat,n.goals.fat,'var(--teal)']].forEach(([lbl,have,goal,col]) => {
+      const pct = goal > 0 ? Math.min(100,(have/goal)*100) : 0;
+      parts.push('<div style="margin-bottom:8px"><div class="fb" style="margin-bottom:3px"><span style="font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--muted)">'+lbl+'</span><span style="font-family:var(--mono);font-size:10px">'+Math.round(have)+'<span style="color:var(--muted)">/'+goal+'g</span></span></div>');
+      parts.push('<div style="height:3px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+col+';border-radius:2px"></div></div></div>');
+    });
+    parts.push('</div>');
+  }
+
+  if (gaps.length) {
+    parts.push('<div class="section-label">STILL OPEN</div>');
+    parts.push('<div class="card mb12">');
+    gaps.forEach(g => {
+      parts.push('<div class="fb" style="padding:9px 0;cursor:pointer" onclick="'+g.fn+'"><span style="font-size:13px">'+g.icon+' '+g.text+'</span><span style="color:var(--muted);font-size:14px">›</span></div>');
+    });
+    parts.push('</div>');
+  }
+
+  parts.push('<button class="btn btn-outline" onclick="switchTab(\'nutrition\')">🍽️ Log a meal</button>');
+  p.innerHTML = parts.join('');
 }
 
 function renderNutritionGoalsSetup(p) {

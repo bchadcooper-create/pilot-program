@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.35';
+const FCF_VERSION = 'v5.19.36';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -7362,6 +7362,14 @@ function getTodayContext() {
 // Returns the single most useful thing right now, plus its tone. Ordered by
 // priority — the first matching rule wins, so a low-readiness day never gets
 // a "go train hard" headline just because a gap happens to exist.
+// Real operational overhead on a between-legs gap, not configurable —
+// these are duty requirements, not preferences. After brakes are set,
+// 10 minutes for deplaning and the post-flight walk-around; before the
+// next departure, 30 minutes minimum at the aircraft for FMC programming,
+// walk-around, and briefings. Neither end of a ground gap is actually free.
+const POST_LANDING_BUFFER_MIN = 10;
+const PRE_DEPARTURE_BUFFER_MIN = 30;
+
 function buildTodayBriefing(ctx) {
   const { sched, oura, training, hour } = ctx;
   const readiness = oura.readiness;
@@ -7399,11 +7407,16 @@ function buildTodayBriefing(ctx) {
   }
 
   // 5. A gap while there's STILL FLYING LEFT today is not a training window,
-  // whatever its length — you'd be training in uniform with legs ahead. The
-  // useful move is fuel, and naming when the duty day actually ends so the
-  // real session has somewhere to go.
+  // whatever its length — you'd be training in uniform with legs ahead.
+  // The raw gap between landing and the next departure isn't usable ground
+  // time — 10 minutes of it belongs to deplaning/walk-around on the leg
+  // just finished, and the last 30 belong to prepping the next one. What's
+  // left in between is the only part actually available for anything else,
+  // and a 38-minute gap and a 65-minute gap can look similar on a calendar
+  // while being completely different once that's accounted for.
   if (gapMin !== null && sched.legsRemaining > 0 && sched.legsCompleted > 0) {
     const ord = ['','First','Second','Third','Fourth','Fifth'][sched.legsCompleted] || 'Latest';
+    const usableMin = gapMin - POST_LANDING_BUFFER_MIN - PRE_DEPARTURE_BUFFER_MIN;
     const hrs = Math.floor(gapMin/60), mins = gapMin%60;
     const gapStr = (hrs > 0 ? hrs+'h '+(mins?mins+'m':'') : gapMin+' min').trim();
     const where = sched.layoverAirport ? ' in '+sched.layoverAirport : '';
@@ -7411,12 +7424,22 @@ function buildTodayBriefing(ctx) {
     const legWord = sched.legsRemaining === 1 ? 'one more leg' : sched.legsRemaining+' more legs';
     const ate = ctx.nutrition.mealCount > 0;
     let body = ord+' leg done, '+legWord+' to go'+(dutyEnd ? ' — you\'re off at '+dutyEnd+'.' : '.')+' ';
-    body += ate
-      ? 'Top up water and keep moving while you can; sitting is the real cost of a day like this.'
-      : 'Eat now rather than training — you\'ve got flying ahead, and nothing\'s logged yet today.';
+
+    if (usableMin >= 20 && !ate) {
+      body += gapStr+' on the ground is really about '+usableMin+' min once deplaning duties and the '+PRE_DEPARTURE_BUFFER_MIN+'-minute report requirement are accounted for — worth eating now.';
+    } else if (usableMin >= 20 && ate) {
+      body += 'Top up water and keep moving while you can; sitting is the real cost of a day like this.';
+    } else if (usableMin >= 5) {
+      body += gapStr+' on the ground is really only about '+usableMin+' min after duty requirements on both ends — enough for something quick and portable, not a real meal.';
+    } else {
+      body += gapStr+' isn\'t real ground time once deplaning and report requirements are accounted for — basically none of it is usable. Water if you can grab it, don\'t plan around food here.';
+    }
     if (dutyEnd) body += ' The window after '+dutyEnd+' is where a real session and dinner fit.';
-    return { tone:'neutral', headline:ord+' leg done — '+gapStr+where,
-      body, action:{ label: ate ? 'Log a meal' : 'Fuel up — log a meal', fn:"switchTab('nutrition')" } };
+
+    const action = usableMin >= 5
+      ? { label: (usableMin >= 20 && !ate) ? 'Fuel up — log a meal' : 'Log a meal', fn:"switchTab('nutrition')" }
+      : null;
+    return { tone:'neutral', headline:ord+' leg done — '+gapStr+where, body, action };
   }
 
   // 6. Duty is finished for the day (or hasn't started and there's real room).

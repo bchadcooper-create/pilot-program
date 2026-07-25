@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.36';
+const FCF_VERSION = 'v5.19.37';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -7648,51 +7648,72 @@ function renderNutritionGoalsSetup(p) {
 async function renderNutrition(p) {
   await loadTodaysMeals();
   const parts = [moreBackLink()];
-  parts.push('<div class="section-label" style="margin-top:0">NUTRITION LOG — TODAY</div>');
+  parts.push('<div class="section-label" style="margin-top:0">FUEL LOG — TODAY</div>');
 
   const g = ST.nutritionGoals;
+  const meals = ST.todaysMeals || [];
+  const dayTotals = sumMealNutrients(meals.flatMap(m => m.meal_data.items));
+
   if (!g) {
     parts.push('<div class="card mb12"><div style="font-size:13px;font-weight:600;margin-bottom:6px">Set up your fuel plan</div><div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px">Calorie and macro targets built from your own biometrics — or skip targets entirely and just log what you eat.</div><button class="btn btn-gold" onclick="switchTab(\'fuelplan\')">Set Up Fuel Plan</button></div>');
   } else if (g.mode !== 'none') {
-    const dayT = sumMealNutrients((ST.todaysMeals||[]).flatMap(m => m.meal_data.items));
-    parts.push('<div class="card mb12">');
-    parts.push('<div class="fb" style="align-items:baseline;margin-bottom:12px"><span style="font-family:var(--mono);font-size:26px;color:var(--text)">'+Math.round(dayT.calories).toLocaleString()+'</span><span style="font-family:var(--mono);font-size:11px;color:var(--muted)">OF '+g.calories.toLocaleString()+' KCAL</span></div>');
-    [['PROTEIN',dayT.protein,g.protein,'var(--gold)'],['CARBS',dayT.carbs,g.carbs,'var(--blue)'],['FAT',dayT.fat,g.fat,'var(--teal)']].forEach(([n,have,goal,col]) => {
-      const pct = goal > 0 ? Math.min(100, (have/goal)*100) : 0;
-      parts.push('<div style="margin-bottom:10px"><div class="fb" style="margin-bottom:4px"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--muted)">'+n+'</span><span style="font-family:var(--mono);font-size:11px">'+Math.round(have)+'<span style="color:var(--muted)">/'+goal+'g</span></span></div>');
-      parts.push('<div style="height:4px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+col+';border-radius:2px"></div></div></div>');
-    });
-    parts.push('<button class="btn-ghost" style="font-size:11px;margin-top:4px" onclick="switchTab(\'fuelplan\')">Adjust targets</button>');
+    // One consolidated card — ring plus macro bars — replacing what used to
+    // be two separate totals displays (a goals-progress card, then a second
+    // "Today's Totals" card further down repeating the same calorie number).
+    const pct = g.calories > 0 ? Math.min(100, (dayTotals.calories / g.calories) * 100) : 0;
+    const circumference = 2 * Math.PI * 45;
+    const dashOffset = circumference * (1 - pct / 100);
+    parts.push('<div class="card mb12"><div style="display:flex;gap:16px;align-items:center">');
+    parts.push('<div style="position:relative;width:96px;height:96px;flex-shrink:0">');
+    parts.push('<svg width="96" height="96" viewBox="0 0 104 104" style="transform:rotate(-90deg)">');
+    parts.push('<circle cx="52" cy="52" r="45" fill="none" stroke="var(--bg3)" stroke-width="9"/>');
+    parts.push('<circle cx="52" cy="52" r="45" fill="none" stroke="var(--gold)" stroke-width="9" stroke-linecap="round" stroke-dasharray="'+circumference.toFixed(1)+'" stroke-dashoffset="'+dashOffset.toFixed(1)+'"/>');
+    parts.push('</svg>');
+    parts.push('<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-family:var(--mono);font-size:20px">'+Math.round(dayTotals.calories).toLocaleString()+'</div><div style="font-family:var(--mono);font-size:8px;color:var(--muted);letter-spacing:.1em;margin-top:2px">OF '+g.calories.toLocaleString()+'</div></div>');
     parts.push('</div>');
+    parts.push('<div style="flex:1;min-width:0">');
+    [['PROTEIN',dayTotals.protein,g.protein,'var(--gold)'],['CARBS',dayTotals.carbs,g.carbs,'var(--blue)'],['FAT',dayTotals.fat,g.fat,'var(--teal)']].forEach(([n,have,goal,col]) => {
+      const mpct = goal > 0 ? Math.min(100, (have/goal)*100) : 0;
+      parts.push('<div style="margin-bottom:9px"><div class="fb" style="margin-bottom:3px"><span style="font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--muted)">'+n+'</span><span style="font-family:var(--mono);font-size:10px">'+Math.round(have)+'<span style="color:var(--muted)">/'+goal+'g</span></span></div>');
+      parts.push('<div style="height:3px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+mpct+'%;background:'+col+';border-radius:2px"></div></div></div>');
+    });
+    parts.push('</div></div>');
+    parts.push('<button class="btn-ghost" style="font-size:11px;margin-top:2px" onclick="switchTab(\'fuelplan\')">Adjust targets</button>');
+    parts.push('</div>');
+  } else {
+    // "Just track" mode still gets a real number, no targets to compare against
+    parts.push('<div class="card mb12"><div class="fb" style="align-items:baseline"><span style="font-family:var(--mono);font-size:26px">'+Math.round(dayTotals.calories).toLocaleString()+'</span><span style="font-family:var(--mono);font-size:11px;color:var(--muted)">CAL TODAY · P'+Math.round(dayTotals.protein)+'g · C'+Math.round(dayTotals.carbs)+'g · F'+Math.round(dayTotals.fat)+'g</span></div></div>');
   }
 
-  const meals = ST.todaysMeals || [];
+  // Moved up per direct feedback — this used to be the last thing on the
+  // screen, after the full meal list, instead of the first action available.
+  parts.push('<button class="btn btn-gold mb12" onclick="openMealBuilder()">+ Log a Meal</button>');
+  parts.push('<div id="mealBuilderRoot"></div>');
+
   if (!meals.length) {
     parts.push('<div class="alert alert-info mb12"><div class="alert-icon">🍽️</div><div>Nothing logged yet today.</div></div>');
   } else {
-    const dayTotals = sumMealNutrients(meals.flatMap(m => m.meal_data.items));
-    parts.push('<div class="card mb12">');
-    parts.push('<div class="fb"><div style="font-size:13px;font-weight:600">Today\'s Totals</div><div style="font-size:12px;color:var(--muted)">'+dayTotals.calories+' cal · P'+dayTotals.protein+'g · C'+dayTotals.carbs+'g · F'+dayTotals.fat+'g</div></div>');
-    parts.push('</div>');
+    // Manifest style: grouped by meal type, each item with its own line and
+    // calories, a timestamp per meal, and a subtotal — replacing the flatter
+    // list that repeated per-meal totals without any time context.
     ['breakfast','lunch','dinner','snack'].forEach(type => {
       const typeMeals = meals.filter(m => m.meal_type === type);
       if (!typeMeals.length) return;
-      parts.push('<div class="section-label">'+type.toUpperCase()+'</div>');
       typeMeals.forEach(m => {
         const t = m.meal_data.totals;
-        parts.push('<div class="card mb12">');
+        const timeStr = m.logged_at ? new Date(m.logged_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : '';
+        parts.push('<div class="fb" style="margin:14px 0 6px"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;color:var(--muted)">'+type.toUpperCase()+'</span>'+(timeStr?'<span style="font-family:var(--mono);font-size:10px;color:var(--gold)">'+timeStr+'</span>':'')+'</div>');
+        parts.push('<div class="card" style="padding:12px 16px">');
         m.meal_data.items.forEach(item => {
-          parts.push('<div class="fb" style="margin-bottom:4px"><span style="font-size:13px">'+item.description+'</span><span style="font-size:11px;color:var(--muted)">'+item.nutrients.calories+' cal</span></div>');
+          parts.push('<div class="fb" style="padding:6px 0;border-bottom:1px solid var(--border)"><span style="font-size:13px">'+item.description+'</span><span style="font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0;padding-left:10px">'+item.nutrients.calories+'</span></div>');
         });
-        parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">Total: '+t.calories+' cal · P'+t.protein+'g · C'+t.carbs+'g · F'+t.fat+'g</div>');
-        parts.push('<button class="btn-ghost" style="font-size:11px;margin-top:6px" onclick="deleteMealLog(\''+m.id+'\')">🗑️ Remove</button>');
+        parts.push('<div class="fb" style="padding-top:8px;font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.05em"><span>SUBTOTAL</span><span>'+t.calories+' KCAL</span></div>');
+        parts.push('<button class="btn-ghost" style="font-size:11px;margin-top:8px" onclick="deleteMealLog(\''+m.id+'\')">🗑️ Remove</button>');
         parts.push('</div>');
       });
     });
   }
 
-  parts.push('<button class="btn btn-gold mt8" onclick="openMealBuilder()">+ Log a Meal</button>');
-  parts.push('<div id="mealBuilderRoot"></div>');
   p.innerHTML = parts.join('');
 }
 

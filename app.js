@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.44';
+const FCF_VERSION = 'v5.19.45';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -1555,15 +1555,15 @@ const BADGES = [
   { id:'weekly_3',     icon:'📅', title:'Weekly Warrior',   desc:'3 workouts inside one week',             check:s => s.best7Day >= 3 },
   { id:'month_solid',  icon:'🔥', title:'Month of Missions',desc:'12 workouts inside 28 days',             check:s => s.best28Day >= 12 },
   { id:'first_pr',     icon:'⭐', title:'New Record',       desc:'Set your first PR',                      check:s => s.prCount >= 1 },
-  { id:'pr_5',         icon:'🏅', title:'PR Hunter',        desc:'5 lifetime PRs',                         check:s => s.prCount >= 5 },
+  { id:'pr_5',         icon:'🏅', title:'PR Hunter',        desc:'10 lifetime PRs',                        check:s => s.prCount >= 10 },
   { id:'pr_25',        icon:'🏆', title:'Record Machine',   desc:'25 lifetime PRs',                        check:s => s.prCount >= 25 },
   { id:'down_5',       icon:'📉', title:'Lean Descent',     desc:'Down 5 lb from your first logged weight',check:s => s.weightLost >= 5 },
   { id:'logger_7',     icon:'📋', title:'Flight Recorder',  desc:'Log biometrics 7 days in a row',         check:s => s.bioStreak >= 7 },
-  { id:'century',      icon:'💯', title:'Century Club',     desc:'100 lifetime sets logged',               check:s => s.totalSets >= 100 },
-  { id:'iron_will',    icon:'🦾', title:'Iron Will',        desc:'15+ sets in a single session',           check:s => s.maxSetsInSession >= 15 },
+  { id:'century',      icon:'💯', title:'Century Club',     desc:'500 lifetime sets logged',               check:s => s.totalSets >= 500 },
+  { id:'iron_will',    icon:'🦾', title:'Iron Will',        desc:'20+ sets in a single session',           check:s => s.maxSetsInSession >= 20 },
   { id:'redline',      icon:'🔴', title:'Redline',          desc:'Trained through NO-GO fatigue 3 times — showing up beats the mood you showed up in', check:s => s.nogoTrainedCount >= 3 },
   { id:'all_weather',  icon:'🌍', title:'All-Weather',      desc:'Trained in Hotel Room, Hotel Gym, and Commercial Gym', check:s => s.envsTrained >= 3 },
-  { id:'early_bird',   icon:'🌅', title:'Early Bird',       desc:'Logged a workout before 6 AM',           check:s => s.earlyBirdCount >= 1 },
+  { id:'early_bird',   icon:'🌅', title:'Early Bird',       desc:'Logged a workout before 6 AM, 5 times',  check:s => s.earlyBirdCount >= 5 },
   { id:'top_gun',      icon:'🎖️', title:'Top Gun',          desc:'Hold the #1 spot on any leaderboard',    check:null, live:true },
   { id:'debrief',      icon:'💬', title:'Debrief',          desc:'Sent feedback to help improve the app',  check:null, live:true },
   { id:'recruiter',    icon:'📡', title:'Recruiter',        desc:'Shared Flight Crew Fitness with someone (self-reported)', check:null, live:true },
@@ -1810,15 +1810,64 @@ async function backfillLeaderboard() {
   }
 }
 
+// The handful of lifts people actually care about seeing at a glance —
+// showing all 13 tracked exercises simultaneously would be unwieldy, so
+// this curates the classic "big lifts" plus running for the summary view,
+// with every other exercise still reachable via the detailed board below.
+const LEADERBOARD_GLANCE_IDS = ['c_up_to1','c_lb_to1','c_ul_to1','c_up_to2'];
+
+async function loadLeaderboardGlance() {
+  const el = document.getElementById('lbGlance');
+  if (!el) return;
+  try {
+    const liftQueries = LEADERBOARD_GLANCE_IDS.map(id =>
+      withTimeout(SB.from('leaderboard_entries').select('*').eq('exercise_id', id).order('weight_lb', { ascending: false }).limit(3))
+        .then(r => ({ id, rows: r.data || [] })).catch(() => ({ id, rows: [] })));
+    const runQuery = withTimeout(SB.from('running_pr_entries').select('*').order('distance_mi', { ascending: false }).limit(3))
+      .then(r => ({ id: 'running', rows: r.data || [] })).catch(() => ({ id: 'running', rows: [] }));
+    const results = await Promise.all([...liftQueries, runQuery]);
+
+    const parts = ['<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'];
+    results.forEach(({ id, rows }) => {
+      const isRunning = id === 'running';
+      const name = isRunning ? 'Running' : (LEADERBOARD_EXERCISES.find(e => e.id === id)?.name || id);
+      parts.push('<div class="card" style="padding:10px;cursor:pointer" onclick="'+(isRunning ? "ST.lbCategory='running';renderPage()" : "ST.lbCategory='strength';ST.lbEx='"+id+"';localStorage.setItem('fcf_lb_ex','"+id+"');renderPage()")+'">');
+      parts.push('<div style="font-size:11px;font-weight:600;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+name+'</div>');
+      if (!rows.length) {
+        parts.push('<div style="font-size:10px;color:var(--muted)">No entries yet</div>');
+      } else {
+        rows.forEach((r, i) => {
+          const medal = i===0?'🥇':i===1?'🥈':'🥉';
+          const val = isRunning ? formatMiPace(r.distance_mi, r.duration_sec) : Math.round(r.weight_lb)+' lb';
+          parts.push('<div class="fb" style="padding:2px 0"><span style="font-size:10px">'+medal+' '+sanitizeUserText(r.username)+'</span><span style="font-family:var(--mono);font-size:10px;color:var(--gold)">'+val+'</span></div>');
+        });
+      }
+      parts.push('</div>');
+    });
+    parts.push('</div>');
+    el.innerHTML = parts.join('');
+  } catch(e) {
+    el.innerHTML = '';
+  }
+}
+
 function renderLeaderboard(p) {
   const parts = [];
-  parts.push('<div class="section-label">LEADERBOARD</div>');
+  parts.push('<div class="section-label">RANKS</div>');
   if (!ST.username) {
     parts.push('<div class="card mb12" style="border-color:var(--gold)">');
     parts.push('<div style="font-size:12px;line-height:1.6;margin-bottom:10px">🏆 <strong>Want on the boards?</strong> Set a call sign in More → Pilot Profile. No call sign = you\'re not listed — your lifts and runs stay private.</div>');
     parts.push('<button class="btn btn-outline" onclick="switchTab(\'profile\')">Set My Call Sign →</button>');
     parts.push('</div>');
   }
+
+  // At-a-glance: several boards visible at once, tap any card to drill into
+  // its full, filterable standings below.
+  parts.push('<div class="section-label" style="margin-top:0">AT A GLANCE</div>');
+  parts.push('<div id="lbGlance" class="mb12"><div class="card" style="text-align:center;color:var(--muted);font-size:11px">Loading…</div></div>');
+
+  parts.push('<div class="section-label">FULL BOARD</div>');
+
   const segBtn = (key, val, label) =>
     '<div class="env-btn" style="padding:8px 4px'+(ST[key]===val?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="ST.'+key+'=\''+val+'\';renderPage()"><div style="font-size:11px;font-weight:700">'+label+'</div></div>';
 
@@ -1837,6 +1886,7 @@ function renderLeaderboard(p) {
     parts.push('<div id="lbRows"><div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">Loading standings…</div></div>');
     p.innerHTML = parts.join('');
     loadRunningRows();
+    loadLeaderboardGlance();
     return;
   }
 
@@ -1853,6 +1903,7 @@ function renderLeaderboard(p) {
   parts.push('<div id="lbRows"><div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">Loading standings…</div></div>');
   p.innerHTML = parts.join('');
   loadLeaderboardRows();
+  loadLeaderboardGlance();
 }
 
 async function loadLeaderboardRows() {

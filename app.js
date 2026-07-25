@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.33';
+const FCF_VERSION = 'v5.19.34';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -7218,7 +7218,8 @@ async function saveNutritionGoals(targets) {
 function scheduleContextForToday(schedule, now) {
   const ctx = { hasSchedule: false, todayEvents: [], current: null, nextDuty: null,
                 lastDutyEndedAt: null, freeMinutesUntilDuty: null, layoverAirport: null,
-                tomorrowFirstDuty: null, yesterdayDutyHours: 0, flightsToday: 0 };
+                tomorrowFirstDuty: null, yesterdayDutyHours: 0, flightsToday: 0,
+                legsCompleted: 0, legsRemaining: 0, dutyEndsAt: null, justLandedMinAgo: null };
   if (!schedule || !schedule.length) return ctx;
   ctx.hasSchedule = true;
   const t = now.getTime();
@@ -7238,8 +7239,17 @@ function scheduleContextForToday(schedule, now) {
         ctx.current = e;
         if (e.type === 'layover') ctx.layoverAirport = e.airport;
       }
-      if (e.type === 'flight' && s > t && (!ctx.nextDuty || s < new Date(ctx.nextDuty.start).getTime())) ctx.nextDuty = e;
-      if (e.type === 'flight' && en < t && (!ctx.lastDutyEndedAt || en > ctx.lastDutyEndedAt)) ctx.lastDutyEndedAt = en;
+      if (e.type === 'flight' && s > t) {
+        ctx.legsRemaining++;
+        if (!ctx.nextDuty || s < new Date(ctx.nextDuty.start).getTime()) ctx.nextDuty = e;
+      }
+      if (e.type === 'flight' && en < t) {
+        ctx.legsCompleted++;
+        if (!ctx.lastDutyEndedAt || en > ctx.lastDutyEndedAt) ctx.lastDutyEndedAt = en;
+      }
+      // When the flying actually stops today — the point after which a real
+      // session becomes possible, which is different from the next gap.
+      if (e.type === 'flight' && (!ctx.dutyEndsAt || en > ctx.dutyEndsAt)) ctx.dutyEndsAt = en;
     }
     // Yesterday's total flight time — the recovery-debt signal
     if (e.type === 'flight' && en > yStart.getTime() && s < dayStart.getTime()) {
@@ -7252,6 +7262,7 @@ function scheduleContextForToday(schedule, now) {
   });
   ctx.yesterdayDutyHours = Math.round(ctx.yesterdayDutyHours * 10) / 10;
   if (ctx.nextDuty) ctx.freeMinutesUntilDuty = Math.round((new Date(ctx.nextDuty.start).getTime() - t) / 60000);
+  if (ctx.lastDutyEndedAt) ctx.justLandedMinAgo = Math.round((t - ctx.lastDutyEndedAt) / 60000);
   return ctx;
 }
 
@@ -7315,7 +7326,28 @@ function buildTodayBriefing(ctx) {
       action: shortProtein ? { label:'Log a meal', fn:"switchTab('nutrition')" } : null };
   }
 
-  // 5. A real window before the next report.
+  // 5. A gap while there's STILL FLYING LEFT today is not a training window,
+  // whatever its length — you'd be training in uniform with legs ahead. The
+  // useful move is fuel, and naming when the duty day actually ends so the
+  // real session has somewhere to go.
+  if (gapMin !== null && sched.legsRemaining > 0 && sched.legsCompleted > 0) {
+    const ord = ['','First','Second','Third','Fourth','Fifth'][sched.legsCompleted] || sched.legsCompleted+'th';
+    const hrs = Math.floor(gapMin/60), mins = gapMin%60;
+    const gapStr = (hrs > 0 ? hrs+'h '+(mins?mins+'m':'') : gapMin+' min').trim();
+    const where = sched.layoverAirport ? ' in '+sched.layoverAirport : '';
+    const dutyEnd = sched.dutyEndsAt ? new Date(sched.dutyEndsAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : null;
+    const legWord = sched.legsRemaining === 1 ? 'one more leg' : sched.legsRemaining+' more legs';
+    const ate = ctx.nutrition.mealCount > 0;
+    let body = ord+' leg done, '+legWord+' to go'+(dutyEnd ? ' — you\'re off at '+dutyEnd+'.' : '.')+' ';
+    body += ate
+      ? 'Top up water and keep moving while you can; sitting is the real cost of a day like this.'
+      : 'Eat now rather than training — you\'ve got flying ahead, and nothing\'s logged yet today.';
+    if (dutyEnd) body += ' The window after '+dutyEnd+' is where a real session and dinner fit.';
+    return { tone:'neutral', headline:ord+' leg done — '+gapStr+where,
+      body, action:{ label: ate ? 'Log a meal' : 'Fuel up — log a meal', fn:"switchTab('nutrition')" } };
+  }
+
+  // 6. Duty is finished for the day (or hasn't started and there's real room).
   if (gapMin !== null && gapMin >= 45) {
     const hrs = Math.floor(gapMin/60), mins = gapMin%60;
     const gapStr = hrs > 0 ? hrs+'h '+(mins?mins+'m':'') : gapMin+' min';
@@ -7325,6 +7357,14 @@ function buildTodayBriefing(ctx) {
       body: marginal
         ? 'Readiness at '+readiness+' — enough time to train, but keep the intensity honest rather than chasing a PR.'
         : (sched.layoverAirport ? 'On a layover in '+sched.layoverAirport+'. ' : '') + 'Good window for a full session.',
+      action:{ label:'Start a workout', fn:"switchTab('preflight')" } };
+  }
+
+  // 7. Flying is done for the day — this is the genuine training window.
+  if (sched.legsCompleted > 0 && sched.legsRemaining === 0) {
+    const endStr = sched.dutyEndsAt ? new Date(sched.dutyEndsAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : null;
+    return { tone:'go', headline:'Done flying for the day',
+      body:(endStr ? 'Last leg landed at '+endStr+'. ' : '')+'This is your window — a full session now, then dinner, and you\'re still in good shape for tomorrow.',
       action:{ label:'Start a workout', fn:"switchTab('preflight')" } };
   }
 

@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.43';
+const FCF_VERSION = 'v5.19.44';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -7147,6 +7147,7 @@ const STAPLE_FOOD_BOOSTS = {
   apple: /^apples,\s*raw/i,
   yogurt: /yogurt.*plain/i,
   milk: /^milk,/i,
+  croissant: /^croissants?,/i,
 };
 
 async function searchUSDAFoods(query) {

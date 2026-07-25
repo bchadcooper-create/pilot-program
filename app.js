@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.29';
+const FCF_VERSION = 'v5.19.30';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -6996,19 +6996,47 @@ function usdaReferenceLabel(food) {
   return '100 g';
 }
 
+// USDA's search has no concept of "the plain, default version of this
+// food" — for a handful of the most commonly logged staples, this maps the
+// query to a pattern matching that plain version, boosted above everything
+// else when found among the actual results. Deliberately small and
+// expandable — covers the highest-value common cases rather than
+// attempting to solve food-search relevance generally, which USDA's own
+// data doesn't have the signal to support.
+const STAPLE_FOOD_BOOSTS = {
+  chicken: /chicken.*breast/i,
+  beef: /beef.*ground/i,
+  egg: /^egg,?\s*whole/i,
+  eggs: /^egg,?\s*whole/i,
+  rice: /rice,\s*white|rice,\s*brown/i,
+  salmon: /salmon/i,
+  turkey: /turkey.*breast/i,
+  oatmeal: /^oats\b/i,
+  oats: /^oats\b/i,
+  broccoli: /^broccoli,\s*raw/i,
+  potato: /potato.*baked|potato.*boiled/i,
+  banana: /^bananas,\s*raw/i,
+  apple: /^apples,\s*raw/i,
+  yogurt: /yogurt.*plain/i,
+  milk: /^milk,/i,
+};
+
 async function searchUSDAFoods(query) {
   if (!query || query.trim().length < 2) return [];
   const q = query.trim().toLowerCase();
   const res = await usdaFetch('search', { query: query.trim() });
   const foods = res?.foods || [];
-  // Two sort tiers: (1) generic before branded — an everyday query usually
-  // wants the plain version, not a specific packaged product; (2) within
-  // each tier, results whose description actually STARTS WITH the search
-  // term rank first — without this, "Bologna, chicken, pork" or
-  // "Frankfurter, chicken" can outrank more useful plain entries just
-  // because both merely CONTAIN the word somewhere. Stable sort preserves
-  // USDA's own relevance ordering within each resulting group.
+  const staplePattern = STAPLE_FOOD_BOOSTS[q];
+  // Three sort tiers: (1) a curated staple match, if the query is one of
+  // the common cases above, always wins outright; (2) generic before
+  // branded; (3) within each tier, results starting with the search term
+  // rank first. Stable sort preserves USDA's own ordering beyond that.
   const sorted = [...foods].sort((a, b) => {
+    if (staplePattern) {
+      const aStaple = staplePattern.test(a.description || '');
+      const bStaple = staplePattern.test(b.description || '');
+      if (aStaple !== bStaple) return aStaple ? -1 : 1;
+    }
     const aGeneric = a.dataType === 'Foundation' || a.dataType === 'SR Legacy';
     const bGeneric = b.dataType === 'Foundation' || b.dataType === 'SR Legacy';
     if (aGeneric !== bGeneric) return aGeneric ? -1 : 1;

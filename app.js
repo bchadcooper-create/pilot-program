@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.39';
+const FCF_VERSION = 'v5.19.40';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -7815,13 +7815,14 @@ function openQuickActions() {
   const root = document.getElementById('modalRoot');
   if (!root) return;
   root.innerHTML =
-    '<div class="modal-bg"><div class="modal-sheet">' +
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet">' +
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">Quick Actions</div>' +
     '<button class="btn btn-gold mb8" onclick="closeModal();switchTab(\'preflight\')">⚡ Start a Workout</button>' +
     '<button class="btn btn-outline mb8" onclick="quickLogMeal()">🍽️ Log a Meal</button>' +
     '<button class="btn btn-outline mb8" onclick="closeModal();switchTab(\'trends\')">⚖️ Log Weight / BP / Glucose</button>' +
-    '<button class="btn btn-outline" onclick="openQuickWaterLog()">💧 Log Water</button>' +
+    '<button class="btn btn-outline mb8" onclick="openQuickWaterLog()">💧 Log Water</button>' +
+    '<button class="btn-ghost" onclick="closeModal()">Cancel</button>' +
     '</div></div>';
 }
 
@@ -7842,7 +7843,7 @@ function openQuickWaterLog() {
   const root = document.getElementById('modalRoot');
   if (!root) return;
   root.innerHTML =
-    '<div class="modal-bg"><div class="modal-sheet">' +
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet">' +
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">Log Water</div>' +
     '<div class="field"><label>Liters consumed</label><input type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" id="quickWaterInput" value="'+(ST.waterInRaw||'')+'" placeholder="e.g. 1.2"></div>' +

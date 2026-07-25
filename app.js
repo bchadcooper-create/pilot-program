@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.34';
+const FCF_VERSION = 'v5.19.35';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2900,7 +2900,11 @@ function wasExercisePR(exId, exItem, sets, sessionDate, allPriorSessions) {
 
 async function showCalendarDay(isoDate) {
   const rangeData = await loadCalendarRange();
-  const session = rangeData.sessions.find(s => new Date(s.date).toDateString() === new Date(isoDate).toDateString());
+  // isoDate is a bare 'YYYY-MM-DD' string, which JS parses as UTC midnight
+  // — in a negative-UTC-offset timezone like Arizona (UTC-7), that's 5pm
+  // the PREVIOUS day locally, silently shifting the comparison by a day.
+  // Appending noon with no timezone suffix forces local-time parsing instead.
+  const session = rangeData.sessions.find(s => new Date(s.date).toDateString() === new Date(isoDate+'T12:00:00').toDateString());
   if (!session) return;
 
   const profile = await dbGetProfile();
@@ -3179,7 +3183,10 @@ function emptySnapshot() { return { taxi:[], takeoff:[], enroute:[], landing:[] 
 
 // New blank session on an empty past date.
 function openNewSessionEditor(isoDate) {
-  const d = new Date(isoDate);
+  // Same trap as showCalendarDay: a bare date string parses as UTC
+  // midnight, which getFullYear/getMonth/getDate would then read back in
+  // local time — a day earlier for anyone west of UTC, like Arizona.
+  const d = new Date(isoDate+'T12:00:00');
   const noon = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0);
   ST.editSession = {
     key: null, isNew: true,
@@ -7263,7 +7270,72 @@ function scheduleContextForToday(schedule, now) {
   ctx.yesterdayDutyHours = Math.round(ctx.yesterdayDutyHours * 10) / 10;
   if (ctx.nextDuty) ctx.freeMinutesUntilDuty = Math.round((new Date(ctx.nextDuty.start).getTime() - t) / 60000);
   if (ctx.lastDutyEndedAt) ctx.justLandedMinAgo = Math.round((t - ctx.lastDutyEndedAt) / 60000);
+  // Trip-aware counts replace the calendar-day-bounded ones for anything
+  // that drives a recommendation — a trip crossing midnight is one duty
+  // period, not a fresh day that resets what's already been flown.
+  const trip = currentTripContext(schedule, now);
+  ctx.legsCompleted = trip.legsCompleted;
+  ctx.legsRemaining = trip.legsRemaining;
+  if (trip.current) ctx.current = trip.current;
+  if (trip.dutyEndsAt) ctx.dutyEndsAt = trip.dutyEndsAt;
+  if (!ctx.layoverAirport && trip.current?.type === 'layover') ctx.layoverAirport = trip.current.airport;
   return ctx;
+}
+
+// Pilots think in trips, not calendar days. A layover that started before
+// midnight with legs still to fly after it is the SAME situation as a
+// same-day layover — calendar-day boundaries were causing it to look like
+// a fresh, unstarted day and wrongly recommend a full session. Scans the
+// whole schedule for the current continuous duty run: a dutyfree block, or
+// a 20+ hour gap with nothing scheduled, is what actually ends a trip.
+function currentTripContext(schedule, now) {
+  const t = now.getTime();
+  const DUTYFREE_GAP_MS = 20 * 3600000;
+  const events = (schedule || [])
+    .filter(e => e.type === 'flight' || e.type === 'layover')
+    .map(e => { const s = new Date(e.start).getTime(), en = new Date(e.end).getTime(); return { ...e, s, en }; })
+    .filter(e => !isNaN(e.s) && !isNaN(e.en))
+    .sort((a,b) => a.s - b.s);
+
+  // Partition into discrete trips FIRST — a gap over the threshold ends
+  // one trip and starts the next. The earlier version tracked this boundary
+  // but never actually used it to limit counting, so it accumulated legs
+  // across the entire multi-month schedule instead of just the current trip.
+  const trips = [];
+  let cur = [];
+  events.forEach(e => {
+    if (cur.length && (e.s - cur[cur.length-1].en) > DUTYFREE_GAP_MS) { trips.push(cur); cur = []; }
+    cur.push(e);
+  });
+  if (cur.length) trips.push(cur);
+
+  // The active trip: one whose events actually span "now" — either inside
+  // a specific flight/layover, or between two events of the same trip
+  // (a short ground stop shorter than the reset threshold).
+  let activeTrip = trips.find(trip => trip.some(e => t >= e.s && t <= e.en))
+                 || trips.find(trip => t >= trip[0].s && t <= trip[trip.length-1].en);
+  if (!activeTrip) {
+    // Neither condition matches when the most recent trip has already
+    // fully ended and nothing is scheduled next (just landed, no further
+    // legs today) — fall back to that trip if it ended recently enough to
+    // still be the relevant context, same threshold used to define a trip
+    // boundary in the first place.
+    const ended = trips.filter(trip => trip[trip.length-1].en < t)
+                        .sort((a,b) => b[b.length-1].en - a[a.length-1].en);
+    if (ended.length && (t - ended[0][ended[0].length-1].en) <= DUTYFREE_GAP_MS) activeTrip = ended[0];
+  }
+  if (!activeTrip) return { legsCompleted: 0, legsRemaining: 0, current: null, dutyEndsAt: null };
+
+  let legsCompleted = 0, legsRemaining = 0, current = null, dutyEndsAt = null;
+  activeTrip.forEach(e => {
+    if (t >= e.s && t <= e.en) current = e;
+    if (e.type === 'flight') {
+      if (e.en <= t) legsCompleted++;
+      else if (e.s > t) legsRemaining++;
+      if (!dutyEndsAt || e.en > dutyEndsAt) dutyEndsAt = e.en;
+    }
+  });
+  return { legsCompleted, legsRemaining, current, dutyEndsAt };
 }
 
 function getTodayContext() {
@@ -7331,7 +7403,7 @@ function buildTodayBriefing(ctx) {
   // useful move is fuel, and naming when the duty day actually ends so the
   // real session has somewhere to go.
   if (gapMin !== null && sched.legsRemaining > 0 && sched.legsCompleted > 0) {
-    const ord = ['','First','Second','Third','Fourth','Fifth'][sched.legsCompleted] || sched.legsCompleted+'th';
+    const ord = ['','First','Second','Third','Fourth','Fifth'][sched.legsCompleted] || 'Latest';
     const hrs = Math.floor(gapMin/60), mins = gapMin%60;
     const gapStr = (hrs > 0 ? hrs+'h '+(mins?mins+'m':'') : gapMin+' min').trim();
     const where = sched.layoverAirport ? ' in '+sched.layoverAirport : '';
@@ -7384,7 +7456,10 @@ function buildTodayBriefing(ctx) {
   }
 
   // 8. Nothing scheduled — the best day of the week to train properly.
-  if (sched.hasSchedule && !sched.todayEvents.length) {
+  // Checks flightsToday specifically, not todayEvents.length — a
+  // duty-free block IS a today-event, so counting raw events never
+  // recognized a genuinely open day.
+  if (sched.hasSchedule && sched.flightsToday === 0) {
     return { tone:'go', headline:'No duty today',
       body:'Nothing on the schedule. Best chance this week for a full session with real equipment.',
       action:{ label:'Start a workout', fn:"switchTab('preflight')" } };

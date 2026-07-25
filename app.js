@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.37';
+const FCF_VERSION = 'v5.19.38';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -48,6 +48,7 @@ const ST = {
   ouraDismissedIds: [], ouraImportQueue: [],
   ouraSteps: null, ouraActiveCal: null,
   nutritionGoals: null, goalDraft: 'maintain', trainDaysDraft: '3-4',
+  manualTargetsOpen: false, manualCal: '', manualProtein: '', manualCarbs: '', manualFat: '', manualTargetsWarning: null,
 
   tab: 'preflight',
   env: 'comm',
@@ -1489,6 +1490,7 @@ function renderRoot() {
 }
 
 function switchTab(tab) {
+  if (ST.tab === 'fuelplan' && tab !== 'fuelplan') { ST.fuelPlanDraftSynced = false; ST.manualTargetsOpen = false; ST.manualTargetsWarning = null; }
   ST.tab = tab;
   const MORE_SUBVIEWS = ['profile','wisdom','devices','data','badges','superuser'];
   const hl = MORE_SUBVIEWS.includes(tab) ? 'more' : tab;
@@ -7179,6 +7181,25 @@ function calculateTDEE(bmr, trainingDays) {
 const MAX_DAILY_DEFICIT = 500;   // ≈1 lb/week, the well-established safe rate
 const MAX_DAILY_SURPLUS = 300;   // lean gain; more than this is mostly fat
 
+// Minimum safe fat intake regardless of goal — below this risks real
+// physiological harm (hormone production depends on dietary fat), not just
+// a suboptimal macro split. Applied to manual entry the same as calculated.
+const MIN_DAILY_FAT_G = 20;
+
+// The single place guardrails are enforced, used by BOTH the calculated
+// path and manual entry — so typing in a number can never bypass the same
+// protections the calculator has. Returns the clamped values plus which
+// ones were actually changed, so the UI can explain honestly rather than
+// silently override what someone typed.
+function enforceNutritionGuardrails(calories, protein, carbs, fat, bmr) {
+  const out = { calories, protein, carbs, fat, calorieClamped: false, fatClamped: false };
+  if (bmr && out.calories < bmr) { out.calories = bmr; out.calorieClamped = true; }
+  if (out.fat < MIN_DAILY_FAT_G) { out.fat = MIN_DAILY_FAT_G; out.fatClamped = true; }
+  out.protein = Math.max(0, out.protein);
+  out.carbs = Math.max(0, out.carbs);
+  return out;
+}
+
 function calculateNutritionTargets(mode, tdee, bmr, weightLb) {
   if (mode === 'none' || !tdee || !bmr) return null;
   let calories;
@@ -7188,7 +7209,8 @@ function calculateNutritionTargets(mode, tdee, bmr, weightLb) {
 
   // Hard floor. Eating below resting metabolic rate isn't a more aggressive
   // plan, it's a worse one — so this clamps regardless of what the
-  // arithmetic above produced.
+  // arithmetic above produced. Needs to happen before fat is derived below,
+  // since fat is a percentage of calories.
   const flooredAtBMR = calories < bmr;
   if (flooredAtBMR) calories = bmr;
 
@@ -7201,7 +7223,13 @@ function calculateNutritionTargets(mode, tdee, bmr, weightLb) {
   const fat = Math.round((calories * fatPct) / 9);
   const carbs = Math.max(0, Math.round((calories - (protein * 4) - (fat * 9)) / 4));
 
-  return { calories: Math.round(calories), protein, carbs, fat, bmr, tdee, mode, flooredAtBMR };
+  // Final pass through the same guardrail function manual entry uses —
+  // catches the fat floor too (unlikely to trigger here given realistic
+  // BMR values, but one real source of truth beats two rules that could
+  // quietly drift apart over time).
+  const g = enforceNutritionGuardrails(Math.round(calories), protein, carbs, fat, bmr);
+  return { calories: g.calories, protein: g.protein, carbs: g.carbs, fat: g.fat, bmr, tdee, mode,
+           flooredAtBMR: flooredAtBMR || g.calorieClamped, fatFloored: g.fatClamped };
 }
 
 function nutritionGoalsComplete() {
@@ -7575,7 +7603,50 @@ function renderToday(p) {
   p.innerHTML = parts.join('');
 }
 
+// Manual entry goes through the exact same guardrail function as the
+// calculated path. If anything gets clamped, this corrects the displayed
+// values and explains why rather than silently saving something different
+// from what was typed — and only actually saves/navigates once a second
+// pass confirms nothing more needs adjusting.
+async function saveManualTargets(bmr, mode, trainingDays, tdee) {
+  const cal = parseFloat(ST.manualCal) || 0;
+  const protein = parseFloat(ST.manualProtein) || 0;
+  const carbs = parseFloat(ST.manualCarbs) || 0;
+  const fat = parseFloat(ST.manualFat) || 0;
+  const bmrNum = parseFloat(bmr);
+  const g = enforceNutritionGuardrails(cal, protein, carbs, fat, bmrNum);
+
+  if (g.calorieClamped || g.fatClamped) {
+    ST.manualCal = String(g.calories);
+    ST.manualFat = String(g.fat);
+    const msgs = [];
+    if (g.calorieClamped) msgs.push('Calories can\'t go below your resting metabolic rate ('+Math.round(bmrNum)+') — adjusted up.');
+    if (g.fatClamped) msgs.push('Fat can\'t go below '+MIN_DAILY_FAT_G+'g — adjusted up.');
+    ST.manualTargetsWarning = msgs.join(' ');
+    renderPage();
+    return;
+  }
+
+  ST.manualTargetsWarning = null;
+  const targets = { calories: g.calories, protein: g.protein, carbs: g.carbs, fat: g.fat,
+    bmr: bmrNum, tdee: parseFloat(tdee), mode, trainingDays, flooredAtBMR: false, manual: true };
+  await saveNutritionGoals(targets);
+  ST.manualTargetsOpen = false;
+  switchTab('nutrition');
+}
+
 function renderNutritionGoalsSetup(p) {
+  // "Adjust anytime" needs to actually show what's currently saved, not
+  // reset to generic defaults every time the screen opens — sync once per
+  // visit, so it reflects the real plan on entry but doesn't fight an
+  // in-progress selection on every subsequent click.
+  if (!ST.fuelPlanDraftSynced) {
+    if (ST.nutritionGoals && ST.nutritionGoals.mode) {
+      ST.goalDraft = ST.nutritionGoals.mode;
+      ST.trainDaysDraft = ST.nutritionGoals.trainingDays || '3-4';
+    }
+    ST.fuelPlanDraftSynced = true;
+  }
   const parts = [moreBackLink()];
   parts.push('<div class="section-label" style="margin-top:0">FUEL PLAN SETUP</div>');
 
@@ -7634,6 +7705,25 @@ function renderNutritionGoalsSetup(p) {
         parts.push('<div style="font-size:11px;color:var(--amber);line-height:1.6;margin-top:10px">Held at your resting metabolic rate. The deficit math would have gone lower, but eating below what your body uses at rest isn\'t a faster plan, just a worse one.</div>');
       }
       parts.push('</div>');
+
+      if (!ST.manualTargetsOpen) {
+        parts.push('<button class="btn-ghost mb12" onclick="ST.manualTargetsOpen=true;ST.manualCal=\''+t.calories+'\';ST.manualProtein=\''+t.protein+'\';ST.manualCarbs=\''+t.carbs+'\';ST.manualFat=\''+t.fat+'\';renderPage()">✏️ Fine-tune these numbers manually</button>');
+      } else {
+        parts.push('<div class="card mb12">');
+        parts.push('<div class="section-label" style="margin-top:0">CUSTOM TARGETS</div>');
+        parts.push('<div style="font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:12px">Starting from the calculated numbers above — adjust anything you want. The same safety limits still apply: calories can\'t go below what your body burns at rest, and fat can\'t go below '+MIN_DAILY_FAT_G+'g regardless of the goal.</div>');
+        parts.push('<div class="field"><label>Calories / day</label><input type="text" inputmode="numeric" value="'+ST.manualCal+'" oninput="ST.manualCal=this.value"></div>');
+        parts.push('<div class="field-row">');
+        parts.push('<div class="field"><label>Protein (g)</label><input type="text" inputmode="numeric" value="'+ST.manualProtein+'" oninput="ST.manualProtein=this.value"></div>');
+        parts.push('<div class="field"><label>Carbs (g)</label><input type="text" inputmode="numeric" value="'+ST.manualCarbs+'" oninput="ST.manualCarbs=this.value"></div>');
+        parts.push('</div>');
+        parts.push('<div class="field"><label>Fat (g)</label><input type="text" inputmode="numeric" value="'+ST.manualFat+'" oninput="ST.manualFat=this.value"></div>');
+        parts.push('<div id="manualTargetsWarning" style="font-size:11px;color:var(--amber);line-height:1.6;margin-top:4px">'+(ST.manualTargetsWarning||'')+'</div>');
+        parts.push('<button class="btn btn-gold mt8" onclick="saveManualTargets('+bmr+',\''+(ST.goalDraft||'maintain')+'\',\''+(ST.trainDaysDraft||'3-4')+'\',\''+tdee+'\')">Save Custom Targets</button>');
+        parts.push('<button class="btn-ghost" onclick="ST.manualTargetsOpen=false;renderPage()">Cancel</button>');
+        parts.push('</div>');
+      }
+      t.trainingDays = ST.trainDaysDraft || '3-4';
       parts.push('<button class="btn btn-gold" onclick="saveNutritionGoals('+JSON.stringify(t).replace(/"/g,'&quot;')+').then(()=>{switchTab(\'nutrition\')})">Use These Targets</button>');
     }
   } else {

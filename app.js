@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.42';
+const FCF_VERSION = 'v5.19.43';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -133,24 +133,55 @@ const FREQUENCY_GUIDE = {
 const HYDRO_RATE = 0.3;
 const HYDRO_FLOOR = 1.0; // minimum daily water target even on no-fly days
 
+// What fraction of a normal waking day has elapsed right now — 6am-10pm is
+// a reasonable default active-day window. Used to judge hydration pace
+// fairly: 0L consumed at 6:15am isn't a deficit, it's just early, and
+// comparing it against the FULL day's target would make the very first
+// hydration check of the day alarmist rather than useful.
+function dayElapsedPct(now) {
+  now = now || new Date();
+  const DAY_START_HOUR = 6, DAY_END_HOUR = 22;
+  const hoursIn = now.getHours() + now.getMinutes()/60;
+  if (hoursIn <= DAY_START_HOUR) return 0;
+  if (hoursIn >= DAY_END_HOUR) return 1;
+  return (hoursIn - DAY_START_HOUR) / (DAY_END_HOUR - DAY_START_HOUR);
+}
+
+// What you'd reasonably be expected to have had by THIS point in the day —
+// never used to lower the actual end-of-day target (hydroTarget), only to
+// judge whether right now is a fair moment to sound an alarm about it.
+function hydroPacedTarget()  { return hydroTarget() * dayElapsedPct(new Date()); }
+function hydroPacedDeficit() { return Math.max(hydroPacedTarget() - ST.waterIn, 0); }
+
 function hydroTarget()  {
   if (ST.flightHrs > 0) return Math.max(ST.flightHrs * HYDRO_RATE, HYDRO_FLOOR);
   return HYDRO_FLOOR; // no-fly day: still need baseline hydration
 }
 function hydroDeficit() { return Math.max(hydroTarget() - ST.waterIn, 0); }
 function hydroPct()     { return Math.min(ST.waterIn / Math.max(hydroTarget(), 0.5), 1); }
-function hydroStatus() {
-  const p = hydroPct();
+function hydroPacedTarget(now)  { return hydroTarget() * dayElapsedPct(now || new Date()); }
+function hydroPacedDeficit(now) { return Math.max(hydroPacedTarget(now) - ST.waterIn, 0); }
+
+function hydroStatus(now) {
+  const paced = hydroPacedTarget(now);
+  // Genuinely too early in the day to judge fairly — the first ~15% of
+  // the paced window (about the first 90 minutes after 6am) always reads
+  // as nominal regardless of intake, rather than risking a division against
+  // a near-zero paced target swinging wildly from a single sip of water.
+  if (paced <= hydroTarget() * 0.15) return { label:'NOMINAL', color:'var(--green)', icon:'✅', cls:'status-ok' };
+  const p = ST.waterIn / paced;
   if (p >= 1)   return { label:'NOMINAL', color:'var(--green)', icon:'✅', cls:'status-ok' };
   if (p >= 0.6) return { label:'CAUTION', color:'var(--amber)', icon:'⚠️', cls:'status-warn' };
   return              { label:'DEFICIT',  color:'var(--red)',   icon:'🚨', cls:'status-no' };
 }
-function hydroAdvice() {
-  const def = hydroDeficit();
+function hydroAdvice(now) {
+  const paced = hydroPacedTarget(now);
+  if (paced <= hydroTarget() * 0.15) return null; // too early to advise anything yet
+  const def = hydroPacedDeficit(now);
   if (def <= 0) return null;
-  if (def < 0.25) return `Sip ${Math.round(def*1000)}ml now — you're almost there.`;
-  if (def < 0.5)  return `Drink ${Math.round(def*1000)}ml before starting. Even 2% dehydration measurably cuts strength, endurance, and focus.`;
-  return `You're ${def.toFixed(1)}L behind. Drink 500ml now, then sip throughout your session.`;
+  if (def < 0.25) return `Sip ${Math.round(def*1000)}ml now — you're on pace, just top up a little.`;
+  if (def < 0.5)  return `Drink ${Math.round(def*1000)}ml soon to stay on pace for the day. Even 2% dehydration measurably cuts strength, endurance, and focus.`;
+  return `You're ${def.toFixed(1)}L behind pace for this point in the day. Drink 500ml now, then sip regularly — total target is still ${hydroTarget().toFixed(1)}L.`;
 }
 
 // Patches just the hydration display elements on every keystroke instead of
@@ -7431,6 +7462,27 @@ function currentTripContext(schedule, now) {
   return { legsCompleted, legsRemaining, current, dutyEndsAt };
 }
 
+// Adjacent, identically-labeled events — e.g. an export that creates one
+// "Duty free period" block per calendar day of a multi-day stretch, with
+// one block ending the exact instant the next begins — merge into a single
+// continuous entry for display. Otherwise the same label can show up two
+// or three times in a row with confusingly-overlapping boundary times.
+function mergeAdjacentEvents(events) {
+  const sorted = [...events].sort((a,b) => new Date(a.start) - new Date(b.start));
+  const merged = [];
+  const TOLERANCE_MS = 5 * 60000; // small gap tolerance for near-exact boundaries
+  sorted.forEach(e => {
+    const last = merged[merged.length - 1];
+    if (last && last.summary === e.summary && (new Date(e.start).getTime() - new Date(last.end).getTime()) <= TOLERANCE_MS) {
+      if (new Date(e.end).getTime() > new Date(last.end).getTime()) last.end = e.end;
+      last.uids.push(e.uid);
+    } else {
+      merged.push({ ...e, uids: [e.uid] });
+    }
+  });
+  return merged;
+}
+
 function getTodayContext() {
   const now = new Date();
   const sched = scheduleContextForToday(ST.flightSchedule, now);
@@ -7628,12 +7680,20 @@ function renderToday(p) {
   if (brief.action) parts.push('<button class="btn btn-gold" style="margin-top:14px" onclick="'+brief.action.fn+'">'+brief.action.label+'</button>');
   parts.push('</div>');
 
+  // Standalone, always-shown prompt — not folded into one specific briefing
+  // outcome, since a low-readiness day (or several other rules) would
+  // otherwise completely bypass the only place this used to be mentioned,
+  // meaning most schedule-less users would never actually see it.
+  if (!ST.flightSchedule) {
+    parts.push('<div class="card mb12"><div class="fb" style="align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:600;margin-bottom:4px">📅 No flight schedule uploaded</div><div style="font-size:11px;color:var(--muted);line-height:1.5">Upload your crew schedule and this briefing gets a lot more specific — layovers, duty-day length, real windows to train.</div></div></div><button class="btn-outline mt8" onclick="switchTab(\'data\')">Upload Schedule</button></div>');
+  }
+
   if (ctx.sched.todayEvents.length) {
     parts.push('<div class="section-label">TODAY\'S SCHEDULE</div>');
     parts.push('<div class="card mb12">');
-    ctx.sched.todayEvents.slice(0,6).forEach(e => {
+    mergeAdjacentEvents(ctx.sched.todayEvents).slice(0,6).forEach(e => {
       const s = new Date(e.start), en = new Date(e.end);
-      const isNow = ctx.sched.current && ctx.sched.current.uid === e.uid;
+      const isNow = ctx.sched.current && e.uids.includes(ctx.sched.current.uid);
       parts.push('<div class="fb" style="padding:7px 0;'+(isNow?'':'opacity:.72')+'">');
       parts.push('<span style="font-family:var(--mono);font-size:11px;color:'+(isNow?'var(--gold)':'var(--muted)')+'">'+s.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false})+'–'+en.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false})+'</span>');
       parts.push('<span style="font-size:12px;text-align:right">'+e.summary+'</span>');

@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.23.3';
+const FCF_VERSION = 'v5.24.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2433,6 +2433,7 @@ async function bootApp() {
   // Auto-sync Oura on boot if connected — runs in background after render
   if (ST.ouraConnected && ST.ouraAccessToken) {
     setTimeout(() => syncOuraData().catch(() => {}), 1500);
+    scheduleOuraActivityRetry();
   }
   // Badges only ever got checked as a side effect of a brand-new workout or
   // biometric save — anyone with existing history never had it evaluated
@@ -6945,6 +6946,34 @@ async function syncOuraData(force) {
   } catch(e) {
     if (force) showBigToast('Oura sync failed: '+e.message,'warn');
   }
+}
+
+// Oura's daily_activity endpoint can genuinely not have today's row yet
+// for hours (confirmed via the Activity Sync Diagnostic — the request
+// succeeds, just with no same-day entry), even though nothing is broken.
+// Rather than require remembering to tap Sync Now again later, retry
+// periodically through the day and stop bothering once today's activity
+// actually shows up. Naturally resets itself at midnight too, since
+// "today" changing makes ST.ouraData's cached date stale again on its own.
+function shouldRetryOuraActivity() {
+  if (!ST.ouraConnected || !ST.ouraAccessToken) return false;
+  const today = localDateStr(new Date());
+  const alreadyHaveTodaysActivity = ST.ouraData?.date === today && ST.ouraData?.activity_score != null;
+  return !alreadyHaveTodaysActivity;
+}
+
+const OURA_ACTIVITY_RETRY_MS = 30 * 60 * 1000; // every 30 minutes — cheap enough to just leave running
+function scheduleOuraActivityRetry() {
+  const checkAndRetry = () => {
+    if (shouldRetryOuraActivity()) syncOuraData(false).catch(() => {});
+  };
+  setInterval(checkAndRetry, OURA_ACTIVITY_RETRY_MS);
+  // Also catch it the moment the app comes back to the foreground —
+  // someone reopening the app after lunch shouldn't have to wait for the
+  // next 30-minute tick if Oura posted the data in the meantime.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') checkAndRetry();
+  });
 }
 
 // Disconnect Oura

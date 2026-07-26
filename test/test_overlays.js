@@ -2915,4 +2915,35 @@ log('BUG FIX: a fresh device (or fresh boot) picks up water logged on another de
 ST.user = null;
 ST.waterIn = 0; ST.flightHrs = 0; ST.flightHrsTouched = false; ST.sleepHours = null; ST.readiness = null;
 
+// ── Background retry for Oura activity data ──
+// Confirmed via the diagnostic that Oura's API can genuinely just not
+// have today's activity row for hours, with nothing broken. Rather than
+// requiring a manual re-sync, this decides whether it's worth trying again.
+ST.ouraConnected = true;
+ST.ouraAccessToken = 'fake-token';
+
+ST.ouraData = null;
+log('shouldRetryOuraActivity: with no cached Oura data at all, keeps retrying', shouldRetryOuraActivity() === true, '');
+
+ST.ouraData = { date: localDateStr(new Date()), activity_score: 88 };
+log('shouldRetryOuraActivity: stops once today\'s activity score is actually present', shouldRetryOuraActivity() === false, '');
+
+ST.ouraData = { date: localDateStr(new Date(Date.now() - 86400000)), activity_score: 90 }; // yesterday's cached row
+log('shouldRetryOuraActivity: a cached row from a PRIOR day does not count — keeps retrying for today', shouldRetryOuraActivity() === true, '');
+
+ST.ouraData = { date: localDateStr(new Date()), activity_score: null };
+log('shouldRetryOuraActivity: today\'s row exists but with no activity score yet — keeps retrying', shouldRetryOuraActivity() === true, '');
+
+ST.ouraConnected = false;
+ST.ouraData = null;
+log('shouldRetryOuraActivity: never retries for a disconnected/unlinked Oura account', shouldRetryOuraActivity() === false, '');
+
+ST.ouraConnected = true;
+ST.ouraAccessToken = null;
+log('shouldRetryOuraActivity: never retries without a valid access token', shouldRetryOuraActivity() === false, '');
+
+ST.ouraConnected = false;
+ST.ouraAccessToken = null;
+ST.ouraData = null;
+
 })();

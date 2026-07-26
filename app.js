@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.19.46';
+const FCF_VERSION = 'v5.20.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -13,6 +13,8 @@ const OURA_CLIENT_ID   = 'deb737ed-9343-407a-b993-9907bc101800';
 const OURA_REDIRECT_URI = 'https://flightcrew.fit/';
 const OURA_EDGE_FN      = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/oura-auth';
 const USDA_EDGE_FN      = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/usda-food';
+const FOOD_RECOGNITION_EDGE_FN = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/fcf-food-recognition';
+const DAILY_PHOTO_LIMIT = 5; // must match DAILY_PHOTO_LIMIT in the edge function — shown in UI copy only, the server enforces the real limit
 const FEEDBACK_EDGE_FN  = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/feedback-submit';
 const OURA_SCOPES       = 'daily personal workout tag'; // readiness, sleep, activity, personal info, workouts, tags
 // Supabase anon key sent as auth header — required when Edge Function JWT verification is enabled
@@ -8115,6 +8117,11 @@ function renderMealBuilder() {
 
   parts.push('<div class="field"><input type="text" id="foodSearchInput" placeholder="Search a food (e.g. chicken breast)..." oninput="filterUSDASearch(this.value)"></div>');
   parts.push('<div id="usdaSearchResults"></div>');
+  parts.push('<div class="fb mt8">');
+  parts.push('<button class="btn btn-outline" style="flex:1;margin-right:8px" onclick="analyzeFoodPhoto()">📷 Photo</button>');
+  parts.push('<button class="btn btn-outline" style="flex:1" onclick="scanFoodBarcode()">🔢 Barcode</button>');
+  parts.push('</div>');
+  parts.push('<div id="foodPhotoResultRoot"></div>');
   parts.push('<button class="btn-ghost mt8" onclick="showManualFoodEntry()">Can\'t find it? Enter manually</button>');
   parts.push('<div id="manualFoodEntryRoot"></div>');
 
@@ -8202,6 +8209,184 @@ function addUSDAFoodToMeal() {
   document.getElementById('usdaSearchResults').innerHTML = '';
   window._usdaPendingFood = null;
   renderMealBuilder();
+}
+
+// ─── AI PHOTO FOOD RECOGNITION + BARCODE (fcf-food-recognition edge fn) ───
+// Both actions return the same shape: { source, description,
+// servingDescription, confidence, nutrients, quota? }. A barcode hit is
+// an exact product match (confidence 1, never triggers the "is this
+// right?" prompt); a photo is always a model guess.
+async function callFoodRecognitionEdge(payload) {
+  const { data: { session } } = await SB.auth.getSession();
+  if (!session) { showBigToast('Sign in to use photo/barcode food logging.', 'warn'); return null; }
+  try {
+    const res = await fetch(FOOD_RECOGNITION_EDGE_FN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) return { error: data.error || 'request_failed', ...data };
+    return data;
+  } catch (e) {
+    return { error: 'network', message: e.message };
+  }
+}
+
+// Deliberately a single button rather than the separate Camera/Library
+// buttons progress photos use — leaving off `capture` lets iOS/Android
+// show their native "Take Photo / Photo Library" choice sheet, which
+// covers both cases with one control and less meal-builder clutter.
+async function analyzeFoodPhoto() {
+  if (!ST.user) { showBigToast('Sign in to analyze food photos.', 'warn'); return; }
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.onchange = async () => {
+    const file = input.files[0];
+    if (!file) return;
+    const box = document.getElementById('foodPhotoResultRoot');
+    if (box) box.innerHTML = '<div class="card mt8" style="font-size:12px;color:var(--muted)">Analyzing photo…</div>';
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result).split(',')[1]);
+        r.onerror = () => reject(new Error('could not read file'));
+        r.readAsDataURL(file);
+      });
+      const result = await callFoodRecognitionEdge({ action: 'photo', image: base64, mediaType: file.type || 'image/jpeg' });
+      handleFoodRecognitionResult(result);
+    } catch (e) {
+      if (box) box.innerHTML = '<div class="card mt8" style="font-size:12px;color:var(--amber)">Couldn\'t read that photo: ' + (e.message || 'unknown error') + '</div>';
+    }
+  };
+  document.body.appendChild(input);
+  input.click();
+  setTimeout(() => input.remove(), 5000);
+}
+
+function handleFoodRecognitionResult(result) {
+  const box = document.getElementById('foodPhotoResultRoot');
+  if (!box) return;
+  if (!result) { box.innerHTML = ''; return; }
+  if (result.error === 'limit_reached') {
+    box.innerHTML = '<div class="card mt8" style="font-size:12px">' +
+      'You\'ve used all ' + result.limit + ' free photo analyses today. Resets tomorrow — or ' +
+      '<span style="color:var(--gold)">upgrade to Pro for 20+/day</span> plus AI coaching features.</div>';
+    return;
+  }
+  if (result.error) {
+    box.innerHTML = '<div class="card mt8" style="font-size:12px;color:var(--amber)">Analysis failed: ' + (result.message || result.error) + '. Try again or enter it manually below.</div>';
+    return;
+  }
+  window._foodRecPending = result;
+  box.innerHTML = buildFoodRecognitionCardHTML(result);
+}
+
+function buildFoodRecognitionCardHTML(result) {
+  const n = result.nutrients;
+  const lowConfidence = result.source === 'photo' && result.confidence < 0.8;
+  const parts = [];
+  parts.push('<div class="card mt8">');
+  if (lowConfidence) {
+    parts.push('<div style="font-size:12px;color:var(--amber);margin-bottom:8px">⚠ Best guess only (' + Math.round(result.confidence * 100) + '% confidence) — is this right? Edit anything below before adding.</div>');
+  } else if (result.source === 'photo') {
+    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + Math.round(result.confidence * 100) + '% confidence</div>');
+  } else if (result.brandName) {
+    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + sanitizeUserText(result.brandName) + '</div>');
+  }
+  parts.push('<div class="field"><input type="text" id="foodRecDescription" value="' + sanitizeUserText(result.description).replace(/"/g, '&quot;') + '"></div>');
+  if (result.servingDescription) {
+    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:6px">Estimated portion: ' + sanitizeUserText(result.servingDescription) + '</div>');
+  }
+  parts.push('<div class="field-row">');
+  parts.push('<div class="field"><label>Calories</label><input type="text" inputmode="numeric" id="foodRecCal" value="' + n.calories + '"></div>');
+  parts.push('<div class="field"><label>Protein (g)</label><input type="text" inputmode="decimal" id="foodRecProtein" value="' + n.protein + '"></div>');
+  parts.push('</div>');
+  parts.push('<div class="field-row">');
+  parts.push('<div class="field"><label>Carbs (g)</label><input type="text" inputmode="decimal" id="foodRecCarbs" value="' + n.carbs + '"></div>');
+  parts.push('<div class="field"><label>Fat (g)</label><input type="text" inputmode="decimal" id="foodRecFat" value="' + n.fat + '"></div>');
+  parts.push('</div>');
+  parts.push('<button class="btn btn-outline mt8" onclick="addFoodRecognitionToMeal()">Add to Meal</button>');
+  if (result.quota && !result.quota.unlimited) {
+    parts.push('<div style="font-size:10px;color:var(--muted);margin-top:6px">' + result.quota.used + ' of ' + result.quota.limit + ' photo analyses used today</div>');
+  }
+  parts.push('</div>');
+  return parts.join('');
+}
+
+function addFoodRecognitionToMeal() {
+  const pending = window._foodRecPending;
+  if (!pending || !ST.mealBuilder) return;
+  const description = document.getElementById('foodRecDescription')?.value?.trim() || pending.description;
+  const nutrients = {
+    calories: parseFloat(document.getElementById('foodRecCal')?.value) || 0,
+    protein: parseFloat(document.getElementById('foodRecProtein')?.value) || 0,
+    carbs: parseFloat(document.getElementById('foodRecCarbs')?.value) || 0,
+    fat: parseFloat(document.getElementById('foodRecFat')?.value) || 0,
+    fiber: pending.nutrients.fiber || 0,
+    sugar: pending.nutrients.sugar || 0,
+  };
+  ST.mealBuilder.items.push({
+    description: sanitizeUserText(description),
+    nutrients,
+    source: pending.source, // 'photo' or 'barcode'
+    confidence: pending.confidence,
+  });
+  window._foodRecPending = null;
+  const box = document.getElementById('foodPhotoResultRoot');
+  if (box) box.innerHTML = '';
+  renderMealBuilder();
+}
+
+// Barcode scanning runs client-side (html5-qrcode, loaded in index.html) —
+// the decoded UPC is the only thing sent to the server, so scanning
+// itself never touches the photo quota or costs an API call.
+function scanFoodBarcode() {
+  if (!ST.user) { showBigToast('Sign in to scan barcodes.', 'warn'); return; }
+  if (typeof Html5Qrcode === 'undefined') { showBigToast('Barcode scanner failed to load — check your connection and reload.', 'warn'); return; }
+  const root = document.getElementById('modalRoot');
+  if (!root) return;
+  root.innerHTML =
+    '<div class="modal-bg"><div class="modal-sheet">' +
+    '<div class="modal-title">SCAN BARCODE</div>' +
+    '<div id="barcodeScannerBox" style="border-radius:12px;overflow:hidden;min-height:250px;background:#000"></div>' +
+    '<div id="barcodeScannerStatus" style="font-size:12px;color:var(--muted);margin-top:8px">Point your camera at the barcode.</div>' +
+    '<button class="btn btn-outline mt12" onclick="stopFoodBarcodeScanner()">CANCEL</button>' +
+    '</div></div>';
+
+  const scanner = new Html5Qrcode('barcodeScannerBox');
+  window._barcodeScanner = scanner;
+  scanner.start(
+    { facingMode: 'environment' },
+    { fps: 10, qrbox: { width: 250, height: 150 } },
+    (decodedText) => {
+      stopFoodBarcodeScanner();
+      handleFoodBarcodeDecoded(decodedText);
+    },
+    () => {} // per-frame decode failures are normal while aiming — ignore
+  ).catch((e) => {
+    const status = document.getElementById('barcodeScannerStatus');
+    if (status) status.textContent = 'Camera unavailable: ' + (e.message || e);
+  });
+}
+
+function stopFoodBarcodeScanner() {
+  const scanner = window._barcodeScanner;
+  window._barcodeScanner = null;
+  if (scanner) { scanner.stop().then(() => scanner.clear()).catch(() => {}); }
+  closeModal();
+}
+
+async function handleFoodBarcodeDecoded(barcode) {
+  const box = document.getElementById('foodPhotoResultRoot');
+  if (box) box.innerHTML = '<div class="card mt8" style="font-size:12px;color:var(--muted)">Looking up ' + sanitizeUserText(barcode) + '…</div>';
+  const result = await callFoodRecognitionEdge({ action: 'barcode', barcode });
+  if (result && result.error === 'not_found') {
+    if (box) box.innerHTML = '<div class="card mt8" style="font-size:12px;color:var(--amber)">No product found for that barcode. Try search or manual entry below.</div>';
+    return;
+  }
+  handleFoodRecognitionResult(result);
 }
 
 function showManualFoodEntry() {

@@ -2309,4 +2309,58 @@ const napBriefLowReadiness = buildTodayBriefing(bCtx(50, 75)); // jump but readi
 log('BUG-FREE (priority): low readiness still overrides even when a nap is detected — rest advice, not "go train"', napBriefLowReadiness.tone === 'rest' && !napBriefLowReadiness.headline.includes('Nice nap'), napBriefLowReadiness.headline);
 ST.sleepBaselineScore = null;
 
+// ── AI food photo recognition ──
+document.getElementById = () => _fakeEl;
+
+const lowConfPhoto = { source: 'photo', description: 'mystery casserole', servingDescription: '1 bowl', confidence: 0.55, nutrients: { calories: 400, protein: 20, carbs: 30, fat: 15, fiber: 3, sugar: 5 } };
+const highConfPhoto = { source: 'photo', description: 'grilled chicken breast', servingDescription: '6oz', confidence: 0.9, nutrients: { calories: 280, protein: 52, carbs: 0, fat: 6, fiber: 0, sugar: 0 } };
+const barcodeHit = { source: 'barcode', description: 'Clif Bar Chocolate Chip', brandName: 'Clif Bar', servingDescription: '1 bar (68g)', confidence: 1, nutrients: { calories: 250, protein: 9, carbs: 45, fat: 5, fiber: 5, sugar: 21 } };
+
+const lowConfHTML = buildFoodRecognitionCardHTML(lowConfPhoto);
+log('food photo: a sub-80%% confidence guess shows the "is this right?" warning banner', lowConfHTML.includes('is this right?'), '');
+log('food photo: the low-confidence banner surfaces the actual percentage', lowConfHTML.includes('55%'), '');
+
+const highConfHTML = buildFoodRecognitionCardHTML(highConfPhoto);
+log('food photo: an 80%%+ confidence guess does NOT show the warning banner', !highConfHTML.includes('is this right?'), '');
+log('food photo: high-confidence card still shows the confidence figure for transparency', highConfHTML.includes('90%'), '');
+
+const barcodeHTML = buildFoodRecognitionCardHTML(barcodeHit);
+log('barcode: an exact product match never shows the low-confidence warning', !barcodeHTML.includes('is this right?'), '');
+log('barcode: shows the brand name instead of a confidence percentage', barcodeHTML.includes('Clif Bar'), '');
+
+// Description and macro fields are editable text/number inputs pre-filled
+// with the model's guess — confirms the "user can modify it" requirement
+// actually renders editable controls, not read-only text.
+log('food photo: description renders as an editable input, not static text', lowConfHTML.includes('id="foodRecDescription"') && lowConfHTML.includes('value="mystery casserole"'), '');
+log('food photo: macro fields render as editable inputs pre-filled with the estimate', lowConfHTML.includes('id="foodRecCal"') && lowConfHTML.includes('value="400"'), '');
+
+// addFoodRecognitionToMeal: user edits fields before adding — the saved
+// item should reflect the EDITED values, not silently revert to the
+// original model guess.
+ST.mealBuilder = { mealType: 'lunch', items: [] };
+window._foodRecPending = { ...lowConfPhoto };
+const editedFields = { foodRecDescription: 'homemade chicken casserole', foodRecCal: '450', foodRecProtein: '25', foodRecCarbs: '35', foodRecFat: '18' };
+document.getElementById = (id) => (id in editedFields ? { value: editedFields[id] } : _fakeEl);
+addFoodRecognitionToMeal();
+const addedItem = ST.mealBuilder.items[0];
+log('food photo: adding to meal uses the user-edited description, not the original guess', addedItem && addedItem.description === 'homemade chicken casserole', addedItem && addedItem.description);
+log('food photo: adding to meal uses user-edited calories', addedItem && addedItem.nutrients.calories === 450, addedItem && JSON.stringify(addedItem.nutrients));
+log('food photo: fiber/sugar (not shown as editable fields) are carried over from the original guess', addedItem && addedItem.nutrients.fiber === 3 && addedItem.nutrients.sugar === 5, addedItem && JSON.stringify(addedItem.nutrients));
+log('food photo: saved item retains its source and confidence for later reference', addedItem && addedItem.source === 'photo' && addedItem.confidence === 0.55, '');
+document.getElementById = () => _fakeEl;
+ST.mealBuilder = null;
+window._foodRecPending = null;
+
+// Error states the meal builder needs to render distinctly
+const limitHTML_check = (result) => {
+  // handleFoodRecognitionResult writes into #foodPhotoResultRoot; since
+  // getElementById is stubbed to _fakeEl here, read back via _fakeEl.innerHTML.
+  handleFoodRecognitionResult(result);
+  return _fakeEl.innerHTML;
+};
+const limitMsg = limitHTML_check({ error: 'limit_reached', used: 5, limit: 5 });
+log('food photo: hitting the daily cap shows an upgrade-oriented message, not a raw error', limitMsg.includes('Pro') && limitMsg.includes('5'), '');
+const notFoundMsg = limitHTML_check({ error: 'vision_api_failed' });
+log('food photo: a server-side failure shows a retry-or-manual-entry message', notFoundMsg.includes('manually'), '');
+
 })();

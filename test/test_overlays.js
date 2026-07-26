@@ -2383,4 +2383,53 @@ log('food photo: hitting the daily cap shows an upgrade-oriented message, not a 
 const notFoundMsg = limitHTML_check({ error: 'vision_api_failed' });
 log('food photo: a server-side failure shows a retry-or-manual-entry message', notFoundMsg.includes('manually'), '');
 
+// ── Food emoji matching ──
+log('foodEmoji: banana matches', foodEmoji('Bananas, raw') === '🍌', '');
+log('foodEmoji: pizza matches', foodEmoji('Pepperoni pizza slice') === '🍕', '');
+log('foodEmoji: protein shake matches before generic patterns could grab it', foodEmoji('Protein shake, chocolate') === '🥤', '');
+log('foodEmoji: sandwich matches', foodEmoji('Turkey sandwich on wheat') === '🥪', '');
+log('foodEmoji: chicken matches', foodEmoji('Grilled chicken breast') === '🍗', '');
+log('foodEmoji: an unrecognized food gets the generic plate fallback, not a wrong icon', foodEmoji('Some obscure regional dish') === '🍽️', '');
+log('foodEmoji: matching is case-insensitive', foodEmoji('BANANA') === '🍌', '');
+
+// ── Frequent foods (history-based quick-add) ──
+log('normalizeFoodKey: strips a trailing serving multiplier so portions of the same food count together', normalizeFoodKey('Chicken breast (2x)') === normalizeFoodKey('Chicken breast'), '');
+log('normalizeFoodKey: is case/whitespace insensitive', normalizeFoodKey('  Banana  ') === normalizeFoodKey('BANANA'), '');
+
+const mkMealLog = (loggedAt, items) => ({ logged_at: loggedAt, meal_data: { items } });
+const chickenItem = { description: 'Chicken breast', nutrients: { calories: 280, protein: 53, carbs: 0, fat: 6, fiber: 0, sugar: 0 } };
+const chickenItem2x = { description: 'Chicken breast (2x)', nutrients: { calories: 560, protein: 106, carbs: 0, fat: 12, fiber: 0, sugar: 0 } };
+const bananaItem = { description: 'Banana', nutrients: { calories: 105, protein: 1, carbs: 27, fat: 0, fiber: 3, sugar: 14 } };
+const oneOffItem = { description: 'Exotic fruit smoothie', nutrients: { calories: 200, protein: 2, carbs: 40, fat: 1, fiber: 2, sugar: 30 } };
+
+const mockLogs = [
+  mkMealLog('2026-07-01T12:00:00Z', [chickenItem]),
+  mkMealLog('2026-07-05T12:00:00Z', [chickenItem, bananaItem]),
+  mkMealLog('2026-07-10T12:00:00Z', [chickenItem2x]), // same food, different portion — should merge into one count
+  mkMealLog('2026-07-15T12:00:00Z', [bananaItem]),
+  mkMealLog('2026-07-20T12:00:00Z', [oneOffItem]), // logged only once
+];
+
+const frequent = getFrequentFoods(mockLogs, 8);
+log('getFrequentFoods: chicken (logged across 3 meals at different portions) counts as one food, not three', frequent.some(f => normalizeFoodKey(f.description) === 'chicken breast' && f.timesLogged === 3), JSON.stringify(frequent));
+log('getFrequentFoods: banana (logged twice) is included', frequent.some(f => normalizeFoodKey(f.description) === 'banana' && f.timesLogged === 2), '');
+log('getFrequentFoods: a genuine one-off (logged once) is excluded — this is a "usual foods" list, not a full history dump', !frequent.some(f => f.description === 'Exotic fruit smoothie'), '');
+log('getFrequentFoods: most frequent food is ranked first', normalizeFoodKey(frequent[0].description) === 'chicken breast', JSON.stringify(frequent[0]));
+log('getFrequentFoods: uses the most recently logged version\'s nutrients (the 2x portion), not the first-ever logged portion', frequent.find(f => normalizeFoodKey(f.description) === 'chicken breast').nutrients.calories === 560, JSON.stringify(frequent.find(f => normalizeFoodKey(f.description) === 'chicken breast')));
+
+const manyFoodsLogs = ['a','b','c','d','e','f','g','h','i','j'].flatMap(name =>
+  [mkMealLog('2026-07-01T00:00:00Z', [{ description: name, nutrients: { calories:100,protein:1,carbs:1,fat:1,fiber:0,sugar:0 } }]),
+   mkMealLog('2026-07-02T00:00:00Z', [{ description: name, nutrients: { calories:100,protein:1,carbs:1,fat:1,fiber:0,sugar:0 } }])]
+);
+log('getFrequentFoods: respects the limit parameter even with many qualifying foods', getFrequentFoods(manyFoodsLogs, 3).length === 3, '');
+
+// addFrequentFoodToMeal: one tap adds directly, no search/photo/barcode call involved
+document.getElementById = () => _fakeEl;
+ST.mealBuilder = { mealType: 'lunch', items: [], frequentFoods: frequent };
+const chickenIdx = frequent.findIndex(f => normalizeFoodKey(f.description) === 'chicken breast');
+addFrequentFoodToMeal(chickenIdx);
+log('addFrequentFoodToMeal: adds the tapped food directly to the meal', ST.mealBuilder.items.length === 1 && normalizeFoodKey(ST.mealBuilder.items[0].description) === 'chicken breast', JSON.stringify(ST.mealBuilder.items));
+log('addFrequentFoodToMeal: tags the item source as history, distinct from usda/photo/barcode/manual', ST.mealBuilder.items[0].source === 'history', '');
+ST.mealBuilder = null;
+
 })();

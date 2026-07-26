@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.20.2';
+const FCF_VERSION = 'v5.20.3';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -5721,6 +5721,71 @@ async function loadRecentMealLogs(days) {
   } catch(e) { return []; }
 }
 
+// ─── FREQUENT FOODS ─────────────────────────────────────────────────────
+// Most people rotate through a fairly narrow set of foods week to week.
+// Surfacing what someone has actually logged before — ranked by how often
+// — lets a repeat meal get added with a single tap and zero search,
+// photo, or barcode calls at all, which is where the real API-call
+// savings are: not in making photo analysis cheaper, but in someone not
+// needing it for the fourth Tuesday in a row they've had the same lunch.
+const FREQUENT_FOODS_CACHE_KEY = 'fcf_frequent_foods_cache';
+const FREQUENT_FOODS_WINDOW_DAYS = 30;
+const FREQUENT_FOODS_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000; // refreshed at most twice a day — this doesn't need to be real-time
+
+// Strips a trailing serving-multiplier suffix like " (2x)" so "Chicken
+// breast (2x)" and "Chicken breast" count as the same food instead of
+// splitting one habit's frequency count across every portion size it's
+// ever been logged at.
+function normalizeFoodKey(description) {
+  return (description || '').toLowerCase().replace(/\s*\(\d+(\.\d+)?x\)\s*$/, '').trim();
+}
+
+function getFrequentFoods(mealLogs, limit) {
+  const counts = {}; // normalized key -> { count, lastLoggedAt, item }
+  (mealLogs || []).forEach(log => {
+    (log.meal_data?.items || []).forEach(item => {
+      const key = normalizeFoodKey(item.description);
+      if (!key) return;
+      if (!counts[key]) counts[key] = { count: 0, lastLoggedAt: null, item: null };
+      counts[key].count++;
+      // Keep the most recently logged version — nutrients can drift
+      // slightly between entries (a different portion typed in, a
+      // corrected photo guess) and the newest is the best guess at how
+      // they'd want it logged again.
+      if (!counts[key].lastLoggedAt || log.logged_at > counts[key].lastLoggedAt) {
+        counts[key].lastLoggedAt = log.logged_at;
+        counts[key].item = item;
+      }
+    });
+  });
+  return Object.values(counts)
+    .filter(c => c.count >= 2) // a genuine one-off shouldn't clutter a "usual foods" list
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit || 8)
+    .map(c => ({ ...c.item, timesLogged: c.count }));
+}
+
+function loadFrequentFoodsCache() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FREQUENT_FOODS_CACHE_KEY) || 'null');
+    if (!raw || !ST.user || raw.userId !== ST.user.id) return null;
+    if (Date.now() - raw.cachedAt > FREQUENT_FOODS_CACHE_MAX_AGE_MS) return null;
+    return raw.foods;
+  } catch(e) { return null; }
+}
+function saveFrequentFoodsCache(foods) {
+  try { localStorage.setItem(FREQUENT_FOODS_CACHE_KEY, JSON.stringify({ userId: ST.user?.id, cachedAt: Date.now(), foods })); } catch(e) {}
+}
+
+async function getFrequentFoodsForMealBuilder() {
+  const cached = loadFrequentFoodsCache();
+  if (cached) return cached;
+  const logs = await loadRecentMealLogs(FREQUENT_FOODS_WINDOW_DAYS);
+  const foods = getFrequentFoods(logs, 8);
+  saveFrequentFoodsCache(foods);
+  return foods;
+}
+
 // Groups logged meals by calendar day and classifies a protein-adherence
 // trend over the period — reuses classifyTrend, the same function already
 // driving the strength/pace trends, so every trend indicator in the app
@@ -7206,6 +7271,60 @@ const STAPLE_FOOD_BOOSTS = {
   croissant: /^croissants?,/i,
 };
 
+// ─── FOOD EMOJI ─────────────────────────────────────────────────────────
+// Purely cosmetic — keyword-matched against whatever description string a
+// food ended up with, whichever source it came from (USDA, manual, photo,
+// barcode, frequent-foods history). Ordered most-specific-first so e.g.
+// "protein shake" matches before a more generic pattern could grab it.
+// Not exhaustive by design — an unmatched food just gets the plate
+// fallback rather than a guessed-wrong icon.
+const FOOD_EMOJI_PATTERNS = [
+  [/protein\s*shake|protein\s*powder|whey/i, '🥤'],
+  [/banana/i, '🍌'],
+  [/pizza/i, '🍕'],
+  [/burger/i, '🍔'],
+  [/sandwich|\bsub\b/i, '🥪'],
+  [/taco/i, '🌮'],
+  [/burrito/i, '🌯'],
+  [/salad/i, '🥗'],
+  [/\begg/i, '🥚'],
+  [/bacon/i, '🥓'],
+  [/chicken|turkey/i, '🍗'],
+  [/steak|\bbeef\b/i, '🥩'],
+  [/salmon|\bfish\b|tuna/i, '🐟'],
+  [/shrimp/i, '🍤'],
+  [/\brice\b/i, '🍚'],
+  [/pasta|spaghetti|noodle/i, '🍝'],
+  [/toast|\bbread\b|bagel/i, '🍞'],
+  [/oatmeal|\boats\b/i, '🥣'],
+  [/yogurt/i, '🥣'],
+  [/cheese/i, '🧀'],
+  [/pancake|waffle/i, '🥞'],
+  [/donut|doughnut/i, '🍩'],
+  [/cookie/i, '🍪'],
+  [/ice cream/i, '🍦'],
+  [/coffee/i, '☕'],
+  [/\bmilk\b/i, '🥛'],
+  [/broccoli|vegetable|veggie/i, '🥦'],
+  [/avocado/i, '🥑'],
+  [/apple/i, '🍎'],
+  [/orange/i, '🍊'],
+  [/grape/i, '🍇'],
+  [/strawberr|\bberry\b|berries/i, '🍓'],
+  [/watermelon/i, '🍉'],
+  [/potato|fries/i, '🍟'],
+  [/soup/i, '🍲'],
+  [/protein\s*bar|granola\s*bar|\bbar\b/i, '🍫'],
+  [/pie\b/i, '🥧'],
+];
+function foodEmoji(description) {
+  const d = description || '';
+  for (const [pattern, emoji] of FOOD_EMOJI_PATTERNS) {
+    if (pattern.test(d)) return emoji;
+  }
+  return '🍽️'; // generic fallback so every food row still has an icon slot
+}
+
 async function searchUSDAFoods(query) {
   if (!query || query.trim().length < 2) return [];
   const q = query.trim().toLowerCase();
@@ -8023,7 +8142,7 @@ async function renderNutrition(p) {
         parts.push('<div class="card" style="padding:12px 16px">');
         m.meal_data.items.forEach(item => {
           parts.push('<div style="padding:6px 0;border-bottom:1px solid var(--border)">');
-          parts.push('<div class="fb"><span style="font-size:13px">'+item.description+'</span><span style="font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0;padding-left:10px">'+item.nutrients.calories+' cal</span></div>');
+          parts.push('<div class="fb"><span style="font-size:13px">'+foodEmoji(item.description)+' '+item.description+'</span><span style="font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0;padding-left:10px">'+item.nutrients.calories+' cal</span></div>');
           parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">P'+item.nutrients.protein+'g · C'+item.nutrients.carbs+'g · F'+item.nutrients.fat+'g</div>');
           parts.push('</div>');
         });
@@ -8093,8 +8212,13 @@ function saveQuickWater() {
 }
 
 function openMealBuilder() {
-  ST.mealBuilder = { mealType: 'snack', items: [] };
+  ST.mealBuilder = { mealType: 'snack', items: [], frequentFoods: null };
   renderMealBuilder();
+  getFrequentFoodsForMealBuilder().then(foods => {
+    if (!ST.mealBuilder) return; // builder was closed before this resolved
+    ST.mealBuilder.frequentFoods = foods;
+    renderMealBuilder();
+  });
 }
 
 function closeMealBuilder() {
@@ -8117,10 +8241,23 @@ function renderMealBuilder() {
   if (mb.items.length) {
     parts.push('<div style="margin:10px 0">');
     mb.items.forEach((item, i) => {
-      parts.push('<div class="fb" style="margin-bottom:4px"><span style="font-size:13px">'+item.description+'</span><button class="btn-ghost" style="font-size:11px" onclick="ST.mealBuilder.items.splice('+i+',1);renderMealBuilder()">✕</button></div>');
+      parts.push('<div class="fb" style="margin-bottom:4px"><span style="font-size:13px">'+foodEmoji(item.description)+' '+item.description+'</span><button class="btn-ghost" style="font-size:11px" onclick="ST.mealBuilder.items.splice('+i+',1);renderMealBuilder()">✕</button></div>');
     });
     const runningTotals = sumMealNutrients(mb.items);
     parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">Running total: '+runningTotals.calories+' cal · P'+runningTotals.protein+'g · C'+runningTotals.carbs+'g · F'+runningTotals.fat+'g</div>');
+    parts.push('</div>');
+  }
+
+  // "Your Usual" — foods logged 2+ times in the last 30 days, ranked by
+  // frequency. One tap adds it with its last-used macros already filled
+  // in: no search, no photo call, no barcode scan needed for a repeat
+  // meal, which covers most days for most people.
+  if (mb.frequentFoods && mb.frequentFoods.length) {
+    parts.push('<div class="section-label" style="margin-top:12px">YOUR USUAL</div>');
+    parts.push('<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">');
+    mb.frequentFoods.forEach((food, i) => {
+      parts.push('<button class="btn-outline" style="font-size:12px;padding:6px 10px;border-radius:20px" onclick="addFrequentFoodToMeal('+i+')">'+foodEmoji(food.description)+' '+sanitizeUserText(food.description)+' <span style="color:var(--muted)">· '+food.nutrients.calories+' cal</span></button>');
+    });
     parts.push('</div>');
   }
 
@@ -8174,7 +8311,7 @@ function filterUSDASearch(query) {
     if (!document.getElementById('usdaSearchResults')) return; // builder closed mid-search
     if (!results.length) { box.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-top:6px">No matches — try manual entry below.</div>'; return; }
     box.innerHTML = results.map((f,i) =>
-      '<div class="card" style="padding:8px;margin-top:6px;cursor:pointer" onclick="selectUSDAFood('+i+')"><div style="font-size:13px">'+f.description+(f.brandName?' <span style="color:var(--muted);font-size:11px">('+f.brandName+')</span>':'')+'</div><div style="font-size:11px;color:var(--muted)">'+f.nutrients.calories+' cal per '+usdaReferenceLabel(f)+'</div></div>'
+      '<div class="card" style="padding:8px;margin-top:6px;cursor:pointer" onclick="selectUSDAFood('+i+')"><div style="font-size:13px">'+foodEmoji(f.description)+' '+f.description+(f.brandName?' <span style="color:var(--muted);font-size:11px">('+f.brandName+')</span>':'')+'</div><div style="font-size:11px;color:var(--muted)">'+f.nutrients.calories+' cal per '+usdaReferenceLabel(f)+'</div></div>'
     ).join('');
     window._usdaLastResults = results;
   }, 350);
@@ -8217,6 +8354,19 @@ function addUSDAFoodToMeal() {
   document.getElementById('foodSearchInput').value = '';
   document.getElementById('usdaSearchResults').innerHTML = '';
   window._usdaPendingFood = null;
+  renderMealBuilder();
+}
+
+// One tap, no search/photo/barcode call at all — the whole point of
+// surfacing "Your Usual" in the first place.
+function addFrequentFoodToMeal(idx) {
+  const food = ST.mealBuilder?.frequentFoods?.[idx];
+  if (!food || !ST.mealBuilder) return;
+  ST.mealBuilder.items.push({
+    description: food.description,
+    nutrients: food.nutrients,
+    source: 'history',
+  });
   renderMealBuilder();
 }
 
@@ -8304,7 +8454,7 @@ function buildFoodRecognitionCardHTML(result) {
   } else if (result.brandName) {
     parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + sanitizeUserText(result.brandName) + '</div>');
   }
-  parts.push('<div class="field"><input type="text" id="foodRecDescription" value="' + sanitizeUserText(result.description).replace(/"/g, '&quot;') + '"></div>');
+  parts.push('<div class="field"><label>' + foodEmoji(result.description) + ' Description</label><input type="text" id="foodRecDescription" value="' + sanitizeUserText(result.description).replace(/"/g, '&quot;') + '"></div>');
   if (result.servingDescription) {
     parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:6px">Estimated portion: ' + sanitizeUserText(result.servingDescription) + '</div>');
   }

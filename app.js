@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.22.0';
+const FCF_VERSION = 'v5.22.1';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -3874,7 +3874,7 @@ async function renderPreflight(p) {
     parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--gold);letter-spacing:0.1em;margin-bottom:6px">TODAY\'S MISSION</div>');
     parts.push('<div style="font-size:19px;font-weight:800;margin-bottom:4px">'+planName+'</div>');
     parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px">'+planSummary+(ST.activeCustomProfileId?'':' · '+levelLabel+(ST.fatigue!=='go'?' / '+fatigueLabel:''))+'</div>');
-    parts.push('<button class="btn btn-gold" onclick="engageWorkout()">⚡ ENGAGE WORKOUT</button>');
+    parts.push('<button class="btn btn-gold" onclick="engageWorkout()">'+(ST.workout ? '↩ RETURN TO WORKOUT' : '⚡ ENGAGE WORKOUT')+'</button>');
     parts.push('</div>');
   } else {
     parts.push('<div class="alert alert-info mb12"><div class="alert-icon">ℹ️</div><div>Select a mission profile below to generate your flight plan.</div></div>');
@@ -4219,6 +4219,13 @@ function getCurrentExerciseId() {
 }
 
 function engageWorkout() {
+  // A workout already in progress must never be silently discarded —
+  // tabbing away to check Today and coming back was resetting the entire
+  // session, wiping every set already logged. Returning to an existing
+  // session is always the safe default; starting fresh is a separate,
+  // explicit action (Change Plan), not something this button does for you.
+  if (ST.workout) { switchTab('flight'); return; }
+
   const wk = getActiveWorkout();
   if (!wk) { showToast('No workout available for this selection.'); return; }
 

@@ -2667,4 +2667,38 @@ log('a barcode result never shows a photo thumbnail even if one is still stashed
 
 window._foodRecPendingImageUrl = null;
 
+// ── BUG FIX: tabbing away from an in-progress workout and pressing the
+// hero button again silently reset the whole session, wiping every
+// logged set. The button now recognizes an in-progress workout and
+// returns to it instead of re-initializing from the template. ──
+
+// Simulate a workout well underway: some sets already filled in.
+ST.workout = { taxi: [], takeoff: [{ id: 'ex1', name: 'Bench Press', target: '3x8', sets: 3 }], enroute: [], landing: [] };
+ST.sets = { ex1: [{ reps: '8', weight: '135' }, { reps: '8', weight: '135' }, { reps: '', weight: '' }] };
+ST.workoutStartedAt = Date.now() - 15*60*1000; // 15 minutes in
+
+let tabSwitchedTo = null;
+const origSwitchTabForWorkoutTest = switchTab;
+switchTab = (t) => { tabSwitchedTo = t; };
+
+engageWorkout();
+log('BUG FIX: pressing the hero button with a workout already in progress does NOT wipe the logged sets', ST.sets.ex1[0].reps === '8' && ST.sets.ex1[0].weight === '135', JSON.stringify(ST.sets));
+log('BUG FIX: the in-progress workout object itself is untouched, not silently reinitialized', ST.workout.takeoff[0].name === 'Bench Press', '');
+log('BUG FIX: pressing the button with a workout in progress navigates back to it (the "flight" tab), not a reset', tabSwitchedTo === 'flight', tabSwitchedTo);
+
+switchTab = origSwitchTabForWorkoutTest;
+
+// The button's own label must reflect this too, not just its behavior —
+// otherwise it still visually invites "starting fresh" even though
+// tapping it now safely returns instead.
+ST.workout = { taxi: [], takeoff: [{ id: 'ex1', name: 'Bench Press', target: '3x8', sets: 3 }], enroute: [], landing: [] };
+ST.sets = { ex1: [{ reps: '8', weight: '135' }] };
+await renderPreflight(_fakeEl);
+const inProgressHtml = _fakeEl.innerHTML || '';
+log('BUG FIX: the hero button reads "RETURN TO WORKOUT" once a session is in progress, not "ENGAGE WORKOUT"', inProgressHtml.includes('RETURN TO WORKOUT') && !inProgressHtml.includes('ENGAGE WORKOUT'), '');
+
+ST.workout = null;
+ST.sets = {};
+ST.workoutStartedAt = null;
+
 })();

@@ -41,6 +41,12 @@ the next session**, providing it fresh in the new chat rather than it
 persisting across sessions indefinitely. Do not write the actual token
 into any file that gets downloaded or committed.
 
+**→ First thing to do in the new chat:** paste your current GitHub PAT as
+a plain message when Claude needs to push (same as this session's
+workflow). If you haven't rotated it yet, this is also the moment to do
+that — revoke the old one at GitHub → Settings → Developer settings →
+Personal access tokens, generate a new one, and paste that instead.
+
 ## Continuity note — why a test file got committed today
 
 `test/test_overlays.js` had lived only in the sandbox's `/tmp` directory

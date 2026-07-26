@@ -2151,6 +2151,24 @@ log('someone on pace mid-day (not yet at the full target) still correctly reads 
 
 ST.waterIn = 0; ST.flightHrs = 0;
 
+// THE EXACT REPORTED CONTRADICTION: no-fly day (1.0L floor target), 1L
+// consumed, evening. The workout Hydration Payload widget correctly reads
+// 100%/nominal off hydroStatus() — but Today's "Still Open" list was
+// using its own hardcoded "under 1.5L after 2pm" check, completely
+// ignoring the real target, and flagged the same 1L as "light" at the
+// same moment. Both surfaces now read from the same hydroStatus() call,
+// so this can't diverge again.
+ST.flightHrs = 0; ST.waterIn = 1;
+const noFlyEveningCtx = { ...baseCtx(), hour: 18, now: new Date('2026-07-25T18:14:00') };
+log('BUG FIX (reported contradiction): 1L on a no-fly day (1.0L target) does NOT flag as "light" — matches the Hydration Payload widget showing 100%/nominal', !buildTodayGaps(noFlyEveningCtx).some(g => /Water is light/.test(g.text)), JSON.stringify(buildTodayGaps(noFlyEveningCtx)));
+
+// Same no-fly floor target, but genuinely behind — should still flag,
+// just using the real target-aware status instead of the old flat number
+ST.waterIn = 0.3;
+log('gaps: genuinely behind pace on a no-fly day still flags water, just via the real paced status now', buildTodayGaps(noFlyEveningCtx).some(g => /Water/.test(g.text)), JSON.stringify(buildTodayGaps(noFlyEveningCtx)));
+
+ST.waterIn = 0; ST.flightHrs = 0;
+
 // ── Standalone calendar-upload prompt ──
 ST.flightSchedule = null; ST.ouraConnected = true; ST.ouraScore = 45; // deliberately LOW readiness
 ST.ouraData = {sleep_score:50, activity_score:60}; ST.ouraSteps = 1000;

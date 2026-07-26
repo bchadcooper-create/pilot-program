@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.20.1';
+const FCF_VERSION = 'v5.20.2';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -153,9 +153,6 @@ function dayElapsedPct(now) {
 // What you'd reasonably be expected to have had by THIS point in the day —
 // never used to lower the actual end-of-day target (hydroTarget), only to
 // judge whether right now is a fair moment to sound an alarm about it.
-function hydroPacedTarget()  { return hydroTarget() * dayElapsedPct(new Date()); }
-function hydroPacedDeficit() { return Math.max(hydroPacedTarget() - ST.waterIn, 0); }
-
 function hydroTarget()  {
   if (ST.flightHrs > 0) return Math.max(ST.flightHrs * HYDRO_RATE, HYDRO_FLOOR);
   return HYDRO_FLOOR; // no-fly day: still need baseline hydration
@@ -7739,13 +7736,22 @@ function buildTodayBriefing(ctx) {
 // show alongside any recommendation without competing with it.
 function buildTodayGaps(ctx) {
   const gaps = [];
-  const { nutrition, training, water, hour } = ctx;
+  const { nutrition, training, hour } = ctx;
   if (!nutrition.mealCount && hour >= 11) gaps.push({ icon:'🍽️', text:'Nothing logged yet today', fn:"switchTab('nutrition')" });
   else if (nutrition.goals && nutrition.proteinPct !== null && nutrition.proteinPct < 70 && hour >= 15) {
     gaps.push({ icon:'🥩', text:'Protein at '+nutrition.proteinPct+'% of target', fn:"switchTab('nutrition')" });
   }
   if (!training.workoutToday && hour >= 18) gaps.push({ icon:'💪', text:'No session logged today', fn:"switchTab('preflight')" });
-  if (water < 1.5 && hour >= 14) gaps.push({ icon:'💧', text:'Water is light so far', fn:"switchTab('preflight')" });
+  // Uses the same hydroStatus() the workout hydration gate reads from —
+  // previously this used a hardcoded "under 1.5L after 2pm" check that
+  // ignored the real, flight-hours-aware target entirely. On a no-fly day
+  // (1.0L floor target) that hardcoded check could flag water as "light"
+  // at the exact same moment the workout screen showed 100%/nominal —
+  // two screens disagreeing about the same number. Both now read from
+  // hydroTarget()/ST.waterIn, so they can't diverge again.
+  const hydro = hydroStatus(ctx.now);
+  if (hydro.label === 'DEFICIT') gaps.push({ icon:'💧', text:'Water is well behind pace today', fn:"switchTab('preflight')" });
+  else if (hydro.label === 'CAUTION') gaps.push({ icon:'💧', text:'Water is light so far', fn:"switchTab('preflight')" });
   return gaps;
 }
 

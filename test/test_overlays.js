@@ -2401,47 +2401,69 @@ const napBriefLowReadiness = buildTodayBriefing(bCtx(50, 75)); // jump but readi
 log('BUG-FREE (priority): low readiness still overrides even when a nap is detected — rest advice, not "go train"', napBriefLowReadiness.tone === 'rest' && !napBriefLowReadiness.headline.includes('Nice nap'), napBriefLowReadiness.headline);
 ST.sleepBaselineScore = null;
 
-// ── AI food photo recognition ──
+// ── AI food photo recognition (auto-add on recognition; review card
+// shown for the just-added item — no separate "Add to Meal" tap) ──
 document.getElementById = () => _fakeEl;
 
 const lowConfPhoto = { source: 'photo', description: 'mystery casserole', servingDescription: '1 bowl', confidence: 0.55, nutrients: { calories: 400, protein: 20, carbs: 30, fat: 15, fiber: 3, sugar: 5 } };
 const highConfPhoto = { source: 'photo', description: 'grilled chicken breast', servingDescription: '6oz', confidence: 0.9, nutrients: { calories: 280, protein: 52, carbs: 0, fat: 6, fiber: 0, sugar: 0 } };
 const barcodeHit = { source: 'barcode', description: 'Clif Bar Chocolate Chip', brandName: 'Clif Bar', servingDescription: '1 bar (68g)', confidence: 1, nutrients: { calories: 250, protein: 9, carbs: 45, fat: 5, fiber: 5, sugar: 21 } };
 
-const lowConfHTML = buildFoodRecognitionCardHTML(lowConfPhoto);
+// BUG FIX (reported): recognizing a food used to stop at a separate "Add
+// to Meal" button — confusing, since taking the photo already was the
+// selection. handleFoodRecognitionResult now auto-adds immediately.
+ST.mealBuilder = { mealType: 'lunch', items: [] };
+handleFoodRecognitionResult(lowConfPhoto);
+log('BUG FIX: recognizing a food auto-adds it immediately, no separate confirm tap required', ST.mealBuilder.items.length === 1 && ST.mealBuilder.items[0].description === 'mystery casserole', JSON.stringify(ST.mealBuilder.items));
+log('BUG FIX: a review card is shown bound to the just-added item\'s index', window._foodRecReviewIndex === 0, '');
+
+const lowConfHTML = buildItemReviewCardHTML(0);
 log('food photo: a sub-80%% confidence guess shows the "is this right?" warning banner', lowConfHTML.includes('is this right?'), '');
 log('food photo: the low-confidence banner surfaces the actual percentage', lowConfHTML.includes('55%'), '');
+finishReviewingAddedItem();
+ST.mealBuilder = null;
 
-const highConfHTML = buildFoodRecognitionCardHTML(highConfPhoto);
+ST.mealBuilder = { mealType: 'lunch', items: [] };
+handleFoodRecognitionResult(highConfPhoto);
+const highConfHTML = buildItemReviewCardHTML(0);
 log('food photo: an 80%%+ confidence guess does NOT show the warning banner', !highConfHTML.includes('is this right?'), '');
 log('food photo: high-confidence card still shows the confidence figure for transparency', highConfHTML.includes('90%'), '');
+finishReviewingAddedItem();
+ST.mealBuilder = null;
 
-const barcodeHTML = buildFoodRecognitionCardHTML(barcodeHit);
+ST.mealBuilder = { mealType: 'lunch', items: [] };
+handleFoodRecognitionResult(barcodeHit);
+const barcodeHTML = buildItemReviewCardHTML(0);
 log('barcode: an exact product match never shows the low-confidence warning', !barcodeHTML.includes('is this right?'), '');
 log('barcode: shows the brand name instead of a confidence percentage', barcodeHTML.includes('Clif Bar'), '');
+finishReviewingAddedItem();
+ST.mealBuilder = null;
 
 // Description and macro fields are editable text/number inputs pre-filled
 // with the model's guess — confirms the "user can modify it" requirement
 // actually renders editable controls, not read-only text.
-log('food photo: description renders as an editable input, not static text', lowConfHTML.includes('id="foodRecDescription"') && lowConfHTML.includes('value="mystery casserole"'), '');
-log('food photo: macro fields render as editable inputs pre-filled with the estimate', lowConfHTML.includes('id="foodRecCal"') && lowConfHTML.includes('value="400"'), '');
-
-// addFoodRecognitionToMeal: user edits fields before adding — the saved
-// item should reflect the EDITED values, not silently revert to the
-// original model guess.
 ST.mealBuilder = { mealType: 'lunch', items: [] };
-window._foodRecPending = { ...lowConfPhoto };
-const editedFields = { foodRecDescription: 'homemade chicken casserole', foodRecCal: '450', foodRecProtein: '25', foodRecCarbs: '35', foodRecFat: '18' };
-document.getElementById = (id) => (id in editedFields ? { value: editedFields[id] } : _fakeEl);
-addFoodRecognitionToMeal();
-const addedItem = ST.mealBuilder.items[0];
-log('food photo: adding to meal uses the user-edited description, not the original guess', addedItem && addedItem.description === 'homemade chicken casserole', addedItem && addedItem.description);
-log('food photo: adding to meal uses user-edited calories', addedItem && addedItem.nutrients.calories === 450, addedItem && JSON.stringify(addedItem.nutrients));
-log('food photo: fiber/sugar (not shown as editable fields) are carried over from the original guess', addedItem && addedItem.nutrients.fiber === 3 && addedItem.nutrients.sugar === 5, addedItem && JSON.stringify(addedItem.nutrients));
-log('food photo: saved item retains its source and confidence for later reference', addedItem && addedItem.source === 'photo' && addedItem.confidence === 0.55, '');
-document.getElementById = () => _fakeEl;
+handleFoodRecognitionResult(lowConfPhoto);
+const reviewHtml = buildItemReviewCardHTML(0);
+log('food photo: description renders as an editable input, not static text', reviewHtml.includes('id="foodRecDescription"') && reviewHtml.includes('value="mystery casserole"'), '');
+log('food photo: macro fields render as editable inputs pre-filled with the estimate', reviewHtml.includes('id="foodRecCal"') && reviewHtml.includes('value="400"'), '');
+
+// updateReviewedItemField: editing a field updates the ALREADY-ADDED item
+// directly — there's no separate staging object that gets copied over on
+// a later "confirm" step, so an edit can never silently revert.
+updateReviewedItemField('description', 'homemade chicken casserole');
+updateReviewedItemField('calories', '450');
+updateReviewedItemField('protein', '25');
+updateReviewedItemField('carbs', '35');
+updateReviewedItemField('fat', '18');
+const editedItem = ST.mealBuilder.items[0];
+log('food photo: editing a field updates the already-added item directly, not a separate pending copy', editedItem.description === 'homemade chicken casserole' && editedItem.nutrients.calories === 450, JSON.stringify(editedItem));
+log('food photo: fiber/sugar (not shown as editable fields) are left untouched from the original guess', editedItem.nutrients.fiber === 3 && editedItem.nutrients.sugar === 5, JSON.stringify(editedItem.nutrients));
+log('food photo: the item retains its source and confidence for later reference', editedItem.source === 'photo' && editedItem.confidence === 0.55, '');
+
+finishReviewingAddedItem();
+log('finishReviewingAddedItem ("+ Add More to Your Meal"): clears review state but leaves the added item in place', ST.mealBuilder.items.length === 1 && window._foodRecReviewIndex === null && window._foodRecReviewMeta === null, '');
 ST.mealBuilder = null;
-window._foodRecPending = null;
 
 // Error states the meal builder needs to render distinctly
 const limitHTML_check = (result) => {
@@ -2640,40 +2662,45 @@ dbGetRecentSessions = origDbGetRecentSessions;
 // separate eggs). Added a Quantity field mirroring the USDA search's
 // existing serving-multiplier pattern.
 const eggBarcode = { source: 'barcode', description: 'Organic Eggs', brandName: 'Vital Farms', servingDescription: '1 egg (50g)', confidence: 1, nutrients: { calories: 70, protein: 6, carbs: 0, fat: 5, fiber: 0, sugar: 0 } };
-const eggCardHtml = buildFoodRecognitionCardHTML(eggBarcode);
-log('BUG FIX: the barcode/photo confirm card now has a Quantity field', eggCardHtml.includes('id="foodRecQty"') && eggCardHtml.includes('value="1"'), '');
+document.getElementById = () => _fakeEl;
+ST.mealBuilder = { mealType: 'breakfast', items: [] };
+handleFoodRecognitionResult(eggBarcode);
+const eggCardHtml = buildItemReviewCardHTML(0);
+log('BUG FIX: the barcode/photo review card has a Quantity field', eggCardHtml.includes('id="foodRecQty"') && eggCardHtml.includes('value="1"'), '');
+log('BUG FIX: scanning auto-adds the item immediately, before any quantity is even set', ST.mealBuilder.items.length === 1 && ST.mealBuilder.items[0].nutrients.calories === 70, '');
 
 // Changing quantity recalculates the macro fields from the ORIGINAL
-// scanned values (not whatever might already be sitting in the fields).
-window._foodRecPending = eggBarcode;
-const qtyFields = { foodRecQty: { value: '3' }, foodRecCal: {}, foodRecProtein: {}, foodRecCarbs: {}, foodRecFat: {} };
+// scanned values (meta.baseNutrients) — not whatever might already be
+// sitting on the item, so it's never cumulative across repeated changes.
+const qtyFields = { foodRecQty: { value: '3' }, foodRecCal: {}, foodRecProtein: {}, foodRecCarbs: {}, foodRecFat: {}, foodRecDescription: { value: 'Organic Eggs' } };
 document.getElementById = (id) => qtyFields[id] || _fakeEl;
-updateFoodRecPreview();
-log('BUG FIX: setting quantity to 3 scales calories from the original 70 to 210, not a running total from repeated scans', qtyFields.foodRecCal.value === 210, qtyFields.foodRecCal.value);
-log('BUG FIX: setting quantity to 3 scales protein accordingly (6g -> 18g)', qtyFields.foodRecProtein.value === 18, qtyFields.foodRecProtein.value);
+updateReviewedItemQuantity();
+log('BUG FIX: setting quantity to 3 scales calories from the original 70 to 210, not a running total from repeated scans', ST.mealBuilder.items[0].nutrients.calories === 210, ST.mealBuilder.items[0].nutrients.calories);
+log('BUG FIX: setting quantity to 3 scales protein accordingly (6g -> 18g)', ST.mealBuilder.items[0].nutrients.protein === 18, ST.mealBuilder.items[0].nutrients.protein);
+log('BUG FIX: the visible calorie field itself is updated too, not just the underlying item', qtyFields.foodRecCal.value === 210, qtyFields.foodRecCal.value);
 
-// Adding to the meal at quantity 3 produces ONE item with 3x the
-// nutrients and a "(3x)" label, not three separate identical entries —
-// this is the direct fix for having had to scan the same barcode 3 times.
-ST.mealBuilder = { mealType: 'breakfast', items: [] };
-qtyFields.foodRecDescription = { value: 'Organic Eggs' };
-addFoodRecognitionToMeal();
-log('BUG FIX: scanning once at quantity 3 adds a single item, not three', ST.mealBuilder.items.length === 1, JSON.stringify(ST.mealBuilder.items));
-log('BUG FIX: the single item carries the full 3x nutrients', ST.mealBuilder.items[0].nutrients.calories === 210 && ST.mealBuilder.items[0].nutrients.fat === 15, JSON.stringify(ST.mealBuilder.items[0].nutrients));
+// Quantity 3 stays as ONE item with 3x nutrients and a "(3x)" label — not
+// three separate identical entries — the direct fix for having had to
+// scan the same barcode 3 times.
+log('BUG FIX: quantity 3 stays a single item, not three', ST.mealBuilder.items.length === 1, JSON.stringify(ST.mealBuilder.items));
+log('BUG FIX: the single item carries the full 3x nutrients', ST.mealBuilder.items[0].nutrients.fat === 15, JSON.stringify(ST.mealBuilder.items[0].nutrients));
 log('BUG FIX: the description is labeled (3x) so the quantity is visible in the meal list, matching the existing USDA/manual convention', ST.mealBuilder.items[0].description.includes('(3x)'), ST.mealBuilder.items[0].description);
-log('BUG FIX: fiber/sugar (not shown as editable fields) still scale with quantity, not left at the single-unit amount', ST.mealBuilder.items[0].nutrients.fiber === 0, ''); // 0 * 3 = 0, but confirms the scaled path is used at all via the calories/fat checks above
+log('BUG FIX: fiber/sugar (not shown as editable fields) still scale with quantity, not left at the single-unit amount', ST.mealBuilder.items[0].nutrients.fiber === 0, '');
+
+finishReviewingAddedItem();
+ST.mealBuilder = null;
 
 // Quantity of 1 (the default, e.g. a single banana) should NOT add a
 // "(1x)" label — matches the existing USDA convention exactly.
-window._foodRecPending = eggBarcode;
 ST.mealBuilder = { mealType: 'breakfast', items: [] };
-const qty1Fields = { foodRecQty: { value: '1' }, foodRecCal: { value: '70' }, foodRecProtein: { value: '6' }, foodRecCarbs: { value: '0' }, foodRecFat: { value: '5' }, foodRecDescription: { value: 'Organic Eggs' } };
+handleFoodRecognitionResult(eggBarcode);
+const qty1Fields = { foodRecQty: { value: '1' } };
 document.getElementById = (id) => qty1Fields[id] || _fakeEl;
-addFoodRecognitionToMeal();
+updateReviewedItemQuantity();
 log('quantity of 1 does not add a redundant "(1x)" label', !ST.mealBuilder.items[0].description.includes('(1x)'), ST.mealBuilder.items[0].description);
 
 document.getElementById = () => _fakeEl;
-window._foodRecPending = null;
+finishReviewingAddedItem();
 ST.mealBuilder = null;
 
 // ── Oura-style meal logging flow ──
@@ -2716,28 +2743,56 @@ const sliderHtml = buildQualitySliderHTML('good');
 log('quality slider: bolds/colors the active rating', /color:var\(--blue\);font-weight:700/.test(sliderHtml) && sliderHtml.includes('Good'), '');
 log('quality slider: shows all four labels regardless of which is active', ['Limited','Fair','Good','Nutritious'].every(l => sliderHtml.includes(l)), '');
 
-// buildFoodRecognitionCardHTML: Advisor note + slider show for a photo
-// result with a real qualitative assessment, matching the Oura reference
+// buildItemReviewCardHTML: Advisor note + slider show for a photo result
+// with a real qualitative assessment, matching the Oura reference
 // screenshot's "Advisor" block — but never for a barcode (exact product
 // match, no subjective call to make) or a photo result the model didn't
 // rate (no fabricated assessment).
 const photoWithAdvisor = { source: 'photo', description: 'Fried eggs with black pepper', servingDescription: '2 eggs', confidence: 0.9, qualityRating: 'nutritious', advisorNote: 'Fried eggs give you quality protein and choline.', nutrients: { calories: 180, protein: 12, carbs: 1, fat: 14, fiber: 0, sugar: 0 } };
 window._foodRecPendingImageUrl = 'data:image/jpeg;base64,abc123';
-const advisorHtml = buildFoodRecognitionCardHTML(photoWithAdvisor);
+ST.mealBuilder = { mealType: 'breakfast', items: [] };
+handleFoodRecognitionResult(photoWithAdvisor);
+const advisorHtml = buildItemReviewCardHTML(0);
 log('BUG FIX (Oura-style flow): a photo result with a real quality assessment shows the Advisor block', advisorHtml.includes('✦ Advisor') && advisorHtml.includes('Fried eggs give you quality protein'), '');
 log('BUG FIX (Oura-style flow): the photo thumbnail is shown for a photo result', advisorHtml.includes('data:image/jpeg;base64,abc123'), '');
+finishReviewingAddedItem();
+ST.mealBuilder = null;
 
 const photoNoRating = { source: 'photo', description: 'Mystery leftovers', servingDescription: '1 bowl', confidence: 0.6, qualityRating: null, advisorNote: null, nutrients: { calories: 300, protein: 10, carbs: 30, fat: 10, fiber: 2, sugar: 3 } };
-const noAdvisorHtml = buildFoodRecognitionCardHTML(photoNoRating);
+ST.mealBuilder = { mealType: 'breakfast', items: [] };
+handleFoodRecognitionResult(photoNoRating);
+const noAdvisorHtml = buildItemReviewCardHTML(0);
 log('a photo result the model did not rate shows no fabricated Advisor block', !noAdvisorHtml.includes('✦ Advisor'), '');
+finishReviewingAddedItem();
+ST.mealBuilder = null;
 
 const barcodeResult = { source: 'barcode', description: 'Clif Bar', brandName: 'Clif', servingDescription: '1 bar', confidence: 1, nutrients: { calories: 250, protein: 9, carbs: 45, fat: 5, fiber: 5, sugar: 21 } };
 window._foodRecPendingImageUrl = 'data:image/jpeg;base64,stale-photo-from-earlier-scan';
-const barcodeHtml2 = buildFoodRecognitionCardHTML(barcodeResult);
+ST.mealBuilder = { mealType: 'breakfast', items: [] };
+handleFoodRecognitionResult(barcodeResult);
+const barcodeHtml2 = buildItemReviewCardHTML(0);
 log('a barcode result never shows the Advisor block (exact match, not a subjective call)', !barcodeHtml2.includes('✦ Advisor'), '');
 log('a barcode result never shows a photo thumbnail even if one is still stashed from an earlier photo scan', !barcodeHtml2.includes('stale-photo-from-earlier-scan'), '');
+finishReviewingAddedItem();
+ST.mealBuilder = null;
 
 window._foodRecPendingImageUrl = null;
+
+// The two actions replacing the old "Add to Meal" tap: "+ Add More to
+// Your Meal" clears the review card but leaves the item added; "✓ Log
+// This Meal" does that AND saves the whole meal.
+ST.mealBuilder = { mealType: 'breakfast', items: [] };
+handleFoodRecognitionResult(eggBarcode);
+log('review card offers "+ Add More to Your Meal"', buildItemReviewCardHTML(0).includes('Add More to Your Meal'), '');
+log('review card offers "✓ Log This Meal"', buildItemReviewCardHTML(0).includes('Log This Meal'), '');
+let mealLoggedViaReview = false;
+const origFinishMealBuilderForReview = finishMealBuilder;
+finishMealBuilder = async () => { mealLoggedViaReview = true; };
+logMealFromReview();
+log('"Log This Meal" saves via the existing finishMealBuilder path', mealLoggedViaReview, '');
+log('"Log This Meal" also clears the review state first', window._foodRecReviewIndex === null, '');
+finishMealBuilder = origFinishMealBuilderForReview;
+ST.mealBuilder = null;
 
 // ── BUG FIX: tabbing away from an in-progress workout and pressing the
 // hero button again silently reset the whole session, wiping every

@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.24.0';
+const FCF_VERSION = 'v5.25.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -7495,6 +7495,19 @@ const FOOD_EMOJI_PATTERNS = [
   [/protein\s*bar|granola\s*bar|\bbar\b/i, '🍫'],
   [/pie\b/i, '🥧'],
 ];
+
+// Shared "working on it" state for anything that calls out to the vision
+// API or a barcode lookup — both can take several real seconds, and a
+// small muted line of text was easy to miss, making the app look hung
+// rather than busy. Bold, bordered, with a spinning indicator so there's
+// no ambiguity about whether something is happening.
+function loadingCardHTML(label) {
+  return '<div class="card mt8" style="border-color:var(--gold);text-align:center;padding:20px 16px">' +
+    '<span class="fcf-spinner"></span>' +
+    '<span style="font-size:14px;font-weight:600">' + sanitizeUserText(label) + '</span>' +
+    '</div>';
+}
+
 function foodEmoji(description) {
   const d = description || '';
   for (const [pattern, emoji] of FOOD_EMOJI_PATTERNS) {
@@ -8452,6 +8465,9 @@ function autoMealTypeForTime(date) {
 
 function openMealBuilder() {
   ST.mealBuilder = { mealType: autoMealTypeForTime(new Date()), items: [], frequentFoods: null, editingId: null, editingLoggedAt: null };
+  window._foodRecReviewIndex = null;
+  window._foodRecReviewMeta = null;
+  window._foodRecPendingImageUrl = null;
   renderMealBuilder();
   getFrequentFoodsForMealBuilder().then(foods => {
     if (!ST.mealBuilder) return; // builder was closed before this resolved
@@ -8480,6 +8496,9 @@ function editMealLog(id) {
     editingId: meal.id,
     editingLoggedAt: meal.logged_at,
   };
+  window._foodRecReviewIndex = null;
+  window._foodRecReviewMeta = null;
+  window._foodRecPendingImageUrl = null;
   renderMealBuilder();
   getFrequentFoodsForMealBuilder().then(foods => {
     if (!ST.mealBuilder) return;
@@ -8490,6 +8509,9 @@ function editMealLog(id) {
 
 function closeMealBuilder() {
   ST.mealBuilder = null;
+  window._foodRecReviewIndex = null;
+  window._foodRecReviewMeta = null;
+  window._foodRecPendingImageUrl = null;
   const box = document.getElementById('mealBuilderRoot');
   if (box) box.innerHTML = '';
 }
@@ -8504,13 +8526,17 @@ function renderMealBuilder() {
 
   // The photo/barcode/search result — now the primary content area, since
   // the camera launches immediately on open rather than waiting behind a
-  // menu. This div is empty and invisible until something resolves into it.
-  parts.push('<div id="foodPhotoResultRoot"></div>');
+  // menu. Renders the review card for whatever was just auto-added, if
+  // anything; otherwise stays empty until a loading/error state writes
+  // into it directly (see analyzeFoodPhoto et al).
+  parts.push('<div id="foodPhotoResultRoot">' +
+    (window._foodRecReviewIndex != null && mb.items[window._foodRecReviewIndex] ? buildItemReviewCardHTML(window._foodRecReviewIndex) : '') +
+    '</div>');
 
   if (mb.items.length) {
     parts.push('<div class="section-label" style="margin-top:12px">MEAL ITEMS</div>');
     mb.items.forEach((item, i) => {
-      parts.push('<div class="fb" style="margin-bottom:4px"><span style="font-size:13px">'+foodEmoji(item.description)+' '+item.description+'</span><button class="btn-ghost" style="font-size:11px" onclick="ST.mealBuilder.items.splice('+i+',1);renderMealBuilder()">✕</button></div>');
+      parts.push('<div class="fb" style="margin-bottom:6px"><span style="font-size:17px;font-weight:700">'+foodEmoji(item.description)+' '+item.description+'</span><button class="btn-ghost" style="font-size:11px" onclick="ST.mealBuilder.items.splice('+i+',1);renderMealBuilder()">✕</button></div>');
     });
     const runningTotals = sumMealNutrients(mb.items);
     parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">Running total: '+runningTotals.calories+' cal · P'+runningTotals.protein+'g · C'+runningTotals.carbs+'g · F'+runningTotals.fat+'g</div>');
@@ -8691,10 +8717,11 @@ async function analyzeFoodPhoto() {
     input.accept = 'image/*';
     input.capture = 'environment';
     input.onchange = async () => {
+      input.remove(); // clean up now that we actually have the result — no more racing a blind timer
       const file = input.files[0];
       if (!file) return;
       const box = document.getElementById('foodPhotoResultRoot');
-      if (box) box.innerHTML = '<div class="card mt8" style="font-size:12px;color:var(--muted)">Analyzing photo…</div>';
+      if (box) box.innerHTML = loadingCardHTML('Analyzing photo…');
       try {
         const dataUrl = await new Promise((resolve, reject) => {
           const r = new FileReader();
@@ -8712,7 +8739,13 @@ async function analyzeFoodPhoto() {
     };
     document.body.appendChild(input);
     input.click();
-    setTimeout(() => input.remove(), 5000);
+    // Safety-net cleanup only — for the case where the picker gets backed
+    // out of with nothing chosen at all. 5 seconds was nowhere near long
+    // enough for an actual camera flow (permission prompt + warm-up +
+    // framing + shutter + confirm easily exceeds it), so the element was
+    // getting yanked out from under a still-in-progress photo, silently
+    // dropping the very first attempt.
+    setTimeout(() => { if (!input.files.length) input.remove(); }, 5*60*1000);
   } catch (e) {
     showBigToast('Could not open the camera: ' + (e.message || 'unknown error'), 'warn');
   }
@@ -8728,10 +8761,11 @@ async function analyzeFoodPhotoFromLibrary() {
     input.type = 'file';
     input.accept = 'image/*';
     input.onchange = async () => {
+      input.remove(); // clean up now that we actually have the result — no more racing a blind timer
       const file = input.files[0];
       if (!file) return;
       const box = document.getElementById('foodPhotoResultRoot');
-      if (box) box.innerHTML = '<div class="card mt8" style="font-size:12px;color:var(--muted)">Analyzing photo…</div>';
+      if (box) box.innerHTML = loadingCardHTML('Analyzing photo…');
       try {
         const dataUrl = await new Promise((resolve, reject) => {
           const r = new FileReader();
@@ -8749,7 +8783,7 @@ async function analyzeFoodPhotoFromLibrary() {
     };
     document.body.appendChild(input);
     input.click();
-    setTimeout(() => input.remove(), 5000);
+    setTimeout(() => { if (!input.files.length) input.remove(); }, 5*60*1000);
   } catch (e) {
     showBigToast('Could not open the photo library: ' + (e.message || 'unknown error'), 'warn');
   }
@@ -8769,8 +8803,32 @@ function handleFoodRecognitionResult(result) {
     box.innerHTML = '<div class="card mt8" style="font-size:12px;color:var(--amber)">Analysis failed: ' + (result.message || result.error) + '. Try again or enter it manually below.</div>';
     return;
   }
-  window._foodRecPending = result;
-  box.innerHTML = buildFoodRecognitionCardHTML(result);
+  if (!ST.mealBuilder) return;
+
+  // BUG FIX (reported): recognizing a food used to stop at an "Add to
+  // Meal" button — confusing, since the whole point of taking the photo
+  // was already selecting that food. Now it's auto-added the moment
+  // recognition succeeds; the card below is for reviewing/correcting
+  // what just got added, not deciding whether to add it at all.
+  ST.mealBuilder.items.push({
+    description: sanitizeUserText(result.description),
+    nutrients: { ...result.nutrients },
+    source: result.source, // 'photo' or 'barcode'
+    confidence: result.confidence,
+  });
+  window._foodRecReviewIndex = ST.mealBuilder.items.length - 1;
+  window._foodRecReviewMeta = {
+    baseNutrients: { ...result.nutrients }, // fixed reference for quantity scaling — never mutated
+    qualityRating: result.qualityRating,
+    advisorNote: result.advisorNote,
+    servingDescription: result.servingDescription,
+    brandName: result.brandName,
+    confidence: result.confidence,
+    source: result.source,
+    imageUrl: window._foodRecPendingImageUrl,
+    quota: result.quota,
+  };
+  renderMealBuilder();
 }
 
 const QUALITY_RATINGS = [
@@ -8798,105 +8856,121 @@ function buildQualitySliderHTML(qualityRating) {
   return parts.join('');
 }
 
-function buildFoodRecognitionCardHTML(result) {
-  const n = result.nutrients;
-  const lowConfidence = result.source === 'photo' && result.confidence < 0.8;
+// Renders the review/edit card for an item that's ALREADY been added to
+// the meal (see handleFoodRecognitionResult above) — editing here mutates
+// that item directly rather than staging a separate pending object.
+function buildItemReviewCardHTML(index) {
+  const item = ST.mealBuilder.items[index];
+  const meta = window._foodRecReviewMeta || {};
+  const n = item.nutrients;
+  const lowConfidence = meta.source === 'photo' && meta.confidence < 0.8;
   const parts = [];
-  parts.push('<div class="card mt8">');
+  parts.push('<div class="card mt8" style="border-color:var(--gold)">');
+  parts.push('<div style="font-size:11px;color:var(--gold);font-weight:700;margin-bottom:8px">✓ ADDED — review or correct below</div>');
 
-  // Photo thumbnail — Oura shows the actual photo behind the result card;
-  // this is the closest equivalent, a preview above the details rather
-  // than a full-bleed background.
-  if (result.source === 'photo' && window._foodRecPendingImageUrl) {
-    parts.push('<img src="' + window._foodRecPendingImageUrl + '" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;margin-bottom:10px">');
+  if (meta.source === 'photo' && meta.imageUrl) {
+    parts.push('<img src="' + meta.imageUrl + '" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;margin-bottom:10px">');
   }
 
   if (lowConfidence) {
-    parts.push('<div style="font-size:12px;color:var(--amber);margin-bottom:8px">⚠ Best guess only (' + Math.round(result.confidence * 100) + '% confidence) — is this right? Edit anything below before adding.</div>');
-  } else if (result.source === 'photo') {
-    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + Math.round(result.confidence * 100) + '% confidence</div>');
-  } else if (result.brandName) {
-    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + sanitizeUserText(result.brandName) + '</div>');
+    parts.push('<div style="font-size:12px;color:var(--amber);margin-bottom:8px">⚠ Best guess only (' + Math.round(meta.confidence * 100) + '% confidence) — is this right? Edit anything below if not.</div>');
+  } else if (meta.source === 'photo') {
+    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + Math.round(meta.confidence * 100) + '% confidence</div>');
+  } else if (meta.brandName) {
+    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + sanitizeUserText(meta.brandName) + '</div>');
   }
-  parts.push('<div class="field"><label>' + foodEmoji(result.description) + ' Description</label><input type="text" id="foodRecDescription" value="' + sanitizeUserText(result.description).replace(/"/g, '&quot;') + '"></div>');
-  if (result.servingDescription) {
-    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:6px">Estimated portion: ' + sanitizeUserText(result.servingDescription) + '</div>');
+  parts.push('<div class="field"><label>' + foodEmoji(item.description) + ' Description</label><input type="text" id="foodRecDescription" value="' + sanitizeUserText(item.description).replace(/"/g, '&quot;') + '" oninput="updateReviewedItemField(\'description\', this.value)"></div>');
+  if (meta.servingDescription) {
+    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:6px">Estimated portion: ' + sanitizeUserText(meta.servingDescription) + '</div>');
   }
 
   // Advisor — the qualitative read Oura leads with, alongside (not instead
   // of) the precise macros pilots actually asked to keep. Only present for
   // photo results with a real assessment; a barcode's exact product match
   // or a subjective call the model didn't return doesn't get a fake one.
-  if (result.source === 'photo' && result.qualityRating && result.advisorNote) {
+  if (meta.source === 'photo' && meta.qualityRating && meta.advisorNote) {
     parts.push('<div style="background:var(--bg3);border-radius:10px;padding:10px;margin-bottom:10px">');
     parts.push('<div style="font-size:11px;color:var(--gold);margin-bottom:4px">✦ Advisor</div>');
-    parts.push('<div style="font-size:13px;color:var(--text);margin-bottom:2px">' + sanitizeUserText(result.advisorNote) + '</div>');
-    parts.push(buildQualitySliderHTML(result.qualityRating));
+    parts.push('<div style="font-size:13px;color:var(--text);margin-bottom:2px">' + sanitizeUserText(meta.advisorNote) + '</div>');
+    parts.push(buildQualitySliderHTML(meta.qualityRating));
     parts.push('</div>');
   }
 
-  // Quantity — the actual fix for "scanned the same barcode 3 times":
-  // scanning or photographing one unit and setting quantity=3 replaces
-  // needing to repeat the whole scan/analyze step per item. Changing
-  // quantity recalculates the macro fields below FROM THE ORIGINAL
-  // scanned values, same as the USDA search's serving multiplier — so if
-  // someone hand-edits a macro afterward, that edit sticks until quantity
-  // is changed again, at which point it recalculates from the base.
-  parts.push('<div class="field"><label>Quantity</label><input type="text" inputmode="decimal" id="foodRecQty" value="1" oninput="updateFoodRecPreview()"></div>');
+  // Quantity — scanning/photographing one unit and setting quantity=3
+  // replaces repeating the whole scan/analyze step per item. Recalculates
+  // FROM meta.baseNutrients (the original, fixed scan result) every time,
+  // so it's never cumulative — but a hand-edit to a macro field sticks
+  // until quantity is changed again, at which point it recalculates fresh.
+  parts.push('<div class="field"><label>Quantity</label><input type="text" inputmode="decimal" id="foodRecQty" value="1" oninput="updateReviewedItemQuantity()"></div>');
   parts.push('<div class="field-row">');
-  parts.push('<div class="field"><label>Calories</label><input type="text" inputmode="numeric" id="foodRecCal" value="' + n.calories + '"></div>');
-  parts.push('<div class="field"><label>Protein (g)</label><input type="text" inputmode="decimal" id="foodRecProtein" value="' + n.protein + '"></div>');
+  parts.push('<div class="field"><label>Calories</label><input type="text" inputmode="numeric" id="foodRecCal" value="' + n.calories + '" oninput="updateReviewedItemField(\'calories\', this.value)"></div>');
+  parts.push('<div class="field"><label>Protein (g)</label><input type="text" inputmode="decimal" id="foodRecProtein" value="' + n.protein + '" oninput="updateReviewedItemField(\'protein\', this.value)"></div>');
   parts.push('</div>');
   parts.push('<div class="field-row">');
-  parts.push('<div class="field"><label>Carbs (g)</label><input type="text" inputmode="decimal" id="foodRecCarbs" value="' + n.carbs + '"></div>');
-  parts.push('<div class="field"><label>Fat (g)</label><input type="text" inputmode="decimal" id="foodRecFat" value="' + n.fat + '"></div>');
+  parts.push('<div class="field"><label>Carbs (g)</label><input type="text" inputmode="decimal" id="foodRecCarbs" value="' + n.carbs + '" oninput="updateReviewedItemField(\'carbs\', this.value)"></div>');
+  parts.push('<div class="field"><label>Fat (g)</label><input type="text" inputmode="decimal" id="foodRecFat" value="' + n.fat + '" oninput="updateReviewedItemField(\'fat\', this.value)"></div>');
   parts.push('</div>');
-  parts.push('<button class="btn btn-outline mt8" onclick="addFoodRecognitionToMeal()">Add to Meal</button>');
-  if (result.quota && !result.quota.unlimited) {
-    parts.push('<div style="font-size:10px;color:var(--muted);margin-top:6px">' + result.quota.used + ' of ' + result.quota.limit + ' photo analyses used today</div>');
+  if (meta.quota && !meta.quota.unlimited) {
+    parts.push('<div style="font-size:10px;color:var(--muted);margin:6px 0">' + meta.quota.used + ' of ' + meta.quota.limit + ' photo analyses used today</div>');
   }
+  // The two actions that actually matter once something's been added:
+  // add another item, or you're done. No separate "confirm the add"
+  // step — that already happened.
+  parts.push('<div class="fb mt8">');
+  parts.push('<button class="btn btn-outline" style="flex:1;margin-right:8px" onclick="finishReviewingAddedItem()">+ Add More to Your Meal</button>');
+  parts.push('<button class="btn btn-gold" style="flex:1" onclick="logMealFromReview()">✓ Log This Meal</button>');
+  parts.push('</div>');
   parts.push('</div>');
   return parts.join('');
 }
 
-function updateFoodRecPreview() {
-  const pending = window._foodRecPending;
-  if (!pending) return;
+// Edits to the reviewed item's fields apply directly to the already-added
+// array entry — there's no separate staging object to keep in sync.
+function updateReviewedItemField(field, value) {
+  const idx = window._foodRecReviewIndex;
+  if (idx == null || !ST.mealBuilder?.items[idx]) return;
+  const item = ST.mealBuilder.items[idx];
+  if (field === 'description') {
+    item.description = sanitizeUserText(value);
+  } else {
+    item.nutrients[field] = parseFloat(value) || 0;
+  }
+}
+
+function updateReviewedItemQuantity() {
+  const idx = window._foodRecReviewIndex;
+  const meta = window._foodRecReviewMeta;
+  if (idx == null || !meta || !ST.mealBuilder?.items[idx]) return;
   const qty = document.getElementById('foodRecQty')?.value || 1;
-  const scaled = scaleNutrients(pending.nutrients, qty);
-  const calEl = document.getElementById('foodRecCal'), profEl = document.getElementById('foodRecProtein'), carbEl = document.getElementById('foodRecCarbs'), fatEl = document.getElementById('foodRecFat');
+  const scaled = scaleNutrients(meta.baseNutrients, qty);
+  const item = ST.mealBuilder.items[idx];
+  item.nutrients = scaled;
+  const calEl = document.getElementById('foodRecCal'), profEl = document.getElementById('foodRecProtein'), carbEl = document.getElementById('foodRecCarbs'), fatEl = document.getElementById('foodRecFat'), descEl = document.getElementById('foodRecDescription');
   if (calEl) calEl.value = scaled.calories;
   if (profEl) profEl.value = scaled.protein;
   if (carbEl) carbEl.value = scaled.carbs;
   if (fatEl) fatEl.value = scaled.fat;
+  const qtyNum = parseFloat(qty) || 1;
+  const baseDesc = (item.description || '').replace(/\s*\(\d+(\.\d+)?x\)\s*$/, '');
+  item.description = baseDesc + (qtyNum !== 1 ? ' (' + qty + 'x)' : '');
+  if (descEl) descEl.value = item.description;
 }
 
-function addFoodRecognitionToMeal() {
-  const pending = window._foodRecPending;
-  if (!pending || !ST.mealBuilder) return;
-  const qty = document.getElementById('foodRecQty')?.value || 1;
-  const description = document.getElementById('foodRecDescription')?.value?.trim() || pending.description;
-  const scaledFull = scaleNutrients(pending.nutrients, qty); // for fiber/sugar, which aren't shown as editable fields
-  const nutrients = {
-    calories: parseFloat(document.getElementById('foodRecCal')?.value) || 0,
-    protein: parseFloat(document.getElementById('foodRecProtein')?.value) || 0,
-    carbs: parseFloat(document.getElementById('foodRecCarbs')?.value) || 0,
-    fat: parseFloat(document.getElementById('foodRecFat')?.value) || 0,
-    fiber: scaledFull.fiber || 0,
-    sugar: scaledFull.sugar || 0,
-  };
-  const qtyNum = parseFloat(qty) || 1;
-  ST.mealBuilder.items.push({
-    description: sanitizeUserText(description) + (qtyNum !== 1 ? ' ('+qty+'x)' : ''),
-    nutrients,
-    source: pending.source, // 'photo' or 'barcode'
-    confidence: pending.confidence,
-  });
-  window._foodRecPending = null;
+// "Add More to Your Meal" — clears the review state so the next
+// photo/barcode/search result gets its own fresh review card, leaving
+// this item exactly as already added.
+function finishReviewingAddedItem() {
+  window._foodRecReviewIndex = null;
+  window._foodRecReviewMeta = null;
   window._foodRecPendingImageUrl = null;
-  const box = document.getElementById('foodPhotoResultRoot');
-  if (box) box.innerHTML = '';
   renderMealBuilder();
+}
+
+// "Log This Meal" — same idea, then saves everything via the existing
+// finishMealBuilder() path.
+function logMealFromReview() {
+  finishReviewingAddedItem();
+  finishMealBuilder();
 }
 
 // Barcode scanning runs client-side (html5-qrcode, loaded in index.html) —
@@ -8940,7 +9014,7 @@ function stopFoodBarcodeScanner() {
 
 async function handleFoodBarcodeDecoded(barcode) {
   const box = document.getElementById('foodPhotoResultRoot');
-  if (box) box.innerHTML = '<div class="card mt8" style="font-size:12px;color:var(--muted)">Looking up ' + sanitizeUserText(barcode) + '…</div>';
+  if (box) box.innerHTML = loadingCardHTML('Looking up ' + sanitizeUserText(barcode) + '…');
   const result = await callFoodRecognitionEdge({ action: 'barcode', barcode });
   if (result && result.error === 'not_found') {
     if (box) box.innerHTML = '<div class="card mt8" style="font-size:12px;color:var(--amber)">No product found for that barcode. Try search or manual entry below.</div>';

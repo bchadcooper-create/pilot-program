@@ -48,6 +48,8 @@ a{color:inherit}
 .tab.active svg{stroke:var(--gold)}
 
 .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px}
+@keyframes fcf-spin{to{transform:rotate(360deg)}}
+.fcf-spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:fcf-spin 0.8s linear infinite;vertical-align:middle;margin-right:8px}
 .card-dark{background:var(--bg3)}
 .phase-header{display:flex;align-items:center;gap:10px;margin-bottom:14px;margin-top:4px}
 .phase-badge{font-family:var(--mono);font-size:10px;letter-spacing:0.1em;padding:3px 10px;border-radius:4px;border:1px solid;flex-shrink:0}

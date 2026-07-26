@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.21.3';
+const FCF_VERSION = 'v5.22.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -8280,14 +8280,32 @@ function saveQuickWater() {
   renderPage();
 }
 
+const MEAL_TYPES = ['breakfast','lunch','dinner','snack'];
+
+// Guesses meal type from time of day, same idea as Oura's auto-detected
+// "Breakfast" label — still fully changeable via the Meal Type control,
+// this just saves the tap for the common case.
+function autoMealTypeForTime(date) {
+  const h = (date || new Date()).getHours();
+  if (h >= 4 && h < 11) return 'breakfast';
+  if (h >= 11 && h < 15) return 'lunch';
+  if (h >= 17 && h < 21) return 'dinner';
+  return 'snack';
+}
+
 function openMealBuilder() {
-  ST.mealBuilder = { mealType: 'snack', items: [], frequentFoods: null, editingId: null, editingLoggedAt: null };
+  ST.mealBuilder = { mealType: autoMealTypeForTime(new Date()), items: [], frequentFoods: null, editingId: null, editingLoggedAt: null };
   renderMealBuilder();
   getFrequentFoodsForMealBuilder().then(foods => {
     if (!ST.mealBuilder) return; // builder was closed before this resolved
     ST.mealBuilder.frequentFoods = foods;
     renderMealBuilder();
   });
+  // The camera launches immediately, before any menu — the one-tap flow
+  // that was actually requested. Editing an existing meal skips this,
+  // since jumping straight to the camera when correcting an already-
+  // logged item would be surprising.
+  analyzeFoodPhoto();
 }
 
 // Opens the same meal builder, pre-populated with an already-logged
@@ -8326,19 +8344,27 @@ function renderMealBuilder() {
   const parts = [];
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">'+(mb.editingId ? 'EDIT MEAL' : 'LOG A MEAL')+'</div>');
-  parts.push('<div class="field"><label>Meal Type</label><select onchange="ST.mealBuilder.mealType=this.value">');
-  ['breakfast','lunch','dinner','snack'].forEach(t => parts.push('<option value="'+t+'"'+(mb.mealType===t?' selected':'')+'>'+t[0].toUpperCase()+t.slice(1)+'</option>'));
-  parts.push('</select></div>');
+
+  // The photo/barcode/search result — now the primary content area, since
+  // the camera launches immediately on open rather than waiting behind a
+  // menu. This div is empty and invisible until something resolves into it.
+  parts.push('<div id="foodPhotoResultRoot"></div>');
 
   if (mb.items.length) {
-    parts.push('<div style="margin:10px 0">');
+    parts.push('<div class="section-label" style="margin-top:12px">MEAL ITEMS</div>');
     mb.items.forEach((item, i) => {
       parts.push('<div class="fb" style="margin-bottom:4px"><span style="font-size:13px">'+foodEmoji(item.description)+' '+item.description+'</span><button class="btn-ghost" style="font-size:11px" onclick="ST.mealBuilder.items.splice('+i+',1);renderMealBuilder()">✕</button></div>');
     });
     const runningTotals = sumMealNutrients(mb.items);
     parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">Running total: '+runningTotals.calories+' cal · P'+runningTotals.protein+'g · C'+runningTotals.carbs+'g · F'+runningTotals.fat+'g</div>');
-    parts.push('</div>');
   }
+
+  // Meal Type and (implicitly) time are auto-set when the builder opens —
+  // Meal Type by time of day, time to now at save — both still editable
+  // here rather than requiring a tap before you can even take the photo.
+  parts.push('<div class="field" style="margin-top:12px"><label>Meal Type (auto-detected — change if needed)</label><select onchange="ST.mealBuilder.mealType=this.value">');
+  MEAL_TYPES.forEach(t => parts.push('<option value="'+t+'"'+(mb.mealType===t?' selected':'')+'>'+t[0].toUpperCase()+t.slice(1)+'</option>'));
+  parts.push('</select></div>');
 
   // "Your Usual" — foods logged 2+ times in the last 30 days, ranked by
   // frequency. One tap adds it with its last-used macros already filled
@@ -8353,15 +8379,22 @@ function renderMealBuilder() {
     parts.push('</div>');
   }
 
+  // Secondary ways to add a food — the camera already auto-launched above,
+  // so this is the equivalent of Oura's "Text input / Recent meals /
+  // Favorites" row: alternatives for when the photo isn't the right tool
+  // (a packaged product, a repeat meal already covered by Your Usual
+  // above, or nothing worth photographing).
+  parts.push('<div class="section-label" style="margin-top:12px">OR ADD MANUALLY</div>');
   parts.push('<div class="field"><input type="text" id="foodSearchInput" placeholder="Search a food (e.g. chicken breast)..." oninput="filterUSDASearch(this.value)"></div>');
   parts.push('<div id="usdaSearchResults"></div>');
   parts.push('<div class="fb mt8">');
-  parts.push('<button class="btn btn-outline" style="flex:1;margin-right:8px" onclick="analyzeFoodPhoto()">📷 Photo</button>');
+  parts.push('<button class="btn btn-outline" style="flex:1;margin-right:8px" onclick="analyzeFoodPhoto()">📷 Retake Photo</button>');
+  parts.push('<button class="btn btn-outline" style="flex:1;margin-right:8px" onclick="analyzeFoodPhotoFromLibrary()">🖼 Library</button>');
   parts.push('<button class="btn btn-outline" style="flex:1" onclick="scanFoodBarcode()">🔢 Barcode</button>');
   parts.push('</div>');
-  parts.push('<div id="foodPhotoResultRoot"></div>');
   parts.push('<button class="btn-ghost mt8" onclick="showManualFoodEntry()">Can\'t find it? Enter manually</button>');
   parts.push('<div id="manualFoodEntryRoot"></div>');
+
 
   parts.push('<div class="fb mt8">');
   parts.push('<button class="btn btn-outline" style="flex:1;margin-right:8px" onclick="closeMealBuilder()">Cancel</button>');
@@ -8488,36 +8521,81 @@ async function callFoodRecognitionEdge(payload) {
   }
 }
 
-// Deliberately a single button rather than the separate Camera/Library
-// buttons progress photos use — leaving off `capture` lets iOS/Android
-// show their native "Take Photo / Photo Library" choice sheet, which
-// covers both cases with one control and less meal-builder clutter.
+// Sets `capture` here (unlike the old "either Camera or Library" choice-
+// sheet behavior) — this is now the primary Log a Meal entry point and
+// should open the camera directly with one tap, matching the requested
+// flow. Choosing a food from Library/Recent/Search/Manual is still fully
+// available via the secondary row in the builder.
 async function analyzeFoodPhoto() {
   if (!ST.user) { showBigToast('Sign in to analyze food photos.', 'warn'); return; }
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  input.onchange = async () => {
-    const file = input.files[0];
-    if (!file) return;
-    const box = document.getElementById('foodPhotoResultRoot');
-    if (box) box.innerHTML = '<div class="card mt8" style="font-size:12px;color:var(--muted)">Analyzing photo…</div>';
-    try {
-      const base64 = await new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve(String(r.result).split(',')[1]);
-        r.onerror = () => reject(new Error('could not read file'));
-        r.readAsDataURL(file);
-      });
-      const result = await callFoodRecognitionEdge({ action: 'photo', image: base64, mediaType: file.type || 'image/jpeg' });
-      handleFoodRecognitionResult(result);
-    } catch (e) {
-      if (box) box.innerHTML = '<div class="card mt8" style="font-size:12px;color:var(--amber)">Couldn\'t read that photo: ' + (e.message || 'unknown error') + '</div>';
-    }
-  };
-  document.body.appendChild(input);
-  input.click();
-  setTimeout(() => input.remove(), 5000);
+  try {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.capture = 'environment';
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) return;
+      const box = document.getElementById('foodPhotoResultRoot');
+      if (box) box.innerHTML = '<div class="card mt8" style="font-size:12px;color:var(--muted)">Analyzing photo…</div>';
+      try {
+        const dataUrl = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(String(r.result));
+          r.onerror = () => reject(new Error('could not read file'));
+          r.readAsDataURL(file);
+        });
+        const base64 = dataUrl.split(',')[1];
+        window._foodRecPendingImageUrl = dataUrl;
+        const result = await callFoodRecognitionEdge({ action: 'photo', image: base64, mediaType: file.type || 'image/jpeg' });
+        handleFoodRecognitionResult(result);
+      } catch (e) {
+        if (box) box.innerHTML = '<div class="card mt8" style="font-size:12px;color:var(--amber)">Couldn\'t read that photo: ' + (e.message || 'unknown error') + '</div>';
+      }
+    };
+    document.body.appendChild(input);
+    input.click();
+    setTimeout(() => input.remove(), 5000);
+  } catch (e) {
+    showBigToast('Could not open the camera: ' + (e.message || 'unknown error'), 'warn');
+  }
+}
+
+// Same photo picker, but for choosing an existing photo from the library
+// instead of taking a new one right now — the "or pick from Library"
+// fallback next to the auto-launched camera.
+async function analyzeFoodPhotoFromLibrary() {
+  if (!ST.user) { showBigToast('Sign in to analyze food photos.', 'warn'); return; }
+  try {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) return;
+      const box = document.getElementById('foodPhotoResultRoot');
+      if (box) box.innerHTML = '<div class="card mt8" style="font-size:12px;color:var(--muted)">Analyzing photo…</div>';
+      try {
+        const dataUrl = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(String(r.result));
+          r.onerror = () => reject(new Error('could not read file'));
+          r.readAsDataURL(file);
+        });
+        const base64 = dataUrl.split(',')[1];
+        window._foodRecPendingImageUrl = dataUrl;
+        const result = await callFoodRecognitionEdge({ action: 'photo', image: base64, mediaType: file.type || 'image/jpeg' });
+        handleFoodRecognitionResult(result);
+      } catch (e) {
+        if (box) box.innerHTML = '<div class="card mt8" style="font-size:12px;color:var(--amber)">Couldn\'t read that photo: ' + (e.message || 'unknown error') + '</div>';
+      }
+    };
+    document.body.appendChild(input);
+    input.click();
+    setTimeout(() => input.remove(), 5000);
+  } catch (e) {
+    showBigToast('Could not open the photo library: ' + (e.message || 'unknown error'), 'warn');
+  }
 }
 
 function handleFoodRecognitionResult(result) {
@@ -8538,11 +8616,44 @@ function handleFoodRecognitionResult(result) {
   box.innerHTML = buildFoodRecognitionCardHTML(result);
 }
 
+const QUALITY_RATINGS = [
+  { key: 'limited', label: 'Limited', color: 'var(--red)' },
+  { key: 'fair', label: 'Fair', color: 'var(--amber)' },
+  { key: 'good', label: 'Good', color: 'var(--blue)' },
+  { key: 'nutritious', label: 'Nutritious', color: 'var(--green)' },
+];
+
+// Visual approximation of Oura's Limited/Fair/Good/Nutritious bar — four
+// equal segments with the active one called out by color and a marker.
+function buildQualitySliderHTML(qualityRating) {
+  const idx = QUALITY_RATINGS.findIndex(q => q.key === qualityRating);
+  const parts = ['<div style="margin:10px 0">'];
+  parts.push('<div style="display:flex;gap:3px;height:4px;border-radius:2px;overflow:hidden;margin-bottom:6px">');
+  QUALITY_RATINGS.forEach((q, i) => {
+    parts.push('<div style="flex:1;background:'+(i<=idx?q.color:'var(--border)')+'"></div>');
+  });
+  parts.push('</div>');
+  parts.push('<div style="display:flex;justify-content:space-between">');
+  QUALITY_RATINGS.forEach((q, i) => {
+    parts.push('<span style="font-size:10px;'+(i===idx?'color:'+q.color+';font-weight:700':'color:var(--muted)')+'">'+q.label+'</span>');
+  });
+  parts.push('</div></div>');
+  return parts.join('');
+}
+
 function buildFoodRecognitionCardHTML(result) {
   const n = result.nutrients;
   const lowConfidence = result.source === 'photo' && result.confidence < 0.8;
   const parts = [];
   parts.push('<div class="card mt8">');
+
+  // Photo thumbnail — Oura shows the actual photo behind the result card;
+  // this is the closest equivalent, a preview above the details rather
+  // than a full-bleed background.
+  if (result.source === 'photo' && window._foodRecPendingImageUrl) {
+    parts.push('<img src="' + window._foodRecPendingImageUrl + '" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;margin-bottom:10px">');
+  }
+
   if (lowConfidence) {
     parts.push('<div style="font-size:12px;color:var(--amber);margin-bottom:8px">⚠ Best guess only (' + Math.round(result.confidence * 100) + '% confidence) — is this right? Edit anything below before adding.</div>');
   } else if (result.source === 'photo') {
@@ -8554,6 +8665,19 @@ function buildFoodRecognitionCardHTML(result) {
   if (result.servingDescription) {
     parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:6px">Estimated portion: ' + sanitizeUserText(result.servingDescription) + '</div>');
   }
+
+  // Advisor — the qualitative read Oura leads with, alongside (not instead
+  // of) the precise macros pilots actually asked to keep. Only present for
+  // photo results with a real assessment; a barcode's exact product match
+  // or a subjective call the model didn't return doesn't get a fake one.
+  if (result.source === 'photo' && result.qualityRating && result.advisorNote) {
+    parts.push('<div style="background:var(--bg3);border-radius:10px;padding:10px;margin-bottom:10px">');
+    parts.push('<div style="font-size:11px;color:var(--gold);margin-bottom:4px">✦ Advisor</div>');
+    parts.push('<div style="font-size:13px;color:var(--text);margin-bottom:2px">' + sanitizeUserText(result.advisorNote) + '</div>');
+    parts.push(buildQualitySliderHTML(result.qualityRating));
+    parts.push('</div>');
+  }
+
   // Quantity — the actual fix for "scanned the same barcode 3 times":
   // scanning or photographing one unit and setting quantity=3 replaces
   // needing to repeat the whole scan/analyze step per item. Changing
@@ -8612,6 +8736,7 @@ function addFoodRecognitionToMeal() {
     confidence: pending.confidence,
   });
   window._foodRecPending = null;
+  window._foodRecPendingImageUrl = null;
   const box = document.getElementById('foodPhotoResultRoot');
   if (box) box.innerHTML = '';
   renderMealBuilder();

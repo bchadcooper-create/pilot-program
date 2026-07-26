@@ -148,10 +148,14 @@ Respond with ONLY a JSON object, no other text, in exactly this shape:
   "description": "short plain description of the food/meal, e.g. 'grilled chicken breast with steamed broccoli and rice'",
   "servingDescription": "your best estimate of the portion shown, e.g. '1 plate, ~6oz protein'",
   "confidence": 0.0 to 1.0,
-  "nutrients": { "calories": number, "protein": number, "carbs": number, "fat": number, "fiber": number, "sugar": number }
+  "nutrients": { "calories": number, "protein": number, "carbs": number, "fat": number, "fiber": number, "sugar": number },
+  "qualityRating": "limited" | "fair" | "good" | "nutritious",
+  "advisorNote": "1-2 short sentences on the nutritional value of this specific meal, written for someone actively training - e.g. why the protein content helps, or why a mostly-refined-carb plate is more of an energy top-up than a balanced meal"
 }
 
 Confidence guidance: use 0.85+ only for a single, clearly identifiable, commonly-portioned food. Use below 0.8 for mixed dishes, ambiguous portions, poor lighting, partially visible food, or anything home-made/restaurant-plated where the exact ingredients aren't certain. Be conservative — an overconfident wrong guess is worse than an honest low score.
+
+qualityRating guidance: judge THIS specific plate, not the food category in the abstract - a candy bar is "limited", a grilled protein + vegetables + whole grain plate is "nutritious", most everyday home-cooked meals with a good protein source land on "good", and anything mostly refined carbs/fried/sugary with little protein or fiber is "fair" at best.
 
 Nutrient numbers should be your best real estimate for the portion shown, not placeholders.`;
 
@@ -190,6 +194,7 @@ Nutrient numbers should be your best real estimate for the portion shown, not pl
         return json({ error: 'could not parse model response as JSON', detail: String(e) }, 502);
       }
 
+      const VALID_RATINGS = ['limited', 'fair', 'good', 'nutritious'];
       const result = {
         source: 'photo',
         description: String(parsed.description || 'Unidentified food'),
@@ -203,6 +208,8 @@ Nutrient numbers should be your best real estimate for the portion shown, not pl
           fiber: cleanNumber(parsed.nutrients?.fiber),
           sugar: cleanNumber(parsed.nutrients?.sugar),
         },
+        qualityRating: VALID_RATINGS.includes(parsed.qualityRating) ? parsed.qualityRating : null,
+        advisorNote: parsed.advisorNote ? String(parsed.advisorNote) : null,
       };
 
       // Only counts against quota on a successful analysis — a failed

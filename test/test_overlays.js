@@ -1240,7 +1240,7 @@ SB.from = (table) => {
 // Meal builder flow: open -> search -> select -> add -> save
 ST.mealBuilder = null;
 openMealBuilder();
-log('openMealBuilder: initializes an empty meal builder', ST.mealBuilder && ST.mealBuilder.items.length === 0 && ST.mealBuilder.mealType === 'snack', '');
+log('openMealBuilder: initializes an empty meal builder with the meal type auto-detected from time of day', ST.mealBuilder && ST.mealBuilder.items.length === 0 && ST.mealBuilder.mealType === autoMealTypeForTime(new Date()), ST.mealBuilder?.mealType);
 
 ST.mealBuilder.items.push({ description: 'Banana, raw', nutrients: extracted2, source: 'usda', fdcId: '456' });
 renderMealBuilder();
@@ -2603,5 +2603,68 @@ log('quantity of 1 does not add a redundant "(1x)" label', !ST.mealBuilder.items
 document.getElementById = () => _fakeEl;
 window._foodRecPending = null;
 ST.mealBuilder = null;
+
+// ── Oura-style meal logging flow ──
+
+// autoMealTypeForTime: pure function, deterministic regardless of
+// wall-clock time the test happens to run at.
+log('autoMealTypeForTime: 7am is breakfast', autoMealTypeForTime(new Date(2026,6,26,7,0)) === 'breakfast', autoMealTypeForTime(new Date(2026,6,26,7,0)));
+log('autoMealTypeForTime: noon is lunch', autoMealTypeForTime(new Date(2026,6,26,12,0)) === 'lunch', '');
+log('autoMealTypeForTime: 6:30pm is dinner', autoMealTypeForTime(new Date(2026,6,26,18,30)) === 'dinner', '');
+log('autoMealTypeForTime: 3:30am and 4pm both fall back to snack (outside the three main windows)', autoMealTypeForTime(new Date(2026,6,26,3,30)) === 'snack' && autoMealTypeForTime(new Date(2026,6,26,16,0)) === 'snack', '');
+
+// openMealBuilder: meal type now defaults by time of day, not a hardcoded
+// 'snack' — and the camera launches immediately (via analyzeFoodPhoto),
+// matching "as soon as I click log a meal, it launches the camera."
+ST.user = { id: 'test-user', email: 'test@example.com' };
+let cameraLaunched = false;
+const origAnalyzeFoodPhoto = analyzeFoodPhoto;
+analyzeFoodPhoto = async () => { cameraLaunched = true; };
+SB.from = () => ({ select: () => ({ eq: () => ({ gte: () => ({ order: async () => ({ data: [], error: null }) }) }) }) });
+openMealBuilder();
+log('BUG FIX (Oura-style flow): Log a Meal now defaults the meal type by time of day rather than always "snack"', ST.mealBuilder.mealType === autoMealTypeForTime(new Date()), ST.mealBuilder.mealType);
+log('BUG FIX (Oura-style flow): opening the meal builder launches the camera immediately, not after a menu', cameraLaunched, '');
+analyzeFoodPhoto = origAnalyzeFoodPhoto;
+ST.mealBuilder = null;
+ST.user = null;
+
+// editMealLog (correcting an existing meal) should NOT auto-launch the
+// camera — only a brand-new Log a Meal does.
+cameraLaunched = false;
+analyzeFoodPhoto = async () => { cameraLaunched = true; };
+ST.todaysMeals = [{ id: 'm1', meal_type: 'lunch', logged_at: '2026-07-26T12:00:00Z', meal_data: { items: [{ description: 'Turkey sandwich', nutrients: { calories: 400, protein: 25, carbs: 40, fat: 12, fiber: 3, sugar: 4 } }] } }];
+editMealLog('m1');
+log('editing an existing meal does NOT auto-launch the camera (only a fresh Log a Meal does)', !cameraLaunched, '');
+analyzeFoodPhoto = origAnalyzeFoodPhoto;
+ST.mealBuilder = null;
+ST.todaysMeals = [];
+
+// buildQualitySliderHTML: the active rating is called out distinctly
+const sliderHtml = buildQualitySliderHTML('good');
+log('quality slider: bolds/colors the active rating', /color:var\(--blue\);font-weight:700/.test(sliderHtml) && sliderHtml.includes('Good'), '');
+log('quality slider: shows all four labels regardless of which is active', ['Limited','Fair','Good','Nutritious'].every(l => sliderHtml.includes(l)), '');
+
+// buildFoodRecognitionCardHTML: Advisor note + slider show for a photo
+// result with a real qualitative assessment, matching the Oura reference
+// screenshot's "Advisor" block — but never for a barcode (exact product
+// match, no subjective call to make) or a photo result the model didn't
+// rate (no fabricated assessment).
+const photoWithAdvisor = { source: 'photo', description: 'Fried eggs with black pepper', servingDescription: '2 eggs', confidence: 0.9, qualityRating: 'nutritious', advisorNote: 'Fried eggs give you quality protein and choline.', nutrients: { calories: 180, protein: 12, carbs: 1, fat: 14, fiber: 0, sugar: 0 } };
+window._foodRecPendingImageUrl = 'data:image/jpeg;base64,abc123';
+const advisorHtml = buildFoodRecognitionCardHTML(photoWithAdvisor);
+log('BUG FIX (Oura-style flow): a photo result with a real quality assessment shows the Advisor block', advisorHtml.includes('✦ Advisor') && advisorHtml.includes('Fried eggs give you quality protein'), '');
+log('BUG FIX (Oura-style flow): the photo thumbnail is shown for a photo result', advisorHtml.includes('data:image/jpeg;base64,abc123'), '');
+
+const photoNoRating = { source: 'photo', description: 'Mystery leftovers', servingDescription: '1 bowl', confidence: 0.6, qualityRating: null, advisorNote: null, nutrients: { calories: 300, protein: 10, carbs: 30, fat: 10, fiber: 2, sugar: 3 } };
+const noAdvisorHtml = buildFoodRecognitionCardHTML(photoNoRating);
+log('a photo result the model did not rate shows no fabricated Advisor block', !noAdvisorHtml.includes('✦ Advisor'), '');
+
+const barcodeResult = { source: 'barcode', description: 'Clif Bar', brandName: 'Clif', servingDescription: '1 bar', confidence: 1, nutrients: { calories: 250, protein: 9, carbs: 45, fat: 5, fiber: 5, sugar: 21 } };
+window._foodRecPendingImageUrl = 'data:image/jpeg;base64,stale-photo-from-earlier-scan';
+const barcodeHtml2 = buildFoodRecognitionCardHTML(barcodeResult);
+log('a barcode result never shows the Advisor block (exact match, not a subjective call)', !barcodeHtml2.includes('✦ Advisor'), '');
+log('a barcode result never shows a photo thumbnail even if one is still stashed from an earlier photo scan', !barcodeHtml2.includes('stale-photo-from-earlier-scan'), '');
+
+window._foodRecPendingImageUrl = null;
 
 })();

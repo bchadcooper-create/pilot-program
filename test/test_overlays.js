@@ -1524,13 +1524,39 @@ let c3 = baseCtx(); c3.sched.yesterdayDutyHours = 11; c3.sched.freeMinutesUntilD
 const b3 = buildTodayBriefing(c3);
 log('PRIORITY: a long duty day yesterday downgrades today to moderate', b3.tone === 'ease' && b3.body.includes('11'), b3.headline);
 
-// Already trained -> completion framing, and it notices a protein shortfall
+// Already trained -> completion framing, and it fairly notices a REAL
+// protein shortfall (paced by time of day, not a flat 75% of the full
+// day's goal — see the BUG FIX tests below for why that distinction matters)
 let c4 = baseCtx(); c4.training.workoutToday = true; c4.sched.freeMinutesUntilDuty = 240;
+c4.now = new Date(_iso(20)); c4.hour = 20; c4.nutrition.consumed.protein = 60; // 8pm, day mostly over, still well short
 const b4 = buildTodayBriefing(c4);
 log('PRIORITY: workout already logged shifts to completing the day, not training again', b4.headline === 'Session logged', b4.headline);
-log('post-workout briefing flags a real protein shortfall (90 of 165)', b4.body.includes('protein'), '');
+log('post-workout briefing flags a REAL protein shortfall late in the day (60g of 165g goal at 8pm)', b4.body.includes('protein'), '');
 let c4b = baseCtx(); c4b.training.workoutToday = true; c4b.nutrition.consumed.protein = 150;
 log('post-workout briefing does NOT nag about protein when intake is on track', !buildTodayBriefing(c4b).body.includes('short on protein'), '');
+
+// BUG FIX (reported): at 11:25am with 58g of a 224g protein goal, the
+// briefing said "well short on protein" — but that's comparing 26% of
+// intake against 75% of the FULL DAY's target, an unreachable bar not
+// even halfway through the day. Fixed to pace against time of day instead,
+// same approach hydration already uses.
+let proteinPacingCtx = baseCtx();
+proteinPacingCtx.training.workoutToday = true;
+proteinPacingCtx.now = new Date(2026,6,26,11,25);
+proteinPacingCtx.hour = 11;
+proteinPacingCtx.nutrition.goals.protein = 224;
+proteinPacingCtx.nutrition.consumed.protein = 58;
+const proteinPacingResult = buildTodayBriefing(proteinPacingCtx);
+log('BUG FIX (reported): 58g of a 224g goal at 11:25am is NOT flagged as "well short" — the day is barely a third over', !proteinPacingResult.body.includes('short on protein'), proteinPacingResult.body);
+
+// The same 58g WOULD be fair to flag once it's genuinely late and still low
+let proteinPacingLateCtx = baseCtx();
+proteinPacingLateCtx.training.workoutToday = true;
+proteinPacingLateCtx.now = new Date(2026,6,26,20,0);
+proteinPacingLateCtx.hour = 20;
+proteinPacingLateCtx.nutrition.goals.protein = 224;
+proteinPacingLateCtx.nutrition.consumed.protein = 58;
+log('the same 58g genuinely is fair to flag once it is 8pm and still that low', buildTodayBriefing(proteinPacingLateCtx).body.includes('short on protein'), '');
 
 // Real window -> train, and it names the layover location
 let c5 = baseCtx(); c5.sched.freeMinutesUntilDuty = 150; c5.sched.layoverAirport = 'SEA';
@@ -2700,5 +2726,77 @@ log('BUG FIX: the hero button reads "RETURN TO WORKOUT" once a session is in pro
 ST.workout = null;
 ST.sets = {};
 ST.workoutStartedAt = null;
+
+// ── BUG FIX (reported): FCF showed 11,702 steps while the Oura app itself
+// showed 2,342 for the same morning. Root cause: syncOuraData() took the
+// LAST item in the daily_activity response array and assumed it was
+// today's, but Oura's activity endpoint often hasn't posted today's row
+// yet this early — so "last item" was actually YESTERDAY's already-
+// finalized (and typically much higher) step count. Fixed to match by
+// the actual `day` field instead of array position. ──
+ST.user = { id: 'test-user', email: 'test@example.com' };
+ST.ouraAccessToken = 'fake-token-for-test';
+const origOuraFetch = ouraFetch;
+// Must match syncOuraData's OWN internal computation exactly (UTC-based,
+// via toISOString) rather than the local-date helper — otherwise this
+// test's mock "today" could silently mismatch the function's real "today"
+// depending on which timezone the suite happens to run under.
+const today = new Date().toISOString().slice(0,10);
+const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0,10);
+
+// Oura hasn't posted today's activity row yet — only yesterday's (already
+// finalized, high step count) is in the response.
+ouraFetch = async (endpoint) => {
+  if (endpoint.startsWith('daily_readiness')) return { data: [{ day: today, score: 82 }] };
+  if (endpoint.startsWith('daily_sleep')) return { data: [{ day: today, score: 78 }] };
+  if (endpoint.startsWith('daily_activity')) return { data: [{ day: yesterday, score: 90, steps: 11702 }] }; // no row for `today` at all
+  return { data: [] };
+};
+SB.from = (table) => ({
+  upsert: async () => ({ error: null }),
+});
+ST.ouraSteps = null;
+await syncOuraData(false);
+log('BUG FIX (reported steps mismatch): when Oura has not posted TODAY\'s activity row yet, steps is left null rather than silently showing yesterday\'s finalized total', ST.ouraSteps === null, String(ST.ouraSteps));
+
+// Once Oura HAS posted today's row, it's used correctly.
+ouraFetch = async (endpoint) => {
+  if (endpoint.startsWith('daily_readiness')) return { data: [{ day: today, score: 82 }] };
+  if (endpoint.startsWith('daily_sleep')) return { data: [{ day: today, score: 78 }] };
+  if (endpoint.startsWith('daily_activity')) return { data: [{ day: yesterday, score: 90, steps: 11702 }, { day: today, score: 40, steps: 2342 }] };
+  return { data: [] };
+};
+await syncOuraData(false);
+log('BUG FIX: once today\'s row exists, its steps are used correctly (not yesterday\'s, even though yesterday\'s is still last-in-some-orderings)', ST.ouraSteps === 2342, String(ST.ouraSteps));
+
+ouraFetch = origOuraFetch;
+ST.user = null;
+ST.ouraAccessToken = null;
+ST.ouraSteps = null;
+
+// ── BUG FIX (reported): water logged on the phone did not show up on the
+// PC — daily inputs (water, flight hours, sleep, readiness) were
+// localStorage-only, two completely separate per-device caches with no
+// shared source of truth. Added a DB-backed cross-device sync. ──
+ST.user = { id: 'test-user', email: 'test@example.com' };
+let upsertedRow = null;
+SB.from = () => ({ upsert: async (row) => { upsertedRow = row; return { error: null }; } });
+ST.waterIn = 1; ST.flightHrs = 0; ST.flightHrsTouched = false; ST.sleepHours = 7; ST.readiness = null;
+persistDailyInputs();
+await new Promise(r => setTimeout(r, 900)); // past the debounce window
+log('BUG FIX: logging water now writes to the database, not just localStorage', upsertedRow && upsertedRow.water_in === 1, JSON.stringify(upsertedRow));
+log('daily inputs upsert uses the local calendar date, not a UTC-shifted one', upsertedRow && upsertedRow.date === localDateStr(new Date()), upsertedRow?.date);
+
+// Simulates the actual reported scenario: water logged on "the phone"
+// (this same ST, saved to DB) — "the PC" is a fresh boot that should pick
+// up that DB value rather than starting from an empty local cache.
+ST.waterIn = 0; // simulate a fresh device with nothing logged locally yet
+SB.from = () => ({ select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { water_in: 1, flight_hrs: 0, flight_hrs_touched: false, sleep_hours: 7, readiness: null }, error: null }) }) }) }) });
+const fetchedRow = await dbGetDailyInputs();
+applyDailyInputsRow(fetchedRow);
+log('BUG FIX: a fresh device (or fresh boot) picks up water logged on another device via the DB, not just its own empty local cache', ST.waterIn === 1, String(ST.waterIn));
+
+ST.user = null;
+ST.waterIn = 0; ST.flightHrs = 0; ST.flightHrsTouched = false; ST.sleepHours = null; ST.readiness = null;
 
 })();

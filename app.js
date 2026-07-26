@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.22.1';
+const FCF_VERSION = 'v5.23.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -198,6 +198,13 @@ function persistDailyInputs() {
       timeAvailMin: ST.timeAvailMin, sleepHours: ST.sleepHours, readiness: ST.readiness,
     }));
   } catch(e) {}
+  // BUG FIX: water (and the other daily inputs) previously lived in
+  // localStorage ONLY — logging water on the phone was invisible on the
+  // PC and vice versa, two entirely separate local caches with no shared
+  // source of truth. This debounced upsert makes the database the real
+  // cross-device record; localStorage above stays purely as an instant-
+  // response cache / offline fallback.
+  saveDailyInputsToDBDebounced();
 }
 function restoreDailyInputs() {
   try {
@@ -213,6 +220,53 @@ function restoreDailyInputs() {
     ST.sleepHours = saved.sleepHours || null;
     ST.readiness = saved.readiness || null;
   } catch(e) {}
+}
+
+// Fetched once at boot and applied AFTER restoreDailyInputs() — the DB
+// row (if one exists for today) wins over whatever's in localStorage,
+// since the DB is the actual cross-device truth and localStorage is just
+// this device's last-known cache, which may be stale or from a different
+// device entirely.
+async function dbGetDailyInputs() {
+  if (!ST.user) return null;
+  try {
+    const { data, error } = await SB.from('daily_inputs')
+      .select('*').eq('user_id', ST.user.id).eq('date', localDateStr(new Date())).maybeSingle();
+    if (error) throw error;
+    return data;
+  } catch(e) { return null; }
+}
+
+function applyDailyInputsRow(row) {
+  if (!row) return;
+  if (row.water_in != null) { ST.waterIn = row.water_in; ST.waterInRaw = String(row.water_in); }
+  if (row.flight_hrs != null) { ST.flightHrs = row.flight_hrs; ST.flightHrsRaw = String(row.flight_hrs); }
+  if (row.flight_hrs_touched != null) ST.flightHrsTouched = !!row.flight_hrs_touched;
+  if (row.sleep_hours != null) ST.sleepHours = row.sleep_hours;
+  if (row.readiness != null) ST.readiness = row.readiness;
+}
+
+let _dailyInputsSaveTimer = null;
+// Debounced — water/flight-hours/etc. can change on every keystroke while
+// typing, and this doesn't need to be real-time to fix the actual
+// reported problem (checking the OTHER device later, not simultaneously).
+function saveDailyInputsToDBDebounced() {
+  if (!ST.user) return;
+  clearTimeout(_dailyInputsSaveTimer);
+  _dailyInputsSaveTimer = setTimeout(async () => {
+    try {
+      await SB.from('daily_inputs').upsert({
+        user_id: ST.user.id,
+        date: localDateStr(new Date()),
+        water_in: ST.waterIn,
+        flight_hrs: ST.flightHrs,
+        flight_hrs_touched: ST.flightHrsTouched,
+        sleep_hours: ST.sleepHours,
+        readiness: ST.readiness,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id,date' });
+    } catch(e) {}
+  }, 800);
 }
 
 function updateHydrationUI() {
@@ -2348,6 +2402,7 @@ async function bootApp() {
     ST.sessionCache.push(ST.lastSession);
   }
   restoreDailyInputs();
+  applyDailyInputsRow(await dbGetDailyInputs());
   applyScheduleEnvironmentSuggestion();
   applyScheduleFlightHours();
   // First-ever open with no profile info: land on Profile once so the user
@@ -6783,9 +6838,16 @@ async function syncOuraData(force) {
     ]);
     syncOuraWorkouts().catch(()=>{});
 
-    const readinessItem = readiness?.data?.[readiness.data.length-1];
-    const sleepItem     = sleep?.data?.[sleep.data.length-1];
-    const activityItem  = activity?.data?.[activity.data.length-1];
+    // BUG FIX: previously just took the LAST item in each response array
+    // and assumed it was today's — but Oura's daily_activity endpoint
+    // often hasn't posted today's row yet this early in the day, so the
+    // "last" item was actually yesterday's already-finalized (and usually
+    // much higher) step count, silently displayed as if it were today's.
+    // Matching by the actual `day` field means a missing today's-row now
+    // correctly shows as "no data yet" instead of yesterday's number.
+    const readinessItem = readiness?.data?.find(d => d.day === today) ?? readiness?.data?.[readiness.data.length-1];
+    const sleepItem     = sleep?.data?.find(d => d.day === today) ?? sleep?.data?.[sleep.data.length-1];
+    const activityItem  = activity?.data?.find(d => d.day === today) ?? null; // no same-day fallback for steps specifically — that's the exact bug being fixed
 
     if (!readinessItem) {
       if (force) showBigToast('No readiness data yet — sync your Oura app first.','info');
@@ -7820,7 +7882,15 @@ function buildTodayBriefing(ctx) {
 
   // 4. Already trained — shift to completing the day well.
   if (training.workoutToday) {
-    const shortProtein = ctx.nutrition.goals && ctx.nutrition.consumed.protein < ctx.nutrition.goals.protein * 0.75;
+    // BUG FIX: was comparing protein-so-far against 75% of the FULL day's
+    // goal regardless of what time it actually is — at 11:25am that's an
+    // unreachable bar (a fair "well short" call needs the day to actually
+    // be mostly over), so it fired "well short on protein" almost
+    // regardless of how someone was actually pacing. Now paced the same
+    // way hydration already is: judged against what's reasonable to have
+    // eaten by THIS point in the day, not the full 24-hour target.
+    const proteinPacedTarget = ctx.nutrition.goals ? ctx.nutrition.goals.protein * dayElapsedPct(ctx.now) : null;
+    const shortProtein = proteinPacedTarget !== null && ctx.nutrition.consumed.protein < proteinPacedTarget * 0.7;
     return { tone:'go', headline:'Session logged',
       body: shortProtein
         ? 'Work\'s done. You\'re still well short on protein, and that\'s the piece that turns the session into progress.'

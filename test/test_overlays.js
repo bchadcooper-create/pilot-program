@@ -2432,4 +2432,58 @@ log('addFrequentFoodToMeal: adds the tapped food directly to the meal', ST.mealB
 log('addFrequentFoodToMeal: tags the item source as history, distinct from usda/photo/barcode/manual', ST.mealBuilder.items[0].source === 'history', '');
 ST.mealBuilder = null;
 
+// ── Edit a logged meal (not just delete) ──
+document.getElementById = () => _fakeEl;
+const originalMeal = { id: 'meal_1', meal_type: 'lunch', logged_at: '2026-07-25T12:00:00Z',
+  meal_data: { items: [{ description: 'Turkey sandwich', nutrients: { calories: 400, protein: 25, carbs: 40, fat: 12, fiber: 3, sugar: 4 } }], totals: { calories: 400, protein: 25, carbs: 40, fat: 12, fiber: 3, sugar: 4 } } };
+ST.todaysMeals = [originalMeal];
+editMealLog('meal_1');
+log('editMealLog: opens the builder pre-populated with the meal\'s existing items', ST.mealBuilder && ST.mealBuilder.items.length === 1 && ST.mealBuilder.items[0].description === 'Turkey sandwich', JSON.stringify(ST.mealBuilder?.items));
+log('editMealLog: carries over the original meal type', ST.mealBuilder && ST.mealBuilder.mealType === 'lunch', '');
+log('editMealLog: tracks which meal is being edited so Save updates rather than inserts', ST.mealBuilder && ST.mealBuilder.editingId === 'meal_1', '');
+log('editMealLog: preserves the original logged_at so editing doesn\'t silently move the meal to "now"', ST.mealBuilder && ST.mealBuilder.editingLoggedAt === '2026-07-25T12:00:00Z', '');
+
+// Items are deep-copied — mutating the builder's draft must not corrupt
+// the original meal still sitting in ST.todaysMeals until Save is pressed.
+ST.mealBuilder.items[0].nutrients.calories = 999;
+log('editMealLog: the draft is an independent copy, not a live reference into ST.todaysMeals', ST.todaysMeals[0].meal_data.items[0].nutrients.calories === 400, String(ST.todaysMeals[0].meal_data.items[0].nutrients.calories));
+
+// updateMealLog itself updates ST.todaysMeals in place, synchronously
+// relative to its own resolution — checked directly here rather than
+// after finishMealBuilder's trailing renderPage() call, since that kicks
+// off its own async reload whose timing isn't this test's concern.
+ST.todaysMeals = [originalMeal];
+let directUpdatedRow = null;
+SB.from = () => ({ update: (row) => ({ eq: (col, id) => ({ select: async () => { directUpdatedRow = { ...row, id }; return { data: [{ ...row, id, logged_at: originalMeal.logged_at }], error: null }; } }) }) });
+const directUpdateResult = await updateMealLog('meal_1', 'lunch', [{ description: 'Turkey sandwich, no cheese', nutrients: { calories: 350, protein: 25, carbs: 38, fat: 8, fiber: 3, sugar: 4 } }], originalMeal.logged_at);
+log('updateMealLog: returns the saved row', directUpdateResult && directUpdateResult.id === 'meal_1', JSON.stringify(directUpdateResult));
+log('updateMealLog: updates ST.todaysMeals in place — same array length, corrected content, not a duplicate entry', ST.todaysMeals.length === 1 && ST.todaysMeals[0].meal_data.items[0].description === 'Turkey sandwich, no cheese', JSON.stringify(ST.todaysMeals));
+
+// Saving an edit through the builder calls update(), not insert() —
+// verified via a mock that only implements the update().eq().select()
+// chain finishMealBuilder should be using for an edit.
+editMealLog('meal_1');
+ST.mealBuilder.items[0].description = 'Turkey sandwich, extra cheese';
+ST.mealBuilder.items[0].nutrients.calories = 480;
+let updatedRow = null;
+SB.from = () => ({ update: (row) => ({ eq: (col, id) => ({ select: async () => { updatedRow = { ...row, id }; return { data: [{ ...row, id, logged_at: originalMeal.logged_at }], error: null }; } }) }) });
+await finishMealBuilder();
+log('finishMealBuilder (editing): calls update on the existing row, not insert', updatedRow !== null && updatedRow.id === 'meal_1', JSON.stringify(updatedRow));
+log('finishMealBuilder (editing): the corrected description and calories are what gets saved', updatedRow?.meal_data?.items?.[0]?.description === 'Turkey sandwich, extra cheese' && updatedRow?.meal_data?.totals?.calories === 480, JSON.stringify(updatedRow?.meal_data));
+log('finishMealBuilder (editing): clears the builder after a successful save, same as a new meal', ST.mealBuilder === null, '');
+
+ST.todaysMeals = [];
+
+// ── Hydration status surfaced directly on Today's Fuel card ──
+ST.flightHrs = 0; ST.waterIn = 1; // no-fly day, at the 1.0L floor target — nominal
+ST.nutritionGoals = { mode: 'auto', calories: 2400, protein: 180, carbs: 250, fat: 80 };
+ST.todaysMeals = [];
+const fuelCtx = getTodayContext();
+const fuelRoot = { innerHTML: '' };
+renderToday(fuelRoot);
+log('Fuel card: hydration status is now visible on Today without switching tabs', fuelRoot.innerHTML.includes('HYDRATION'), '');
+log('Fuel card: shows NOMINAL when water is at the real target, matching the workout screen\'s math', fuelRoot.innerHTML.includes('NOMINAL') && fuelRoot.innerHTML.includes('1.0/1.0L'), fuelRoot.innerHTML.slice(0, 400));
+
+ST.flightHrs = 0; ST.waterIn = 0; ST.nutritionGoals = null; ST.todaysMeals = [];
+
 })();

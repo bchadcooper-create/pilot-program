@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.20.3';
+const FCF_VERSION = 'v5.21.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2910,6 +2910,7 @@ function buildCalendarHTML(rangeData) {
   const parts = [];
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-bottom:8px">TRAINING CALENDAR</div>');
+  parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Tap a day to log, edit, or delete a workout.</div>');
   parts.push('<div id="calScroll" style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;padding-bottom:2px;scrollbar-width:none">');
   days.forEach(day => {
     const isToday = day.date.toDateString() === new Date().toDateString();
@@ -2918,18 +2919,23 @@ function buildCalendarHTML(rangeData) {
     const hasWorkout = !!day.session;
     const cellStyle = isToday ? 'border-color:var(--gold)' : '';
     const bg = hasWorkout ? 'background:rgba(34,197,94,0.12);border-color:rgba(34,197,94,0.4)' : '';
-    parts.push('<div style="flex:0 0 40px;scroll-snap-align:center;text-align:center;border:1.5px solid var(--border);border-radius:8px;padding:6px 2px;cursor:pointer;'+cellStyle+';'+bg+'" onclick="'+(hasWorkout?'showCalendarDay(\''+day.date.toISOString()+'\')':'openNewSessionEditor(\''+day.date.toISOString()+'\')')+'">');
+    parts.push('<div style="flex:0 0 46px;min-height:64px;scroll-snap-align:center;text-align:center;border:1.5px solid var(--border);border-radius:8px;padding:7px 2px;cursor:pointer;'+cellStyle+';'+bg+'" onclick="'+(hasWorkout?'showCalendarDay(\''+day.date.toISOString()+'\')':'openNewSessionEditor(\''+day.date.toISOString()+'\')')+'">');
     parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted)">'+dow+'</div>');
     parts.push('<div style="font-size:13px;font-weight:600;margin-top:2px">'+dateNum+'</div>');
     if (hasWorkout) {
       const icon = {'Lower Body':'🦵','Upper Push':'💪','Upper Pull':'🎯','Power / Plyo':'⚡','Full Body':'🔥','Longevity':'🌿','Cardio':'❤️','Run':'🏃'}[day.session.muscle_group] || '✓';
-      parts.push('<div style="font-size:13px;margin-top:2px">'+icon+'</div>');
+      parts.push('<div style="font-size:14px;margin-top:3px">'+icon+'</div>');
     } else {
-      parts.push('<div style="font-size:12px;color:var(--muted);margin-top:3px">+</div>');
+      parts.push('<div style="font-size:16px;font-weight:700;color:var(--gold);margin-top:2px">+</div>');
     }
     parts.push('</div>');
   });
-  parts.push('</div></div>');
+  parts.push('</div>');
+  // Explicit, unmissable entry point — separate from the small day cells
+  // above, which are easy to miss as tappable. Defaults to today; picking
+  // a different date is still available by tapping that day's cell.
+  parts.push('<button class="btn btn-outline mt8" onclick="openNewSessionEditor(new Date().toISOString())">+ Log a Workout</button>');
+  parts.push('</div>');
   return parts.join('');
 }
 
@@ -3615,7 +3621,7 @@ function renderProfileBuilder() {
       parts.push('<span style="color:var(--red);cursor:pointer;font-size:14px" onclick="bpRemove(\''+section+'\',\''+e.id+'\')">✕</span>');
       parts.push('</div>');
     });
-    parts.push('<input type="text" placeholder="Search to add…" oninput="bpFilter(\''+section+'\',this.value)" autocomplete="off" style="margin-bottom:6px">');
+    parts.push('<input class="fcf-input" type="text" placeholder="Search to add…" oninput="bpFilter(\''+section+'\',this.value)" autocomplete="off" style="margin-bottom:6px">');
     parts.push('<div id="bpResults_'+section+'"></div>');
     const chosenIds = new Set([...bp.taxi, ...bp.takeoff, ...bp.enroute, ...bp.landing].map(e => e.id));
     // Warmup/Stretching and Cooldown Stretches only show relevant content in
@@ -3627,7 +3633,7 @@ function renderProfileBuilder() {
       if (section === 'landing') return isStretchLikeExercise(e);
       return true;
     });
-    parts.push('<select onchange="bpAddFromDropdown(\''+section+'\',this.value);this.value=\'\'" style="margin-top:6px">');
+    parts.push('<select class="fcf-input" onchange="bpAddFromDropdown(\''+section+'\',this.value);this.value=\'\'" style="margin-top:6px">');
     parts.push('<option value="">— Or browse to add —</option>');
     dropdownPool.forEach(e => {
       parts.push('<option value="'+e.id+'">'+e.name+'</option>');
@@ -3856,9 +3862,9 @@ async function renderPreflight(p) {
   // explicit way to open them. Auto-expanded for new users and for anyone
   // who hasn't picked anything yet (nothing to summarize otherwise).
   const showPlan = ST.showChangePlan || isNewUser || !wk;
-  parts.push('<div class="edit-row-fb" style="display:flex;justify-content:space-between;align-items:center;padding:2px 2px 12px;font-size:11px;color:var(--muted)" onclick="ST.showChangePlan=!ST.showChangePlan;renderPage()">');
+  parts.push('<div class="edit-row-fb" style="display:flex;justify-content:space-between;align-items:center;padding:8px 2px;font-size:12px;color:var(--muted)" onclick="ST.showChangePlan=!ST.showChangePlan;renderPage()">');
   parts.push('<span>'+(ST.scheduleEnvNote || (ST.activeCustomProfileId ? 'Custom routine, used as saved.' : 'Same as your usual plan.'))+'</span>');
-  parts.push('<span style="font-family:var(--mono);color:var(--gold);cursor:pointer">'+(showPlan?'HIDE ▴':'CHANGE PLAN ▾')+'</span>');
+  parts.push('<span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--gold);cursor:pointer;padding:6px 4px">'+(showPlan?'HIDE ▴':'CHANGE PLAN ▾')+'</span>');
   parts.push('</div>');
 
   if (showPlan) {
@@ -5890,10 +5896,11 @@ async function renderTrends(p) {
 
   // Oura Ring trend charts
   if (ST.ouraConnected) {
-    parts.push('<div class="section-label">OURA RING TRENDS</div>');
+    parts.push('<div id="ouraTrendsSection"><div class="section-label">OURA RING TRENDS</div>');
     [['chartOuraReadiness','READINESS SCORE (0-100)',null],['chartOuraSleep','SLEEP SCORE + HRV BALANCE (0-100)','hrv']].forEach(([id,label,infoKey]) => {
       parts.push('<div class="card mb8"><div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:6px">'+label+(infoKey?' <span class="info-i" onclick="showBioInfo(\''+infoKey+'\')">i</span>':'')+'</div><div class="chart-wrap"><canvas id="'+id+'"></canvas></div></div>');
     });
+    parts.push('</div>');
   }
 
   // Photo progress at bottom of Trends — wrapped in id div for DOM patching
@@ -6044,9 +6051,11 @@ async function loadAndDrawCharts() {
   function mkChart(id, labels, datasets, legendOn) {
     const canvas = document.getElementById(id);
     if (!canvas) return;
+    const card = canvas.closest('.card');
     const key = 'c_'+id;
     if (ST.chartInst[key]) { try { ST.chartInst[key].destroy(); } catch(e){} }
-    if (!labels.length) return; // nothing logged for this metric yet
+    if (!labels.length) { if (card) card.style.display = 'none'; return; } // nothing logged for this metric yet — hide the whole card, not just an empty canvas
+    if (card) card.style.display = '';
     datasets = applyTrendSmoothing(labels, datasets);
     // Adaptive density for shorter (un-smoothed) series: shrink points as the
     // series grows so dots don't merge into a blob on a phone screen.
@@ -6082,8 +6091,10 @@ async function loadAndDrawCharts() {
   const bp = metricSeriesMulti(['systolic_bp','diastolic_bp']);
   const bpCanvas = document.getElementById('chartBP');
   if (bpCanvas) {
+    const bpCard = bpCanvas.closest('.card');
     if (ST.chartInst['c_chartBP']) { try { ST.chartInst['c_chartBP'].destroy(); } catch(e){} }
     if (bp.rows.length) {
+      if (bpCard) bpCard.style.display = '';
       ST.chartInst['c_chartBP'] = new Chart(bpCanvas.getContext('2d'), {
         type:'line',
         data:{ labels: bp.labels, datasets: applyTrendSmoothing(bp.labels, [
@@ -6094,16 +6105,20 @@ async function loadAndDrawCharts() {
         ])},
         options:{ ...OPTS, plugins:{ legend:{ display:true, labels:{filter:legendFilter,font:{size:9,family:'Share Tech Mono'},color:'#64748b'} } } }
       });
+    } else if (bpCard) {
+      bpCard.style.display = 'none'; // nothing logged for BP yet — hide the whole card
     }
   }
 
   // Oura Ring trend charts — only drawn if user is connected
   if (!ST.ouraConnected) return;
+  const ouraSection = document.getElementById('ouraTrendsSection');
   try {
     const filter = ST.user ? SB.from('oura_daily').select('*').eq('user_id', ST.user.id) : null;
     if (!filter) return;
     const { data: ouraRows, error } = await filter.order('date', { ascending: true });
-    if (error || !ouraRows || !ouraRows.length) return;
+    if (error || !ouraRows || !ouraRows.length) { if (ouraSection) ouraSection.style.display = 'none'; return; }
+    if (ouraSection) ouraSection.style.display = '';
 
     const ouraLabels = ouraRows.map(d => new Date(d.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}));
 
@@ -7403,6 +7418,26 @@ async function saveMealLog(mealType, items, loggedAt) {
   }
 }
 
+// Edits an already-logged meal in place — same shape as saveMealLog, but
+// updates the existing row (and its position in ST.todaysMeals) rather
+// than inserting a new one. The original logged_at time is preserved
+// unless the caller passes a new one, so editing what someone ate for
+// lunch doesn't quietly move it to "now" in the timeline.
+async function updateMealLog(id, mealType, items, loggedAt) {
+  if (!id || !items || !items.length) return null;
+  const mealData = { mealType, items, totals: sumMealNutrients(items) };
+  const row = { meal_type: mealType, meal_data: mealData };
+  try {
+    const { data, error } = await SB.from('meal_logs').update(row).eq('id', id).select();
+    if (error) throw error;
+    const saved = data?.[0] || { id, user_id: ST.user?.id || null, logged_at: loggedAt || new Date().toISOString(), meal_type: mealType, meal_data: mealData };
+    ST.todaysMeals = (ST.todaysMeals || []).map(m => m.id === id ? saved : m);
+    return saved;
+  } catch(e) {
+    return null;
+  }
+}
+
 async function loadTodaysMeals() {
   if (!ST.user) { ST.todaysMeals = []; return; }
   const dayStart = new Date(); dayStart.setHours(0,0,0,0);
@@ -7933,6 +7968,14 @@ function renderToday(p) {
       parts.push('<div style="margin-bottom:8px"><div class="fb" style="margin-bottom:3px"><span style="font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--muted)">'+lbl+'</span><span style="font-family:var(--mono);font-size:10px">'+Math.round(have)+'<span style="color:var(--muted)">/'+goal+'g</span></span></div>');
       parts.push('<div style="height:3px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+col+';border-radius:2px"></div></div></div>');
     });
+
+    // Hydration status now lives here too — previously the only place to
+    // check it was the Preflight/workout screen's Hydration Payload
+    // widget, so there was no way to see it from Today without switching
+    // tabs. Reads the same hydroStatus()/hydroTarget() as that widget and
+    // the Still Open list, so all three can never show conflicting numbers.
+    const hs = hydroStatus(ctx.now);
+    parts.push('<div class="fb" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><span style="font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--muted)">💧 HYDRATION</span><span style="font-family:var(--mono);font-size:10px;color:'+hs.color+'">'+ST.waterIn.toFixed(1)+'/'+hydroTarget().toFixed(1)+'L · '+hs.label+'</span></div>');
     parts.push('</div>');
   }
 
@@ -8147,7 +8190,10 @@ async function renderNutrition(p) {
           parts.push('</div>');
         });
         parts.push('<div class="fb" style="padding-top:8px;font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.05em"><span>SUBTOTAL</span><span>'+t.calories+' CAL · P'+t.protein+'g · C'+t.carbs+'g · F'+t.fat+'g</span></div>');
-        parts.push('<button class="btn-ghost" style="font-size:11px;margin-top:8px" onclick="deleteMealLog(\''+m.id+'\')">🗑️ Remove</button>');
+        parts.push('<div class="fb" style="margin-top:8px;gap:16px;justify-content:flex-start">');
+        parts.push('<button class="btn-ghost" style="font-size:11px" onclick="editMealLog(\''+m.id+'\')">✏️ Edit</button>');
+        parts.push('<button class="btn-ghost" style="font-size:11px;color:var(--red)" onclick="deleteMealLog(\''+m.id+'\')">🗑️ Remove</button>');
+        parts.push('</div>');
         parts.push('</div>');
       });
     });
@@ -8212,10 +8258,33 @@ function saveQuickWater() {
 }
 
 function openMealBuilder() {
-  ST.mealBuilder = { mealType: 'snack', items: [], frequentFoods: null };
+  ST.mealBuilder = { mealType: 'snack', items: [], frequentFoods: null, editingId: null, editingLoggedAt: null };
   renderMealBuilder();
   getFrequentFoodsForMealBuilder().then(foods => {
     if (!ST.mealBuilder) return; // builder was closed before this resolved
+    ST.mealBuilder.frequentFoods = foods;
+    renderMealBuilder();
+  });
+}
+
+// Opens the same meal builder, pre-populated with an already-logged
+// meal's items for correction — a mis-scanned barcode, a forgotten side,
+// a portion that needs adjusting. Items are deep-copied so cancelling
+// out of the builder never mutates the original until Save is actually
+// pressed.
+function editMealLog(id) {
+  const meal = (ST.todaysMeals || []).find(m => m.id === id);
+  if (!meal) return;
+  ST.mealBuilder = {
+    mealType: meal.meal_type,
+    items: JSON.parse(JSON.stringify(meal.meal_data.items || [])),
+    frequentFoods: null,
+    editingId: meal.id,
+    editingLoggedAt: meal.logged_at,
+  };
+  renderMealBuilder();
+  getFrequentFoodsForMealBuilder().then(foods => {
+    if (!ST.mealBuilder) return;
     ST.mealBuilder.frequentFoods = foods;
     renderMealBuilder();
   });
@@ -8233,7 +8302,7 @@ function renderMealBuilder() {
   const mb = ST.mealBuilder;
   const parts = [];
   parts.push('<div class="card mb12">');
-  parts.push('<div class="section-label" style="margin-top:0">LOG A MEAL</div>');
+  parts.push('<div class="section-label" style="margin-top:0">'+(mb.editingId ? 'EDIT MEAL' : 'LOG A MEAL')+'</div>');
   parts.push('<div class="field"><label>Meal Type</label><select onchange="ST.mealBuilder.mealType=this.value">');
   ['breakfast','lunch','dinner','snack'].forEach(t => parts.push('<option value="'+t+'"'+(mb.mealType===t?' selected':'')+'>'+t[0].toUpperCase()+t.slice(1)+'</option>'));
   parts.push('</select></div>');
@@ -8273,7 +8342,7 @@ function renderMealBuilder() {
 
   parts.push('<div class="fb mt8">');
   parts.push('<button class="btn btn-outline" style="flex:1;margin-right:8px" onclick="closeMealBuilder()">Cancel</button>');
-  parts.push('<button class="btn btn-gold" style="flex:1" '+((mb.items.length || window._usdaPendingFood)?'':'disabled')+' onclick="finishMealBuilder()">Save Meal</button>');
+  parts.push('<button class="btn btn-gold" style="flex:1" '+((mb.items.length || window._usdaPendingFood)?'':'disabled')+' onclick="finishMealBuilder()">'+(mb.editingId ? 'Save Changes' : 'Save Meal')+'</button>');
   parts.push('</div>');
   parts.push('</div>');
   box.innerHTML = parts.join('');
@@ -8294,7 +8363,11 @@ async function finishMealBuilder() {
     showBigToast('Add at least one food before saving.', 'warn');
     return;
   }
-  await saveMealLog(ST.mealBuilder.mealType, ST.mealBuilder.items);
+  if (ST.mealBuilder.editingId) {
+    await updateMealLog(ST.mealBuilder.editingId, ST.mealBuilder.mealType, ST.mealBuilder.items, ST.mealBuilder.editingLoggedAt);
+  } else {
+    await saveMealLog(ST.mealBuilder.mealType, ST.mealBuilder.items);
+  }
   ST.mealBuilder = null;
   renderPage();
 }

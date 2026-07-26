@@ -1558,6 +1558,28 @@ proteinPacingLateCtx.nutrition.goals.protein = 224;
 proteinPacingLateCtx.nutrition.consumed.protein = 58;
 log('the same 58g genuinely is fair to flag once it is 8pm and still that low', buildTodayBriefing(proteinPacingLateCtx).body.includes('short on protein'), '');
 
+// BUG FIX (reported): 58g against a paced target of ~63g (92% of the way
+// there) was still worded as "well short," overstating a genuinely
+// marginal, close-to-on-pace case. Now reads as "a bit behind" instead —
+// "well short" is reserved for a real gap (below half of paced target).
+let marginalProteinCtx = baseCtx();
+marginalProteinCtx.training.workoutToday = true;
+marginalProteinCtx.now = new Date(2026,6,26,12,23); // Chad's exact reported time
+marginalProteinCtx.hour = 12;
+marginalProteinCtx.nutrition.goals.protein = 224;
+marginalProteinCtx.nutrition.consumed.protein = 58;
+const marginalProteinResult = buildTodayBriefing(marginalProteinCtx);
+log('BUG FIX (reported): a marginal miss (58g vs a ~63g paced bar) reads as "a bit behind", not the much stronger "well short"', marginalProteinResult.body.includes('a bit behind on protein') && !marginalProteinResult.body.includes('well short'), marginalProteinResult.body);
+
+// A genuinely large gap still gets the stronger wording — this isn't
+// softened into meaninglessness, just no longer overstated for close calls.
+let severeProteinCtx = baseCtx();
+severeProteinCtx.training.workoutToday = true;
+severeProteinCtx.now = new Date(2026,6,26,20,0);
+severeProteinCtx.nutrition.goals.protein = 224;
+severeProteinCtx.nutrition.consumed.protein = 30; // well under half of the ~196g paced target at 8pm
+log('a genuinely large protein gap still reads as "well short", not softened away entirely', buildTodayBriefing(severeProteinCtx).body.includes('well short'), '');
+
 // Real window -> train, and it names the layover location
 let c5 = baseCtx(); c5.sched.freeMinutesUntilDuty = 150; c5.sched.layoverAirport = 'SEA';
 const b5 = buildTodayBriefing(c5);
@@ -2768,6 +2790,65 @@ ouraFetch = async (endpoint) => {
 };
 await syncOuraData(false);
 log('BUG FIX: once today\'s row exists, its steps are used correctly (not yesterday\'s, even though yesterday\'s is still last-in-some-orderings)', ST.ouraSteps === 2342, String(ST.ouraSteps));
+
+// ── Diagnostic for a manual Sync Now that still shows no activity data
+// (the actual next-step case: it's ambiguous from the outside whether
+// the fetch itself failed, returned nothing, or returned rows that just
+// don't include today — this distinguishes all three instead of leaving
+// a bare "—" with no way to tell which one it is). ──
+let diagToastMsgs = [];
+const origShowBigToastForOuraDiag = showBigToast;
+showBigToast = (msg) => { diagToastMsgs.push(msg); };
+
+// Case 1: the daily_activity request itself failed (network/auth/scope) —
+// readiness and sleep still work, so this looks identical to "no data
+// yet" from the UI alone unless surfaced explicitly.
+ouraFetch = async (endpoint) => {
+  if (endpoint.startsWith('daily_readiness')) return { data: [{ day: today, score: 82 }] };
+  if (endpoint.startsWith('daily_sleep')) return { data: [{ day: today, score: 78 }] };
+  if (endpoint.startsWith('daily_activity')) throw new Error('401 unauthorized');
+  return { data: [] };
+};
+diagToastMsgs = [];
+await syncOuraData(true);
+log('diagnostic: a failed activity fetch is called out distinctly from "no data yet" on a manual sync', diagToastMsgs.some(m => /request itself failed/.test(m)), JSON.stringify(diagToastMsgs));
+
+// Case 2: the request succeeded but genuinely returned zero rows.
+ouraFetch = async (endpoint) => {
+  if (endpoint.startsWith('daily_readiness')) return { data: [{ day: today, score: 82 }] };
+  if (endpoint.startsWith('daily_sleep')) return { data: [{ day: today, score: 78 }] };
+  if (endpoint.startsWith('daily_activity')) return { data: [] };
+  return { data: [] };
+};
+diagToastMsgs = [];
+await syncOuraData(true);
+log('diagnostic: zero rows returned is called out distinctly from a failed request', diagToastMsgs.some(m => /zero rows/.test(m)), JSON.stringify(diagToastMsgs));
+
+// Case 3: rows exist but none match today — shows exactly which days ARE
+// present, so a real mismatch (date format, timezone, off-by-one) would
+// be immediately visible instead of requiring more back-and-forth.
+ouraFetch = async (endpoint) => {
+  if (endpoint.startsWith('daily_readiness')) return { data: [{ day: today, score: 82 }] };
+  if (endpoint.startsWith('daily_sleep')) return { data: [{ day: today, score: 78 }] };
+  if (endpoint.startsWith('daily_activity')) return { data: [{ day: yesterday, score: 90, steps: 11702 }] };
+  return { data: [] };
+};
+diagToastMsgs = [];
+await syncOuraData(true);
+log('diagnostic: rows present but none matching today lists the actual days that WERE returned', diagToastMsgs.some(m => m.includes(yesterday) && m.includes(today)), JSON.stringify(diagToastMsgs));
+
+// A manual sync that DOES find today's data shows no diagnostic at all.
+ouraFetch = async (endpoint) => {
+  if (endpoint.startsWith('daily_readiness')) return { data: [{ day: today, score: 82 }] };
+  if (endpoint.startsWith('daily_sleep')) return { data: [{ day: today, score: 78 }] };
+  if (endpoint.startsWith('daily_activity')) return { data: [{ day: today, score: 88, steps: 2342 }] };
+  return { data: [] };
+};
+diagToastMsgs = [];
+await syncOuraData(true);
+log('no diagnostic noise when activity data is found correctly', !diagToastMsgs.some(m => m.includes('diagnostic')), JSON.stringify(diagToastMsgs));
+
+showBigToast = origShowBigToastForOuraDiag;
 
 ouraFetch = origOuraFetch;
 ST.user = null;

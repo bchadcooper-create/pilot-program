@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.23.0';
+const FCF_VERSION = 'v5.23.1';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -6849,6 +6849,22 @@ async function syncOuraData(force) {
     const sleepItem     = sleep?.data?.find(d => d.day === today) ?? sleep?.data?.[sleep.data.length-1];
     const activityItem  = activity?.data?.find(d => d.day === today) ?? null; // no same-day fallback for steps specifically — that's the exact bug being fixed
 
+    // Diagnostic for a manual Sync Now when activity data still doesn't
+    // show up — rather than guess a third time whether this is a stale
+    // cache, a date-format mismatch, or the fetch itself silently failing
+    // (each of the three calls above swallows its own errors via
+    // .catch(()=>null), which would look IDENTICAL to "no data yet" from
+    // outside), surface exactly what actually happened.
+    if (force && !activityItem) {
+      if (!activity) {
+        showBigToast('Activity sync diagnostic: the daily_activity request itself failed (network error, expired token, or missing scope) — this is NOT the "Oura hasn\'t posted today yet" case.', 'warn');
+      } else if (!activity.data || !activity.data.length) {
+        showBigToast('Activity sync diagnostic: request succeeded but returned zero rows for '+yesterday+' to '+today+'.', 'warn');
+      } else {
+        showBigToast('Activity sync diagnostic: got '+activity.data.length+' row(s), days present: '+activity.data.map(d=>d.day).join(', ')+' — none matched today ('+today+').', 'warn');
+      }
+    }
+
     if (!readinessItem) {
       if (force) showBigToast('No readiness data yet — sync your Oura app first.','info');
       return;
@@ -7889,13 +7905,23 @@ function buildTodayBriefing(ctx) {
     // regardless of how someone was actually pacing. Now paced the same
     // way hydration already is: judged against what's reasonable to have
     // eaten by THIS point in the day, not the full 24-hour target.
+    //
+    // BUG FIX: even paced correctly, a marginal miss (e.g. 58g against a
+    // 63g bar — 92% of the way there) was still called "well short," which
+    // overstates a genuinely close call. Graduated to two tiers: "well
+    // short" is reserved for a real gap, "a bit behind" covers the
+    // marginal case honestly instead of alarming over a few grams.
     const proteinPacedTarget = ctx.nutrition.goals ? ctx.nutrition.goals.protein * dayElapsedPct(ctx.now) : null;
-    const shortProtein = proteinPacedTarget !== null && ctx.nutrition.consumed.protein < proteinPacedTarget * 0.7;
+    const proteinPaceRatio = proteinPacedTarget ? ctx.nutrition.consumed.protein / Math.max(proteinPacedTarget, 1) : 1;
+    const wellShortProtein = proteinPacedTarget !== null && proteinPaceRatio < 0.5;
+    const slightlyBehindProtein = proteinPacedTarget !== null && !wellShortProtein && proteinPaceRatio < 0.85;
     return { tone:'go', headline:'Session logged',
-      body: shortProtein
+      body: wellShortProtein
         ? 'Work\'s done. You\'re still well short on protein, and that\'s the piece that turns the session into progress.'
+        : slightlyBehindProtein
+        ? 'Work\'s done. You\'re a bit behind on protein for this point in the day — not urgent, but worth catching up at your next meal.'
         : 'Work\'s done. Keep water up through the rest of the day and protect your sleep window tonight.',
-      action: shortProtein ? { label:'Log a meal', fn:"switchTab('nutrition')" } : null };
+      action: (wellShortProtein || slightlyBehindProtein) ? { label:'Log a meal', fn:"switchTab('nutrition')" } : null };
   }
 
   // 5. A gap while there's STILL FLYING LEFT today is not a training window,

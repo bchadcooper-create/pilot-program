@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.23.1';
+const FCF_VERSION = 'v5.23.2';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -148,6 +148,20 @@ function dayElapsedPct(now) {
   if (hoursIn <= DAY_START_HOUR) return 0;
   if (hoursIn >= DAY_END_HOUR) return 1;
   return (hoursIn - DAY_START_HOUR) / (DAY_END_HOUR - DAY_START_HOUR);
+}
+
+// How far off pace protein intake is, judged against what's reasonable
+// to have eaten by THIS point in the day (see dayElapsedPct), not the
+// full 24-hour goal. Four bands rather than a single yes/no — a 3-gram
+// miss and a 100-gram miss are different situations and shouldn't read
+// the same. Boundaries: under 40% of paced target is a real gap; 40-60%
+// is genuinely falling behind; 60-85% is a marginal, close-to-on-pace
+// miss; 85%+ is on track.
+function proteinPaceTier(ratio) {
+  if (ratio < 0.40) return 'well_short';
+  if (ratio < 0.60) return 'behind';
+  if (ratio < 0.85) return 'slightly_behind';
+  return 'on_track';
 }
 
 // What you'd reasonably be expected to have had by THIS point in the day —
@@ -7906,22 +7920,21 @@ function buildTodayBriefing(ctx) {
     // way hydration already is: judged against what's reasonable to have
     // eaten by THIS point in the day, not the full 24-hour target.
     //
-    // BUG FIX: even paced correctly, a marginal miss (e.g. 58g against a
-    // 63g bar — 92% of the way there) was still called "well short," which
-    // overstates a genuinely close call. Graduated to two tiers: "well
-    // short" is reserved for a real gap, "a bit behind" covers the
-    // marginal case honestly instead of alarming over a few grams.
+    // Four tiers by how far off pace, each with its own language — a
+    // 3-gram miss and a 100-gram miss are different situations and
+    // shouldn't read the same. See proteinPaceTier() for the exact bands.
     const proteinPacedTarget = ctx.nutrition.goals ? ctx.nutrition.goals.protein * dayElapsedPct(ctx.now) : null;
     const proteinPaceRatio = proteinPacedTarget ? ctx.nutrition.consumed.protein / Math.max(proteinPacedTarget, 1) : 1;
-    const wellShortProtein = proteinPacedTarget !== null && proteinPaceRatio < 0.5;
-    const slightlyBehindProtein = proteinPacedTarget !== null && !wellShortProtein && proteinPaceRatio < 0.85;
+    const tier = proteinPacedTarget !== null ? proteinPaceTier(proteinPaceRatio) : 'on_track';
+    const tierCopy = {
+      well_short: 'Work\'s done. You\'re still well short on protein, and that\'s the piece that turns the session into progress.',
+      behind: 'Work\'s done. You\'re falling behind on protein for this point in the day — make it a priority at your next meal.',
+      slightly_behind: 'Work\'s done. You\'re a bit behind on protein for this point in the day — not urgent, but worth catching up at your next meal.',
+      on_track: 'Work\'s done. Keep water up through the rest of the day and protect your sleep window tonight.',
+    };
     return { tone:'go', headline:'Session logged',
-      body: wellShortProtein
-        ? 'Work\'s done. You\'re still well short on protein, and that\'s the piece that turns the session into progress.'
-        : slightlyBehindProtein
-        ? 'Work\'s done. You\'re a bit behind on protein for this point in the day — not urgent, but worth catching up at your next meal.'
-        : 'Work\'s done. Keep water up through the rest of the day and protect your sleep window tonight.',
-      action: (wellShortProtein || slightlyBehindProtein) ? { label:'Log a meal', fn:"switchTab('nutrition')" } : null };
+      body: tierCopy[tier],
+      action: tier !== 'on_track' ? { label:'Log a meal', fn:"switchTab('nutrition')" } : null };
   }
 
   // 5. A gap while there's STILL FLYING LEFT today is not a training window,

@@ -1580,6 +1580,30 @@ severeProteinCtx.nutrition.goals.protein = 224;
 severeProteinCtx.nutrition.consumed.protein = 30; // well under half of the ~196g paced target at 8pm
 log('a genuinely large protein gap still reads as "well short", not softened away entirely', buildTodayBriefing(severeProteinCtx).body.includes('well short'), '');
 
+// proteinPaceTier: exact boundary behavior for all four bands
+log('proteinPaceTier: far under pace is well_short', proteinPaceTier(0.10) === 'well_short', '');
+log('proteinPaceTier: just under the well_short boundary is still well_short', proteinPaceTier(0.39) === 'well_short', '');
+log('proteinPaceTier: just at/over the well_short boundary moves to behind', proteinPaceTier(0.40) === 'behind', '');
+log('proteinPaceTier: mid-range is behind', proteinPaceTier(0.50) === 'behind', '');
+log('proteinPaceTier: just under the behind boundary is still behind', proteinPaceTier(0.59) === 'behind', '');
+log('proteinPaceTier: just at/over the behind boundary moves to slightly_behind', proteinPaceTier(0.60) === 'slightly_behind', '');
+log('proteinPaceTier: just under the slightly_behind boundary is still slightly_behind', proteinPaceTier(0.84) === 'slightly_behind', '');
+log('proteinPaceTier: at/over 85% is on_track', proteinPaceTier(0.85) === 'on_track', '');
+log('proteinPaceTier: well ahead of pace is on_track', proteinPaceTier(1.5) === 'on_track', '');
+
+// The new middle "behind" tier gets its own distinct language — a
+// genuine-but-not-severe gap (e.g. 70g of a paced ~144g target, ratio
+// ~0.49) reads as "falling behind", distinct from both "well short" and
+// "a bit behind".
+let behindTierCtx = baseCtx();
+behindTierCtx.training.workoutToday = true;
+behindTierCtx.now = new Date(2026,6,26,20,0);
+behindTierCtx.nutrition.goals.protein = 165;
+behindTierCtx.nutrition.consumed.protein = 70; // ratio ~0.485 at 8pm
+const behindTierResult = buildTodayBriefing(behindTierCtx);
+log('the new middle tier ("falling behind") uses its own distinct language, not "well short" or "a bit behind"', behindTierResult.body.includes('falling behind on protein') && !behindTierResult.body.includes('well short') && !behindTierResult.body.includes('a bit behind'), behindTierResult.body);
+log('the "falling behind" tier still offers the Log a Meal action', behindTierResult.action && behindTierResult.action.label === 'Log a meal', '');
+
 // Real window -> train, and it names the layover location
 let c5 = baseCtx(); c5.sched.freeMinutesUntilDuty = 150; c5.sched.layoverAirport = 'SEA';
 const b5 = buildTodayBriefing(c5);

@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.21.2';
+const FCF_VERSION = 'v5.21.3';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -8554,6 +8554,14 @@ function buildFoodRecognitionCardHTML(result) {
   if (result.servingDescription) {
     parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:6px">Estimated portion: ' + sanitizeUserText(result.servingDescription) + '</div>');
   }
+  // Quantity — the actual fix for "scanned the same barcode 3 times":
+  // scanning or photographing one unit and setting quantity=3 replaces
+  // needing to repeat the whole scan/analyze step per item. Changing
+  // quantity recalculates the macro fields below FROM THE ORIGINAL
+  // scanned values, same as the USDA search's serving multiplier — so if
+  // someone hand-edits a macro afterward, that edit sticks until quantity
+  // is changed again, at which point it recalculates from the base.
+  parts.push('<div class="field"><label>Quantity</label><input type="text" inputmode="decimal" id="foodRecQty" value="1" oninput="updateFoodRecPreview()"></div>');
   parts.push('<div class="field-row">');
   parts.push('<div class="field"><label>Calories</label><input type="text" inputmode="numeric" id="foodRecCal" value="' + n.calories + '"></div>');
   parts.push('<div class="field"><label>Protein (g)</label><input type="text" inputmode="decimal" id="foodRecProtein" value="' + n.protein + '"></div>');
@@ -8570,20 +8578,35 @@ function buildFoodRecognitionCardHTML(result) {
   return parts.join('');
 }
 
+function updateFoodRecPreview() {
+  const pending = window._foodRecPending;
+  if (!pending) return;
+  const qty = document.getElementById('foodRecQty')?.value || 1;
+  const scaled = scaleNutrients(pending.nutrients, qty);
+  const calEl = document.getElementById('foodRecCal'), profEl = document.getElementById('foodRecProtein'), carbEl = document.getElementById('foodRecCarbs'), fatEl = document.getElementById('foodRecFat');
+  if (calEl) calEl.value = scaled.calories;
+  if (profEl) profEl.value = scaled.protein;
+  if (carbEl) carbEl.value = scaled.carbs;
+  if (fatEl) fatEl.value = scaled.fat;
+}
+
 function addFoodRecognitionToMeal() {
   const pending = window._foodRecPending;
   if (!pending || !ST.mealBuilder) return;
+  const qty = document.getElementById('foodRecQty')?.value || 1;
   const description = document.getElementById('foodRecDescription')?.value?.trim() || pending.description;
+  const scaledFull = scaleNutrients(pending.nutrients, qty); // for fiber/sugar, which aren't shown as editable fields
   const nutrients = {
     calories: parseFloat(document.getElementById('foodRecCal')?.value) || 0,
     protein: parseFloat(document.getElementById('foodRecProtein')?.value) || 0,
     carbs: parseFloat(document.getElementById('foodRecCarbs')?.value) || 0,
     fat: parseFloat(document.getElementById('foodRecFat')?.value) || 0,
-    fiber: pending.nutrients.fiber || 0,
-    sugar: pending.nutrients.sugar || 0,
+    fiber: scaledFull.fiber || 0,
+    sugar: scaledFull.sugar || 0,
   };
+  const qtyNum = parseFloat(qty) || 1;
   ST.mealBuilder.items.push({
-    description: sanitizeUserText(description),
+    description: sanitizeUserText(description) + (qtyNum !== 1 ? ' ('+qty+'x)' : ''),
     nutrients,
     source: pending.source, // 'photo' or 'barcode'
     confidence: pending.confidence,

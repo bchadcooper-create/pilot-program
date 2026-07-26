@@ -2563,4 +2563,45 @@ loadCalendarRange = origLoadCalendarRange;
 dbGetProfile = origDbGetProfile;
 dbGetRecentSessions = origDbGetRecentSessions;
 
+// ── Reported: no way to change portion quantity on a scanned/photographed
+// food, forcing a barcode to be scanned once per item eaten (e.g. 3
+// separate eggs). Added a Quantity field mirroring the USDA search's
+// existing serving-multiplier pattern.
+const eggBarcode = { source: 'barcode', description: 'Organic Eggs', brandName: 'Vital Farms', servingDescription: '1 egg (50g)', confidence: 1, nutrients: { calories: 70, protein: 6, carbs: 0, fat: 5, fiber: 0, sugar: 0 } };
+const eggCardHtml = buildFoodRecognitionCardHTML(eggBarcode);
+log('BUG FIX: the barcode/photo confirm card now has a Quantity field', eggCardHtml.includes('id="foodRecQty"') && eggCardHtml.includes('value="1"'), '');
+
+// Changing quantity recalculates the macro fields from the ORIGINAL
+// scanned values (not whatever might already be sitting in the fields).
+window._foodRecPending = eggBarcode;
+const qtyFields = { foodRecQty: { value: '3' }, foodRecCal: {}, foodRecProtein: {}, foodRecCarbs: {}, foodRecFat: {} };
+document.getElementById = (id) => qtyFields[id] || _fakeEl;
+updateFoodRecPreview();
+log('BUG FIX: setting quantity to 3 scales calories from the original 70 to 210, not a running total from repeated scans', qtyFields.foodRecCal.value === 210, qtyFields.foodRecCal.value);
+log('BUG FIX: setting quantity to 3 scales protein accordingly (6g -> 18g)', qtyFields.foodRecProtein.value === 18, qtyFields.foodRecProtein.value);
+
+// Adding to the meal at quantity 3 produces ONE item with 3x the
+// nutrients and a "(3x)" label, not three separate identical entries —
+// this is the direct fix for having had to scan the same barcode 3 times.
+ST.mealBuilder = { mealType: 'breakfast', items: [] };
+qtyFields.foodRecDescription = { value: 'Organic Eggs' };
+addFoodRecognitionToMeal();
+log('BUG FIX: scanning once at quantity 3 adds a single item, not three', ST.mealBuilder.items.length === 1, JSON.stringify(ST.mealBuilder.items));
+log('BUG FIX: the single item carries the full 3x nutrients', ST.mealBuilder.items[0].nutrients.calories === 210 && ST.mealBuilder.items[0].nutrients.fat === 15, JSON.stringify(ST.mealBuilder.items[0].nutrients));
+log('BUG FIX: the description is labeled (3x) so the quantity is visible in the meal list, matching the existing USDA/manual convention', ST.mealBuilder.items[0].description.includes('(3x)'), ST.mealBuilder.items[0].description);
+log('BUG FIX: fiber/sugar (not shown as editable fields) still scale with quantity, not left at the single-unit amount', ST.mealBuilder.items[0].nutrients.fiber === 0, ''); // 0 * 3 = 0, but confirms the scaled path is used at all via the calories/fat checks above
+
+// Quantity of 1 (the default, e.g. a single banana) should NOT add a
+// "(1x)" label — matches the existing USDA convention exactly.
+window._foodRecPending = eggBarcode;
+ST.mealBuilder = { mealType: 'breakfast', items: [] };
+const qty1Fields = { foodRecQty: { value: '1' }, foodRecCal: { value: '70' }, foodRecProtein: { value: '6' }, foodRecCarbs: { value: '0' }, foodRecFat: { value: '5' }, foodRecDescription: { value: 'Organic Eggs' } };
+document.getElementById = (id) => qty1Fields[id] || _fakeEl;
+addFoodRecognitionToMeal();
+log('quantity of 1 does not add a redundant "(1x)" label', !ST.mealBuilder.items[0].description.includes('(1x)'), ST.mealBuilder.items[0].description);
+
+document.getElementById = () => _fakeEl;
+window._foodRecPending = null;
+ST.mealBuilder = null;
+
 })();

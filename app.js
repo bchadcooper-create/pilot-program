@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.20.0';
+const FCF_VERSION = 'v5.20.1';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -7802,7 +7802,7 @@ function renderToday(p) {
   if (n.goals) {
     parts.push('<div class="section-label">FUEL</div>');
     parts.push('<div class="card mb12">');
-    parts.push('<div class="fb" style="align-items:baseline;margin-bottom:10px"><span style="font-family:var(--mono);font-size:22px">'+Math.round(n.consumed.calories).toLocaleString()+'</span><span style="font-family:var(--mono);font-size:10px;color:var(--muted)">OF '+n.goals.calories.toLocaleString()+' KCAL</span></div>');
+    parts.push('<div class="fb" style="align-items:baseline;margin-bottom:10px"><span style="font-family:var(--mono);font-size:22px">'+Math.round(n.consumed.calories).toLocaleString()+'</span><span style="font-family:var(--mono);font-size:10px;color:var(--muted)">OF '+n.goals.calories.toLocaleString()+' CAL</span></div>');
     [['PROTEIN',n.consumed.protein,n.goals.protein,'var(--gold)'],['CARBS',n.consumed.carbs,n.goals.carbs,'var(--blue)'],['FAT',n.consumed.fat,n.goals.fat,'var(--teal)']].forEach(([lbl,have,goal,col]) => {
       const pct = goal > 0 ? Math.min(100,(have/goal)*100) : 0;
       parts.push('<div style="margin-bottom:8px"><div class="fb" style="margin-bottom:3px"><span style="font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--muted)">'+lbl+'</span><span style="font-family:var(--mono);font-size:10px">'+Math.round(have)+'<span style="color:var(--muted)">/'+goal+'g</span></span></div>');
@@ -8016,9 +8016,12 @@ async function renderNutrition(p) {
         parts.push('<div class="fb" style="margin:14px 0 6px"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;color:var(--muted)">'+type.toUpperCase()+'</span>'+(timeStr?'<span style="font-family:var(--mono);font-size:10px;color:var(--gold)">'+timeStr+'</span>':'')+'</div>');
         parts.push('<div class="card" style="padding:12px 16px">');
         m.meal_data.items.forEach(item => {
-          parts.push('<div class="fb" style="padding:6px 0;border-bottom:1px solid var(--border)"><span style="font-size:13px">'+item.description+'</span><span style="font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0;padding-left:10px">'+item.nutrients.calories+'</span></div>');
+          parts.push('<div style="padding:6px 0;border-bottom:1px solid var(--border)">');
+          parts.push('<div class="fb"><span style="font-size:13px">'+item.description+'</span><span style="font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0;padding-left:10px">'+item.nutrients.calories+' cal</span></div>');
+          parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">P'+item.nutrients.protein+'g · C'+item.nutrients.carbs+'g · F'+item.nutrients.fat+'g</div>');
+          parts.push('</div>');
         });
-        parts.push('<div class="fb" style="padding-top:8px;font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.05em"><span>SUBTOTAL</span><span>'+t.calories+' KCAL</span></div>');
+        parts.push('<div class="fb" style="padding-top:8px;font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.05em"><span>SUBTOTAL</span><span>'+t.calories+' CAL · P'+t.protein+'g · C'+t.carbs+'g · F'+t.fat+'g</span></div>');
         parts.push('<button class="btn-ghost" style="font-size:11px;margin-top:8px" onclick="deleteMealLog(\''+m.id+'\')">🗑️ Remove</button>');
         parts.push('</div>');
       });

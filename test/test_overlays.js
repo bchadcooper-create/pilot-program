@@ -1582,7 +1582,7 @@ const th = _fakeEl.innerHTML || '';
 log('render: steps are shown at the top as requested', th.includes('8,432') && th.includes('STEPS'), '');
 log('render: the Oura metric row appears when connected', th.includes('READINESS') && th.includes('78'), '');
 log('render: today\'s schedule is listed from the uploaded calendar', th.includes("TODAY'S SCHEDULE"), '');
-log('render: fuel progress shows against targets', th.includes('OF 2,400 KCAL'), '');
+log('render: fuel progress shows against targets', th.includes('OF 2,400 CAL'), '');
 log('render: a primary briefing headline is present', th.includes('before your next flight') || th.includes('Afternoon') || th.includes('window') || th.includes('On duty'), ''); // 'On duty' is a valid outcome too if the sandbox's real clock happens to fall inside the test's hardcoded flight window when this runs
 
 // ── v5.19.34: BETWEEN-LEGS vs POST-DUTY WINDOW ──
@@ -1777,7 +1777,9 @@ log('the ring card shows the real logged calorie total (280)', rebuildHtml.inclu
 // Manifest structure: meal type label, a timestamp, and a subtotal line
 log('meal shown with its type label', rebuildHtml.includes('LUNCH'), '');
 log('meal shown with an actual logged time, not just a date', /\d{1,2}:\d{2}\s*(AM|PM)/i.test(rebuildHtml), '');
-log('meal shows a SUBTOTAL line matching the manifest design', rebuildHtml.includes('SUBTOTAL') && rebuildHtml.includes('280 KCAL'), '');
+log('meal shows a SUBTOTAL line matching the manifest design', rebuildHtml.includes('SUBTOTAL') && rebuildHtml.includes('280 CAL'), '');
+log('logged item now shows its own macros, not just calories', rebuildHtml.includes('P53g') && rebuildHtml.includes('C0g') && rebuildHtml.includes('F6g'), rebuildHtml);
+log('subtotal line also carries the full macro breakdown', /SUBTOTAL[\s\S]*?280 CAL · P53g · C0g · F6g/.test(rebuildHtml), '');
 log('delete action is still wired correctly on the rebuilt card', rebuildHtml.includes("deleteMealLog('m1')"), '');
 
 // Ring math: verify the SVG dash offset actually reflects the real percentage

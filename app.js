@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.23.2';
+const FCF_VERSION = 'v5.23.3';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -6868,14 +6868,18 @@ async function syncOuraData(force) {
     // cache, a date-format mismatch, or the fetch itself silently failing
     // (each of the three calls above swallows its own errors via
     // .catch(()=>null), which would look IDENTICAL to "no data yet" from
-    // outside), surface exactly what actually happened.
+    // outside), surface exactly what actually happened. Captured here and
+    // shown via a modal AFTER the sync finishes (see below) — showing it
+    // immediately as a toast got instantly overwritten by the "Oura
+    // synced" success toast a moment later, too fast to read either one.
+    let activityDiagnostic = null;
     if (force && !activityItem) {
       if (!activity) {
-        showBigToast('Activity sync diagnostic: the daily_activity request itself failed (network error, expired token, or missing scope) — this is NOT the "Oura hasn\'t posted today yet" case.', 'warn');
+        activityDiagnostic = 'The daily_activity request itself failed — a network error, expired token, or missing permission scope. This is NOT the "Oura hasn\'t posted today\'s data yet" case; something is actually broken in the connection.';
       } else if (!activity.data || !activity.data.length) {
-        showBigToast('Activity sync diagnostic: request succeeded but returned zero rows for '+yesterday+' to '+today+'.', 'warn');
+        activityDiagnostic = 'The request succeeded but returned zero rows for the range '+yesterday+' to '+today+'.';
       } else {
-        showBigToast('Activity sync diagnostic: got '+activity.data.length+' row(s), days present: '+activity.data.map(d=>d.day).join(', ')+' — none matched today ('+today+').', 'warn');
+        activityDiagnostic = 'Got '+activity.data.length+' row(s) back, but none matched today (' + today + '). Days actually present in the response: ' + activity.data.map(d=>d.day).join(', ') + '.';
       }
     }
 
@@ -6919,14 +6923,22 @@ async function syncOuraData(force) {
     ST.ouraActiveCal = activityItem?.active_calories ?? null;
     ST.ouraData   = row;
 
-    // Show the sync result once per day for automatic background syncs — a
-    // manual "Sync Now" tap always shows it, since that's a deliberate
-    // action expecting confirmation.
-    const alreadyShownToday = localStorage.getItem(OURA_TOAST_KEY) === today;
-    if (force || !alreadyShownToday) {
-      const sleepScoreStr = row.sleep_score ? String(row.sleep_score) : '—';
-      showBigToast('Oura synced\nReadiness: '+score+' → '+label+'\nSleep Score: '+sleepScoreStr,'ok');
-      localStorage.setItem(OURA_TOAST_KEY, today);
+    // If there's an activity diagnostic to report, show THAT (as a modal
+    // that stays until dismissed) instead of the generic success toast —
+    // saying "Oura synced ✅" right on top of a real problem is exactly
+    // the confusing double-message this replaces.
+    if (activityDiagnostic) {
+      showInfoModal('Activity Sync Diagnostic', activityDiagnostic);
+    } else {
+      // Show the sync result once per day for automatic background syncs
+      // — a manual "Sync Now" tap always shows it, since that's a
+      // deliberate action expecting confirmation.
+      const alreadyShownToday = localStorage.getItem(OURA_TOAST_KEY) === today;
+      if (force || !alreadyShownToday) {
+        const sleepScoreStr = row.sleep_score ? String(row.sleep_score) : '—';
+        showBigToast('Oura synced\nReadiness: '+score+' → '+label+'\nSleep Score: '+sleepScoreStr,'ok');
+        localStorage.setItem(OURA_TOAST_KEY, today);
+      }
     }
     renderPage();
 

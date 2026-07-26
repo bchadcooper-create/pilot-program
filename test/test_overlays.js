@@ -2819,10 +2819,16 @@ log('BUG FIX: once today\'s row exists, its steps are used correctly (not yester
 // (the actual next-step case: it's ambiguous from the outside whether
 // the fetch itself failed, returned nothing, or returned rows that just
 // don't include today — this distinguishes all three instead of leaving
-// a bare "—" with no way to tell which one it is). ──
-let diagToastMsgs = [];
+// a bare "—" with no way to tell which one it is). Shown via a modal that
+// requires a tap to dismiss — a toast here was getting instantly
+// overwritten by the "Oura synced" success toast a moment later, too
+// fast to ever read. ──
+let modalCalls = [];
+let toastMsgs = [];
+const origShowInfoModalForOuraDiag = showInfoModal;
 const origShowBigToastForOuraDiag = showBigToast;
-showBigToast = (msg) => { diagToastMsgs.push(msg); };
+showInfoModal = (title, text) => { modalCalls.push({ title, text }); };
+showBigToast = (msg) => { toastMsgs.push(msg); };
 
 // Case 1: the daily_activity request itself failed (network/auth/scope) —
 // readiness and sleep still work, so this looks identical to "no data
@@ -2833,9 +2839,11 @@ ouraFetch = async (endpoint) => {
   if (endpoint.startsWith('daily_activity')) throw new Error('401 unauthorized');
   return { data: [] };
 };
-diagToastMsgs = [];
+modalCalls = []; toastMsgs = [];
 await syncOuraData(true);
-log('diagnostic: a failed activity fetch is called out distinctly from "no data yet" on a manual sync', diagToastMsgs.some(m => /request itself failed/.test(m)), JSON.stringify(diagToastMsgs));
+log('diagnostic: a failed activity fetch is called out distinctly from "no data yet" on a manual sync', modalCalls.some(m => /request itself failed/.test(m.text)), JSON.stringify(modalCalls));
+log('BUG FIX: the diagnostic is shown as a modal (stays until dismissed), not a toast that gets overwritten', modalCalls.length === 1, '');
+log('BUG FIX: the misleading "Oura synced" success toast is suppressed when there\'s a real diagnostic to show instead', !toastMsgs.some(m => m.includes('Oura synced')), JSON.stringify(toastMsgs));
 
 // Case 2: the request succeeded but genuinely returned zero rows.
 ouraFetch = async (endpoint) => {
@@ -2844,9 +2852,9 @@ ouraFetch = async (endpoint) => {
   if (endpoint.startsWith('daily_activity')) return { data: [] };
   return { data: [] };
 };
-diagToastMsgs = [];
+modalCalls = []; toastMsgs = [];
 await syncOuraData(true);
-log('diagnostic: zero rows returned is called out distinctly from a failed request', diagToastMsgs.some(m => /zero rows/.test(m)), JSON.stringify(diagToastMsgs));
+log('diagnostic: zero rows returned is called out distinctly from a failed request', modalCalls.some(m => /zero rows/.test(m.text)), JSON.stringify(modalCalls));
 
 // Case 3: rows exist but none match today — shows exactly which days ARE
 // present, so a real mismatch (date format, timezone, off-by-one) would
@@ -2857,21 +2865,24 @@ ouraFetch = async (endpoint) => {
   if (endpoint.startsWith('daily_activity')) return { data: [{ day: yesterday, score: 90, steps: 11702 }] };
   return { data: [] };
 };
-diagToastMsgs = [];
+modalCalls = []; toastMsgs = [];
 await syncOuraData(true);
-log('diagnostic: rows present but none matching today lists the actual days that WERE returned', diagToastMsgs.some(m => m.includes(yesterday) && m.includes(today)), JSON.stringify(diagToastMsgs));
+log('diagnostic: rows present but none matching today lists the actual days that WERE returned', modalCalls.some(m => m.text.includes(yesterday) && m.text.includes(today)), JSON.stringify(modalCalls));
 
-// A manual sync that DOES find today's data shows no diagnostic at all.
+// A manual sync that DOES find today's data shows no diagnostic at all,
+// and the normal success toast fires as usual.
 ouraFetch = async (endpoint) => {
   if (endpoint.startsWith('daily_readiness')) return { data: [{ day: today, score: 82 }] };
   if (endpoint.startsWith('daily_sleep')) return { data: [{ day: today, score: 78 }] };
   if (endpoint.startsWith('daily_activity')) return { data: [{ day: today, score: 88, steps: 2342 }] };
   return { data: [] };
 };
-diagToastMsgs = [];
+modalCalls = []; toastMsgs = [];
 await syncOuraData(true);
-log('no diagnostic noise when activity data is found correctly', !diagToastMsgs.some(m => m.includes('diagnostic')), JSON.stringify(diagToastMsgs));
+log('no diagnostic modal when activity data is found correctly', modalCalls.length === 0, JSON.stringify(modalCalls));
+log('the normal "Oura synced" success toast still fires when everything is fine', toastMsgs.some(m => m.includes('Oura synced')), JSON.stringify(toastMsgs));
 
+showInfoModal = origShowInfoModalForOuraDiag;
 showBigToast = origShowBigToastForOuraDiag;
 
 ouraFetch = origOuraFetch;

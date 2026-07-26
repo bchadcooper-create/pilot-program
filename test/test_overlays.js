@@ -2486,4 +2486,40 @@ log('Fuel card: shows NOMINAL when water is at the real target, matching the wor
 
 ST.flightHrs = 0; ST.waterIn = 0; ST.nutritionGoals = null; ST.todaysMeals = [];
 
+// ── BUG FIX: tapping any calendar day or "+ Log a Workout" did nothing ──
+// Root cause: showCalendarDay() and openNewSessionEditor() both expect a
+// bare 'YYYY-MM-DD' string and append 'T12:00:00' internally. The calendar
+// cell onclick generation was passing day.date.toISOString() — a full UTC
+// timestamp — which produced "...T12:00:00" appended onto an already-
+// timezoned string, an Invalid Date, and a silent throw with nothing
+// visible to the user. Fixed via a new localDateStr() helper.
+log('localDateStr: formats a Date as a bare YYYY-MM-DD string', localDateStr(new Date(2026,6,26,15,0,0)) === '2026-07-26', localDateStr(new Date(2026,6,26,15,0,0)));
+log('localDateStr: zero-pads single-digit months and days', localDateStr(new Date(2026,0,5,12,0,0)) === '2026-01-05', localDateStr(new Date(2026,0,5,12,0,0)));
+
+// Reproduce the actual reported symptom directly: the OLD buggy input
+// (a full ISO timestamp) really does throw inside openNewSessionEditor —
+// confirming this was the real root cause, not a guess.
+let oldBuggyInputThrew = false;
+try { openNewSessionEditor(new Date().toISOString()); } catch(e) { oldBuggyInputThrew = true; }
+log('BUG CONFIRMED: the old call pattern (full ISO timestamp) throws inside openNewSessionEditor, explaining the silent no-op', oldBuggyInputThrew, '');
+
+// The fixed input (a bare date string, what localDateStr now produces)
+// must NOT throw, and must result in a valid, usable session date.
+ST.editSession = null;
+let fixedInputThrew = false;
+try { openNewSessionEditor(localDateStr(new Date(2026,6,26))); } catch(e) { fixedInputThrew = true; }
+log('BUG FIX: the corrected call pattern (bare YYYY-MM-DD) does not throw', !fixedInputThrew, '');
+log('BUG FIX: openNewSessionEditor produces a valid session date, not Invalid Date/NaN', ST.editSession && !isNaN(new Date(ST.editSession.session.date).getTime()), ST.editSession?.session?.date);
+
+// buildCalendarHTML must actually generate the bare-date form in its
+// onclick attributes — this is the piece that was actually broken, not
+// the underlying functions themselves (which already had correct tests
+// elsewhere using bare dates directly).
+const calHtml = buildCalendarHTML({ sessions: [{ date: '2026-07-20T07:00:00.000Z', muscle_group: 'Lower Body' }], windowStart: new Date(2026,6,20) });
+log('BUG FIX: calendar day cells no longer embed a full ISO timestamp in their onclick handler', !calHtml.includes(".toISOString()") && !/showCalendarDay\('[^']*T[^']*Z'\)/.test(calHtml) && !/openNewSessionEditor\('[^']*T[^']*Z'\)/.test(calHtml), '');
+log('BUG FIX: a day WITH a workout calls showCalendarDay with a bare date string', /showCalendarDay\('2026-07-20'\)/.test(calHtml), calHtml.match(/showCalendarDay\('[^']*'\)/)?.[0]);
+log('BUG FIX: the "+ Log a Workout" button passes a bare date string, not a full timestamp', /openNewSessionEditor\('\d{4}-\d{2}-\d{2}'\)/.test(calHtml), calHtml.match(/openNewSessionEditor\('[^']*'\)/g)?.slice(-1)[0]);
+
+ST.editSession = null;
+
 })();

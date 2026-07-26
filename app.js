@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.21.0';
+const FCF_VERSION = 'v5.21.1';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2897,6 +2897,18 @@ async function loadCalendarRange() {
   }
 }
 
+// showCalendarDay() and openNewSessionEditor() both expect a bare
+// 'YYYY-MM-DD' string (see their own comments) and append 'T12:00:00'
+// internally to force local-noon parsing. Passing a full ISO timestamp
+// here instead — e.g. from .toISOString() — double-appends a time
+// component onto an already-timezoned string, producing an Invalid Date
+// that then throws inside openNewSessionEditor's .toISOString() call
+// with no visible error: every tap on a calendar day or "+ Log a
+// Workout" silently did nothing.
+function localDateStr(d) {
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
 function buildCalendarHTML(rangeData) {
   const { sessions, windowStart } = rangeData;
   const days = [];
@@ -2919,7 +2931,7 @@ function buildCalendarHTML(rangeData) {
     const hasWorkout = !!day.session;
     const cellStyle = isToday ? 'border-color:var(--gold)' : '';
     const bg = hasWorkout ? 'background:rgba(34,197,94,0.12);border-color:rgba(34,197,94,0.4)' : '';
-    parts.push('<div style="flex:0 0 46px;min-height:64px;scroll-snap-align:center;text-align:center;border:1.5px solid var(--border);border-radius:8px;padding:7px 2px;cursor:pointer;'+cellStyle+';'+bg+'" onclick="'+(hasWorkout?'showCalendarDay(\''+day.date.toISOString()+'\')':'openNewSessionEditor(\''+day.date.toISOString()+'\')')+'">');
+    parts.push('<div style="flex:0 0 46px;min-height:64px;scroll-snap-align:center;text-align:center;border:1.5px solid var(--border);border-radius:8px;padding:7px 2px;cursor:pointer;'+cellStyle+';'+bg+'" onclick="'+(hasWorkout?'showCalendarDay(\''+localDateStr(day.date)+'\')':'openNewSessionEditor(\''+localDateStr(day.date)+'\')')+'">');
     parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted)">'+dow+'</div>');
     parts.push('<div style="font-size:13px;font-weight:600;margin-top:2px">'+dateNum+'</div>');
     if (hasWorkout) {
@@ -2934,7 +2946,7 @@ function buildCalendarHTML(rangeData) {
   // Explicit, unmissable entry point — separate from the small day cells
   // above, which are easy to miss as tappable. Defaults to today; picking
   // a different date is still available by tapping that day's cell.
-  parts.push('<button class="btn btn-outline mt8" onclick="openNewSessionEditor(new Date().toISOString())">+ Log a Workout</button>');
+  parts.push('<button class="btn btn-outline mt8" onclick="openNewSessionEditor(\''+localDateStr(new Date())+'\')">+ Log a Workout</button>');
   parts.push('</div>');
   return parts.join('');
 }

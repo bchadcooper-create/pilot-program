@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.21.1';
+const FCF_VERSION = 'v5.21.2';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -3008,63 +3008,70 @@ function wasExercisePR(exId, exItem, sets, sessionDate, allPriorSessions) {
 }
 
 async function showCalendarDay(isoDate) {
-  const rangeData = await loadCalendarRange();
-  // isoDate is a bare 'YYYY-MM-DD' string, which JS parses as UTC midnight
-  // — in a negative-UTC-offset timezone like Arizona (UTC-7), that's 5pm
-  // the PREVIOUS day locally, silently shifting the comparison by a day.
-  // Appending noon with no timezone suffix forces local-time parsing instead.
-  const session = rangeData.sessions.find(s => new Date(s.date).toDateString() === new Date(isoDate+'T12:00:00').toDateString());
-  if (!session) return;
+  try {
+    const rangeData = await loadCalendarRange();
+    // isoDate is a bare 'YYYY-MM-DD' string, which JS parses as UTC midnight
+    // — in a negative-UTC-offset timezone like Arizona (UTC-7), that's 5pm
+    // the PREVIOUS day locally, silently shifting the comparison by a day.
+    // Appending noon with no timezone suffix forces local-time parsing instead.
+    const session = rangeData.sessions.find(s => new Date(s.date).toDateString() === new Date(isoDate+'T12:00:00').toDateString());
+    if (!session) { showToast('No workout found for that day.'); return; }
 
-  const profile = await dbGetProfile();
-  const recentSessions = await dbGetRecentSessions(7);
-  const allHistory = await dbGetRecentSessions(3650); // full history, for accurate PR comparison
-  const allEx = session.workoutSnapshot
-    ? [...session.workoutSnapshot.taxi,...session.workoutSnapshot.takeoff,...session.workoutSnapshot.enroute,...session.workoutSnapshot.landing]
-    : Object.keys(session.sets||{}).map(id => ({id, name:id, inputType:'reps_weight', timed:false}));
-  const summary = buildWorkoutSummary(session, allEx, recentSessions, profile?.lastWeight);
-  const sessionDate = new Date(session.date);
+    const profile = await dbGetProfile();
+    const recentSessions = await dbGetRecentSessions(7);
+    const allHistory = await dbGetRecentSessions(3650); // full history, for accurate PR comparison
+    const allEx = session.workoutSnapshot
+      ? [...session.workoutSnapshot.taxi,...session.workoutSnapshot.takeoff,...session.workoutSnapshot.enroute,...session.workoutSnapshot.landing]
+      : Object.keys(session.sets||{}).map(id => ({id, name:id, inputType:'reps_weight', timed:false}));
+    const summary = buildWorkoutSummary(session, allEx, recentSessions, profile?.lastWeight);
+    const sessionDate = new Date(session.date);
 
-  const exerciseRows = allEx
-    .filter(isLoggableStrengthExercise)
-    .map(exItem => {
-      const sets = session.sets?.[exItem.id] || [];
-      const perf = formatSetPerformance(exItem, sets);
-      if (!perf) return null;
-      const isPR = wasExercisePR(exItem.id, exItem, sets, sessionDate, allHistory);
-      return { name: exItem.name, perf, isPR };
-    })
-    .filter(Boolean);
+    const exerciseRows = allEx
+      .filter(isLoggableStrengthExercise)
+      .map(exItem => {
+        const sets = session.sets?.[exItem.id] || [];
+        const perf = formatSetPerformance(exItem, sets);
+        if (!perf) return null;
+        const isPR = wasExercisePR(exItem.id, exItem, sets, sessionDate, allHistory);
+        return { name: exItem.name, perf, isPR };
+      })
+      .filter(Boolean);
 
-  const root = document.getElementById('modalRoot');
-  const parts = [];
-  parts.push('<div class="modal-bg" onclick="if(event.target===this)closeModal()">');
-  parts.push('<div class="modal-sheet">');
-  parts.push('<div class="modal-handle"></div>');
-  parts.push('<div class="modal-title">'+session.muscle_group+(session.importedFromOura ? ' <span style="font-size:11px;color:var(--blue);font-weight:400">📱 via Oura</span>' : '')+'</div>');
-  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:14px">'+sessionDate.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+' at '+sessionDate.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})+'</div>');
-  parts.push('<div class="stat-row">');
-  parts.push('<div class="stat-box"><div class="stat-val">'+(summary.durationMinutes||'—')+'</div><div class="stat-lbl">Minutes</div></div>');
-  parts.push('<div class="stat-box"><div class="stat-val">'+summary.totalSets+'</div><div class="stat-lbl">Sets</div></div>');
-  parts.push('<div class="stat-box"><div class="stat-val">'+summary.estCalories+'</div><div class="stat-lbl">Calories</div></div>');
-  parts.push('</div>');
-  parts.push('<div class="modal-body" style="margin-bottom:10px">Environment: '+session.env+' · Condition: '+(session.fatigue||'go')+'</div>');
+    const root = document.getElementById('modalRoot');
+    const parts = [];
+    parts.push('<div class="modal-bg" onclick="if(event.target===this)closeModal()">');
+    parts.push('<div class="modal-sheet">');
+    parts.push('<div class="modal-handle"></div>');
+    parts.push('<div class="modal-title">'+(session.muscle_group||'Workout')+(session.importedFromOura ? ' <span style="font-size:11px;color:var(--blue);font-weight:400">📱 via Oura</span>' : '')+'</div>');
+    parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:14px">'+sessionDate.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+' at '+sessionDate.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})+'</div>');
+    parts.push('<div class="stat-row">');
+    parts.push('<div class="stat-box"><div class="stat-val">'+(summary.durationMinutes||'—')+'</div><div class="stat-lbl">Minutes</div></div>');
+    parts.push('<div class="stat-box"><div class="stat-val">'+summary.totalSets+'</div><div class="stat-lbl">Sets</div></div>');
+    parts.push('<div class="stat-box"><div class="stat-val">'+summary.estCalories+'</div><div class="stat-lbl">Calories</div></div>');
+    parts.push('</div>');
+    parts.push('<div class="modal-body" style="margin-bottom:10px">Environment: '+(session.env||'—')+' · Condition: '+(session.fatigue||'go')+'</div>');
 
-  if (exerciseRows.length) {
-    parts.push('<div class="section-label" style="margin-top:4px">EXERCISES</div>');
-    exerciseRows.forEach(row => {
-      parts.push('<div class="fb" style="padding:8px 0;border-bottom:1px solid var(--border)">');
-      parts.push('<div style="font-size:13px">'+(row.isPR?'⭐ ':'')+row.name+'</div>');
-      parts.push('<div style="font-family:var(--mono);font-size:12px;color:'+(row.isPR?'var(--gold)':'var(--text)')+';font-weight:'+(row.isPR?'700':'400')+'">'+row.perf+'</div>');
-      parts.push('</div>');
-    });
+    if (exerciseRows.length) {
+      parts.push('<div class="section-label" style="margin-top:4px">EXERCISES</div>');
+      exerciseRows.forEach(row => {
+        parts.push('<div class="fb" style="padding:8px 0;border-bottom:1px solid var(--border)">');
+        parts.push('<div style="font-size:13px">'+(row.isPR?'⭐ ':'')+row.name+'</div>');
+        parts.push('<div style="font-family:var(--mono);font-size:12px;color:'+(row.isPR?'var(--gold)':'var(--text)')+';font-weight:'+(row.isPR?'700':'400')+'">'+row.perf+'</div>');
+        parts.push('</div>');
+      });
+    }
+
+    parts.push('<button class="btn btn-gold mt12" onclick="openEditSessionEditor(\''+(session._key||'')+'\')">✏️ EDIT SESSION</button>');
+    parts.push('<button class="btn btn-outline mt8" style="color:var(--red);border-color:var(--red)" onclick="confirmDeleteSession(\''+(session._key||'')+'\')">🗑 DELETE SESSION</button>');
+    parts.push('<button class="btn btn-outline mt8" onclick="closeModal()">CLOSE</button>');
+    parts.push('</div></div>');
+    root.innerHTML = parts.join('');
+  } catch(e) {
+    // Whatever else might be wrong with a given session's data, the person
+    // tapping it should see SOMETHING happen — a real error beats a dead
+    // tap every time, and this message is exactly what to relay back.
+    showBigToast('Could not open that workout: ' + (e.message || 'unknown error'), 'warn');
   }
-
-  parts.push('<button class="btn btn-gold mt12" onclick="openEditSessionEditor(\''+(session._key||'')+'\')">✏️ EDIT SESSION</button>');
-  parts.push('<button class="btn btn-outline mt8" style="color:var(--red);border-color:var(--red)" onclick="confirmDeleteSession(\''+(session._key||'')+'\')">🗑 DELETE SESSION</button>');
-  parts.push('<button class="btn btn-outline mt8" onclick="closeModal()">CLOSE</button>');
-  parts.push('</div></div>');
-  root.innerHTML = parts.join('');
 }
 
 // ─── SESSION EDITOR (edit past workouts / retroactively log missed ones) ─────
@@ -3312,19 +3319,23 @@ function openNewSessionEditor(isoDate) {
 // Edit an existing session found in the calendar cache by its DB key.
 async function openEditSessionEditor(key) {
   if (!key) { showToast('This session can\'t be edited (no sync record found).'); return; }
-  const rangeData = await loadCalendarRange();
-  const found = rangeData.sessions.find(s => s._key === key);
-  if (!found) { showToast('Session not found.'); return; }
-  const session = JSON.parse(JSON.stringify(found));
-  delete session._key;
-  if (!session.sets) session.sets = {};
-  if (!session.workoutSnapshot) session.workoutSnapshot = emptySnapshot();
-  const snapEx = [...session.workoutSnapshot.taxi, ...session.workoutSnapshot.takeoff, ...session.workoutSnapshot.enroute, ...session.workoutSnapshot.landing];
-  // Editor shows exercises that have any logged data, keeping their real defs
-  // so PR history stays linked to the same exercise ids.
-  const exList = snapEx.filter(e => (session.sets[e.id]||[]).some(set => Object.values(set).some(v => v)));
-  ST.editSession = { key, isNew: false, session, exList };
-  renderSessionEditor();
+  try {
+    const rangeData = await loadCalendarRange();
+    const found = rangeData.sessions.find(s => s._key === key);
+    if (!found) { showToast('Session not found.'); return; }
+    const session = JSON.parse(JSON.stringify(found));
+    delete session._key;
+    if (!session.sets) session.sets = {};
+    if (!session.workoutSnapshot) session.workoutSnapshot = emptySnapshot();
+    const snapEx = [...session.workoutSnapshot.taxi, ...session.workoutSnapshot.takeoff, ...session.workoutSnapshot.enroute, ...session.workoutSnapshot.landing];
+    // Editor shows exercises that have any logged data, keeping their real defs
+    // so PR history stays linked to the same exercise ids.
+    const exList = snapEx.filter(e => (session.sets[e.id]||[]).some(set => Object.values(set).some(v => v)));
+    ST.editSession = { key, isNew: false, session, exList };
+    renderSessionEditor();
+  } catch(e) {
+    showBigToast('Could not open that workout for editing: ' + (e.message || 'unknown error'), 'warn');
+  }
 }
 
 function renderSessionEditor() {

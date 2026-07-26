@@ -2522,4 +2522,45 @@ log('BUG FIX: the "+ Log a Workout" button passes a bare date string, not a full
 
 ST.editSession = null;
 
+// ── Reported follow-up: tapping a day WITH a logged workout still did
+// nothing (blank days and Log a Workout worked once the date-format bug
+// above was fixed, but existing-session days did not). No second crash
+// was findable through static review — every helper showCalendarDay
+// calls already degrades safely on sparse/malformed data. So the fix
+// here is defensive rather than a pinpointed second root cause: any
+// exception now surfaces a real, visible toast instead of vanishing,
+// same as the pattern that caused the original bug in the first place.
+document.getElementById = () => _fakeEl;
+let calToastMsg = null;
+const origShowBigToast2 = showBigToast;
+showBigToast = (msg, type) => { calToastMsg = msg; };
+
+// A session whose data is malformed enough to throw partway through
+// (workoutSnapshot present but missing an expected sub-array) must not
+// fail silently.
+const brokenSession = { date: '2026-07-20T07:00:00.000Z', muscle_group: 'Cardio', workoutSnapshot: { taxi: [], takeoff: [] /* missing enroute/landing */ } };
+loadCalendarRange = async () => ({ sessions: [brokenSession] });
+dbGetProfile = async () => ({ lastWeight: 180 });
+dbGetRecentSessions = async () => [];
+await showCalendarDay('2026-07-20');
+log('BUG FIX: a session detail that fails to build now shows a visible error instead of silently doing nothing', calToastMsg && /could not open/i.test(calToastMsg), calToastMsg);
+
+// A day that genuinely has no session now says so, rather than the tap
+// having no observable effect at all.
+calToastMsg = null;
+loadCalendarRange = async () => ({ sessions: [] });
+await showCalendarDay('2026-07-21');
+log('showCalendarDay: tapping a day with no session shows a message rather than nothing happening', calToastMsg && /no workout/i.test(calToastMsg), calToastMsg);
+
+// Editing a session that fails to load also surfaces a real error.
+calToastMsg = null;
+loadCalendarRange = async () => { throw new Error('network down'); };
+await openEditSessionEditor('some-key');
+log('BUG FIX: openEditSessionEditor also surfaces a real error instead of failing silently', calToastMsg && /could not open/i.test(calToastMsg), calToastMsg);
+
+showBigToast = origShowBigToast2;
+loadCalendarRange = origLoadCalendarRange;
+dbGetProfile = origDbGetProfile;
+dbGetRecentSessions = origDbGetRecentSessions;
+
 })();

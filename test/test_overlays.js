@@ -2838,12 +2838,14 @@ ST.workoutStartedAt = null;
 ST.user = { id: 'test-user', email: 'test@example.com' };
 ST.ouraAccessToken = 'fake-token-for-test';
 const origOuraFetch = ouraFetch;
-// Must match syncOuraData's OWN internal computation exactly (UTC-based,
-// via toISOString) rather than the local-date helper — otherwise this
-// test's mock "today" could silently mismatch the function's real "today"
-// depending on which timezone the suite happens to run under.
-const today = new Date().toISOString().slice(0,10);
-const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0,10);
+// Must match syncOuraData's OWN internal computation. That used to be
+// UTC-based (toISOString), which was itself the bug: Oura's `day` field
+// is the user's LOCAL calendar day, so a UTC comparison broke every
+// evening in any negative-UTC-offset timezone. Both sides are local now.
+// This pair pinned to UTC is precisely what let the bug hide from the
+// suite — under TZ=America/Phoenix in the evening these two disagree.
+const today = localDateStr(new Date());
+const yesterday = localDateStr(new Date(Date.now() - 86400000));
 
 // Oura hasn't posted today's activity row yet — only yesterday's (already
 // finalized, high step count) is in the response.
@@ -3000,6 +3002,44 @@ log('shouldRetryOuraActivity: never retries without a valid access token', shoul
 ST.ouraConnected = false;
 ST.ouraAccessToken = null;
 ST.ouraData = null;
+
+// ── BUG FIX (reported: "I did leg day today, it says nothing logged" —
+// with the training calendar showing it correctly). Root cause was a UTC
+// vs LOCAL date comparison: UTC midnight is 5pm in Arizona, so from 5pm
+// local onward the Today tab's "today" already read as tomorrow while a
+// workout logged that morning still carried today's UTC date. The
+// calendar buckets by local midnight, which is why it disagreed.
+//
+// Swept across ALL 24 hours of a local day rather than just "now" — the
+// original inline version only misbehaved during part of the day, which
+// is precisely how it slipped past a suite that ran at other times.
+let sweepFailures = [];
+for (let h = 0; h < 24; h++) {
+  const checkAt = new Date(2026, 6, 26, h, 30, 0);          // local Jul 26, every hour
+  for (const loggedH of [0, 7, 12, 17, 21, 23]) {
+    const session = { date: new Date(2026, 6, 26, loggedH, 0, 0).toISOString() };
+    if (!isSessionOnLocalDay(session, checkAt)) sweepFailures.push('check '+h+':30 vs logged '+loggedH+':00');
+  }
+}
+log('BUG FIX (reported): a workout logged at ANY hour of the local day counts as "today" when checked at ANY hour of that same local day', sweepFailures.length === 0, sweepFailures.slice(0,5).join(' | '));
+
+// The exact reported scenario, spelled out: leg day mid-morning, checked
+// that evening — the window where the old UTC comparison broke.
+log('BUG FIX (reported): 10am workout still reads as logged when checked at 7:42pm the same local day', isSessionOnLocalDay({ date: new Date(2026,6,26,10,0,0).toISOString() }, new Date(2026,6,26,19,42,0)), '');
+
+// Adjacent local days must still be kept apart — the fix must not make
+// everything match everything.
+log('a workout from the PREVIOUS local day does not count as today, even late in the evening', !isSessionOnLocalDay({ date: new Date(2026,6,25,22,0,0).toISOString() }, new Date(2026,6,26,19,42,0)), '');
+log('a workout from the NEXT local day does not count as today', !isSessionOnLocalDay({ date: new Date(2026,6,27,1,0,0).toISOString() }, new Date(2026,6,26,19,42,0)), '');
+log('isSessionOnLocalDay tolerates a missing or malformed date without throwing', !isSessionOnLocalDay({}, new Date()) && !isSessionOnLocalDay({ date: 'not-a-date' }, new Date()) && !isSessionOnLocalDay(null, new Date()), '');
+
+// End-to-end through getTodayContext: a session stamped just after local
+// midnight today must register regardless of what time the suite runs.
+ST.sessionCache = [{ date: (() => { const d = new Date(); d.setHours(0, 30, 0, 0); return d.toISOString(); })(), muscle_group: 'Lower Body' }];
+log('BUG FIX (integration): getTodayContext reports workoutToday for a session logged just after LOCAL midnight today', getTodayContext().training.workoutToday === true, '');
+ST.sessionCache = [{ date: (() => { const d = new Date(Date.now() - 86400000); d.setHours(12, 0, 0, 0); return d.toISOString(); })(), muscle_group: 'Lower Body' }];
+log('BUG FIX (integration): getTodayContext does NOT report workoutToday for yesterday\'s midday session', getTodayContext().training.workoutToday === false, '');
+ST.sessionCache = [];
 
 // ── BUG FIX (reported): finished a workout, Today tab still said "No
 // session logged today" — despite the calendar correctly showing it.

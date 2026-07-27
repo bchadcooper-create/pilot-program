@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.25.1';
+const FCF_VERSION = 'v5.26.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2977,6 +2977,30 @@ async function loadCalendarRange() {
 // Workout" silently did nothing.
 function localDateStr(d) {
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+// Does a saved session fall on the same LOCAL calendar day as `now`?
+//
+// BUG FIX (reported: "I did leg day today, it says nothing logged").
+// The Today tab used to compare UTC date strings on both sides:
+//   (s.date||'').slice(0,10) === now.toISOString().slice(0,10)
+// UTC midnight is 5pm in Arizona (UTC-7), so from 5pm local onward
+// now.toISOString() already reads as TOMORROW, while a workout logged
+// that morning is still stamped with today's UTC date. They stop
+// matching and Today reports "no session logged" for a workout that
+// plainly happened. The training calendar never showed the bug because
+// it buckets by LOCAL midnight (setHours(0,0,0,0)) — which is exactly
+// why the two screens disagreed and the calendar looked like "proof".
+//
+// Pulled out as its own function specifically so it can be tested
+// against every hour of a local day deterministically; as inline code
+// depending on the real clock, it only misbehaved during part of the
+// day and slipped through a suite that happened to run at other times.
+function isSessionOnLocalDay(session, now) {
+  if (!session || !session.date) return false;
+  const d = new Date(session.date);
+  if (isNaN(d.getTime())) return false;
+  return localDateStr(d) === localDateStr(now || new Date());
 }
 
 function buildCalendarHTML(rangeData) {
@@ -6849,14 +6873,24 @@ async function syncOuraData(force) {
     return;
   }
   try {
-    const today = new Date().toISOString().slice(0,10);
-    const yesterday = new Date(Date.now()-86400000).toISOString().slice(0,10);
+    // BUG FIX: Oura's `day` field is the user's LOCAL calendar day, but
+    // these were UTC dates. UTC midnight is 5pm in Arizona, so from 5pm
+    // local onward `today` already read as TOMORROW and could never match
+    // Oura's row for the actual current day — Activity would blank out
+    // every single evening even when Oura had the data sitting there.
+    // Local dates on both sides fixes the comparison; the fetch window is
+    // separately extended a day past today so a timezone-boundary
+    // interpretation on Oura's side can't truncate today's row out of the
+    // response either.
+    const today = localDateStr(new Date());
+    const yesterday = localDateStr(new Date(Date.now()-86400000));
+    const fetchEnd = localDateStr(new Date(Date.now()+86400000));
 
     // Fetch readiness, sleep, and activity in parallel
     const [readiness, sleep, activity] = await Promise.all([
-      ouraFetch('daily_readiness?start_date='+yesterday+'&end_date='+today).catch(()=>null),
-      ouraFetch('daily_sleep?start_date='+yesterday+'&end_date='+today).catch(()=>null),
-      ouraFetch('daily_activity?start_date='+yesterday+'&end_date='+today).catch(()=>null),
+      ouraFetch('daily_readiness?start_date='+yesterday+'&end_date='+fetchEnd).catch(()=>null),
+      ouraFetch('daily_sleep?start_date='+yesterday+'&end_date='+fetchEnd).catch(()=>null),
+      ouraFetch('daily_activity?start_date='+yesterday+'&end_date='+fetchEnd).catch(()=>null),
     ]);
     syncOuraWorkouts().catch(()=>{});
 
@@ -6885,7 +6919,7 @@ async function syncOuraData(force) {
       if (!activity) {
         activityDiagnostic = 'The daily_activity request itself failed — a network error, expired token, or missing permission scope. This is NOT the "Oura hasn\'t posted today\'s data yet" case; something is actually broken in the connection.';
       } else if (!activity.data || !activity.data.length) {
-        activityDiagnostic = 'The request succeeded but returned zero rows for the range '+yesterday+' to '+today+'.';
+        activityDiagnostic = 'The request succeeded but returned zero rows for the range '+yesterday+' to '+fetchEnd+'.';
       } else {
         activityDiagnostic = 'Got '+activity.data.length+' row(s) back, but none matched today (' + today + '). Days actually present in the response: ' + activity.data.map(d=>d.day).join(', ') + '.';
       }
@@ -7906,8 +7940,7 @@ function getTodayContext() {
   const meals = ST.todaysMeals || [];
   const consumed = sumMealNutrients(meals.flatMap(m => m.meal_data?.items || []));
   const g = ST.nutritionGoals && ST.nutritionGoals.mode !== 'none' ? ST.nutritionGoals : null;
-  const todayStr = now.toISOString().slice(0,10);
-  const workoutToday = (ST.sessionCache || []).some(s => (s.date||'').slice(0,10) === todayStr);
+  const workoutToday = (ST.sessionCache || []).some(s => isSessionOnLocalDay(s, now));
   const sleepScore = ST.ouraData?.sleep_score ?? null;
   return {
     now, hour: now.getHours(),

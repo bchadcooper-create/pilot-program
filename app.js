@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.26.0';
+const FCF_VERSION = 'v5.27.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2606,6 +2606,56 @@ function shareApp() {
   }
 }
 
+// ─── DIALOG LOADING SPINNER ─────────────────────────────────────────────
+// Anything that opens a dialogue behind network round trips looked like a
+// dead tap while it worked — which is exactly what produced the "had to
+// tap the calendar three times" report: showCalendarDay made four
+// sequential DB calls (including a full history fetch) before rendering
+// anything at all.
+//
+// The spinner is DELAYED rather than immediate: work that finishes inside
+// the threshold never flashes a spinner at all (a flash reads as jank),
+// while anything slower gets visible feedback well before it feels
+// broken. It renders into its own overlay root, never #modalRoot, so it
+// can't clobber whatever the dialogue itself writes there.
+const DIALOG_SPINNER_DELAY_MS = 500;
+let _loadingOverlayDepth = 0;
+
+function showLoadingOverlay(label) {
+  _loadingOverlayDepth++;
+  const root = document.getElementById('loadingOverlayRoot');
+  if (!root) return;
+  root.innerHTML =
+    '<div class="loading-overlay"><div class="loading-overlay-card">' +
+    '<span class="fcf-spinner"></span>' +
+    '<span class="loading-overlay-label">' + sanitizeUserText(label || 'Loading…') + '</span>' +
+    '</div></div>';
+}
+
+function hideLoadingOverlay() {
+  // Depth-counted so overlapping operations (or a rapid double-tap that
+  // starts two of them) can't have the first one to finish yank the
+  // overlay out from under the second.
+  _loadingOverlayDepth = Math.max(0, _loadingOverlayDepth - 1);
+  if (_loadingOverlayDepth > 0) return;
+  const root = document.getElementById('loadingOverlayRoot');
+  if (root) root.innerHTML = '';
+}
+
+// Wraps any async work that leads to a dialogue. Always clears the
+// spinner, including when the work throws — a failure must never leave a
+// permanent overlay stuck over the app.
+async function withDialogSpinner(label, fn) {
+  let shown = false;
+  const timer = setTimeout(() => { shown = true; showLoadingOverlay(label); }, DIALOG_SPINNER_DELAY_MS);
+  try {
+    return await fn();
+  } finally {
+    clearTimeout(timer);
+    if (shown) hideLoadingOverlay();
+  }
+}
+
 function showInfoModal(title, text) {
   const root = document.getElementById('modalRoot');
   root.innerHTML =
@@ -3103,7 +3153,17 @@ function wasExercisePR(exId, exItem, sets, sessionDate, allPriorSessions) {
 
 async function showCalendarDay(isoDate) {
   try {
-    const rangeData = await loadCalendarRange();
+    // These four fetches are independent of each other, but were awaited
+    // one after another — four sequential network round trips, one of them
+    // a full 10-year history fetch, all before a single pixel rendered.
+    // Running them in one parallel window cuts the real wait to roughly
+    // the slowest single call instead of their sum.
+    const [rangeData, profile, recentSessions, allHistory] = await withDialogSpinner('Loading workout…', () => Promise.all([
+      loadCalendarRange(),
+      dbGetProfile(),
+      dbGetRecentSessions(7),
+      dbGetRecentSessions(3650), // full history, for accurate PR comparison
+    ]));
     // isoDate is a bare 'YYYY-MM-DD' string, which JS parses as UTC midnight
     // — in a negative-UTC-offset timezone like Arizona (UTC-7), that's 5pm
     // the PREVIOUS day locally, silently shifting the comparison by a day.
@@ -3111,9 +3171,6 @@ async function showCalendarDay(isoDate) {
     const session = rangeData.sessions.find(s => new Date(s.date).toDateString() === new Date(isoDate+'T12:00:00').toDateString());
     if (!session) { showToast('No workout found for that day.'); return; }
 
-    const profile = await dbGetProfile();
-    const recentSessions = await dbGetRecentSessions(7);
-    const allHistory = await dbGetRecentSessions(3650); // full history, for accurate PR comparison
     const allEx = session.workoutSnapshot
       ? [...session.workoutSnapshot.taxi,...session.workoutSnapshot.takeoff,...session.workoutSnapshot.enroute,...session.workoutSnapshot.landing]
       : Object.keys(session.sets||{}).map(id => ({id, name:id, inputType:'reps_weight', timed:false}));
@@ -3414,7 +3471,7 @@ function openNewSessionEditor(isoDate) {
 async function openEditSessionEditor(key) {
   if (!key) { showToast('This session can\'t be edited (no sync record found).'); return; }
   try {
-    const rangeData = await loadCalendarRange();
+    const rangeData = await withDialogSpinner('Loading workout…', () => loadCalendarRange());
     const found = rangeData.sessions.find(s => s._key === key);
     if (!found) { showToast('Session not found.'); return; }
     const session = JSON.parse(JSON.stringify(found));
@@ -3629,7 +3686,7 @@ async function saveEditedSession() {
       if (error) throw error;
     }
     ST.calendarSessions = {};
-    await loadSessionCache();
+    await withDialogSpinner('Saving workout…', () => loadSessionCache());
     closeModal();
     renderPage();
     showToast(ed.isNew ? '✅ Workout added.' : '✅ Workout updated.');
@@ -3655,10 +3712,14 @@ async function deleteSessionConfirmed(key) {
   try {
     let q = SB.from('workout_sessions').delete().eq('session_key', key);
     if (ST.user) q = q.eq('user_id', ST.user.id);
-    const { error } = await q;
+    const { error } = await withDialogSpinner('Deleting workout…', async () => {
+      const res = await q;
+      if (res.error) return res;
+      ST.calendarSessions = {};
+      await loadSessionCache();
+      return res;
+    });
     if (error) throw error;
-    ST.calendarSessions = {};
-    await loadSessionCache();
     closeModal();
     renderPage();
     showToast('Session deleted.');
@@ -3862,7 +3923,7 @@ async function saveBuildProfile() {
   if (!total) { showToast('Add at least one exercise.'); return; }
   const idx = ST.customProfiles.findIndex(p => p.id === bp.id);
   if (idx >= 0) ST.customProfiles[idx] = bp; else ST.customProfiles.push(bp);
-  await saveCustomProfilesToDb();
+  await withDialogSpinner('Saving routine…', () => saveCustomProfilesToDb());
   ST.buildProfile = null;
   closeModal();
   selectCustomProfile(bp.id);
@@ -3908,7 +3969,7 @@ async function deleteCustomProfileConfirmed(id) {
     ST.activeCustomProfileId = null;
     ST.muscleGroup = getRecommendedNext();
   }
-  await saveCustomProfilesToDb();
+  await withDialogSpinner('Saving…', () => saveCustomProfilesToDb());
   closeModal();
   renderPage();
   showToast('Routine deleted.');
@@ -4194,7 +4255,7 @@ async function saveBodyMetrics() {
   profile.sex = ST.sex;
   profile.heightIn = ST.heightIn;
   profile.age = ST.age;
-  await dbSetProfile(profile);
+  await withDialogSpinner('Saving…', () => dbSetProfile(profile));
   showToast('Body metrics saved.');
   // Call sign just set for the first time: put their existing lift history
   // on the boards so months of logged work isn't invisible.
@@ -5527,7 +5588,7 @@ async function saveCustomExercise() {
   profile.customExercises = ST.customExercises;
   profile.goal = ST.goal;
   profile.level = ST.level;
-  await dbSetProfile(profile);
+  await withDialogSpinner('Saving exercise…', () => dbSetProfile(profile));
 
   ST.showAddExercise = false;
   showToast('✅ "'+name+'" added — it will appear in this workout going forward.');
@@ -5569,7 +5630,7 @@ async function deleteCustomExercise(exId) {
   ST.customExercises = ST.customExercises.filter(c => c.exercise.id !== exId);
   const profile = (await dbGetProfile()) || {};
   profile.customExercises = ST.customExercises;
-  await dbSetProfile(profile);
+  await withDialogSpinner('Removing exercise…', () => dbSetProfile(profile));
   delete ST.sets[exId];
   persistWorkoutState();
   closeModal();
@@ -8642,11 +8703,14 @@ async function finishMealBuilder() {
     showBigToast('Add at least one food before saving.', 'warn');
     return;
   }
-  if (ST.mealBuilder.editingId) {
-    await updateMealLog(ST.mealBuilder.editingId, ST.mealBuilder.mealType, ST.mealBuilder.items, ST.mealBuilder.editingLoggedAt);
-  } else {
-    await saveMealLog(ST.mealBuilder.mealType, ST.mealBuilder.items);
-  }
+  const mb = ST.mealBuilder;
+  await withDialogSpinner(mb.editingId ? 'Saving changes…' : 'Logging meal…', async () => {
+    if (mb.editingId) {
+      await updateMealLog(mb.editingId, mb.mealType, mb.items, mb.editingLoggedAt);
+    } else {
+      await saveMealLog(mb.mealType, mb.items);
+    }
+  });
   ST.mealBuilder = null;
   renderPage();
 }

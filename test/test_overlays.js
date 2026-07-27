@@ -3003,6 +3003,57 @@ ST.ouraConnected = false;
 ST.ouraAccessToken = null;
 ST.ouraData = null;
 
+// ── Dialogue loading spinner (reported: tapping a calendar day felt like
+// nothing happened, so it got tapped repeatedly). showCalendarDay made
+// four sequential DB round trips — including a full 10-year history
+// fetch — before rendering anything. Now parallelized AND covered by a
+// delayed spinner so slow work is always visibly acknowledged. ──
+const overlayRoot = { innerHTML: '' };
+const origGetByIdForSpinner = document.getElementById;
+document.getElementById = (id) => (id === 'loadingOverlayRoot' ? overlayRoot : _fakeEl);
+
+// Fast work must NOT flash a spinner — a spinner that appears and
+// vanishes inside a few hundred ms reads as jank, not feedback.
+overlayRoot.innerHTML = '';
+const fastResult = await withDialogSpinner('Loading…', async () => 'done-fast');
+log('spinner: work that finishes under the delay threshold never shows a spinner at all', overlayRoot.innerHTML === '' && fastResult === 'done-fast', overlayRoot.innerHTML);
+
+// Slow work MUST show one, and must clear it when finished.
+overlayRoot.innerHTML = '';
+let sawSpinnerMidFlight = false;
+const slowResult = await withDialogSpinner('Loading workout…', async () => {
+  await new Promise(r => setTimeout(r, DIALOG_SPINNER_DELAY_MS + 120));
+  sawSpinnerMidFlight = overlayRoot.innerHTML.includes('fcf-spinner');
+  return 'done-slow';
+});
+log('spinner: work slower than the threshold shows a spinner while it runs', sawSpinnerMidFlight, overlayRoot.innerHTML);
+log('spinner: the label describes what is actually loading, not a generic string', slowResult === 'done-slow', '');
+log('spinner: it is cleared once the work completes', overlayRoot.innerHTML === '', overlayRoot.innerHTML);
+
+// A failure must never strand a permanent overlay over the app.
+overlayRoot.innerHTML = '';
+let threw = false;
+try {
+  await withDialogSpinner('Loading…', async () => {
+    await new Promise(r => setTimeout(r, DIALOG_SPINNER_DELAY_MS + 120));
+    throw new Error('network down');
+  });
+} catch(e) { threw = true; }
+log('spinner: an operation that THROWS still clears the overlay rather than stranding it on screen', threw && overlayRoot.innerHTML === '', overlayRoot.innerHTML);
+
+// Rapid repeated taps (exactly what the report described) must not have
+// the first completion yank the overlay out from under the second.
+overlayRoot.innerHTML = '';
+const slowA = withDialogSpinner('Loading…', () => new Promise(r => setTimeout(() => r('a'), DIALOG_SPINNER_DELAY_MS + 100)));
+const slowB = withDialogSpinner('Loading…', () => new Promise(r => setTimeout(() => r('b'), DIALOG_SPINNER_DELAY_MS + 400)));
+await slowA;
+const overlayStillUpAfterFirstFinished = overlayRoot.innerHTML.includes('fcf-spinner');
+await slowB;
+log('spinner: with two overlapping operations, the first to finish does not clear the overlay early', overlayStillUpAfterFirstFinished, '');
+log('spinner: the overlay is gone once ALL overlapping operations finish', overlayRoot.innerHTML === '', overlayRoot.innerHTML);
+
+document.getElementById = origGetByIdForSpinner;
+
 // ── BUG FIX (reported: "I did leg day today, it says nothing logged" —
 // with the training calendar showing it correctly). Root cause was a UTC
 // vs LOCAL date comparison: UTC midnight is 5pm in Arizona, so from 5pm

@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.27.0';
+const FCF_VERSION = 'v5.28.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -922,7 +922,28 @@ function getActiveWorkout() {
 }
 
 // Recommend next muscle group based on goal rotation + last completed session
-function getRecommendedNext() {
+// Muscle groups that genuinely need ~48h before being loaded again.
+// Cardio, Run, Walk and Longevity are deliberately exempt: low-CNS,
+// low-mechanical-damage work that is safe — often desirable — on
+// consecutive days.
+const RECOVERY_EXEMPT_GROUPS = new Set(['Cardio','Run','Walk','Longevity']);
+const MUSCLE_RECOVERY_HOURS = 48;
+
+// Which muscle groups were actually trained within the recovery window,
+// by real timestamp. The rotation on its own only knows sequence
+// position, not dates — see getRecommendedNext for why that mattered.
+function groupsTrainedWithin(hours, now) {
+  const cutoff = (now || new Date()).getTime() - hours*3600*1000;
+  const out = new Set();
+  (ST.sessionCache || []).forEach(s => {
+    if (!s || !s.muscle_group || !s.date) return;
+    const d = new Date(s.date);
+    if (!isNaN(d.getTime()) && d.getTime() >= cutoff) out.add(s.muscle_group);
+  });
+  return out;
+}
+
+function getRecommendedNext(now) {
   const order = (GOALS[ST.goal] || GOALS.longevity).order;
   const last = ST.lastSession?.muscle_group;
   if (!last) return order[0];
@@ -937,6 +958,31 @@ function getRecommendedNext() {
     const match = idxs.find(i => order[(i - 1 + L) % L] === ST.prevSession.muscle_group);
     if (match !== undefined) idx = match;
   }
+
+  // BUG FIX (reported: "did lower body yesterday, it's recommending lower
+  // body again today"). The rotation orders are built so that following
+  // them strictly never puts two leg-dominant or CNS-taxing days back to
+  // back — but this only advanced by POSITION IN THE SEQUENCE, with no
+  // idea what day anything actually happened.
+  //
+  // Log two sessions in one day — e.g. Lower Body in the morning and a
+  // Cardio walk that evening, which the app explicitly supports — and the
+  // Cardio advances the pointer past Lower Body and wraps it right back
+  // around to Lower Body for the very next day. The rotation's own safety
+  // invariant, documented above GOALS, gets silently violated by a
+  // perfectly ordinary logging pattern.
+  //
+  // Now checked against real timestamps: skip forward to the first slot
+  // whose muscle group is outside its recovery window.
+  const recentlyTrained = groupsTrainedWithin(MUSCLE_RECOVERY_HOURS, now);
+  const needsRest = g => !RECOVERY_EXEMPT_GROUPS.has(g) && recentlyTrained.has(g);
+  for (let step = 1; step <= L; step++) {
+    const candidate = order[(idx + step) % L];
+    if (!needsRest(candidate)) return candidate;
+  }
+  // Everything in the rotation is inside its recovery window (a very
+  // heavy recent block). Fall back to plain rotation order rather than
+  // returning nothing — the briefing still shows readiness separately.
   return order[(idx + 1) % L];
 }
 

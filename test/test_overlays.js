@@ -3003,6 +3003,62 @@ ST.ouraConnected = false;
 ST.ouraAccessToken = null;
 ST.ouraData = null;
 
+// ── BUG FIX (reported): "I worked out my lower body yesterday... it says
+// my mission is lower body again today." The rotation orders are built so
+// that following them never puts two leg-dominant/CNS-taxing days back to
+// back, but getRecommendedNext advanced purely by POSITION IN THE
+// SEQUENCE with no awareness of dates. Logging two sessions in one day —
+// Lower Body in the morning and a Cardio walk that evening, which the app
+// explicitly supports — advanced the pointer past Lower Body and wrapped
+// it straight back to Lower Body for the next day, silently violating the
+// rotation's own documented safety invariant. ──
+const origGoal = ST.goal, origLast = ST.lastSession, origPrev = ST.prevSession, origCache = ST.sessionCache;
+const nowJul27 = new Date(2026, 6, 27, 10, 16);
+
+ST.goal = 'jump'; // order: Lower Body, Upper Pull, Power / Plyo, Upper Push, Cardio
+ST.lastSession = { muscle_group: 'Cardio' };
+ST.prevSession = { muscle_group: 'Lower Body' };
+ST.sessionCache = [
+  { muscle_group: 'Lower Body', date: new Date(2026,6,26,9,0).toISOString() },
+  { muscle_group: 'Cardio',     date: new Date(2026,6,26,18,0).toISOString() },
+];
+const recJul27 = getRecommendedNext(nowJul27);
+log('BUG FIX (reported): after Lower Body + an evening Cardio yesterday, today is NOT Lower Body again', recJul27 !== 'Lower Body', recJul27);
+log('BUG FIX (reported): it advances to the next group that is actually recovered (Upper Pull)', recJul27 === 'Upper Pull', recJul27);
+
+// Same rotation position, but the leg day is genuinely outside the 48h
+// window — the guard must NOT fire, or it would break normal rotation.
+ST.sessionCache = [
+  { muscle_group: 'Lower Body', date: new Date(2026,6,23,9,0).toISOString() },  // 4 days prior
+  { muscle_group: 'Cardio',     date: new Date(2026,6,26,18,0).toISOString() },
+];
+log('the guard does NOT fire when the leg day is genuinely outside the 48h window — normal rotation resumes', getRecommendedNext(nowJul27) === 'Lower Body', getRecommendedNext(nowJul27));
+
+// Cardio/Walk/Longevity are exempt — safe on consecutive days, so a
+// cardio day yesterday must not push cardio out of the rotation.
+ST.goal = 'longevity'; // Lower Body, Upper Pull, Cardio, Longevity, Upper Push
+ST.lastSession = { muscle_group: 'Upper Pull' };
+ST.prevSession = null;
+ST.sessionCache = [
+  { muscle_group: 'Upper Pull', date: new Date(2026,6,26,9,0).toISOString() },
+  { muscle_group: 'Cardio',     date: new Date(2026,6,26,18,0).toISOString() },
+];
+log('low-CNS work (Cardio) is exempt from the recovery guard — still recommended the day after cardio', getRecommendedNext(nowJul27) === 'Cardio', getRecommendedNext(nowJul27));
+
+// Everything recently trained: must still return something sensible
+// rather than nothing at all.
+ST.goal = 'muscle'; // Lower Body, Upper Push, Upper Pull, Full Body
+ST.lastSession = { muscle_group: 'Full Body' };
+ST.sessionCache = ['Lower Body','Upper Push','Upper Pull','Full Body'].map(g => ({ muscle_group: g, date: new Date(2026,6,26,12,0).toISOString() }));
+const saturated = getRecommendedNext(nowJul27);
+log('with every group inside its recovery window it still returns a valid rotation entry rather than nothing', GOALS.muscle.order.includes(saturated), saturated);
+
+// No history at all — first-ever session still works.
+ST.lastSession = null; ST.prevSession = null; ST.sessionCache = [];
+log('a brand-new user with no history still gets the first entry in the rotation', getRecommendedNext(nowJul27) === GOALS.muscle.order[0], getRecommendedNext(nowJul27));
+
+ST.goal = origGoal; ST.lastSession = origLast; ST.prevSession = origPrev; ST.sessionCache = origCache;
+
 // ── Dialogue loading spinner (reported: tapping a calendar day felt like
 // nothing happened, so it got tapped repeatedly). showCalendarDay made
 // four sequential DB round trips — including a full 10-year history

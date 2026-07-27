@@ -3001,4 +3001,35 @@ ST.ouraConnected = false;
 ST.ouraAccessToken = null;
 ST.ouraData = null;
 
+// ── BUG FIX (reported): finished a workout, Today tab still said "No
+// session logged today" — despite the calendar correctly showing it.
+// Root cause: setTheChocks() invalidated ST.calendarSessions (which the
+// calendar re-fetches from), but never updated ST.sessionCache — a
+// completely separate cache getTodayContext()'s workoutToday check
+// actually reads, populated only at boot. Finishing a workout never
+// touched it until the next full app reload. ──
+ST.user = { id: 'test-user', email: 'test@example.com' };
+ST.workout = { taxi: [], takeoff: [{ id: 'squat', name: 'Squat', target: '3x8', sets: 3 }], enroute: [], landing: [] };
+ST.sets = { squat: [{ reps: '8', weight: '135' }] };
+ST.env = 'Commercial Gym'; ST.muscleGroup = 'Lower Body'; ST.goal = 'Muscle Gain'; ST.fatigue = 'go'; ST.level = 'intermediate';
+ST.flightHrs = 0; ST.waterIn = 1; ST.lastWeight = 180;
+ST.sessionCache = []; // simulates a session already loaded once at boot, before this workout
+ST.calendarSessions = { stale: 'data' };
+SB.from = () => ({ insert: async () => ({ error: null }) });
+dbGetRecentSessions = async () => [];
+dbGetProfile = async () => ({ lastWeight: 180 });
+const origRenderPageForChocks = renderPage;
+const origClearWorkoutStateForChocks = clearWorkoutState;
+renderPage = () => {};
+clearWorkoutState = () => {};
+await setTheChocks();
+log('BUG FIX (reported): finishing a workout immediately adds it to ST.sessionCache, not just the separate calendar cache', ST.sessionCache.length === 1 && ST.sessionCache[0].muscle_group === 'Lower Body', JSON.stringify(ST.sessionCache));
+log('BUG FIX (reported): Today\'s workoutToday check reflects the just-finished workout without needing a reload', getTodayContext().training.workoutToday === true, '');
+renderPage = origRenderPageForChocks;
+clearWorkoutState = origClearWorkoutStateForChocks;
+ST.user = null; ST.workout = null; ST.sets = {}; ST.sessionCache = []; ST.calendarSessions = {};
+loadCalendarRange = origLoadCalendarRange;
+dbGetRecentSessions = origDbGetRecentSessions;
+dbGetProfile = origDbGetProfile;
+
 })();

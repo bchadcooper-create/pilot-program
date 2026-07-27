@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.25.0';
+const FCF_VERSION = 'v5.25.1';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2993,7 +2993,7 @@ function buildCalendarHTML(rangeData) {
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-bottom:8px">TRAINING CALENDAR</div>');
   parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Tap a day to log, edit, or delete a workout.</div>');
-  parts.push('<div id="calScroll" style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;padding-bottom:2px;scrollbar-width:none">');
+  parts.push('<div id="calScroll" style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;touch-action:pan-x;padding-bottom:2px;scrollbar-width:none">');
   days.forEach(day => {
     const isToday = day.date.toDateString() === new Date().toDateString();
     const dow = day.date.toLocaleDateString('en-US',{weekday:'short'}).charAt(0);
@@ -5801,6 +5801,13 @@ async function setTheChocks() {
   ST.sets = {};
   ST.workoutStartedAt = null;
   ST.calendarSessions = {}; // invalidate calendar cache so today's workout shows immediately
+  // BUG FIX (reported): Today's "No session logged today" check reads
+  // from ST.sessionCache, a COMPLETELY SEPARATE cache from the one just
+  // invalidated above — it was only ever populated at boot, so finishing
+  // a workout never updated it. The calendar (which re-fetches from the
+  // DB directly) correctly showed the session; Today's briefing, reading
+  // the stale in-memory list, did not — until the next full app reload.
+  ST.sessionCache = [...(ST.sessionCache || []), session];
   ST.muscleGroup = getRecommendedNext(); // pre-select tomorrow's recommended profile
   clearWorkoutState();
   ST.tab = 'debrief';
@@ -8717,9 +8724,16 @@ async function analyzeFoodPhoto() {
     input.accept = 'image/*';
     input.capture = 'environment';
     input.onchange = async () => {
-      input.remove(); // clean up now that we actually have the result — no more racing a blind timer
       const file = input.files[0];
+      // BUG FIX (reported): removing the input unconditionally here meant
+      // a spurious/empty change event (which iOS can fire mid-camera-flow,
+      // e.g. if the picker sheet is backgrounded during a slow warm-up)
+      // destroyed the input before the REAL photo selection could ever
+      // register — the exact "had to take it twice" symptom, just from a
+      // different cause than the timer race fixed previously. Only remove
+      // once there's an actual file to process.
       if (!file) return;
+      input.remove();
       const box = document.getElementById('foodPhotoResultRoot');
       if (box) box.innerHTML = loadingCardHTML('Analyzing photo…');
       try {
@@ -8761,9 +8775,16 @@ async function analyzeFoodPhotoFromLibrary() {
     input.type = 'file';
     input.accept = 'image/*';
     input.onchange = async () => {
-      input.remove(); // clean up now that we actually have the result — no more racing a blind timer
       const file = input.files[0];
+      // BUG FIX (reported): removing the input unconditionally here meant
+      // a spurious/empty change event (which iOS can fire mid-camera-flow,
+      // e.g. if the picker sheet is backgrounded during a slow warm-up)
+      // destroyed the input before the REAL photo selection could ever
+      // register — the exact "had to take it twice" symptom, just from a
+      // different cause than the timer race fixed previously. Only remove
+      // once there's an actual file to process.
       if (!file) return;
+      input.remove();
       const box = document.getElementById('foodPhotoResultRoot');
       if (box) box.innerHTML = loadingCardHTML('Analyzing photo…');
       try {

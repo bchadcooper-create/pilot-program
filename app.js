@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.30.1';
+const FCF_VERSION = 'v5.31.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -1634,7 +1634,19 @@ function renderRoot() {
   renderPage();
 }
 
+// Restarts a CSS entry animation. Re-adding a class that's already
+// present does nothing on its own — the reflow between removing and
+// re-adding is what makes it replay.
+function playPageTransition(el, className) {
+  if (!el) return;
+  el.classList.remove(className);
+  void el.offsetWidth;
+  el.classList.add(className);
+  el.addEventListener('animationend', () => el.classList.remove(className), { once: true });
+}
+
 function switchTab(tab) {
+  const prevTab = ST.tab;
   if (ST.tab === 'fuelplan' && tab !== 'fuelplan') { ST.fuelPlanDraftSynced = false; ST.manualTargetsOpen = false; ST.manualTargetsWarning = null; }
   ST.tab = tab;
   const MORE_SUBVIEWS = ['profile','wisdom','devices','data','badges','superuser'];
@@ -1646,6 +1658,9 @@ function switchTab(tab) {
 
   const page = document.getElementById('mainPage');
   if (page) {
+    // Only on a genuine tab CHANGE. Firing on every render would replay
+    // the slide every time something on the menu page saved or refreshed.
+    if (tab === 'more' && prevTab !== 'more') playPageTransition(page, 'page-enter-left');
     if (tab === 'flight') {
       const curId = getCurrentExerciseId();
       const el = curId ? document.getElementById('excard_'+curId) : null;

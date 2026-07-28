@@ -3003,6 +3003,47 @@ ST.ouraConnected = false;
 ST.ouraAccessToken = null;
 ST.ouraData = null;
 
+// ── Menu transitions ──
+// playPageTransition has to actually RESTART the animation. Re-adding a
+// class that's already on the element does nothing by itself; the reflow
+// read between removing and re-adding is what makes it replay.
+const animEl = {
+  classes: new Set(), removals: [], adds: [], _reflow: 0,
+  classList: {
+    add(c){ animEl.classes.add(c); animEl.adds.push(c); },
+    remove(c){ animEl.classes.delete(c); animEl.removals.push(c); },
+  },
+  get offsetWidth(){ animEl._reflow++; return 100; },
+  addEventListener(){},
+};
+playPageTransition(animEl, 'page-enter-left');
+log('page transition: applies the animation class', animEl.classes.has('page-enter-left'), '');
+log('page transition: forces a reflow so an already-applied animation replays instead of silently doing nothing', animEl._reflow > 0, String(animEl._reflow));
+log('page transition: removes before re-adding, which is what makes the restart work', animEl.removals[0] === 'page-enter-left' && animEl.adds[0] === 'page-enter-left', '');
+
+// A null element must not throw — switchTab runs before the DOM is
+// guaranteed populated in some paths.
+let transitionThrew = false;
+try { playPageTransition(null, 'page-enter-left'); } catch(e) { transitionThrew = true; }
+log('page transition: a missing element is a no-op rather than a crash', !transitionThrew, '');
+
+// It must fire on a real tab CHANGE only — replaying the slide on every
+// re-render would mean the menu re-animates each time something on it saves.
+let transitionsPlayed = [];
+const origPlay = playPageTransition;
+playPageTransition = (el, cls) => { transitionsPlayed.push(cls); };
+ST.tab = 'today';
+switchTab('more');
+log('menu transition: sliding in fires when arriving at the menu from another tab', transitionsPlayed.includes('page-enter-left'), JSON.stringify(transitionsPlayed));
+transitionsPlayed = [];
+switchTab('more');
+log('menu transition: does NOT replay when already on the menu — a save or refresh must not re-animate it', transitionsPlayed.length === 0, JSON.stringify(transitionsPlayed));
+transitionsPlayed = [];
+switchTab('today');
+log('menu transition: other tabs are unaffected', transitionsPlayed.length === 0, JSON.stringify(transitionsPlayed));
+playPageTransition = origPlay;
+ST.tab = 'today';
+
 // ── BUG FIX (reported): "I logged .5 then an hour later I log .2. It shows
 // only .2 consumed, not .7". The dialog pre-filled with the running TOTAL
 // and saved by REPLACING it, so every entry silently wiped the day. ──

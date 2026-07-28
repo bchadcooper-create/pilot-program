@@ -3050,6 +3050,41 @@ log('the water dialog shows how much is already logged today', waterModalEl.inne
 log('the water dialog offers one-tap quick adds', waterModalEl.innerHTML.includes('+0.5L'), '');
 log('the water dialog offers a deliberate route to correcting the total', waterModalEl.innerHTML.includes("Correct today"), '');
 
+// Confirmation feedback (reported): adding water closes its own dialog,
+// so without a confirmation there is nothing separating "added" from
+// "tapped and nothing happened" — which is how a day's total drifts.
+let addToast = null; const origAddToast = showBigToast; showBigToast = (m) => { addToast = m; };
+ST.flightHrs = 0; ST.waterIn = 0.5; ST.waterInRaw = '0.5';
+document.getElementById = () => _fakeEl;
+addQuickWater(0.25);
+log('confirmation: a quick-add reports the amount added', /added 0\.25 l/i.test(addToast||''), addToast);
+log('confirmation: it also reports the new running total, so the day is verifiable at a glance', (addToast||'').includes('0.75'), addToast);
+
+ST.waterIn = 0.5; ST.waterInRaw = '0.5';
+document.getElementById = (id) => (id === 'quickWaterInput' ? { value: '0.2' } : _fakeEl);
+addToast = null;
+saveQuickWater(false);
+log('confirmation: a typed amount confirms too', /added 0\.2 l/i.test(addToast||'') && (addToast||'').includes('0.7'), addToast);
+
+ST.waterIn = 0.7; ST.waterInRaw = '0.7';
+document.getElementById = (id) => (id === 'quickWaterInput' ? { value: '1.5' } : _fakeEl);
+addToast = null;
+saveQuickWater(true);
+log('confirmation: correcting the total says "set to", not "added" — different action, different wording', /set to 1\.5 l/i.test(addToast||'') && !/added/i.test(addToast||''), addToast);
+
+// Trailing-zero tidiness — "0.7 L" not "0.70 L"
+log('totals read cleanly without trailing zeros', fmtLiters(0.7) === '0.7' && fmtLiters(1) === '1' && fmtLiters(1.25) === '1.25', fmtLiters(0.7)+' / '+fmtLiters(1)+' / '+fmtLiters(1.25));
+showBigToast = origAddToast;
+
+// Reported cosmetic bug: the two ghost buttons rendered as one run-together
+// line ("Correct today's total insteadCancel") because .btn-ghost is inline.
+ST.waterIn = 0.7;
+const ghostModalEl = { innerHTML: '' };
+document.getElementById = (id) => (id === 'modalRoot' ? ghostModalEl : _fakeEl);
+openQuickWaterLog();
+const ghostBtns = (ghostModalEl.innerHTML.match(/class="btn-ghost"[^>]*/g) || []);
+log('BUG FIX: every stacked ghost button in the water dialog is display:block so they cannot run together on one line', ghostBtns.length >= 2 && ghostBtns.every(b => b.includes('display:block')), JSON.stringify(ghostBtns));
+
 document.getElementById = origWaterGetById;
 ST.waterIn = 0; ST.waterInRaw = '';
 

@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.30.0';
+const FCF_VERSION = 'v5.30.1';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -8678,7 +8678,7 @@ function openQuickWaterLog(mode) {
   if (setMode) {
     parts.push('<div class="field"><label>Set today\'s total to (liters)</label><input type="text" inputmode="decimal" id="quickWaterInput" value="'+(ST.waterInRaw||'')+'" placeholder="e.g. 1.2"></div>');
     parts.push('<button class="btn btn-gold mt8" onclick="saveQuickWater(true)">Save Total</button>');
-    parts.push('<button class="btn-ghost mt8" onclick="openQuickWaterLog()">← Add water instead</button>');
+    parts.push('<button class="btn-ghost" style="display:block;width:100%;text-align:center;margin-top:12px" onclick="openQuickWaterLog()">← Add water instead</button>');
   } else {
     parts.push('<div style="display:flex;gap:8px;margin-bottom:10px">');
     WATER_QUICK_ADDS.forEach(a => {
@@ -8687,19 +8687,39 @@ function openQuickWaterLog(mode) {
     parts.push('</div>');
     parts.push('<div class="field"><label>Or add a specific amount (liters)</label><input type="text" inputmode="decimal" id="quickWaterInput" value="" placeholder="e.g. 0.2"></div>');
     parts.push('<button class="btn btn-gold mt8" onclick="saveQuickWater(false)">Add Water</button>');
-    parts.push('<button class="btn-ghost mt8" onclick="openQuickWaterLog(\'set\')">Correct today\'s total instead</button>');
+    parts.push('<button class="btn-ghost" style="display:block;width:100%;text-align:center;margin-top:12px" onclick="openQuickWaterLog(\'set\')">Correct today\'s total instead</button>');
   }
-  parts.push('<button class="btn-ghost" onclick="closeModal()">Cancel</button>');
+  parts.push('<button class="btn-ghost" style="display:block;width:100%;text-align:center;margin-top:10px" onclick="closeModal()">Cancel</button>');
   parts.push('</div></div>');
   root.innerHTML = parts.join('');
+}
+
+// Trims trailing zeros so totals read as "0.7 L" rather than "0.70 L".
+function fmtLiters(n) {
+  return (Math.round((n||0) * 100) / 100).toFixed(2).replace(/\.?0+$/, '');
+}
+
+// Confirms what actually happened. Logging water is a fire-and-forget
+// action that closes its own dialog, so without this there's nothing to
+// distinguish "added" from "tapped and nothing happened" — and getting
+// that wrong is how the day's total silently drifts.
+function confirmWaterChange(added, newTotal) {
+  const target = hydroTarget();
+  const pct = target > 0 ? Math.round((newTotal / target) * 100) : 0;
+  const lead = added != null
+    ? '💧 Added ' + fmtLiters(added) + ' L'
+    : '💧 Total set to ' + fmtLiters(newTotal) + ' L';
+  showBigToast(lead + '\n' + fmtLiters(newTotal) + ' of ' + fmtLiters(target) + ' L today (' + pct + '%)', 'ok');
 }
 
 // One-tap increments — the common case is "I just drank a bottle", not
 // "let me compute my new running total".
 function addQuickWater(amount) {
-  applyWaterChange((ST.waterIn || 0) + amount);
+  const newTotal = (ST.waterIn || 0) + amount;
+  applyWaterChange(newTotal);
   closeModal();
   renderPage();
+  confirmWaterChange(amount, ST.waterIn);
 }
 
 function saveQuickWater(setMode) {
@@ -8709,6 +8729,7 @@ function saveQuickWater(setMode) {
   applyWaterChange(setMode ? entered : (ST.waterIn || 0) + entered);
   closeModal();
   renderPage();
+  confirmWaterChange(setMode ? null : entered, ST.waterIn);
 }
 
 function applyWaterChange(newTotal) {

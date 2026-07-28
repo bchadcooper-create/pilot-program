@@ -3003,6 +3003,60 @@ ST.ouraConnected = false;
 ST.ouraAccessToken = null;
 ST.ouraData = null;
 
+// ── BUG FIX (reported THREE times): "had to take the picture twice."
+// Two earlier attempts both tried to get the lifetime of a dynamically
+// created <input> right. The element's lifetime was the wrong thing to
+// fix — there were two independent defects. ──
+
+// DEFECT 1: iOS only permits a programmatic file-input click inside a
+// live user gesture. quickLogMeal awaited switchTab (which isn't even a
+// promise) before opening the builder; awaiting anything yields to the
+// microtask queue and ends the gesture, so iOS silently blocked the
+// picker — no error, no camera, a tap that did nothing.
+log('BUG FIX: quickLogMeal is synchronous — an await before .click() ends the iOS user gesture and the camera is silently blocked', quickLogMeal.constructor.name !== 'AsyncFunction', quickLogMeal.constructor.name);
+log('BUG FIX: analyzeFoodPhoto is synchronous through to the click for the same reason', analyzeFoodPhoto.constructor.name !== 'AsyncFunction', analyzeFoodPhoto.constructor.name);
+
+// DEFECT 2: a persistent input must have its value cleared, or picking
+// the SAME file again never fires `change` — a silent swallow that looks
+// exactly like "it didn't take the photo".
+ST.user = { id: 'u1', email: 'a@b.c' };
+const fakeCam = { value: 'previously-selected.jpg', files: [], clicked: 0, click(){ this.clicked++; } };
+const origGetById = document.getElementById;
+document.getElementById = (id) => (id === 'foodCameraInput' || id === 'foodLibraryInput') ? fakeCam : _fakeEl;
+_foodInputsBound = true; // listeners already bound; exercising the click path only
+analyzeFoodPhoto();
+log('BUG FIX: the persistent input is cleared before clicking, so retrying with the same photo still fires a change event', fakeCam.value === '', JSON.stringify(fakeCam.value));
+log('BUG FIX: it clicks the persistent element rather than creating a throwaway one', fakeCam.clicked === 1, String(fakeCam.clicked));
+
+// A photo taken while the builder closed (iOS can tear the view down
+// during the camera hand-off) must be USED, not silently dropped.
+ST.mealBuilder = null;
+ST.foodPhotoAnalyzing = false;
+SB.from = () => ({ select: () => ({ eq: () => ({ gte: () => ({ order: async () => ({ data: [], error: null }) }) }) }) });
+const origCallEdge = callFoodRecognitionEdge;
+callFoodRecognitionEdge = async () => ({ source:'photo', description:'omelette', confidence:0.9, nutrients:{calories:300,protein:20,carbs:5,fat:22,fiber:0,sugar:1} });
+const origFR = global.FileReader;
+global.FileReader = function(){ this.readAsDataURL = () => { this.result = 'data:image/jpeg;base64,zz'; setTimeout(()=>this.onload(),0); }; };
+await handleFoodPhotoFile({ value:'x', files:[{ type:'image/jpeg' }] });
+log('BUG FIX: a photo analyzed while the builder was closed reopens it instead of being silently discarded', ST.mealBuilder !== null && ST.mealBuilder.items.length === 1, JSON.stringify(ST.mealBuilder && ST.mealBuilder.items));
+log('BUG FIX: the analyzing flag is cleared once the result arrives', ST.foodPhotoAnalyzing === false, String(ST.foodPhotoAnalyzing));
+
+// The "Analyzing photo…" state is rendered FROM STATE, so an async
+// re-render mid-flight (frequent foods resolving) can't wipe it and make
+// the app look inert.
+ST.mealBuilder = { mealType:'lunch', items:[], frequentFoods:null };
+ST.foodPhotoAnalyzing = true;
+window._foodRecReviewIndex = null;
+document.getElementById = () => _fakeEl;
+renderMealBuilder();
+log('BUG FIX: the analyzing spinner is re-rendered from state, so a mid-flight re-render cannot wipe it', _fakeEl.innerHTML.includes('fcf-spinner') && _fakeEl.innerHTML.includes('Analyzing photo'), '');
+
+global.FileReader = origFR;
+callFoodRecognitionEdge = origCallEdge;
+document.getElementById = origGetById;
+ST.foodPhotoAnalyzing = false; ST.mealBuilder = null; ST.user = null;
+window._foodRecPendingImageUrl = null; window._foodRecReviewIndex = null; window._foodRecReviewMeta = null;
+
 // ── BUG FIX (reported): "I worked out my lower body yesterday... it says
 // my mission is lower body again today." The rotation orders are built so
 // that following them never puts two leg-dominant/CNS-taxing days back to

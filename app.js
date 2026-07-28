@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.28.0';
+const FCF_VERSION = 'v5.29.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2475,6 +2475,7 @@ async function bootApp() {
   // pre-loaded with the right choice rather than always defaulting to Lower Body.
   ST.muscleGroup = getRecommendedNext();
   renderRoot();
+  bindFoodPhotoInputs();
   checkDB();
   // Auto-sync Oura on boot if connected — runs in background after render
   if (ST.ouraConnected && ST.ouraAccessToken) {
@@ -8562,9 +8563,15 @@ function openQuickActions() {
 // once that screen's async render has actually finished — switchTab/
 // renderPage now return their render promise specifically so this can be
 // awaited properly instead of guessing with a timeout.
-async function quickLogMeal() {
+function quickLogMeal() {
+  // Deliberately NOT async and deliberately no await. switchTab isn't a
+  // promise anyway, but awaiting it still yields to the microtask queue,
+  // which ends the iOS user gesture — and openMealBuilder launches the
+  // camera, which iOS silently blocks outside a live gesture. That block
+  // is invisible: no error, no picker, just a tap that appears to do
+  // nothing. Keep this whole path synchronous.
   closeModal();
-  await switchTab('nutrition');
+  switchTab('nutrition');
   openMealBuilder();
 }
 
@@ -8612,6 +8619,7 @@ function autoMealTypeForTime(date) {
 
 function openMealBuilder() {
   ST.mealBuilder = { mealType: autoMealTypeForTime(new Date()), items: [], frequentFoods: null, editingId: null, editingLoggedAt: null };
+  ST.foodPhotoAnalyzing = false;
   window._foodRecReviewIndex = null;
   window._foodRecReviewMeta = null;
   window._foodRecPendingImageUrl = null;
@@ -8643,6 +8651,7 @@ function editMealLog(id) {
     editingId: meal.id,
     editingLoggedAt: meal.logged_at,
   };
+  ST.foodPhotoAnalyzing = false;
   window._foodRecReviewIndex = null;
   window._foodRecReviewMeta = null;
   window._foodRecPendingImageUrl = null;
@@ -8656,6 +8665,7 @@ function editMealLog(id) {
 
 function closeMealBuilder() {
   ST.mealBuilder = null;
+  ST.foodPhotoAnalyzing = false;
   window._foodRecReviewIndex = null;
   window._foodRecReviewMeta = null;
   window._foodRecPendingImageUrl = null;
@@ -8677,7 +8687,8 @@ function renderMealBuilder() {
   // anything; otherwise stays empty until a loading/error state writes
   // into it directly (see analyzeFoodPhoto et al).
   parts.push('<div id="foodPhotoResultRoot">' +
-    (window._foodRecReviewIndex != null && mb.items[window._foodRecReviewIndex] ? buildItemReviewCardHTML(window._foodRecReviewIndex) : '') +
+    (ST.foodPhotoAnalyzing ? loadingCardHTML('Analyzing photo…')
+      : (window._foodRecReviewIndex != null && mb.items[window._foodRecReviewIndex] ? buildItemReviewCardHTML(window._foodRecReviewIndex) : '')) +
     '</div>');
 
   if (mb.items.length) {
@@ -8859,98 +8870,83 @@ async function callFoodRecognitionEdge(payload) {
 // should open the camera directly with one tap, matching the requested
 // flow. Choosing a food from Library/Recent/Search/Manual is still fully
 // available via the secondary row in the builder.
-async function analyzeFoodPhoto() {
-  if (!ST.user) { showBigToast('Sign in to analyze food photos.', 'warn'); return; }
+// Bound ONCE against the persistent inputs in index.html. Previously a
+// fresh <input> was created, appended, clicked and removed on every
+// attempt — which cannot survive iOS suspending the PWA while the camera
+// is open. Two prior fixes tried to get that element's lifetime right and
+// both missed, because the element's lifetime was the wrong thing to fix.
+let _foodInputsBound = false;
+function bindFoodPhotoInputs() {
+  if (_foodInputsBound) return;
+  ['foodCameraInput', 'foodLibraryInput'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => handleFoodPhotoFile(el));
+  });
+  _foodInputsBound = true;
+}
+
+async function handleFoodPhotoFile(input) {
+  const file = input && input.files && input.files[0];
+  // Reset immediately so picking the SAME file again still fires `change`.
+  // With a persistent input this is essential — without it, a retry with an
+  // identical selection is silently swallowed.
+  if (input) input.value = '';
+  if (!file) return;
+
+  // A photo taken while the builder happened to close (iOS can tear the
+  // view down during the camera hand-off) used to be dropped on the floor
+  // with no message at all. Reopen rather than discard — the person took
+  // the photo, so it gets used.
+  if (!ST.mealBuilder) {
+    ST.mealBuilder = { mealType: autoMealTypeForTime(new Date()), items: [], frequentFoods: null, editingId: null, editingLoggedAt: null };
+    getFrequentFoodsForMealBuilder().then(foods => {
+      if (ST.mealBuilder) { ST.mealBuilder.frequentFoods = foods; renderMealBuilder(); }
+    });
+  }
+
+  // Analyzing state is held in state, not written straight into the DOM —
+  // an async re-render (frequent foods resolving mid-flight) would
+  // otherwise wipe the spinner and make it look like nothing happened.
+  ST.foodPhotoAnalyzing = true;
+  renderMealBuilder();
   try {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.capture = 'environment';
-    input.onchange = async () => {
-      const file = input.files[0];
-      // BUG FIX (reported): removing the input unconditionally here meant
-      // a spurious/empty change event (which iOS can fire mid-camera-flow,
-      // e.g. if the picker sheet is backgrounded during a slow warm-up)
-      // destroyed the input before the REAL photo selection could ever
-      // register — the exact "had to take it twice" symptom, just from a
-      // different cause than the timer race fixed previously. Only remove
-      // once there's an actual file to process.
-      if (!file) return;
-      input.remove();
-      const box = document.getElementById('foodPhotoResultRoot');
-      if (box) box.innerHTML = loadingCardHTML('Analyzing photo…');
-      try {
-        const dataUrl = await new Promise((resolve, reject) => {
-          const r = new FileReader();
-          r.onload = () => resolve(String(r.result));
-          r.onerror = () => reject(new Error('could not read file'));
-          r.readAsDataURL(file);
-        });
-        const base64 = dataUrl.split(',')[1];
-        window._foodRecPendingImageUrl = dataUrl;
-        const result = await callFoodRecognitionEdge({ action: 'photo', image: base64, mediaType: file.type || 'image/jpeg' });
-        handleFoodRecognitionResult(result);
-      } catch (e) {
-        if (box) box.innerHTML = '<div class="card mt8" style="font-size:12px;color:var(--amber)">Couldn\'t read that photo: ' + (e.message || 'unknown error') + '</div>';
-      }
-    };
-    document.body.appendChild(input);
-    input.click();
-    // Safety-net cleanup only — for the case where the picker gets backed
-    // out of with nothing chosen at all. 5 seconds was nowhere near long
-    // enough for an actual camera flow (permission prompt + warm-up +
-    // framing + shutter + confirm easily exceeds it), so the element was
-    // getting yanked out from under a still-in-progress photo, silently
-    // dropping the very first attempt.
-    setTimeout(() => { if (!input.files.length) input.remove(); }, 5*60*1000);
+    const dataUrl = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = () => reject(new Error('could not read file'));
+      r.readAsDataURL(file);
+    });
+    window._foodRecPendingImageUrl = dataUrl;
+    const result = await callFoodRecognitionEdge({ action: 'photo', image: dataUrl.split(',')[1], mediaType: file.type || 'image/jpeg' });
+    ST.foodPhotoAnalyzing = false;
+    handleFoodRecognitionResult(result);
   } catch (e) {
-    showBigToast('Could not open the camera: ' + (e.message || 'unknown error'), 'warn');
+    ST.foodPhotoAnalyzing = false;
+    renderMealBuilder();
+    showBigToast('Couldn\'t read that photo: ' + (e.message || 'unknown error'), 'warn');
   }
 }
 
-// Same photo picker, but for choosing an existing photo from the library
-// instead of taking a new one right now — the "or pick from Library"
-// fallback next to the auto-launched camera.
-async function analyzeFoodPhotoFromLibrary() {
+// MUST stay synchronous through to .click(). iOS only allows a
+// programmatic file-input click inside a live user gesture, and any
+// await beforehand — even awaiting a non-Promise — ends that gesture and
+// gets the picker silently blocked with no error.
+function analyzeFoodPhoto() {
   if (!ST.user) { showBigToast('Sign in to analyze food photos.', 'warn'); return; }
-  try {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = async () => {
-      const file = input.files[0];
-      // BUG FIX (reported): removing the input unconditionally here meant
-      // a spurious/empty change event (which iOS can fire mid-camera-flow,
-      // e.g. if the picker sheet is backgrounded during a slow warm-up)
-      // destroyed the input before the REAL photo selection could ever
-      // register — the exact "had to take it twice" symptom, just from a
-      // different cause than the timer race fixed previously. Only remove
-      // once there's an actual file to process.
-      if (!file) return;
-      input.remove();
-      const box = document.getElementById('foodPhotoResultRoot');
-      if (box) box.innerHTML = loadingCardHTML('Analyzing photo…');
-      try {
-        const dataUrl = await new Promise((resolve, reject) => {
-          const r = new FileReader();
-          r.onload = () => resolve(String(r.result));
-          r.onerror = () => reject(new Error('could not read file'));
-          r.readAsDataURL(file);
-        });
-        const base64 = dataUrl.split(',')[1];
-        window._foodRecPendingImageUrl = dataUrl;
-        const result = await callFoodRecognitionEdge({ action: 'photo', image: base64, mediaType: file.type || 'image/jpeg' });
-        handleFoodRecognitionResult(result);
-      } catch (e) {
-        if (box) box.innerHTML = '<div class="card mt8" style="font-size:12px;color:var(--amber)">Couldn\'t read that photo: ' + (e.message || 'unknown error') + '</div>';
-      }
-    };
-    document.body.appendChild(input);
-    input.click();
-    setTimeout(() => { if (!input.files.length) input.remove(); }, 5*60*1000);
-  } catch (e) {
-    showBigToast('Could not open the photo library: ' + (e.message || 'unknown error'), 'warn');
-  }
+  bindFoodPhotoInputs();
+  const el = document.getElementById('foodCameraInput');
+  if (!el) { showBigToast('Camera unavailable — try reloading the app.', 'warn'); return; }
+  el.value = '';
+  el.click();
+}
+
+function analyzeFoodPhotoFromLibrary() {
+  if (!ST.user) { showBigToast('Sign in to analyze food photos.', 'warn'); return; }
+  bindFoodPhotoInputs();
+  const el = document.getElementById('foodLibraryInput');
+  if (!el) { showBigToast('Photo library unavailable — try reloading the app.', 'warn'); return; }
+  el.value = '';
+  el.click();
 }
 
 function handleFoodRecognitionResult(result) {

@@ -262,6 +262,13 @@ a{color:inherit}
 
 <div id="modalRoot"></div>
 <div id="loadingOverlayRoot"></div>
+<!-- Persistent, never re-created. A file input built on the fly, appended,
+     clicked, then removed is fragile on iOS: the PWA is suspended while the
+     camera is open, and anything that re-renders or tears down in the
+     meantime can lose the element before its change event ever fires. These
+     live in the document for the life of the page instead. -->
+<input type="file" id="foodCameraInput" accept="image/*" capture="environment" style="display:none">
+<input type="file" id="foodLibraryInput" accept="image/*" style="display:none">
 
 <script src="app.js"></script>
 </body>

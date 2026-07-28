@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.29.0';
+const FCF_VERSION = 'v5.30.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -6472,6 +6472,7 @@ async function exportCSV() {
   showBigToast('Building export...','info');
   let sessions = [];
   let biometrics = [];
+  let ouraRows = [], mealRows = [], dailyInputRows = [];
   try {
     const sFilter = ST.user ? SB.from('workout_sessions').select('*').eq('user_id', ST.user.id) : SB.from('workout_sessions').select('*');
     const { data: sd } = await sFilter.order('started_at', { ascending: true });
@@ -6479,6 +6480,20 @@ async function exportCSV() {
     const bFilter = ST.user ? SB.from('weight_log').select('*').eq('user_id', ST.user.id) : SB.from('weight_log').select('*');
     const { data: bd } = await bFilter.order('logged_at', { ascending: true });
     biometrics = bd || [];
+    // Everything else the app stores. Previously the export was workouts +
+    // five biometrics only — Oura, meals, hydration and the flight schedule
+    // were all absent, which left most of the picture out of any analysis.
+    // Failures here are non-fatal: a missing table shouldn't cost you the
+    // whole export.
+    const uid = ST.user?.id;
+    if (uid) {
+      const [o, m, di] = await Promise.all([
+        SB.from('oura_daily').select('*').eq('user_id', uid).order('date', { ascending: true }).then(r=>r.data).catch(()=>null),
+        SB.from('meal_logs').select('*').eq('user_id', uid).order('logged_at', { ascending: true }).then(r=>r.data).catch(()=>null),
+        SB.from('daily_inputs').select('*').eq('user_id', uid).order('date', { ascending: true }).then(r=>r.data).catch(()=>null),
+      ]);
+      ouraRows = o || []; mealRows = m || []; dailyInputRows = di || [];
+    }
   } catch(e) {
     sessions = JSON.parse(localStorage.getItem('fcf_sessions')||'[]');
     biometrics = JSON.parse(localStorage.getItem('fcf_bio')||'[]');
@@ -6527,6 +6542,54 @@ async function exportCSV() {
         bio.weight_lb||'', bio.waist_in||'', bio.systolic_bp||'', bio.diastolic_bp||'', bio.fasting_glucose||'']);
     }
   });
+
+  // Additional labelled sections in the same file — one download rather
+  // than several, and clearly delimited so an AI (or a human) can tell the
+  // datasets apart despite their different granularities.
+  const section = (title, header, dataRows) => {
+    rows.push([]);
+    rows.push(['### ' + title]);
+    rows.push(header);
+    if (!dataRows.length) rows.push(['(no data)']);
+    else dataRows.forEach(r => rows.push(r));
+  };
+
+  section('OURA DAILY', ['Date','Readiness','Sleep Score','HRV Balance','Activity Score','Temp Deviation','Total Sleep (h)','Deep Sleep (h)','REM Sleep (h)'],
+    ouraRows.map(o => [o.date||'', o.readiness_score??'', o.sleep_score??'', o.hrv_balance??'', o.activity_score??'', o.temperature_deviation??'',
+      o.total_sleep_seconds ? (o.total_sleep_seconds/3600).toFixed(2) : '',
+      o.deep_sleep_seconds ? (o.deep_sleep_seconds/3600).toFixed(2) : '',
+      o.rem_sleep_seconds ? (o.rem_sleep_seconds/3600).toFixed(2) : '']));
+
+  const mealItemRows = [];
+  mealRows.forEach(m => {
+    const when = m.logged_at ? new Date(m.logged_at) : null;
+    (m.meal_data?.items || []).forEach(it => {
+      const n = it.nutrients || {};
+      mealItemRows.push([
+        when ? when.toLocaleDateString('en-US') : '',
+        when ? when.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : '',
+        m.meal_type || '', it.description || '', it.source || '',
+        n.calories??'', n.protein??'', n.carbs??'', n.fat??'', n.fiber??'', n.sugar??'',
+      ]);
+    });
+  });
+  section('NUTRITION — ITEMS', ['Date','Time','Meal','Food','Source','Calories','Protein (g)','Carbs (g)','Fat (g)','Fiber (g)','Sugar (g)'], mealItemRows);
+
+  section('DAILY INPUTS', ['Date','Water (L)','Flight Hours','Flight Hours Edited','Sleep Hours','Readiness'],
+    dailyInputRows.map(d => [d.date||'', d.water_in??'', d.flight_hrs??'', d.flight_hrs_touched ? 'yes':'', d.sleep_hours??'', d.readiness??'']));
+
+  const sched = (ST.flightSchedule || []).map(e => {
+    const s = e.start ? new Date(e.start) : null, en = e.end ? new Date(e.end) : null;
+    const hrs = (s && en) ? ((en - s)/3600000).toFixed(2) : '';
+    return [
+      s ? s.toLocaleDateString('en-US') : '', e.type || '',
+      e.summary || '', e.airport || '',
+      s ? s.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false}) : '',
+      en ? en.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false}) : '',
+      hrs,
+    ];
+  });
+  section('FLIGHT SCHEDULE (scheduled, device-local times)', ['Date','Type','Summary','Airport','Start','End','Scheduled Hours'], sched);
 
   const csv = rows.map(r => r.map(v => '"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
   const blob = new Blob([csv], {type:'text/csv'});
@@ -8316,7 +8379,12 @@ function renderToday(p) {
     // tabs. Reads the same hydroStatus()/hydroTarget() as that widget and
     // the Still Open list, so all three can never show conflicting numbers.
     const hs = hydroStatus(ctx.now);
-    parts.push('<div class="fb" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><span style="font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--muted)">💧 HYDRATION</span><span style="font-family:var(--mono);font-size:10px;color:'+hs.color+'">'+ST.waterIn.toFixed(1)+'/'+hydroTarget().toFixed(1)+'L · '+hs.label+'</span></div>');
+    // Tappable — reading your hydration status and wanting to log water are
+    // the same moment, so the number itself is the control rather than
+    // making you go find one.
+    parts.push('<div class="fb" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);cursor:pointer;padding-bottom:2px" onclick="openQuickWaterLog()">' +
+      '<span style="font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--muted)">💧 HYDRATION</span>' +
+      '<span style="font-family:var(--mono);font-size:10px;color:'+hs.color+'">'+ST.waterIn.toFixed(1)+'/'+hydroTarget().toFixed(1)+'L · '+hs.label+' <span style="color:var(--gold)">+ LOG</span></span></div>');
     parts.push('</div>');
   }
 
@@ -8578,30 +8646,76 @@ function quickLogMeal() {
 // Self-contained — doesn't navigate anywhere, just updates the same
 // waterIn/waterInRaw state Preflight's hydration section already uses, so
 // whichever screen you're on when you close this reflects the real number.
-function openQuickWaterLog() {
+// BUG FIX (reported): this pre-filled the input with the running TOTAL and
+// then replaced it on save — so logging 0.5L, then 0.2L an hour later,
+// left you with 0.2L instead of 0.7L. Water gets logged in increments
+// through the day, so ADDING is the correct default. Correcting the
+// running total is still possible, just as a deliberate second choice
+// rather than the thing that happens by accident.
+const WATER_QUICK_ADDS = [0.25, 0.5, 1];
+
+function openQuickWaterLog(mode) {
   const root = document.getElementById('modalRoot');
   if (!root) return;
-  root.innerHTML =
-    '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet">' +
-    '<div class="modal-handle"></div>' +
-    '<div class="modal-title">Log Water</div>' +
-    '<div class="field"><label>Liters consumed</label><input type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" id="quickWaterInput" value="'+(ST.waterInRaw||'')+'" placeholder="e.g. 1.2"></div>' +
-    '<button class="btn btn-gold mt8" onclick="saveQuickWater()">Save</button>' +
-    '<button class="btn-ghost" onclick="closeModal()">Cancel</button>' +
-    '</div></div>';
+  const setMode = mode === 'set';
+  const current = ST.waterIn || 0;
+  const target = hydroTarget();
+  const hs = hydroStatus(new Date());
+  const parts = [];
+  parts.push('<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet">');
+  parts.push('<div class="modal-handle"></div>');
+  parts.push('<div class="modal-title">'+(setMode ? 'Correct Water Total' : 'Log Water')+'</div>');
+
+  // Always show where today actually stands, so it's never ambiguous what
+  // a number typed below is going to do to it.
+  parts.push('<div class="card" style="margin-bottom:12px;padding:12px">');
+  parts.push('<div class="fb"><span style="font-size:12px;color:var(--muted)">Logged so far today</span>' +
+             '<span style="font-family:var(--mono);font-size:16px;font-weight:700">'+current.toFixed(2).replace(/\.?0+$/,'')+' L</span></div>');
+  parts.push('<div class="fb" style="margin-top:4px"><span style="font-size:11px;color:var(--muted)">Target '+target.toFixed(1)+' L</span>' +
+             '<span style="font-family:var(--mono);font-size:11px;color:'+hs.color+'">'+hs.label+'</span></div>');
+  parts.push('</div>');
+
+  if (setMode) {
+    parts.push('<div class="field"><label>Set today\'s total to (liters)</label><input type="text" inputmode="decimal" id="quickWaterInput" value="'+(ST.waterInRaw||'')+'" placeholder="e.g. 1.2"></div>');
+    parts.push('<button class="btn btn-gold mt8" onclick="saveQuickWater(true)">Save Total</button>');
+    parts.push('<button class="btn-ghost mt8" onclick="openQuickWaterLog()">← Add water instead</button>');
+  } else {
+    parts.push('<div style="display:flex;gap:8px;margin-bottom:10px">');
+    WATER_QUICK_ADDS.forEach(a => {
+      parts.push('<button class="btn btn-outline" style="flex:1;padding:12px 4px" onclick="addQuickWater('+a+')">+'+a+'L</button>');
+    });
+    parts.push('</div>');
+    parts.push('<div class="field"><label>Or add a specific amount (liters)</label><input type="text" inputmode="decimal" id="quickWaterInput" value="" placeholder="e.g. 0.2"></div>');
+    parts.push('<button class="btn btn-gold mt8" onclick="saveQuickWater(false)">Add Water</button>');
+    parts.push('<button class="btn-ghost mt8" onclick="openQuickWaterLog(\'set\')">Correct today\'s total instead</button>');
+  }
+  parts.push('<button class="btn-ghost" onclick="closeModal()">Cancel</button>');
+  parts.push('</div></div>');
+  root.innerHTML = parts.join('');
 }
 
-function saveQuickWater() {
-  const val = document.getElementById('quickWaterInput')?.value || '';
-  ST.waterInRaw = val;
-  ST.waterIn = parseFloat(val) || 0;
-  persistDailyInputs();
+// One-tap increments — the common case is "I just drank a bottle", not
+// "let me compute my new running total".
+function addQuickWater(amount) {
+  applyWaterChange((ST.waterIn || 0) + amount);
   closeModal();
-  // Whatever screen is currently showing gets refreshed with the new
-  // value — this used to only special-case Preflight, so Today (and
-  // anywhere else reading ST.waterIn) kept showing stale data even though
-  // the state itself had updated correctly.
   renderPage();
+}
+
+function saveQuickWater(setMode) {
+  const raw = document.getElementById('quickWaterInput')?.value || '';
+  const entered = parseFloat(raw);
+  if (!raw.trim() || isNaN(entered)) { showBigToast('Enter an amount first.', 'warn'); return; }
+  applyWaterChange(setMode ? entered : (ST.waterIn || 0) + entered);
+  closeModal();
+  renderPage();
+}
+
+function applyWaterChange(newTotal) {
+  const clamped = Math.max(0, Math.round(newTotal * 100) / 100);
+  ST.waterIn = clamped;
+  ST.waterInRaw = String(clamped);
+  persistDailyInputs();
 }
 
 const MEAL_TYPES = ['breakfast','lunch','dinner','snack'];
@@ -9260,7 +9374,7 @@ function renderData(p) {
   parts.push('</div>');
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">EXPORT DATA</div>');
-  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Export all workout sessions and biometrics as a CSV — one row per set, with date context and biometric data joined by date. Optimized for AI analysis.</div>');
+  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Exports everything the app holds, in one CSV with labelled sections: workouts (one row per set, biometrics joined by date), Oura daily metrics, every logged food item, hydration and flight hours, and your scheduled flights. Optimized for AI analysis.</div>');
   parts.push('<div style="font-size:11px;color:var(--gold);margin-bottom:10px;line-height:1.5">💡 Recommended: export and review weekly. Daily exports are too noisy to show real trends; monthly is often too late to catch a stall early.</div>');
   parts.push('<button class="btn btn-outline" onclick="exportCSV()">📊 Export CSV for AI Analysis</button>');
   parts.push('<button class="btn btn-outline mt8" onclick="showAIPromptModal()">📋 View & Copy AI Prompt</button>');

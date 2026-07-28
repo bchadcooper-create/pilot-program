@@ -3003,6 +3003,56 @@ ST.ouraConnected = false;
 ST.ouraAccessToken = null;
 ST.ouraData = null;
 
+// ── BUG FIX (reported): "I logged .5 then an hour later I log .2. It shows
+// only .2 consumed, not .7". The dialog pre-filled with the running TOTAL
+// and saved by REPLACING it, so every entry silently wiped the day. ──
+const origWaterGetById = document.getElementById;
+ST.flightHrs = 0;
+
+// Adding via the typed field
+ST.waterIn = 0.5; ST.waterInRaw = '0.5';
+document.getElementById = (id) => (id === 'quickWaterInput' ? { value: '0.2' } : _fakeEl);
+saveQuickWater(false);
+log('BUG FIX (reported): logging 0.2L on top of an existing 0.5L gives 0.7L, not 0.2L', ST.waterIn === 0.7, String(ST.waterIn));
+
+// Adding via a quick-add button
+ST.waterIn = 0.7; ST.waterInRaw = '0.7';
+document.getElementById = () => _fakeEl;
+addQuickWater(0.5);
+log('quick-add buttons add to the running total rather than replacing it', ST.waterIn === 1.2, String(ST.waterIn));
+
+// Correcting the total is still possible — deliberately, not by accident
+ST.waterIn = 1.2; ST.waterInRaw = '1.2';
+document.getElementById = (id) => (id === 'quickWaterInput' ? { value: '0.9' } : _fakeEl);
+saveQuickWater(true);
+log('correct-total mode still replaces, so a mistyped total can be fixed', ST.waterIn === 0.9, String(ST.waterIn));
+
+// Guardrails
+ST.waterIn = 1.0; ST.waterInRaw = '1';
+document.getElementById = (id) => (id === 'quickWaterInput' ? { value: '' } : _fakeEl);
+let waterToast = null; const origWaterToast = showBigToast; showBigToast = (m) => { waterToast = m; };
+saveQuickWater(false);
+log('an empty amount is rejected with a message rather than silently zeroing the day', ST.waterIn === 1.0 && /enter an amount/i.test(waterToast||''), waterToast);
+showBigToast = origWaterToast;
+
+ST.waterIn = 0.1; ST.waterInRaw = '0.1';
+document.getElementById = (id) => (id === 'quickWaterInput' ? { value: '-5' } : _fakeEl);
+saveQuickWater(false);
+log('water can never go negative', ST.waterIn === 0, String(ST.waterIn));
+
+// The dialog must SHOW the current total — the reported confusion was not
+// knowing what a typed number would do to it.
+ST.waterIn = 1.25; ST.waterInRaw = '1.25';
+const waterModalEl = { innerHTML: '' };
+document.getElementById = (id) => (id === 'modalRoot' ? waterModalEl : _fakeEl);
+openQuickWaterLog();
+log('the water dialog shows how much is already logged today', waterModalEl.innerHTML.includes('Logged so far today') && waterModalEl.innerHTML.includes('1.25'), '');
+log('the water dialog offers one-tap quick adds', waterModalEl.innerHTML.includes('+0.5L'), '');
+log('the water dialog offers a deliberate route to correcting the total', waterModalEl.innerHTML.includes("Correct today"), '');
+
+document.getElementById = origWaterGetById;
+ST.waterIn = 0; ST.waterInRaw = '';
+
 // ── BUG FIX (reported THREE times): "had to take the picture twice."
 // Two earlier attempts both tried to get the lifetime of a dynamically
 // created <input> right. The element's lifetime was the wrong thing to

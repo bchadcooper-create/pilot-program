@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.31.0';
+const FCF_VERSION = 'v5.31.1';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -8631,7 +8631,7 @@ function openQuickActions() {
   const root = document.getElementById('modalRoot');
   if (!root) return;
   root.innerHTML =
-    '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet">' +
+    '<div class="modal-bg modal-bg-anim" onclick="if(event.target===this)closeModal()"><div class="modal-sheet modal-sheet-anim">' +
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">Quick Actions</div>' +
     '<button class="btn btn-gold mb8" onclick="closeModal();switchTab(\'preflight\')">⚡ Start a Workout</button>' +

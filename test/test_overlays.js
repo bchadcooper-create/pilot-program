@@ -3044,6 +3044,27 @@ log('menu transition: other tabs are unaffected', transitionsPlayed.length === 0
 playPageTransition = origPlay;
 ST.tab = 'today';
 
+// The slide-up belongs to the "+" quick actions menu ONLY. Every other
+// sheet appears immediately, exactly as it did before the animation
+// existed — asserted here so it can't quietly spread back to the shared
+// class the next time a sheet gets touched.
+const sheetEl = { innerHTML: '' };
+const origSheetGetById = document.getElementById;
+document.getElementById = (id) => (id === 'modalRoot' ? sheetEl : _fakeEl);
+
+openQuickActions();
+log('the "+" quick actions sheet slides up from the bottom', sheetEl.innerHTML.includes('modal-sheet-anim') && sheetEl.innerHTML.includes('modal-bg-anim'), '');
+
+ST.waterIn = 0.5; ST.flightHrs = 0;
+openQuickWaterLog();
+log('the water sheet does NOT slide — animation is opt-in, not on the shared class', !sheetEl.innerHTML.includes('modal-sheet-anim'), '');
+
+showInfoModal('Test', 'body');
+log('a plain info modal does NOT slide either', !sheetEl.innerHTML.includes('modal-sheet-anim'), '');
+
+document.getElementById = origSheetGetById;
+ST.waterIn = 0;
+
 // ── BUG FIX (reported): "I logged .5 then an hour later I log .2. It shows
 // only .2 consumed, not .7". The dialog pre-filled with the running TOTAL
 // and saved by REPLACING it, so every entry silently wiped the day. ──

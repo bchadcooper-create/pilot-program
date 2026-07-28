@@ -141,18 +141,20 @@ a{color:inherit}
 @keyframes fcf-fade-in{from{opacity:0}to{opacity:1}}
 @keyframes fcf-slide-up{from{transform:translateY(100%)}to{transform:translateY(0)}}
 @keyframes fcf-slide-in-left{from{transform:translateX(-100%)}to{transform:translateX(0)}}
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;display:flex;align-items:flex-end;animation:fcf-fade-in .18s ease-out}
-/* Bottom sheets rise from the bottom edge. Applied to the shared sheet
-   class rather than just the "+" menu, so every sheet in the app moves the
-   same way instead of one behaving differently from the rest. */
-.modal-sheet{background:var(--panel);border-radius:16px 16px 0 0;padding:20px 20px calc(20px + var(--safe-bot));width:100%;max-height:85vh;overflow-y:auto;border-top:1px solid var(--border);animation:fcf-slide-up .26s cubic-bezier(.32,.72,0,1)}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;display:flex;align-items:flex-end}
+.modal-sheet{background:var(--panel);border-radius:16px 16px 0 0;padding:20px 20px calc(20px + var(--safe-bot));width:100%;max-height:85vh;overflow-y:auto;border-top:1px solid var(--border)}
+/* Opt-in only. Deliberately NOT on the shared .modal-sheet class — the
+   slide-up belongs to the "+" quick actions menu alone; every other sheet
+   appears immediately, exactly as it did before. */
+.modal-bg-anim{animation:fcf-fade-in .18s ease-out}
+.modal-sheet-anim{animation:fcf-slide-up .26s cubic-bezier(.32,.72,0,1)}
 /* The menu page enters from the left edge, reading as a drawer sliding
    out. html/body are overflow:hidden so a full-width translate can't
    produce a horizontal scrollbar flash mid-animation. */
 .page-enter-left{animation:fcf-slide-in-left .26s cubic-bezier(.32,.72,0,1)}
 /* Anyone who has asked their device for less motion gets none of it. */
 @media (prefers-reduced-motion: reduce){
-  .modal-bg,.modal-sheet,.page-enter-left,.loading-overlay{animation:none}
+  .modal-bg-anim,.modal-sheet-anim,.page-enter-left,.loading-overlay{animation:none}
 }
 .modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px}
 .modal-title{font-family:var(--mono);font-size:16px;letter-spacing:0.06em;color:var(--gold);margin-bottom:10px}

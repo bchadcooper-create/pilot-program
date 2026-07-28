@@ -3003,6 +3003,51 @@ ST.ouraConnected = false;
 ST.ouraAccessToken = null;
 ST.ouraData = null;
 
+// ── BUG FIX (reported): "I added eggs this morning, but not sure how to
+// log 3 eggs. Is this for 1 or two?" Tapping a usual food dropped it
+// straight into the meal with no quantity control and no indication of
+// what one serving was — it was the only entry path lacking both. ──
+const origUsualGetById = document.getElementById;
+document.getElementById = () => _fakeEl;
+const eggFood = { description: 'Organic Eggs', servingDescription: '1 egg (50g)', nutrients: { calories: 70, protein: 6, carbs: 0, fat: 5, fiber: 0, sugar: 0 }, timesLogged: 4 };
+ST.mealBuilder = { mealType: 'breakfast', items: [], frequentFoods: [eggFood] };
+window._foodRecReviewIndex = null; window._foodRecReviewMeta = null;
+
+addFrequentFoodToMeal(0);
+log('BUG FIX (reported): tapping a usual food opens the review card so a quantity can actually be entered', window._foodRecReviewIndex === 0 && window._foodRecReviewMeta !== null, String(window._foodRecReviewIndex));
+const usualCard = buildItemReviewCardHTML(0);
+log('BUG FIX (reported): that card has the Quantity field — no more tapping the same food three times', usualCard.includes('id="foodRecQty"'), '');
+log('BUG FIX (reported): the card states what ONE serving is, answering "is this for 1 or 2?"', usualCard.includes('1 egg (50g)'), '');
+
+// Setting quantity to 3 must scale from the single-serving base, and label it
+const qtyF = { foodRecQty: { value: '3' }, foodRecCal: {}, foodRecProtein: {}, foodRecCarbs: {}, foodRecFat: {}, foodRecDescription: {} };
+document.getElementById = (id) => qtyF[id] || _fakeEl;
+updateReviewedItemQuantity();
+log('BUG FIX (reported): quantity 3 scales one egg (70 cal) to 210, as one item rather than three entries', ST.mealBuilder.items.length === 1 && ST.mealBuilder.items[0].nutrients.calories === 210, JSON.stringify(ST.mealBuilder.items[0].nutrients));
+log('BUG FIX (reported): the item is labelled (3x) so the logged quantity is visible afterwards', ST.mealBuilder.items[0].description.includes('(3x)'), ST.mealBuilder.items[0].description);
+log('the per-unit serving description is preserved when scaling, not overwritten', ST.mealBuilder.items[0].servingDescription === '1 egg (50g)', String(ST.mealBuilder.items[0].servingDescription));
+
+// The meal list itself must show serving + calories per row
+document.getElementById = () => _fakeEl;
+renderMealBuilder();
+log('the meal list shows each item\'s serving and calories, so what was logged is unambiguous', _fakeEl.innerHTML.includes('1 egg (50g)') && _fakeEl.innerHTML.includes('210 cal'), '');
+
+// Chips surface the serving too, so the unit is known BEFORE tapping
+ST.mealBuilder = { mealType: 'breakfast', items: [], frequentFoods: [eggFood] };
+window._foodRecReviewIndex = null;
+renderMealBuilder();
+log('the "Your Usual" chip states the serving up front, so the unit is known before tapping', _fakeEl.innerHTML.includes('1 egg (50g)'), '');
+
+// A food with no recorded serving (older history) must degrade quietly
+const noServing = { description: 'Leftover chili', nutrients: { calories: 400, protein: 25, carbs: 30, fat: 18, fiber: 4, sugar: 3 }, timesLogged: 2 };
+ST.mealBuilder = { mealType: 'dinner', items: [], frequentFoods: [noServing] };
+addFrequentFoodToMeal(0);
+const noServingCard = buildItemReviewCardHTML(0);
+log('a food with no recorded serving still gets a Quantity field and simply omits the serving line', noServingCard.includes('id="foodRecQty"') && !noServingCard.includes('Estimated portion'), '');
+
+document.getElementById = origUsualGetById;
+ST.mealBuilder = null; window._foodRecReviewIndex = null; window._foodRecReviewMeta = null;
+
 // ── Menu transitions ──
 // playPageTransition has to actually RESTART the animation. Re-adding a
 // class that's already on the element does nothing by itself; the reflow

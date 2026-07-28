@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.31.1';
+const FCF_VERSION = 'v5.32.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -8844,7 +8844,15 @@ function renderMealBuilder() {
   if (mb.items.length) {
     parts.push('<div class="section-label" style="margin-top:12px">MEAL ITEMS</div>');
     mb.items.forEach((item, i) => {
-      parts.push('<div class="fb" style="margin-bottom:6px"><span style="font-size:17px;font-weight:700">'+foodEmoji(item.description)+' '+item.description+'</span><button class="btn-ghost" style="font-size:11px" onclick="ST.mealBuilder.items.splice('+i+',1);renderMealBuilder()">✕</button></div>');
+      parts.push('<div style="margin-bottom:8px">');
+      parts.push('<div class="fb"><span style="font-size:17px;font-weight:700">'+foodEmoji(item.description)+' '+item.description+'</span><button class="btn-ghost" style="font-size:11px" onclick="ST.mealBuilder.items.splice('+i+',1);renderMealBuilder()">✕</button></div>');
+      // Serving and macros per row — without this there was no way to tell
+      // whether a logged food meant one unit or several.
+      const rowBits = [];
+      if (item.servingDescription) rowBits.push(sanitizeUserText(item.servingDescription));
+      rowBits.push(Math.round(item.nutrients?.calories || 0)+' cal');
+      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:2px">'+rowBits.join(' · ')+'</div>');
+      parts.push('</div>');
     });
     const runningTotals = sumMealNutrients(mb.items);
     parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">Running total: '+runningTotals.calories+' cal · P'+runningTotals.protein+'g · C'+runningTotals.carbs+'g · F'+runningTotals.fat+'g</div>');
@@ -8865,7 +8873,8 @@ function renderMealBuilder() {
     parts.push('<div class="section-label" style="margin-top:12px">YOUR USUAL</div>');
     parts.push('<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">');
     mb.frequentFoods.forEach((food, i) => {
-      parts.push('<button class="btn-outline" style="font-size:12px;padding:6px 10px;border-radius:20px" onclick="addFrequentFoodToMeal('+i+')">'+foodEmoji(food.description)+' '+sanitizeUserText(food.description)+' <span style="color:var(--muted)">· '+food.nutrients.calories+' cal</span></button>');
+      const srv = food.servingDescription ? sanitizeUserText(food.servingDescription)+' · ' : '';
+      parts.push('<button class="btn-outline" style="font-size:12px;padding:6px 10px;border-radius:20px" onclick="addFrequentFoodToMeal('+i+')">'+foodEmoji(food.description)+' '+sanitizeUserText(food.description)+' <span style="color:var(--muted)">· '+srv+food.nutrients.calories+' cal</span></button>');
     });
     parts.push('</div>');
   }
@@ -8982,14 +8991,30 @@ function addUSDAFoodToMeal() {
 
 // One tap, no search/photo/barcode call at all — the whole point of
 // surfacing "Your Usual" in the first place.
+// BUG FIX (reported: "I added eggs, not sure how to log 3 — is this for
+// one or two?"). Tapping a usual food dropped it straight into the meal
+// with no quantity control and no indication of what one serving was, so
+// the only way to log three was to tap three times and hope the unit was
+// what you assumed. It now opens the same review card the photo and
+// barcode paths use — quantity, description and macros all editable —
+// rather than being the one entry path without them.
 function addFrequentFoodToMeal(idx) {
   const food = ST.mealBuilder?.frequentFoods?.[idx];
   if (!food || !ST.mealBuilder) return;
   ST.mealBuilder.items.push({
     description: food.description,
-    nutrients: food.nutrients,
+    nutrients: { ...food.nutrients },
+    servingDescription: food.servingDescription || null,
     source: 'history',
   });
+  window._foodRecReviewIndex = ST.mealBuilder.items.length - 1;
+  window._foodRecReviewMeta = {
+    baseNutrients: { ...food.nutrients },
+    servingDescription: food.servingDescription || null,
+    source: 'history',
+    confidence: 1,
+  };
+  window._foodRecPendingImageUrl = null;
   renderMealBuilder();
 }
 
@@ -9123,6 +9148,9 @@ function handleFoodRecognitionResult(result) {
   ST.mealBuilder.items.push({
     description: sanitizeUserText(result.description),
     nutrients: { ...result.nutrients },
+    // Persisted on the item, not just held in review meta — this is what
+    // lets "Your Usual" later say whether 70 cal means one egg or two.
+    servingDescription: result.servingDescription || null,
     source: result.source, // 'photo' or 'barcode'
     confidence: result.confidence,
   });

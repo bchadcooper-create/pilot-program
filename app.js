@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.32.0';
+const FCF_VERSION = 'v5.33.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -922,68 +922,76 @@ function getActiveWorkout() {
 }
 
 // Recommend next muscle group based on goal rotation + last completed session
-// Muscle groups that genuinely need ~48h before being loaded again.
-// Cardio, Run, Walk and Longevity are deliberately exempt: low-CNS,
-// low-mechanical-damage work that is safe — often desirable — on
-// consecutive days.
-const RECOVERY_EXEMPT_GROUPS = new Set(['Cardio','Run','Walk','Longevity']);
-const MUSCLE_RECOVERY_HOURS = 48;
+// Walks and runs are never positions in the training rotation.
+const NON_ROTATING_GROUPS = new Set(['Run','Walk']);
 
-// Which muscle groups were actually trained within the recovery window,
-// by real timestamp. The rotation on its own only knows sequence
-// position, not dates — see getRecommendedNext for why that mattered.
-function groupsTrainedWithin(hours, now) {
-  const cutoff = (now || new Date()).getTime() - hours*3600*1000;
-  const out = new Set();
-  (ST.sessionCache || []).forEach(s => {
-    if (!s || !s.muscle_group || !s.date) return;
-    const d = new Date(s.date);
-    if (!isNaN(d.getTime()) && d.getTime() >= cutoff) out.add(s.muscle_group);
-  });
-  return out;
+// Does this session represent a deliberate choice to train, and therefore
+// a step through the rotation?
+//
+// Oura imports are the key case: an imported walk lands in history as
+// muscle_group 'Cardio' with importedFromOura set, without anyone
+// choosing it as a mission. Those must not advance the rotation.
+//
+// Note this checks the FLAG rather than blanket-excluding Cardio —
+// General Health and Weight Loss both list Cardio as a real programmed
+// step, and dropping it wholesale would quietly break those rotations for
+// everyone using them.
+function isRotationStep(session) {
+  if (!session || !session.muscle_group || !session.date) return false;
+  if (session.importedFromOura) return false;
+  return !NON_ROTATING_GROUPS.has(session.muscle_group);
 }
 
-function getRecommendedNext(now) {
+// The last real training session, ignoring cardio/walks entirely.
+// Returns the two most recent, because emphasis goals (Chest & Shoulders,
+// Glute Emphasis) list a group twice in one rotation and need the session
+// before last to tell which of the two positions we're actually at.
+function lastMajorSessions(limit) {
+  return (ST.sessionCache || [])
+    .filter(isRotationStep)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, limit || 2);
+}
+
+// BUG FIX (reported): "look at the last MAJOR workout (not a run or walk)
+// and rotate to the next."
+//
+// This previously rotated from whatever was logged most recently, full
+// stop. A walk logged after leg day — or auto-imported from Oura, which is
+// how it kept happening — counted as a step through the rotation and
+// advanced the pointer past everything, wrapping straight back around to
+// legs. The rotation is a sequence of TRAINING sessions; a walk is not one
+// of them, and it should not move the pointer at all.
+//
+// The v5.28.0 attempt at this added a 48-hour recovery guard instead.
+// That treated the symptom: it stopped legs landing twice in two days, but
+// left walks still advancing the rotation, so the sequence kept skipping
+// whole muscle groups. Ignoring non-training sessions outright is the
+// actual fix, and it makes the recovery guard unnecessary — following the
+// rotation never repeats a group anyway.
+function getRecommendedNext() {
   const order = (GOALS[ST.goal] || GOALS.longevity).order;
-  const last = ST.lastSession?.muscle_group;
-  if (!last) return order[0];
-  const L = order.length;
-  // Emphasis goals repeat a muscle group in the rotation, so the same group
-  // can appear at two positions — disambiguate using the session before last.
+  const majors = order.filter(g => !NON_ROTATING_GROUPS.has(g));
+  if (!majors.length) return order[0];
+
+  const recent = lastMajorSessions(2);
+  const last = recent[0]?.muscle_group;
+  if (!last) return majors[0];
+
+  const L = majors.length;
   const idxs = [];
-  order.forEach((mg, i) => { if (mg === last) idxs.push(i); });
-  if (!idxs.length) return order[0];
+  majors.forEach((mg, i) => { if (mg === last) idxs.push(i); });
+  if (!idxs.length) return majors[0];
+
+  // Emphasis goals repeat a group, so the same name sits at two positions
+  // — the session before last says which one we're standing on.
   let idx = idxs[0];
-  if (idxs.length > 1 && ST.prevSession?.muscle_group) {
-    const match = idxs.find(i => order[(i - 1 + L) % L] === ST.prevSession.muscle_group);
+  const prev = recent[1]?.muscle_group;
+  if (idxs.length > 1 && prev) {
+    const match = idxs.find(i => majors[(i - 1 + L) % L] === prev);
     if (match !== undefined) idx = match;
   }
-
-  // BUG FIX (reported: "did lower body yesterday, it's recommending lower
-  // body again today"). The rotation orders are built so that following
-  // them strictly never puts two leg-dominant or CNS-taxing days back to
-  // back — but this only advanced by POSITION IN THE SEQUENCE, with no
-  // idea what day anything actually happened.
-  //
-  // Log two sessions in one day — e.g. Lower Body in the morning and a
-  // Cardio walk that evening, which the app explicitly supports — and the
-  // Cardio advances the pointer past Lower Body and wraps it right back
-  // around to Lower Body for the very next day. The rotation's own safety
-  // invariant, documented above GOALS, gets silently violated by a
-  // perfectly ordinary logging pattern.
-  //
-  // Now checked against real timestamps: skip forward to the first slot
-  // whose muscle group is outside its recovery window.
-  const recentlyTrained = groupsTrainedWithin(MUSCLE_RECOVERY_HOURS, now);
-  const needsRest = g => !RECOVERY_EXEMPT_GROUPS.has(g) && recentlyTrained.has(g);
-  for (let step = 1; step <= L; step++) {
-    const candidate = order[(idx + step) % L];
-    if (!needsRest(candidate)) return candidate;
-  }
-  // Everything in the rotation is inside its recovery window (a very
-  // heavy recent block). Fall back to plain rotation order rather than
-  // returning nothing — the briefing still shows readiness separately.
-  return order[(idx + 1) % L];
+  return majors[(idx + 1) % L];
 }
 
 // ─── EXERCISE GUIDE LINKS ─────────────────────────────────────────────────────
@@ -3121,8 +3129,10 @@ function buildCalendarHTML(rangeData) {
   for (let i = 0; i < CALENDAR_DAYS; i++) {
     const d = new Date(windowStart.getTime() + i*24*60*60*1000);
     const dayStr = d.toDateString();
-    const daySession = sessions.find(s => new Date(s.date).toDateString() === dayStr);
-    days.push({ date: d, session: daySession });
+    // ALL sessions for the day, not just the first. A leg day plus an
+    // Oura-imported walk is two sessions; only one was ever surfaced.
+    const daySessions = sessions.filter(s => new Date(s.date).toDateString() === dayStr);
+    days.push({ date: d, sessions: daySessions, session: daySessions[0] });
   }
 
   const parts = [];
@@ -3134,15 +3144,23 @@ function buildCalendarHTML(rangeData) {
     const isToday = day.date.toDateString() === new Date().toDateString();
     const dow = day.date.toLocaleDateString('en-US',{weekday:'short'}).charAt(0);
     const dateNum = day.date.getDate();
-    const hasWorkout = !!day.session;
+    const hasWorkout = day.sessions.length > 0;
     const cellStyle = isToday ? 'border-color:var(--gold)' : '';
     const bg = hasWorkout ? 'background:rgba(34,197,94,0.12);border-color:rgba(34,197,94,0.4)' : '';
     parts.push('<div style="flex:0 0 46px;min-height:64px;scroll-snap-align:center;text-align:center;border:1.5px solid var(--border);border-radius:8px;padding:7px 2px;cursor:pointer;'+cellStyle+';'+bg+'" onclick="'+(hasWorkout?'showCalendarDay(\''+localDateStr(day.date)+'\')':'openNewSessionEditor(\''+localDateStr(day.date)+'\')')+'">');
     parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted)">'+dow+'</div>');
     parts.push('<div style="font-size:13px;font-weight:600;margin-top:2px">'+dateNum+'</div>');
     if (hasWorkout) {
-      const icon = {'Lower Body':'🦵','Upper Push':'💪','Upper Pull':'🎯','Power / Plyo':'⚡','Full Body':'🔥','Longevity':'🌿','Cardio':'❤️','Run':'🏃'}[day.session.muscle_group] || '✓';
-      parts.push('<div style="font-size:14px;margin-top:3px">'+icon+'</div>');
+      // One icon, as requested — but it represents the TRAINING session
+      // where there is one, so a leg day isn't hidden behind a walk that
+      // happened to be logged first. A count marks days holding more.
+      const ICONS = {'Lower Body':'🦵','Upper Push':'💪','Upper Pull':'🎯','Power / Plyo':'⚡','Full Body':'🔥','Longevity':'🌿','Cardio':'❤️','Run':'🏃','Walk':'🚶'};
+      const primary = day.sessions.find(isRotationStep) || day.sessions[0];
+      const icon = ICONS[primary.muscle_group] || '✓';
+      const extra = day.sessions.length > 1
+        ? '<span style="font-size:9px;font-family:var(--mono);color:var(--gold);vertical-align:super">'+day.sessions.length+'</span>'
+        : '';
+      parts.push('<div style="font-size:14px;margin-top:3px">'+icon+extra+'</div>');
     } else {
       parts.push('<div style="font-size:16px;font-weight:700;color:var(--gold);margin-top:2px">+</div>');
     }
@@ -3230,9 +3248,23 @@ async function showCalendarDay(isoDate) {
     // — in a negative-UTC-offset timezone like Arizona (UTC-7), that's 5pm
     // the PREVIOUS day locally, silently shifting the comparison by a day.
     // Appending noon with no timezone suffix forces local-time parsing instead.
-    const session = rangeData.sessions.find(s => new Date(s.date).toDateString() === new Date(isoDate+'T12:00:00').toDateString());
-    if (!session) { showToast('No workout found for that day.'); return; }
+    // Every session that day, most recent last — a leg day plus an
+    // Oura-imported walk is two, and only the first was ever shown.
+    const daySessions = rangeData.sessions
+      .filter(s => new Date(s.date).toDateString() === new Date(isoDate+'T12:00:00').toDateString())
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+    if (!daySessions.length) { showToast('No workout found for that day.'); return; }
 
+    const root = document.getElementById('modalRoot');
+    const parts = [];
+    parts.push('<div class="modal-bg" onclick="if(event.target===this)closeModal()">');
+    parts.push('<div class="modal-sheet">');
+    parts.push('<div class="modal-handle"></div>');
+    if (daySessions.length > 1) {
+      parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px">'+daySessions.length+' sessions logged this day</div>');
+    }
+
+    daySessions.forEach((session, si) => {
     const allEx = session.workoutSnapshot
       ? [...session.workoutSnapshot.taxi,...session.workoutSnapshot.takeoff,...session.workoutSnapshot.enroute,...session.workoutSnapshot.landing]
       : Object.keys(session.sets||{}).map(id => ({id, name:id, inputType:'reps_weight', timed:false}));
@@ -3250,11 +3282,7 @@ async function showCalendarDay(isoDate) {
       })
       .filter(Boolean);
 
-    const root = document.getElementById('modalRoot');
-    const parts = [];
-    parts.push('<div class="modal-bg" onclick="if(event.target===this)closeModal()">');
-    parts.push('<div class="modal-sheet">');
-    parts.push('<div class="modal-handle"></div>');
+    if (si > 0) parts.push('<div style="border-top:1px solid var(--border);margin:20px 0 14px"></div>');
     parts.push('<div class="modal-title">'+(session.muscle_group||'Workout')+(session.importedFromOura ? ' <span style="font-size:11px;color:var(--blue);font-weight:400">📱 via Oura</span>' : '')+'</div>');
     parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:14px">'+sessionDate.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+' at '+sessionDate.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})+'</div>');
     parts.push('<div class="stat-row">');
@@ -3274,9 +3302,13 @@ async function showCalendarDay(isoDate) {
       });
     }
 
-    parts.push('<button class="btn btn-gold mt12" onclick="openEditSessionEditor(\''+(session._key||'')+'\')">✏️ EDIT SESSION</button>');
-    parts.push('<button class="btn btn-outline mt8" style="color:var(--red);border-color:var(--red)" onclick="confirmDeleteSession(\''+(session._key||'')+'\')">🗑 DELETE SESSION</button>');
-    parts.push('<button class="btn btn-outline mt8" onclick="closeModal()">CLOSE</button>');
+    // Edit and delete stay per-session — with two logged that day, they
+    // have to act on a specific one rather than "the day".
+    parts.push('<button class="btn btn-gold mt12" onclick="openEditSessionEditor(\''+(session._key||'')+'\')">✏️ EDIT '+(session.muscle_group||'SESSION').toUpperCase()+'</button>');
+    parts.push('<button class="btn btn-outline mt8" style="color:var(--red);border-color:var(--red)" onclick="confirmDeleteSession(\''+(session._key||'')+'\')">🗑 DELETE '+(session.muscle_group||'SESSION').toUpperCase()+'</button>');
+    });
+
+    parts.push('<button class="btn btn-outline mt12" onclick="closeModal()">CLOSE</button>');
     parts.push('</div></div>');
     root.innerHTML = parts.join('');
   } catch(e) {

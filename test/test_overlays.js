@@ -3003,6 +3003,75 @@ ST.ouraConnected = false;
 ST.ouraAccessToken = null;
 ST.ouraData = null;
 
+// ── BUG FIX (reported): "look at the last MAJOR workout (not a run or
+// walk) and rotate to the next." The rotation stepped on whatever was
+// logged most recently — including walks Oura imports automatically —
+// so a walk after leg day advanced the pointer past three muscle groups
+// and wrapped it straight back to legs. ──
+const origRotGoal = ST.goal, origRotCache = ST.sessionCache, origRotLast = ST.lastSession;
+const iso = (d,h) => new Date(2026,6,d,h,0).toISOString();
+ST.goal = 'jump'; ST.lastSession = null; ST.prevSession = null;
+
+// The full cycle Chad specified, with an imported walk sitting in the
+// middle of it that must be ignored at every step.
+const cycle = [
+  { after: [{ muscle_group:'Lower Body', date:iso(26,9) }, { muscle_group:'Cardio', importedFromOura:true, date:iso(26,13) }], expect: 'Upper Pull' },
+  { after: [{ muscle_group:'Lower Body', date:iso(26,9) }, { muscle_group:'Cardio', importedFromOura:true, date:iso(26,13) }, { muscle_group:'Upper Pull', date:iso(28,12) }], expect: 'Power / Plyo' },
+  { after: [{ muscle_group:'Upper Pull', date:iso(28,12) }, { muscle_group:'Power / Plyo', date:iso(29,9) }], expect: 'Upper Push' },
+  // NOTE: Cardio is defined as the 5th step of the jump rotation in GOALS,
+  // so after Upper Push it comes around before wrapping to Lower Body.
+  // Asserting the real behaviour rather than quietly trimming the cycle —
+  // whether Cardio belongs in this rotation is a product decision, not
+  // something to bury in a test expectation.
+  { after: [{ muscle_group:'Power / Plyo', date:iso(29,9) }, { muscle_group:'Upper Push', date:iso(30,9) }], expect: 'Cardio' },
+  { after: [{ muscle_group:'Upper Push', date:iso(30,9) }, { muscle_group:'Cardio', date:iso(31,9) }], expect: 'Lower Body' },
+];
+let cycleBad = [];
+cycle.forEach(step => {
+  ST.sessionCache = step.after;
+  const got = getRecommendedNext();
+  if (got !== step.expect) cycleBad.push(step.after[step.after.length-1].muscle_group+' -> got '+got+', expected '+step.expect);
+});
+log('BUG FIX (reported): the jump rotation steps through every position in order, ignoring imported walks throughout', cycleBad.length === 0, cycleBad.join(' | '));
+
+// A pile of imported walks must never move the rotation on their own.
+ST.sessionCache = [
+  { muscle_group:'Lower Body', date:iso(26,9) },
+  { muscle_group:'Cardio', importedFromOura:true, date:iso(26,13) },
+  { muscle_group:'Cardio', importedFromOura:true, date:iso(27,13) },
+  { muscle_group:'Walk', date:iso(28,8) },
+  { muscle_group:'Run', date:iso(28,17) },
+];
+log('BUG FIX (reported): walks and runs piling up never advance the rotation — still Upper Pull after leg day', getRecommendedNext() === 'Upper Pull', getRecommendedNext());
+
+// Emphasis goals repeat a group; the duplicate must still resolve correctly
+ST.goal = 'glute'; // Lower Body, Upper Push, Lower Body, Upper Pull, Full Body
+ST.sessionCache = [{ muscle_group:'Upper Push', date:iso(27,9) }, { muscle_group:'Lower Body', date:iso(28,9) }];
+log('emphasis goals still resolve which of the two duplicate positions we are on', getRecommendedNext() === 'Upper Pull', getRecommendedNext());
+
+ST.goal = 'jump'; ST.sessionCache = [];
+log('no training history at all falls back to the first entry in the rotation', getRecommendedNext() === 'Lower Body', getRecommendedNext());
+ST.sessionCache = [{ muscle_group:'Cardio', importedFromOura:true, date:iso(28,9) }];
+log('a history containing ONLY imported walks also falls back to the first entry', getRecommendedNext() === 'Lower Body', getRecommendedNext());
+
+ST.goal = origRotGoal; ST.sessionCache = origRotCache; ST.lastSession = origRotLast;
+
+// ── BUG FIX (reported): "On July 26th I did lower body and a walk imported
+// from oura. When I look at FCF calendar, it only shows the legs workout,
+// no walk. It should show both (but only one icon)." ──
+const calDay = new Date(2026,6,26,0,0);
+const twoSessionCalHtml = buildCalendarHTML({ windowStart: calDay, sessions: [
+  { date: iso(26,9), muscle_group: 'Lower Body', _key: 'k1' },
+  { date: iso(26,13), muscle_group: 'Cardio', importedFromOura: true, _key: 'k2' },
+]});
+log('BUG FIX (reported): a day with two sessions shows a count so the second is not invisible', /vertical-align:super">2</.test(twoSessionCalHtml), '');
+log('BUG FIX (reported): the single icon shown is the TRAINING session, not whichever happened to be first', twoSessionCalHtml.includes('🦵'), '');
+
+const oneSessionCalHtml = buildCalendarHTML({ windowStart: calDay, sessions: [
+  { date: iso(26,9), muscle_group: 'Lower Body', _key: 'k1' },
+]});
+log('a day with one session shows no count badge', !/vertical-align:super"/.test(oneSessionCalHtml), '');
+
 // ── BUG FIX (reported): "I added eggs this morning, but not sure how to
 // log 3 eggs. Is this for 1 or two?" Tapping a usual food dropped it
 // straight into the meal with no quantity control and no indication of
@@ -3266,7 +3335,10 @@ ST.lastSession = { muscle_group: 'Cardio' };
 ST.prevSession = { muscle_group: 'Lower Body' };
 ST.sessionCache = [
   { muscle_group: 'Lower Body', date: new Date(2026,6,26,9,0).toISOString() },
-  { muscle_group: 'Cardio',     date: new Date(2026,6,26,18,0).toISOString() },
+  // The actual reported case: a walk auto-imported from Oura, which lands
+  // as muscle_group 'Cardio' with importedFromOura set. Nobody chose it as
+  // a mission, so it must not step the rotation.
+  { muscle_group: 'Cardio', importedFromOura: true, date: new Date(2026,6,26,18,0).toISOString() },
 ];
 const recJul27 = getRecommendedNext(nowJul27);
 log('BUG FIX (reported): after Lower Body + an evening Cardio yesterday, today is NOT Lower Body again', recJul27 !== 'Lower Body', recJul27);
@@ -3274,11 +3346,13 @@ log('BUG FIX (reported): it advances to the next group that is actually recovere
 
 // Same rotation position, but the leg day is genuinely outside the 48h
 // window — the guard must NOT fire, or it would break normal rotation.
+// A DELIBERATELY logged Cardio is a real rotation step for goals that
+// programme one, so it does advance — unlike an imported walk.
 ST.sessionCache = [
-  { muscle_group: 'Lower Body', date: new Date(2026,6,23,9,0).toISOString() },  // 4 days prior
-  { muscle_group: 'Cardio',     date: new Date(2026,6,26,18,0).toISOString() },
+  { muscle_group: 'Lower Body', date: new Date(2026,6,23,9,0).toISOString() },
+  { muscle_group: 'Cardio',     date: new Date(2026,6,26,18,0).toISOString() },  // manually chosen, not imported
 ];
-log('the guard does NOT fire when the leg day is genuinely outside the 48h window — normal rotation resumes', getRecommendedNext(nowJul27) === 'Lower Body', getRecommendedNext(nowJul27));
+log('a deliberately logged Cardio still advances the rotation (it is a real step in goals that programme one)', getRecommendedNext(nowJul27) === 'Lower Body', getRecommendedNext(nowJul27));
 
 // Cardio/Walk/Longevity are exempt — safe on consecutive days, so a
 // cardio day yesterday must not push cardio out of the rotation.
@@ -3286,10 +3360,18 @@ ST.goal = 'longevity'; // Lower Body, Upper Pull, Cardio, Longevity, Upper Push
 ST.lastSession = { muscle_group: 'Upper Pull' };
 ST.prevSession = null;
 ST.sessionCache = [
+  { muscle_group: 'Lower Body', date: new Date(2026,6,25,9,0).toISOString() },
   { muscle_group: 'Upper Pull', date: new Date(2026,6,26,9,0).toISOString() },
-  { muscle_group: 'Cardio',     date: new Date(2026,6,26,18,0).toISOString() },
 ];
-log('low-CNS work (Cardio) is exempt from the recovery guard — still recommended the day after cardio', getRecommendedNext(nowJul27) === 'Cardio', getRecommendedNext(nowJul27));
+log('General Health still reaches its programmed Cardio step — blanket-excluding Cardio would have broken that rotation', getRecommendedNext(nowJul27) === 'Cardio', getRecommendedNext(nowJul27));
+
+// An imported walk must not step the rotation even for a cardio-based goal
+ST.sessionCache = [
+  { muscle_group: 'Lower Body', date: new Date(2026,6,25,9,0).toISOString() },
+  { muscle_group: 'Upper Pull', date: new Date(2026,6,26,9,0).toISOString() },
+  { muscle_group: 'Cardio', importedFromOura: true, date: new Date(2026,6,26,19,0).toISOString() },
+];
+log('an Oura-imported walk does not step the rotation even on a goal that programmes Cardio', getRecommendedNext(nowJul27) === 'Cardio', getRecommendedNext(nowJul27));
 
 // Everything recently trained: must still return something sensible
 // rather than nothing at all.

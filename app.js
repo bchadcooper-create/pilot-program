@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.33.0';
+const FCF_VERSION = 'v5.34.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -7996,7 +7996,8 @@ function scheduleContextForToday(schedule, now) {
   const ctx = { hasSchedule: false, todayEvents: [], current: null, nextDuty: null,
                 lastDutyEndedAt: null, freeMinutesUntilDuty: null, layoverAirport: null,
                 tomorrowFirstDuty: null, yesterdayDutyHours: 0, flightsToday: 0,
-                legsCompleted: 0, legsRemaining: 0, dutyEndsAt: null, justLandedMinAgo: null };
+                legsCompleted: 0, legsRemaining: 0, dutyEndsAt: null, dutyEndsToday: null,
+                currentType: null, justLandedMinAgo: null };
   if (!schedule || !schedule.length) return ctx;
   ctx.hasSchedule = true;
   const t = now.getTime();
@@ -8046,6 +8047,8 @@ function scheduleContextForToday(schedule, now) {
   const trip = currentTripContext(schedule, now);
   ctx.legsCompleted = trip.legsCompleted;
   ctx.legsRemaining = trip.legsRemaining;
+  ctx.dutyEndsToday = trip.dutyEndsToday;
+  ctx.currentType = trip.currentType;
   if (trip.current) ctx.current = trip.current;
   if (trip.dutyEndsAt) ctx.dutyEndsAt = trip.dutyEndsAt;
   if (!ctx.layoverAirport && trip.current?.type === 'layover') ctx.layoverAirport = trip.current.airport;
@@ -8105,7 +8108,25 @@ function currentTripContext(schedule, now) {
       if (!dutyEndsAt || e.en > dutyEndsAt) dutyEndsAt = e.en;
     }
   });
-  return { legsCompleted, legsRemaining, current, dutyEndsAt };
+
+  // BUG FIX (reported): dutyEndsAt above is the last flight of the ENTIRE
+  // pairing. Layovers under DUTYFREE_GAP_MS don't split a trip, so a
+  // four-day pairing is one trip and that value can be days out — it was
+  // rendered as a bare time of day, so "you're off at 7:32 PM" read as
+  // tonight when it was actually 7:32 PM two days later.
+  //
+  // What "you're off at" has to mean is the end of the CURRENT duty run:
+  // the last flight before the next rest period, not the end of the trip.
+  const upcomingLayover = activeTrip.find(e => e.type === 'layover' && e.s > t);
+  const dutyRunLimit = upcomingLayover ? upcomingLayover.s : Infinity;
+  let dutyEndsToday = null;
+  activeTrip.forEach(e => {
+    if (e.type !== 'flight' || e.en > dutyRunLimit) return;
+    if (e.en > t && (!dutyEndsToday || e.en > dutyEndsToday)) dutyEndsToday = e.en;
+  });
+
+  return { legsCompleted, legsRemaining, current, dutyEndsAt, dutyEndsToday,
+           currentType: current ? current.type : null };
 }
 
 // Adjacent, identically-labeled events — e.g. an export that creates one
@@ -8182,6 +8203,25 @@ function getTodayContext() {
 // 10 minutes for deplaning and the post-flight walk-around; before the
 // next departure, 30 minutes minimum at the aircraft for FMC programming,
 // walk-around, and briefings. Neither end of a ground gap is actually free.
+// Beyond this a gap is a real rest period rather than a sit between legs.
+// Six hours is a pragmatic line, not a regulatory one: it keeps genuine
+// mid-duty sits — including a short overnight where the right advice is
+// still "eat and rest, don't train" — on the between-legs framing, while
+// stopping a 16-hour layover from being described in terms of deplaning
+// the aircraft you left the previous evening.
+const TURN_MAX_MIN = 360;
+
+// A bare "7:32 PM" is only meaningful if it IS today. Anything further out
+// gets its day named, so a duty end two days away can never again be read
+// as tonight.
+function fmtDutyEnd(ts) {
+  if (!ts) return null;
+  const d = new Date(ts);
+  const time = d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+  if (d.toDateString() === new Date().toDateString()) return time;
+  return d.toLocaleDateString('en-US',{weekday:'long'}) + ' ' + time;
+}
+
 const POST_LANDING_BUFFER_MIN = 10;
 const PRE_DEPARTURE_BUFFER_MIN = 30;
 
@@ -8257,13 +8297,24 @@ function buildTodayBriefing(ctx) {
   // left in between is the only part actually available for anything else,
   // and a 38-minute gap and a 65-minute gap can look similar on a calendar
   // while being completely different once that's accounted for.
-  if (gapMin !== null && sched.legsRemaining > 0 && sched.legsCompleted > 0) {
+  // Only a genuine TURN between legs. The buffers below describe deplaning
+  // the aircraft you just left and reporting for the next one — that
+  // reasoning is sound for a 45-minute turn at a gate and meaningless on
+  // an overnight layover, where you deplaned hours ago and are in a hotel.
+  // Without this bound the branch caught everything, so a 16-hour layover
+  // was reported as "8h 2m ... really about 442 min once deplaning duties
+  // are accounted for", and the genuinely useful "you have 8h before your
+  // next flight" branch below could never be reached.
+  const isTurn = gapMin !== null && gapMin <= TURN_MAX_MIN;
+  if (isTurn && sched.legsRemaining > 0 && sched.legsCompleted > 0) {
     const ord = ['','First','Second','Third','Fourth','Fifth'][sched.legsCompleted] || 'Latest';
     const usableMin = gapMin - POST_LANDING_BUFFER_MIN - PRE_DEPARTURE_BUFFER_MIN;
     const hrs = Math.floor(gapMin/60), mins = gapMin%60;
     const gapStr = (hrs > 0 ? hrs+'h '+(mins?mins+'m':'') : gapMin+' min').trim();
     const where = sched.layoverAirport ? ' in '+sched.layoverAirport : '';
-    const dutyEnd = sched.dutyEndsAt ? new Date(sched.dutyEndsAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : null;
+    // dutyEndsToday, not dutyEndsAt — see currentTripContext. And a bare
+    // time is only safe once it's known to BE today.
+    const dutyEnd = fmtDutyEnd(sched.dutyEndsToday);
     const legWord = sched.legsRemaining === 1 ? 'one more leg' : sched.legsRemaining+' more legs';
     const ate = ctx.nutrition.mealCount > 0;
     let body = ord+' leg done, '+legWord+' to go'+(dutyEnd ? ' — you\'re off at '+dutyEnd+'.' : '.')+' ';

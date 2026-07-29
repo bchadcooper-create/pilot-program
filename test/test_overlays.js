@@ -3003,6 +3003,60 @@ ST.ouraConnected = false;
 ST.ouraAccessToken = null;
 ST.ouraData = null;
 
+// ── BUG FIX (reported, reproduced from the real MobileCCI .ics): on a
+// 16h 33m layover in ELP at 08:30 with 8h until report, the briefing read
+// "Third leg done — 8h 2m in ELP ... you're off at 7:32 PM. 8h 2m on the
+// ground is really about 442 min once deplaning duties and the 30-minute
+// report requirement are accounted for."
+//
+// Two separate defects:
+//  (a) the between-legs branch had NO upper bound, so a 16-hour layover
+//      was described in terms of deplaning an aircraft left the previous
+//      evening — and the useful "you have 8h before your next flight"
+//      branch below it could never be reached;
+//  (b) "off at 7:32 PM" was the last flight of the entire four-day
+//      pairing (Friday), rendered as a bare time so it read as tonight.
+// ──
+const _dutyT = (dayOffset, h, m) => { const d = new Date(); d.setDate(d.getDate()+dayOffset); d.setHours(h, m||0, 0, 0); return d.getTime(); };
+
+// Chad's shape: overnight layover, two legs later today, more legs on
+// later days — all one trip, because layovers under 20h don't split one.
+const pairing = [
+  { uid:'p0', type:'flight',  start:_dutyT(-1,19,0), end:_dutyT(-1,22,59) },
+  { uid:'p1', type:'layover', start:_dutyT(-1,22,59), end:_dutyT(0,15,32), airport:'ELP' },
+  { uid:'p2', type:'flight',  start:_dutyT(0,16,32), end:_dutyT(0,19,27) },
+  { uid:'p3', type:'flight',  start:_dutyT(0,20,50), end:_dutyT(0,21,39) },
+  { uid:'p4', type:'layover', start:_dutyT(0,21,39), end:_dutyT(1,14,50), airport:'MTY' },
+  { uid:'p5', type:'flight',  start:_dutyT(1,15,50), end:_dutyT(1,18,0) },
+  { uid:'p6', type:'flight',  start:_dutyT(2,17,0), end:_dutyT(2,19,32) },  // trip ends 2 days out
+];
+const morningSched = scheduleContextForToday(pairing, new Date(_dutyT(0,8,30)));
+
+log('BUG FIX (reported): "off at" is the end of TODAY\'s duty run, not the last flight of the whole pairing', new Date(morningSched.dutyEndsToday).getTime() === _dutyT(0,21,39), new Date(morningSched.dutyEndsToday).toString());
+// dutyEndsAt is the end of the whole trip. (p6 sits behind a 23h gap, past
+// the 20h trip boundary, so the trip ends at p5 — the point stands: it is
+// on a LATER DAY, and it was being rendered as a bare time of day.)
+log('BUG FIX (reported): the whole-pairing end is on a later day — which is exactly what was being shown as a bare time', new Date(morningSched.dutyEndsAt).toDateString() !== new Date(_dutyT(0,8,30)).toDateString(), new Date(morningSched.dutyEndsAt).toDateString());
+log('fmtDutyEnd names the day when a duty end is NOT today, so it can never read as tonight again', /day/i.test(fmtDutyEnd(_dutyT(2,19,32))), fmtDutyEnd(_dutyT(2,19,32)));
+log('fmtDutyEnd stays a bare time when it genuinely is today', !/day/i.test(fmtDutyEnd(_dutyT(0,21,39))), fmtDutyEnd(_dutyT(0,21,39)));
+
+const morningCtx = { now:new Date(_dutyT(0,8,30)), hour:8, sched: morningSched,
+  oura:{readiness:75,sleep:60,activity:86,steps:0},
+  nutrition:{consumed:{calories:0,protein:0,carbs:0,fat:0},goals:null,mealCount:0,proteinPct:null,caloriePct:null},
+  training:{workoutToday:false}, water:0 };
+const morningBrief = buildTodayBriefing(morningCtx);
+log('BUG FIX (reported): an 8-hour morning layover window is no longer described as deplaning-adjusted ground time', !/deplaning/i.test(morningBrief.body), morningBrief.body);
+log('BUG FIX (reported): it now reports the real free window instead', /8h 2m before your next flight/i.test(morningBrief.headline), morningBrief.headline);
+log('BUG FIX (reported): and recognises it as a genuine training window', /full session/i.test(morningBrief.body), morningBrief.body);
+
+// The between-legs framing must still apply to an actual sit between legs.
+const turnSched = scheduleContextForToday(pairing, new Date(_dutyT(0,19,45)));
+const turnBrief = buildTodayBriefing({ now:new Date(_dutyT(0,19,45)), hour:19, sched:turnSched,
+  oura:{readiness:75,sleep:60,activity:86,steps:0},
+  nutrition:{consumed:{calories:0,protein:0,carbs:0,fat:0},goals:null,mealCount:0,proteinPct:null,caloriePct:null},
+  training:{workoutToday:false}, water:0 });
+log('a genuine short sit between legs still gets between-legs framing — the bound fixed the long case without removing the real one', /leg done/i.test(turnBrief.headline), turnBrief.headline);
+
 // ── BUG FIX (reported): "look at the last MAJOR workout (not a run or
 // walk) and rotate to the next." The rotation stepped on whatever was
 // logged most recently — including walks Oura imports automatically —

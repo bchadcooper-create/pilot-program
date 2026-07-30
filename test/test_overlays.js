@@ -3003,6 +3003,56 @@ ST.ouraConnected = false;
 ST.ouraAccessToken = null;
 ST.ouraData = null;
 
+// ── BUG FIX (reported): "Box and broad jump. Says it's my first time
+// logging. It's not." The same movement carries a different exercise id
+// per environment and per workout template, and every history lookup was
+// keyed on the raw id — so a lift's entire history vanished the moment it
+// was performed somewhere else. 30 movements in the catalog are affected. ──
+const origMovCache = ST.sessionCache, origMovLast = ST.lastSession;
+ST.lastSession = null;
+
+// Identical NAME, three ids: commercial / hotel / room.
+log('Broad Jump resolves to every environment variant of itself', (() => {
+  const ids = equivalentExerciseIds('h_pp_to2', 'Broad Jump');
+  return ids.includes('c_pp_er1') && ids.includes('h_pp_to2') && ids.includes('r_pp_to2');
+})(), equivalentExerciseIds('h_pp_to2','Broad Jump').join(','));
+
+// Different NAMES for the same movement, unified by the alias table.
+log('Box Jump / Bench-Box Jump / Bed-Chair Jump are recognised as one movement despite different names', (() => {
+  const ids = equivalentExerciseIds('h_pp_to1', 'Bench/Box Jump');
+  return ids.includes('c_pp_to1') && ids.includes('r_pp_to1');
+})(), equivalentExerciseIds('h_pp_to1','Bench/Box Jump').join(','));
+
+// The reported case end to end: logged in a commercial gym, read in a hotel.
+ST.sessionCache = [{ date: new Date().toISOString(), muscle_group: 'Power / Plyo',
+  sets: { c_pp_to1: [{ reps:'3', height:'24' }, { reps:'3', height:'26' }] } }];
+log('BUG FIX (reported): a box jump logged in a commercial gym is found when the hotel variant is opened — no longer "first time logging"', lastLoggedMaxField('h_pp_to1', 'height', 'Bench/Box Jump') === 26, String(lastLoggedMaxField('h_pp_to1','height','Bench/Box Jump')));
+
+ST.sessionCache = [{ date: new Date().toISOString(), muscle_group: 'Power / Plyo',
+  sets: { c_pp_er1: [{ reps:'3', distance:'88' }] } }];
+log('BUG FIX (reported): the same holds for broad jump distance across environments', lastLoggedMaxField('h_pp_to2', 'distance', 'Broad Jump') === 88, String(lastLoggedMaxField('h_pp_to2','distance','Broad Jump')));
+
+// Back Squat splits across TEMPLATES inside the same gym — this silently
+// reset progressive-overload targets, which is the more damaging case.
+ST.sessionCache = [{ date: new Date().toISOString(), muscle_group: 'Lower Body',
+  sets: { c_lb_to1: [{ reps:'6', weight:'205' }] } }];
+log('BUG FIX: a Back Squat logged on a Lower Body day is found on a Full Body day — same gym, previously two separate histories', lastLoggedMax('c_fb_to1', 'Back Squat') === 205, String(lastLoggedMax('c_fb_to1','Back Squat')));
+log('BUG FIX: and the progressive-overload target is therefore calculated instead of missing', suggestNextWeight('c_fb_to1', 'Back Squat', 'takeoff') === 210, String(suggestNextWeight('c_fb_to1','Back Squat','takeoff')));
+
+// Genuinely unlogged movements must still say first time — the fix must
+// not manufacture history that isn't there.
+ST.sessionCache = [];
+log('a movement with no history anywhere still correctly reports nothing', lastLoggedMaxField('h_pp_to1','height','Bench/Box Jump') === null && lastLoggedMax('c_fb_to1','Back Squat') === null, '');
+
+// Distinct movements must NOT be merged.
+ST.sessionCache = [{ date: new Date().toISOString(), sets: { c_pp_to1: [{ reps:'3', height:'24' }] } }];
+log('unrelated movements are not merged — a box jump does not become a broad jump', lastLoggedMaxField('h_pp_to2','distance','Broad Jump') === null, '');
+
+// An unknown/custom id falls back to itself rather than throwing.
+log('an unknown or custom exercise id resolves to itself without error', JSON.stringify(equivalentExerciseIds('custom_abc123', 'My Own Lift')) === JSON.stringify(['custom_abc123']), JSON.stringify(equivalentExerciseIds('custom_abc123','My Own Lift')));
+
+ST.sessionCache = origMovCache; ST.lastSession = origMovLast;
+
 // ── BUG FIX (reported, reproduced from the real MobileCCI .ics): on a
 // 16h 33m layover in ELP at 08:30 with 8h until report, the briefing read
 // "Third leg done — 8h 2m in ELP ... you're off at 7:32 PM. 8h 2m on the

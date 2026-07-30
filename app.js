@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.34.0';
+const FCF_VERSION = 'v5.35.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -4510,45 +4510,119 @@ function engageWorkout() {
 }
 
 // ─── PROGRESSIVE OVERLOAD HELPERS ────────────────────────────────────────────
-function lastLoggedMax(exId) {
+// Reads across every id representing this movement — see
+// equivalentExerciseIds. Keyed on the raw id alone, a lift's history
+// vanished the moment it was performed in a different environment.
+function lastLoggedMax(exId, exName) {
+  const ids = equivalentExerciseIds(exId, exName);
   const all = ST.sessionCache || [];
   for (let i = all.length-1; i >= 0; i--) {
-    const sets = all[i].sets?.[exId];
-    if (!sets) continue;
-    const weights = sets.map(s => parseFloat(s.weight)||0).filter(w => w > 0);
-    if (weights.length) return Math.max(...weights);
+    for (const id of ids) {
+      const sets = all[i].sets?.[id];
+      if (!sets) continue;
+      const weights = sets.map(s => parseFloat(s.weight)||0).filter(w => w > 0);
+      if (weights.length) return Math.max(...weights);
+    }
   }
-  const ls = ST.lastSession?.sets?.[exId];
-  if (ls) { const w = ls.map(s=>parseFloat(s.weight)||0).filter(w=>w>0); if(w.length) return Math.max(...w); }
+  for (const id of ids) {
+    const ls = ST.lastSession?.sets?.[id];
+    if (ls) { const w = ls.map(s=>parseFloat(s.weight)||0).filter(w=>w>0); if(w.length) return Math.max(...w); }
+  }
   return null;
 }
-function lastLoggedReps(exId) {
+function lastLoggedReps(exId, exName) {
+  const ids = equivalentExerciseIds(exId, exName);
   const all = ST.sessionCache || [];
   for (let i = all.length-1; i >= 0; i--) {
-    const sets = all[i].sets?.[exId];
-    if (!sets) continue;
-    const reps = sets.map(s=>parseInt(s.reps)||0).filter(r=>r>0);
-    if (reps.length) return Math.max(...reps);
+    for (const id of ids) {
+      const sets = all[i].sets?.[id];
+      if (!sets) continue;
+      const reps = sets.map(s=>parseInt(s.reps)||0).filter(r=>r>0);
+      if (reps.length) return Math.max(...reps);
+    }
   }
-  const ls = ST.lastSession?.sets?.[exId];
-  if (ls) { const r = ls.map(s=>parseInt(s.reps)||0).filter(r=>r>0); if(r.length) return Math.max(...r); }
+  for (const id of ids) {
+    const ls = ST.lastSession?.sets?.[id];
+    if (ls) { const r = ls.map(s=>parseInt(s.reps)||0).filter(r=>r>0); if(r.length) return Math.max(...r); }
+  }
   return null;
 }
 // Generic best-value lookup for non-weight numeric fields (box height, broad jump distance)
-function lastLoggedMaxField(exId, field) {
+// ─── MOVEMENT IDENTITY ──────────────────────────────────────────────────
+// BUG FIX (reported: "Box and broad jump. Says it's my first time logging.
+// It's not."). The same movement carries a DIFFERENT exercise id per
+// environment and per workout template. Broad Jump is c_pp_er1 in a
+// commercial gym, h_pp_to2 in a hotel and r_pp_to2 in a room — identical
+// name, three ids. Back Squat is c_fb_to1 inside a Full Body template but
+// c_lb_to1 inside Lower Body, in the SAME gym.
+//
+// Every history lookup keyed on the raw id, so a personal best set in one
+// place was invisible everywhere else: "first time logging" on a lift done
+// for months, no progressive-overload target, and a PR that silently reset
+// when the environment changed. 30 movements in the catalog are affected.
+//
+// Movements are matched on normalised name, plus this table for the cases
+// where the same movement is deliberately named for its surroundings.
+const MOVEMENT_ALIASES = {
+  'box jump': 'box jump',
+  'bench/box jump': 'box jump',
+  'bed/chair jump': 'box jump',
+};
+function normalizeMovementName(name) {
+  const n = (name || '').toLowerCase().trim();
+  return MOVEMENT_ALIASES[n] || n;
+}
+
+let _movementIndex = null;
+function buildMovementIndex() {
+  if (_movementIndex) return _movementIndex;
+  const idToKey = {}, keyToIds = {};
+  const seen = new Set();
+  (function walk(node) {
+    if (!node || typeof node !== 'object' || seen.has(node)) return;
+    seen.add(node);
+    if (Array.isArray(node)) { node.forEach(walk); return; }
+    if (node.id && node.name) {
+      const key = normalizeMovementName(node.name);
+      idToKey[node.id] = key;
+      (keyToIds[key] = keyToIds[key] || []).push(node.id);
+      return;
+    }
+    Object.values(node).forEach(walk);
+  })(WORKOUTS);
+  _movementIndex = { idToKey, keyToIds };
+  return _movementIndex;
+}
+
+// Every exercise id representing the same movement as this one — the set
+// that history should actually be read across.
+function equivalentExerciseIds(exId, exName) {
+  const { idToKey, keyToIds } = buildMovementIndex();
+  const key = idToKey[exId] || (exName ? normalizeMovementName(exName) : null);
+  if (!key) return [exId];
+  const ids = keyToIds[key] || [];
+  return ids.includes(exId) ? ids : ids.concat(exId);
+}
+
+function lastLoggedMaxField(exId, field, exName) {
+  const ids = equivalentExerciseIds(exId, exName);
   const all = ST.sessionCache || [];
   for (let i = all.length-1; i >= 0; i--) {
-    const sets = all[i].sets?.[exId];
-    if (!sets) continue;
-    const vals = sets.map(s => parseFloat(s[field])||0).filter(v => v > 0);
-    if (vals.length) return Math.max(...vals);
+    for (const id of ids) {
+      const sets = all[i].sets?.[id];
+      if (!sets) continue;
+      const vals = sets.map(s => parseFloat(s[field])||0).filter(v => v > 0);
+      if (vals.length) return Math.max(...vals);
+    }
   }
-  const ls = ST.lastSession?.sets?.[exId];
-  if (ls) { const v = ls.map(s=>parseFloat(s[field])||0).filter(v=>v>0); if(v.length) return Math.max(...v); }
+  for (const id of ids) {
+    const ls = ST.lastSession?.sets?.[id];
+    if (ls) { const v = ls.map(s=>parseFloat(s[field])||0).filter(v=>v>0); if(v.length) return Math.max(...v); }
+  }
   return null;
 }
 function suggestNextWeight(exId, exName, phaseKey) {
-  const last = lastLoggedMax(exId);
+  const last = lastLoggedMax(exId, exName);
   if (!last) return null;
   const name = (exName||'').toLowerCase();
   const isLower = name.includes('squat')||name.includes('deadlift')||name.includes('lunge')||name.includes('rdl');
@@ -5230,8 +5304,8 @@ function buildExCard(exItem, phaseKey) {
 
     // Progressive overload banner — only for weighted exercises
     if (!exItem.timed && exItem.inputType !== 'reps_only' && exItem.inputType !== 'reps_height' && exItem.inputType !== 'reps_distance' && exItem.inputType !== 'nsdr' && !exItem.custom) {
-      const lastW = lastLoggedMax(exItem.id);
-      const lastR = lastLoggedReps(exItem.id);
+      const lastW = lastLoggedMax(exItem.id, exItem.name);
+      const lastR = lastLoggedReps(exItem.id, exItem.name);
       const suggested = suggestNextWeight(exItem.id, exItem.name, phaseKey);
       if (lastW !== null) {
         parts.push('<div class="stat-banner">');
@@ -5248,7 +5322,7 @@ function buildExCard(exItem, phaseKey) {
     if (exItem.inputType === 'reps_height' || exItem.inputType === 'reps_distance') {
       const field = exItem.inputType === 'reps_height' ? 'height' : 'distance';
       const label = exItem.inputType === 'reps_height' ? 'box height' : 'distance';
-      const lastBest = lastLoggedMaxField(exItem.id, field);
+      const lastBest = lastLoggedMaxField(exItem.id, field, exItem.name);
       if (lastBest !== null) {
         parts.push('<div class="stat-banner">');
         parts.push('<div class="stat-banner-label">PERSONAL BEST</div>');

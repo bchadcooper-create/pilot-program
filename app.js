@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.35.0';
+const FCF_VERSION = 'v5.36.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -1238,6 +1238,21 @@ function parseICSDateTime(raw) {
 // which uses a different, non-Z-suffixed time reference that doesn't match
 // the authoritative UTC start/end and would silently misclassify events if
 // relied on.
+// Reads the true station-local times out of a MobileCCI DESCRIPTION line.
+// Built with local date components (not Date.parse of a bare string, which
+// varies by engine), so the value formats back to exactly the digits the
+// airline shows.
+function descriptionLocalTimes(desc) {
+  if (!desc) return null;
+  const m = String(desc).match(/Time:\s*(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\s*-\s*(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+  if (!m) return null;
+  const n = m.map(Number);
+  const start = new Date(n[1], n[2]-1, n[3], n[4], n[5], n[6]);
+  const end   = new Date(n[7], n[8]-1, n[9], n[10], n[11], n[12]);
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
+  return { start, end };
+}
+
 function parseFlightScheduleICS(icsText) {
   if (!icsText) return [];
   // Un-fold ICS line continuations: a line starting with a single space is
@@ -1255,9 +1270,31 @@ function parseFlightScheduleICS(icsText) {
     const key = line.slice(0, idx).split(';')[0]; // strip any ;PARAM= suffix
     const val = line.slice(idx + 1);
     if (key === 'UID') cur.uid = val;
+    else if (key === 'DESCRIPTION') cur.description = val;
     else if (key === 'DTSTART') cur.start = parseICSDateTime(val);
     else if (key === 'DTEND') cur.end = parseICSDateTime(val);
     else if (key === 'SUMMARY') cur.summary = val;
+  });
+
+  // BUG FIX (reported, confirmed against the American Airlines app):
+  // MobileCCI's DTSTART/DTEND carry a Z suffix but are NOT UTC. Across all
+  // 111 flights in a real export they are the station-local time plus
+  // exactly 5 hours — every event stamped as though it were Central,
+  // whatever the station's actual timezone.
+  //
+  // Trusting that Z meant the schedule rendered wrong by however far the
+  // device sat from UTC-5: an hour out in El Paso, two hours out in Eugene.
+  // Every downstream number inherited it — duty windows, free time,
+  // "you're off at", flight hours feeding the hydration target.
+  //
+  // The DESCRIPTION line carries the true local times and matches the
+  // airline's own app exactly:
+  //   Time: 2026-07-31T13:39:00 - 2026-07-31T16:16:00
+  // so it is preferred wherever present, with DTSTART kept only as a
+  // fallback for events that lack it.
+  events.forEach(e => {
+    const t = descriptionLocalTimes(e.description);
+    if (t) { e.start = t.start; e.end = t.end; e.localFromDescription = true; }
   });
 
   return events.filter(e => e.start && e.end && e.summary).map(e => {
@@ -1271,7 +1308,8 @@ function parseFlightScheduleICS(icsText) {
     } else if (/^Duty free period$/.test(e.summary)) {
       type = 'dutyfree';
     }
-    return { uid: e.uid, start: e.start.toISOString(), end: e.end.toISOString(), summary: e.summary, type, airport };
+    return { uid: e.uid, start: e.start.toISOString(), end: e.end.toISOString(), summary: e.summary, type, airport,
+             localFromDescription: !!e.localFromDescription };
   });
 }
 
@@ -8382,7 +8420,20 @@ function buildTodayBriefing(ctx) {
   const isTurn = gapMin !== null && gapMin <= TURN_MAX_MIN;
   if (isTurn && sched.legsRemaining > 0 && sched.legsCompleted > 0) {
     const ord = ['','First','Second','Third','Fourth','Fifth'][sched.legsCompleted] || 'Latest';
-    const usableMin = gapMin - POST_LANDING_BUFFER_MIN - PRE_DEPARTURE_BUFFER_MIN;
+    // BUG FIX (reported): the deplaning buffer was subtracted unconditionally,
+    // so someone finishing a 13-hour overnight layover was told their morning
+    // was shortened by "deplaning duties" — from an aircraft they left the
+    // previous evening. justLandedMinAgo was already being computed for
+    // exactly this and simply never read.
+    //
+    // Deplaning only eats into THIS window if it hasn't happened yet, so
+    // subtract what's actually left of it: all of it right after landing,
+    // none of it once that time has already passed.
+    const deplaningLeftMin = sched.justLandedMinAgo === null
+      ? POST_LANDING_BUFFER_MIN
+      : Math.max(0, POST_LANDING_BUFFER_MIN - sched.justLandedMinAgo);
+    const stillDeplaning = deplaningLeftMin > 0;
+    const usableMin = gapMin - deplaningLeftMin - PRE_DEPARTURE_BUFFER_MIN;
     const hrs = Math.floor(gapMin/60), mins = gapMin%60;
     const gapStr = (hrs > 0 ? hrs+'h '+(mins?mins+'m':'') : gapMin+' min').trim();
     const where = sched.layoverAirport ? ' in '+sched.layoverAirport : '';
@@ -8394,13 +8445,19 @@ function buildTodayBriefing(ctx) {
     let body = ord+' leg done, '+legWord+' to go'+(dutyEnd ? ' — you\'re off at '+dutyEnd+'.' : '.')+' ';
 
     if (usableMin >= 20 && !ate) {
-      body += gapStr+' on the ground is really about '+usableMin+' min once deplaning duties and the '+PRE_DEPARTURE_BUFFER_MIN+'-minute report requirement are accounted for — worth eating now.';
+      body += gapStr+' on the ground is really about '+usableMin+' min once '
+           + (stillDeplaning ? 'deplaning duties and the '+PRE_DEPARTURE_BUFFER_MIN+'-minute report requirement are' : 'the '+PRE_DEPARTURE_BUFFER_MIN+'-minute report requirement is')
+           + ' accounted for — worth eating now.';
     } else if (usableMin >= 20 && ate) {
       body += 'Top up water and keep moving while you can; sitting is the real cost of a day like this.';
     } else if (usableMin >= 5) {
-      body += gapStr+' on the ground is really only about '+usableMin+' min after duty requirements on both ends — enough for something quick and portable, not a real meal.';
+      body += gapStr+' on the ground is really only about '+usableMin+' min after '
+           + (stillDeplaning ? 'duty requirements on both ends' : 'the report requirement')
+           + ' — enough for something quick and portable, not a real meal.';
     } else {
-      body += gapStr+' isn\'t real ground time once deplaning and report requirements are accounted for — basically none of it is usable. Water if you can grab it, don\'t plan around food here.';
+      body += gapStr+' isn\'t real ground time once '
+           + (stillDeplaning ? 'deplaning and report requirements are' : 'the report requirement is')
+           + ' accounted for — basically none of it is usable. Water if you can grab it, don\'t plan around food here.';
     }
     if (dutyEnd) body += ' The window after '+dutyEnd+' is where a real session and dinner fit.';
 

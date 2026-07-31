@@ -1783,14 +1783,20 @@ const _bx = new Date(); _bx.setHours(0,0,0,0);
 const _tx = (h,m=0) => { const d=new Date(_bx); d.setHours(h,m,0,0); return d.toISOString(); };
 const mkCtx = (gapMinutes, mealCount=0) => {
   const sched = [
-    { uid:'f1', type:'flight', start:_tx(6,0), end:_tx(8,0) },
+    // f1 must LAND at 9:00 for `now = landing` below to mean what the
+    // comment says. It previously ended at 8:00, so the fixture was really
+    // testing someone an hour past deplaning while asserting the numbers
+    // for someone still on the jet bridge.
+    { uid:'f1', type:'flight', start:_tx(6,0), end:_tx(9,0) },
     { uid:'f2', type:'flight', start:_tx(9,0), end:_tx(9,0+gapMinutes).replace(/./,c=>c) },
   ];
   // build the second flight\'s start precisely: land f1 at 9:00, next departs gapMinutes later
   const landing = new Date(_tx(9,0));
   const dep = new Date(landing.getTime() + gapMinutes*60000);
   sched[1] = { uid:'f2', type:'flight', start:dep.toISOString(), end:new Date(dep.getTime()+3600000).toISOString() };
-  const now = landing; // checked right at the moment of landing, matching the real PHX case
+  // One minute after touchdown — 'right at landing' without sitting exactly
+  // on the flight's end boundary, which still counts as airborne.
+  const now = new Date(landing.getTime() + 60000);
   return { now, hour: now.getHours(), sched: scheduleContextForToday(sched, now),
     oura:{readiness:85,sleep:80,activity:70,steps:0},
     nutrition:{consumed:{calories:mealCount*400,protein:mealCount*30,carbs:0,fat:0}, goals:null, mealCount, proteinPct:null, caloriePct:null},
@@ -3002,6 +3008,48 @@ log('shouldRetryOuraActivity: never retries without a valid access token', shoul
 ST.ouraConnected = false;
 ST.ouraAccessToken = null;
 ST.ouraData = null;
+
+// ── BUG FIX (reported, confirmed against the American Airlines app):
+// MobileCCI stamps DTSTART/DTEND with a Z suffix but they are NOT UTC —
+// across all 111 flights in a real export they are station-local plus
+// exactly 5 hours, every event treated as Central whatever the station's
+// real timezone. Trusting Z rendered the schedule wrong by however far
+// the device sat from UTC-5: one hour out in El Paso, two in Eugene. The
+// DESCRIPTION line carries the true local times and matches the airline
+// app exactly, so it is now preferred. ──
+const realIcs = [
+  'BEGIN:VCALENDAR',
+  'BEGIN:VEVENT',
+  'UID:Flight-4114-EUG-PHX-1785523140@mobilecci',
+  'DTSTART:20260731T183900Z',
+  'DTEND:20260731T211600Z',
+  'SUMMARY:Flight 4114 EUG\u2192PHX',
+  'DESCRIPTION:Flight: 4114\\nStations: EUG\u2192PHX\\nTime: 2026-07-31T13:39:00 - 2026-07-31T16:16:00',
+  'END:VEVENT',
+  'END:VCALENDAR',
+].join('\r\n');
+const parsedReal = parseFlightScheduleICS(realIcs);
+const hhmm = iso => { const d = new Date(iso); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
+
+log('BUG FIX (reported): departure matches the airline app (13:39), not the mislabelled Z value', hhmm(parsedReal[0].start) === '13:39', hhmm(parsedReal[0].start));
+log('BUG FIX (reported): arrival matches the airline app (16:16)', hhmm(parsedReal[0].end) === '16:16', hhmm(parsedReal[0].end));
+log('BUG FIX (reported): block time comes out right (2h 37m), which the 5-hour skew had left intact but shifted', Math.round((new Date(parsedReal[0].end) - new Date(parsedReal[0].start))/60000) === 157, String(Math.round((new Date(parsedReal[0].end)-new Date(parsedReal[0].start))/60000)));
+log('the event is flagged as having come from the trustworthy DESCRIPTION field', parsedReal[0].localFromDescription === true, '');
+
+// DTSTART must still work for anything lacking a DESCRIPTION, so older or
+// differently-shaped exports don't stop parsing altogether.
+const noDesc = parseFlightScheduleICS([
+  'BEGIN:VCALENDAR','BEGIN:VEVENT','UID:x','DTSTART:20260731T183900Z','DTEND:20260731T211600Z',
+  'SUMMARY:Flight 9999 AAA\u2192BBB','END:VEVENT','END:VCALENDAR'].join('\r\n'));
+log('an event with no DESCRIPTION still parses via DTSTART rather than being dropped', noDesc.length === 1 && !noDesc[0].localFromDescription, JSON.stringify(noDesc.length));
+
+// A malformed DESCRIPTION must fall back rather than throw or produce NaN.
+const badDesc = parseFlightScheduleICS([
+  'BEGIN:VCALENDAR','BEGIN:VEVENT','UID:y','DTSTART:20260731T183900Z','DTEND:20260731T211600Z',
+  'SUMMARY:Flight 8888 CCC\u2192DDD','DESCRIPTION:Flight: 8888\\nTime: garbage','END:VEVENT','END:VCALENDAR'].join('\r\n'));
+log('a malformed DESCRIPTION falls back to DTSTART instead of producing an invalid date', badDesc.length === 1 && !isNaN(new Date(badDesc[0].start).getTime()), '');
+
+log('descriptionLocalTimes returns null on absent or unparseable input rather than throwing', descriptionLocalTimes(null) === null && descriptionLocalTimes('no time here') === null, '');
 
 // ── BUG FIX (reported): "Box and broad jump. Says it's my first time
 // logging. It's not." The same movement carries a different exercise id

@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.36.0';
+const FCF_VERSION = 'v5.36.1';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2430,6 +2430,23 @@ function applyProfileToState(profile) {
   ST.ouraDismissedIds = profile.ouraDismissedIds || [];
   ST.nutritionGoals = profile.nutritionGoals || null;
   ST.flightScheduleRaw = profile.flightScheduleRaw || null;
+
+  // BUG FIX (reported): the parser fix in v5.36.0 changed nothing on a
+  // schedule already uploaded. Events are parsed once at upload and the
+  // RESULT is what gets stored, so a corrected parser only ever reached a
+  // schedule someone happened to re-upload afterwards — which nobody would
+  // think to do, since from their side the times simply look wrong.
+  //
+  // The original .ics text is kept alongside the parsed events anyway, so
+  // re-parse from that at boot and let the stored events be a fallback.
+  // Any future parsing fix now reaches existing schedules on its own.
+  if (ST.flightScheduleRaw) {
+    try {
+      const reparsed = parseFlightScheduleICS(ST.flightScheduleRaw);
+      if (reparsed && reparsed.length) ST.flightSchedule = reparsed;
+    } catch(e) { /* keep the stored events rather than losing the schedule */ }
+  }
+
   ST.customExercises = (profile.customExercises || []).map(ce => {
     if (ce?.exercise) {
       ce.exercise.name = sanitizeUserText(ce.exercise.name);
@@ -5756,6 +5773,22 @@ function buildAddExerciseCard() {
   }
   parts.push('</div>');
   return parts.join('');
+}
+
+// Prose rendered INSIDE an element rather than into an attribute.
+// sanitizeUserText is sized for short name fields — it hard-truncates at
+// 120 characters, which silently cut Advisor notes off mid-sentence — and
+// it strips apostrophes, which mangles ordinary writing ("don't" -> "dont").
+// This escapes into HTML entities instead of stripping, so punctuation
+// survives intact, and allows room for a couple of real sentences.
+function escapeUserProse(s, maxLen) {
+  return String(s || '')
+    .slice(0, maxLen || 600)          // slice BEFORE escaping, so an entity can't be cut in half
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function sanitizeUserText(s) {
@@ -9443,7 +9476,9 @@ function buildItemReviewCardHTML(index) {
   if (meta.source === 'photo' && meta.qualityRating && meta.advisorNote) {
     parts.push('<div style="background:var(--bg3);border-radius:10px;padding:10px;margin-bottom:10px">');
     parts.push('<div style="font-size:11px;color:var(--gold);margin-bottom:4px">✦ Advisor</div>');
-    parts.push('<div style="font-size:13px;color:var(--text);margin-bottom:2px">' + sanitizeUserText(meta.advisorNote) + '</div>');
+    // No height cap or clamp — the block grows to whatever the Advisor
+    // actually wrote rather than cutting it off.
+    parts.push('<div style="font-size:13px;color:var(--text);margin-bottom:2px;line-height:1.45">' + escapeUserProse(meta.advisorNote) + '</div>');
     parts.push(buildQualitySliderHTML(meta.qualityRating));
     parts.push('</div>');
   }

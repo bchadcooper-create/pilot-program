@@ -3009,6 +3009,58 @@ ST.ouraConnected = false;
 ST.ouraAccessToken = null;
 ST.ouraData = null;
 
+// ── BUG FIX (reported): v5.36.0 fixed the parser and changed nothing on
+// screen. Events are parsed once at UPLOAD and the result is what gets
+// stored, so a corrected parser only ever reached a schedule that happened
+// to be re-uploaded afterwards — which nobody would do, because from the
+// outside the times just look wrong. The raw .ics is kept anyway, so it is
+// now re-parsed at boot. ──
+const staleStored = [
+  // What the old Z-trusting parser wrote: two hours early in Pacific.
+  { start:new Date(2026,6,31,11,39).toISOString(), end:new Date(2026,6,31,14,16).toISOString(),
+    summary:'Flight 4114 EUG→PHX', type:'flight', airport:null },
+];
+const rawIcs = [
+  'BEGIN:VCALENDAR','BEGIN:VEVENT',
+  'UID:Flight-4114-EUG-PHX-1785523140@mobilecci',
+  'DTSTART:20260731T183900Z','DTEND:20260731T211600Z',
+  'SUMMARY:Flight 4114 EUG\u2192PHX',
+  'DESCRIPTION:Flight: 4114\\nStations: EUG\u2192PHX\\nTime: 2026-07-31T13:39:00 - 2026-07-31T16:16:00',
+  'END:VEVENT','END:VCALENDAR'].join('\r\n');
+
+const hhmm2 = iso => { const d=new Date(iso); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
+log('the stale STORED event is the wrong time — this is what was still on screen after the parser fix', hhmm2(staleStored[0].start) === '11:39', hhmm2(staleStored[0].start));
+
+// The boot path: raw present, so re-parse rather than trusting the stored copy.
+const bootParsed = parseFlightScheduleICS(rawIcs);
+log('BUG FIX (reported): re-parsing the stored raw .ics corrects an already-saved schedule without any re-upload', hhmm2(bootParsed[0].start) === '13:39' && hhmm2(bootParsed[0].end) === '16:16', hhmm2(bootParsed[0].start)+'-'+hhmm2(bootParsed[0].end));
+log('BUG FIX (reported): and that matches the airline app exactly', hhmm2(bootParsed[0].start)+'-'+hhmm2(bootParsed[0].end) === '13:39-16:16', '');
+
+// Unparseable raw must not wipe an existing schedule.
+const junkParsed = parseFlightScheduleICS('this is not a calendar');
+log('unparseable raw text yields nothing, so the stored schedule is kept rather than destroyed', Array.isArray(junkParsed) && junkParsed.length === 0, String(junkParsed.length));
+
+// ── BUG FIX (reported): "The advisor text is cut off." sanitizeUserText
+// hard-truncates at 120 characters — right for a short name field, wrong
+// for prose — and strips apostrophes, mangling ordinary writing. ──
+const longNote = 'Decent protein hit from the chicken, but the refined dough crust and creamy dressing add a lot of fat and calories with little fibre, so it sits closer to an energy top-up than a balanced meal.';
+log('the reported note is longer than the old 120-character cap, which is exactly where it stopped', longNote.length > 120, String(longNote.length));
+log('BUG FIX (reported): prose is no longer truncated at 120 characters', escapeUserProse(longNote).length === longNote.length, String(escapeUserProse(longNote).length));
+log('BUG FIX: apostrophes survive instead of being stripped — "don\'t" stays "don\'t"', escapeUserProse("don't skip it") === 'don&#39;t skip it', escapeUserProse("don't skip it"));
+log('markup is still neutralised rather than rendered', escapeUserProse('<img src=x onerror=alert(1)>').indexOf('<') === -1, escapeUserProse('<img src=x onerror=alert(1)>'));
+log('a generous ceiling still exists so a runaway response cannot blow up the card', escapeUserProse('a'.repeat(5000)).length === 600, String(escapeUserProse('a'.repeat(5000)).length));
+
+// The rendered Advisor block carries the whole note, with no clamp.
+ST.mealBuilder = { mealType:'lunch', items:[], frequentFoods:null };
+window._foodRecPendingImageUrl = null;
+handleFoodRecognitionResult({ source:'photo', description:'Chicken bake', servingDescription:'1 bake', confidence:0.9,
+  qualityRating:'fair', advisorNote: longNote,
+  nutrients:{calories:460,protein:22,carbs:44,fat:23,fiber:2,sugar:4} });
+const advisorCard = buildItemReviewCardHTML(0);
+log('BUG FIX (reported): the full Advisor note reaches the card, including its final words', advisorCard.includes('balanced meal.'), '');
+log('the Advisor block has no height cap or line clamp, so it grows with the text', !/line-clamp|max-height/.test(advisorCard), '');
+ST.mealBuilder = null; window._foodRecReviewIndex = null; window._foodRecReviewMeta = null;
+
 // ── BUG FIX (reported, confirmed against the American Airlines app):
 // MobileCCI stamps DTSTART/DTEND with a Z suffix but they are NOT UTC —
 // across all 111 flights in a real export they are station-local plus

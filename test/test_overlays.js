@@ -3009,6 +3009,40 @@ ST.ouraConnected = false;
 ST.ouraAccessToken = null;
 ST.ouraData = null;
 
+// ── BUG FIX (reported): opening an exercise guide on YouTube and coming
+// back landed on a blank browser page with an empty address bar, which had
+// to be closed by hand before the workout was reachable again. Cause is
+// target="_blank" from an INSTALLED PWA — iOS opens a separate browsing
+// context that often ends up with nothing loaded. ──
+const origStandaloneFn = window.navigator.standalone;
+const origMatchMedia = window.matchMedia;
+
+// Installed PWA: no target, so iOS presents its own in-app browser with a
+// Done button rather than orphaning an empty window.
+window.navigator.standalone = true;
+window.matchMedia = () => ({ matches: true });
+log('BUG FIX (reported): in an installed PWA the external link carries NO target="_blank"', !externalLinkAttrs().includes('_blank'), externalLinkAttrs());
+log('rel="noopener" is still applied in the PWA, so the link stays safe', externalLinkAttrs().includes('noopener'), externalLinkAttrs());
+
+// Ordinary browser tab: target="_blank" is correct there and must remain.
+window.navigator.standalone = false;
+window.matchMedia = () => ({ matches: false });
+log('in an ordinary browser tab target="_blank" is preserved — the fix only changes the broken case', externalLinkAttrs().includes('target="_blank"'), externalLinkAttrs());
+
+// The YouTube fallback specifically, since that is what was reported.
+window.navigator.standalone = true;
+window.matchMedia = () => ({ matches: true });
+const ytEl = { innerHTML: '' };
+const origYtGetById2 = document.getElementById;
+document.getElementById = (id) => (id === 'modalRoot' ? ytEl : _fakeEl);
+openYouTubeSearch('Barbell Row');
+log('BUG FIX (reported): the YouTube guide link no longer opens a separate blank window from the installed app', !ytEl.innerHTML.includes('target="_blank"'), '');
+log('the YouTube link still points at a real search URL rather than being broken by the change', ytEl.innerHTML.includes('youtube.com/results?search_query='), '');
+document.getElementById = origYtGetById2;
+
+window.navigator.standalone = origStandaloneFn;
+window.matchMedia = origMatchMedia;
+
 // ── BUG FIX (reported): after watching a form video, returning to the app
 // landed on a blank "Search or enter website name" page that had to be
 // closed by hand before the workout came back. Cause was

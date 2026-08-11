@@ -2951,6 +2951,23 @@ window.addEventListener('beforeinstallprompt', (e) => {
 function isStandalonePWA() {
   return window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
 }
+
+// BUG FIX (reported): opening an exercise guide on YouTube and coming back
+// landed on a blank browser page with an empty address bar, which had to be
+// closed by hand before the workout was reachable again.
+//
+// Cause is target="_blank" from an installed PWA. iOS opens it as a
+// separate browsing context that frequently ends up with nothing loaded,
+// and dismissing it is a manual step. Navigating in the SAME context
+// instead makes iOS present its own in-app browser, which carries a Done
+// button that returns straight back to the workout.
+//
+// target="_blank" is still right in an ordinary browser tab, where it
+// opens a real second tab and leaves the app where it was — so this only
+// changes behaviour in the case that's actually broken.
+function externalLinkAttrs() {
+  return isStandalonePWA() ? 'rel="noopener"' : 'target="_blank" rel="noopener"';
+}
 function isIOSSafari() {
   const ua = navigator.userAgent;
   const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
@@ -5377,7 +5394,7 @@ function openYouTubeSearch(exName) {
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">' + sanitizeUserText(exName) + '</div>' +
     '<div class="modal-body">No built-in form guide for this one yet — this opens a YouTube search in your browser.</div>' +
-    '<a class="btn btn-gold mt12" style="display:block;text-align:center;text-decoration:none" href="' + url + '" target="_blank" rel="noopener" onclick="closeModal()">▶ Watch on YouTube</a>' +
+    '<a class="btn btn-gold mt12" style="display:block;text-align:center;text-decoration:none" href="' + url + '" ' + externalLinkAttrs() + ' onclick="closeModal()">▶ Watch on YouTube</a>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">Cancel</button>' +
     '</div></div>';
 }
@@ -5930,7 +5947,7 @@ function showGuide(exId) {
   const linkLabel = guide.verified
     ? '📹 View Exercise Guide on ExRx.net →'
     : '▶️ Search YouTube: "' + e.name + '" →';
-  const linkHTML = '<a class="modal-link" href="'+guide.exrx+'" target="_blank" rel="noopener">'+linkLabel+'</a>';
+  const linkHTML = '<a class="modal-link" href="'+guide.exrx+'" '+externalLinkAttrs()+'>'+linkLabel+'</a>';
 
   root.innerHTML =
     '<div class="modal-bg" onclick="if(event.target===this)closeModal()">' +
@@ -6660,7 +6677,7 @@ function renderWisdom(p) {
   parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--gold);letter-spacing:0.1em;margin-bottom:12px">BRIEFING '+num+' / '+WISDOM.length+'</div>');
   parts.push('<div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:14px">'+card.title+'</div>');
   parts.push('<div style="font-size:13px;line-height:1.8;color:#94a3b8">'+card.text+'</div>');
-  parts.push('</div><div><a class="modal-link" href="'+card.link+'" target="_blank" rel="noopener">📖 Read more →</a></div></div>');
+  parts.push('</div><div><a class="modal-link" href="'+card.link+'" '+externalLinkAttrs()+'>📖 Read more →</a></div></div>');
   parts.push('<div class="wisdom-counter">'+(activeIdx+1)+' of '+WISDOM.length+(isAutoRotated?' · rotates daily':'')+'</div>');
   parts.push('<div class="wisdom-nav"><button class="btn btn-outline" onclick="prevWisdom()">← PREV</button><button class="btn btn-outline" onclick="nextWisdom()">NEXT →</button></div>');
   if (!isAutoRotated) {

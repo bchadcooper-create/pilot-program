@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.36.1';
+const FCF_VERSION = 'v5.37.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -105,6 +105,8 @@ const ST = {
   prevSession: null, // session before last — disambiguates emphasis rotations
   lastDebrief: null,
   workoutStartedAt: null,
+  workoutFirstLoggedAt: null,
+  chocksSaving: false,
   disclaimerAccepted: false,
   calendarSessions: {},
   selectedCalendarDay: null,
@@ -2806,8 +2808,23 @@ function closeModal() { document.getElementById('modalRoot').innerHTML = ''; }
 const WORKOUT_STATE_KEY = 'fcf_inprogress_workout';
 const TIMER_STATE_KEY   = 'fcf_inprogress_timers';
 
+// Has anything actually been entered yet?
+function hasAnyLoggedSet(sets) {
+  return Object.values(sets || {}).some(arr =>
+    Array.isArray(arr) && arr.some(s => s && (s.reps||s.weight||s.seconds||s.height||s.distance||s.miles||s.seconds_left||s.seconds_right)));
+}
+
 function persistWorkoutState() {
   if (!ST.workout) { localStorage.removeItem(WORKOUT_STATE_KEY); return; }
+  // Every set input calls through here, which makes this the one place
+  // that reliably sees the first entry. workoutStartedAt is stamped when
+  // ENGAGE WORKOUT is pressed, which can be long before anything is
+  // actually logged — someone opens the workout, drives to the gym,
+  // changes, then starts. Session duration should run from the first
+  // logged set to setting the chocks, so that moment is recorded here.
+  if (!ST.workoutFirstLoggedAt && hasAnyLoggedSet(ST.sets)) {
+    ST.workoutFirstLoggedAt = Date.now();
+  }
   try {
     localStorage.setItem(WORKOUT_STATE_KEY, JSON.stringify({
       workout: ST.workout,
@@ -2819,6 +2836,7 @@ function persistWorkoutState() {
       level: ST.level,
       expanded: ST.expanded,
       workoutStartedAt: ST.workoutStartedAt,
+      workoutFirstLoggedAt: ST.workoutFirstLoggedAt,
       savedAt: Date.now(),
     }));
   } catch(e) {}
@@ -2843,6 +2861,9 @@ function restoreWorkoutState() {
     ST.level = saved.level;
     ST.expanded = saved.expanded || {};
     ST.workoutStartedAt = saved.workoutStartedAt || saved.savedAt;
+    // Older in-progress workouts predate this field; fall back to the
+    // engage time rather than losing the session's elapsed duration.
+    ST.workoutFirstLoggedAt = saved.workoutFirstLoggedAt || null;
     return true;
   } catch(e) { return false; }
 }
@@ -4560,6 +4581,7 @@ function engageWorkout() {
 
   persistWorkoutState();
   ST.workoutStartedAt = Date.now();
+  ST.workoutFirstLoggedAt = null;
   persistWorkoutState();
   switchTab('flight');
 }
@@ -5289,7 +5311,10 @@ function renderFlight(p) {
   parts.push(buildAddExerciseCard());
 
   parts.push('<div style="height:16px"></div>');
-  parts.push('<button class="btn btn-green" onclick="confirmSetChocks()">🔒 SET THE CHOCKS — FINISH WORKOUT</button>');
+  // Disabled while a save is in flight so the guard is visible rather than
+  // a silent no-op — repeated tapping is what produced duplicates, and a
+  // button that looks live invites exactly that.
+  parts.push('<button class="btn btn-green" '+(ST.chocksSaving?'disabled':'')+' onclick="confirmSetChocks()">'+(ST.chocksSaving?'⏳ SAVING…':'🔒 SET THE CHOCKS — FINISH WORKOUT')+'</button>');
 
   p.innerHTML = parts.join('');
 }
@@ -6066,7 +6091,7 @@ function confirmSetChocks() {
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">Finish this workout now?</div>' +
     '<div class="modal-body" style="margin-bottom:14px">You still have '+remaining+' exercise'+(remaining===1?'':'s')+' left ('+done+'/'+allEx.length+' done). Setting the chocks finishes and saves the workout as-is — anything not logged won\'t be recorded.</div>' +
-    '<button class="btn btn-green" onclick="closeModal();setTheChocks()">🔒 Finish Anyway</button>' +
+    '<button class="btn btn-green" '+(ST.chocksSaving?'disabled':'')+' onclick="closeModal();setTheChocks()">'+(ST.chocksSaving?'⏳ Saving…':'🔒 Finish Anyway')+'</button>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">Keep Training</button>' +
     '</div></div>';
 }
@@ -6075,15 +6100,33 @@ function confirmSetChocks() {
 async function setTheChocks() {
   const wk = ST.workout;
   if (!wk) return;
+
+  // BUG FIX (reported: three identical sessions logged for one workout).
+  // ST.workout isn't cleared until the very END of this function, after an
+  // await on the database insert. Every tap during that window passed the
+  // !wk check and inserted its own near-identical row. Three taps, three
+  // sessions. This flag closes the window; it is cleared in a finally so a
+  // failed save can still be retried rather than locking the button.
+  if (ST.chocksSaving) return;
+  ST.chocksSaving = true;
+  renderPage(); // paint the disabled state before the awaits begin
+  try {
+
   const allEx = [...wk.taxi,...wk.takeoff,...wk.enroute,...wk.landing];
   const logged = allEx.filter(exItem => ST.sets[exItem.id]?.some(s => s.reps||s.weight||s.seconds||s.height||s.distance||s.seconds_left||s.seconds_right));
   if (logged.length === 0) { showToast('Log at least one exercise before setting the chocks.'); return; }
 
-  // Logged duration, not wall-clock time spent with the app open — the two
-  // can be wildly different for cardio logged after the fact (a 50-minute
-  // walk entered in a few seconds of typing), which is exactly what was
-  // collapsing both the displayed duration and the calorie estimate.
-  const durationMinutes = computeSessionEffort(wk, ST.sets, ST.lastWeight).minutes;
+  // Duration is the elapsed time from the FIRST logged set to setting the
+  // chocks — the actual session, not the time the app sat open beforehand.
+  //
+  // computeSessionEffort's rep-based estimate is kept as the floor. Work
+  // entered after the fact (a 50-minute walk typed in ten seconds) has
+  // almost no elapsed time, and the estimate is the honest figure there.
+  // Taking the larger of the two means neither case reports nonsense.
+  const effortMinutes = computeSessionEffort(wk, ST.sets, ST.lastWeight).minutes;
+  const startedAt = ST.workoutFirstLoggedAt || ST.workoutStartedAt;
+  const elapsedMinutes = startedAt ? Math.round((Date.now() - startedAt) / 60000) : 0;
+  const durationMinutes = Math.max(effortMinutes, elapsedMinutes);
 
   const session = {
     date: new Date().toISOString(),
@@ -6124,6 +6167,7 @@ async function setTheChocks() {
   ST.workout = null;
   ST.sets = {};
   ST.workoutStartedAt = null;
+  ST.workoutFirstLoggedAt = null;
   ST.calendarSessions = {}; // invalidate calendar cache so today's workout shows immediately
   // BUG FIX (reported): Today's "No session logged today" check reads
   // from ST.sessionCache, a COMPLETELY SEPARATE cache from the one just
@@ -6140,6 +6184,12 @@ async function setTheChocks() {
   submitRunningPR(session).catch(() => {});
   logRunningVolume(session).catch(() => {});
   awardBadges();
+
+  } finally {
+    // Always released, including on an early return or a thrown save, so a
+    // genuine retry is never blocked by a previous failure.
+    ST.chocksSaving = false;
+  }
 }
 
 // ─── TRENDS TAB ───────────────────────────────────────────────────────────────

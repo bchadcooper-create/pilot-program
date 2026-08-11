@@ -3009,6 +3009,67 @@ ST.ouraConnected = false;
 ST.ouraAccessToken = null;
 ST.ouraData = null;
 
+// ── BUG FIX (reported): "Three identical sessions were logged today for my
+// upper pull. Likely because I clicked set the chocks three times."
+// Exactly right: ST.workout wasn't cleared until the END of setTheChocks,
+// after an await on the insert, so every tap inside that window passed the
+// !wk check and inserted its own row. ──
+const origChocksUser = ST.user, origChocksCache = ST.sessionCache;
+ST.user = { id:'u-chocks', email:'a@b.c' };
+ST.env='comm'; ST.muscleGroup='Upper Pull'; ST.goal='muscle'; ST.fatigue='go'; ST.level='intermediate';
+ST.lastWeight=180; ST.flightHrs=0; ST.waterIn=1; ST.sessionCache=[]; ST.calendarSessions={};
+ST.workout = { taxi:[], takeoff:[{id:'row1',name:'Barbell Row',target:'3x8',sets:3}], enroute:[], landing:[] };
+ST.sets = { row1:[{reps:'8',weight:'135'}] };
+ST.chocksSaving = false;
+
+let insertCount = 0;
+// A slow insert — this is the window the duplicate taps were landing in.
+SB.from = () => ({ insert: async () => { insertCount++; await new Promise(r=>setTimeout(r,60)); return { error:null }; } });
+dbGetRecentSessions = async () => [];
+dbGetProfile = async () => ({ lastWeight:180 });
+const origRenderChocks = renderPage, origClearChocks = clearWorkoutState;
+renderPage = () => {}; clearWorkoutState = () => {};
+
+// Three taps in immediate succession, as reported.
+await Promise.all([ setTheChocks(), setTheChocks(), setTheChocks() ]);
+log('BUG FIX (reported): three rapid taps on SET THE CHOCKS insert ONE session, not three', insertCount === 1, 'inserts='+insertCount);
+log('BUG FIX (reported): only one session lands in the cache as well', ST.sessionCache.length === 1, 'cached='+ST.sessionCache.length);
+log('the saving flag is released afterwards, so the next workout can still be finished', ST.chocksSaving === false, String(ST.chocksSaving));
+
+// A failed save must not permanently lock the button.
+ST.workout = { taxi:[], takeoff:[{id:'row1',name:'Barbell Row',target:'3x8',sets:3}], enroute:[], landing:[] };
+ST.sets = { row1:[{reps:'8',weight:'135'}] };
+SB.from = () => ({ insert: async () => { throw new Error('network down'); } });
+try { await setTheChocks(); } catch(e) {}
+log('a FAILED save still releases the flag, so finishing can be retried rather than being locked out', ST.chocksSaving === false, String(ST.chocksSaving));
+
+renderPage = origRenderChocks; clearWorkoutState = origClearChocks;
+ST.workout = null; ST.sets = {}; ST.user = origChocksUser; ST.sessionCache = origChocksCache;
+
+// ── Session duration now runs from the FIRST LOGGED SET to setting the
+// chocks, rather than from pressing ENGAGE — which can be long before any
+// work starts (open the workout, drive to the gym, change, then begin). ──
+ST.workout = { taxi:[], takeoff:[{id:'row1',name:'Barbell Row',target:'3x8',sets:3}], enroute:[], landing:[] };
+ST.sets = { row1:[{reps:'',weight:''}] };
+ST.workoutStartedAt = Date.now() - 90*60000;  // engaged 90 minutes ago
+ST.workoutFirstLoggedAt = null;
+
+persistWorkoutState();
+log('an empty set does not start the clock — opening a workout and not logging anything yet is not a session', ST.workoutFirstLoggedAt === null, String(ST.workoutFirstLoggedAt));
+
+ST.sets = { row1:[{reps:'8',weight:'135'}] };
+persistWorkoutState();
+log('the clock starts on the first REAL entry', ST.workoutFirstLoggedAt !== null, '');
+
+const firstStamp = ST.workoutFirstLoggedAt;
+ST.sets = { row1:[{reps:'8',weight:'135'},{reps:'8',weight:'135'}] };
+persistWorkoutState();
+log('later sets do not reset the start time — it marks the beginning, not the most recent entry', ST.workoutFirstLoggedAt === firstStamp, '');
+
+log('hasAnyLoggedSet recognises every input type, not just reps and weight', hasAnyLoggedSet({a:[{seconds:'45'}]}) && hasAnyLoggedSet({b:[{miles:'3'}]}) && hasAnyLoggedSet({c:[{height:'24'}]}) && hasAnyLoggedSet({d:[{seconds_left:'30'}]}) && !hasAnyLoggedSet({e:[{reps:''}]}), '');
+
+ST.workout = null; ST.sets = {}; ST.workoutStartedAt = null; ST.workoutFirstLoggedAt = null;
+
 // ── BUG FIX (reported): v5.36.0 fixed the parser and changed nothing on
 // screen. Events are parsed once at UPLOAD and the result is what gets
 // stored, so a corrected parser only ever reached a schedule that happened

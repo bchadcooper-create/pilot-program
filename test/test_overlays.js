@@ -3009,6 +3009,28 @@ ST.ouraConnected = false;
 ST.ouraAccessToken = null;
 ST.ouraData = null;
 
+// ── BUG FIX (reported): after watching a form video, returning to the app
+// landed on a blank "Search or enter website name" page that had to be
+// closed by hand before the workout came back. Cause was
+// window.open(url,'_blank') from a standalone iOS PWA leaving an empty
+// browsing context behind. ──
+const ytRoot = { innerHTML: '' };
+const origYtGetById = document.getElementById;
+document.getElementById = (id) => (id === 'modalRoot' ? ytRoot : _fakeEl);
+let windowOpenCalls = 0;
+const origWindowOpen = window.open;
+window.open = () => { windowOpenCalls++; };
+
+openYouTubeSearch('Barbell Row');
+log('BUG FIX (reported): the guide fallback no longer calls window.open, which is what stranded the empty tab', windowOpenCalls === 0, 'window.open calls='+windowOpenCalls);
+log('BUG FIX (reported): it presents a real anchor for the person to tap instead', /<a [^>]*href="https:\/\/www\.youtube\.com\/results/.test(ytRoot.innerHTML), '');
+log('the link opens in a new context safely (rel=noopener)', /rel="noopener"/.test(ytRoot.innerHTML), '');
+log('the exercise name is carried into the search query', /Barbell\+Row/.test(ytRoot.innerHTML) || /Barbell%20Row/.test(ytRoot.innerHTML), '');
+log('there is a way out without leaving the app at all', /Cancel/.test(ytRoot.innerHTML), '');
+
+window.open = origWindowOpen;
+document.getElementById = origYtGetById;
+
 // ── BUG FIX (reported): "Three identical sessions were logged today for my
 // upper pull. Likely because I clicked set the chocks three times."
 // Exactly right: ST.workout wasn't cleared until the END of setTheChocks,

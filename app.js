@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.37.0';
+const FCF_VERSION = 'v5.37.1';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -5359,9 +5359,27 @@ function openExerciseGuide(exName) {
   }).catch(e => { const el = document.getElementById('guideContent'); if (el) el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">Failed to load.<br><button class="btn btn-blue mt12" onclick="openYouTubeSearch(\''+exName+'\')">Open YouTube</button></div>'; });
 }
 
+// BUG FIX (reported): coming back from the video landed on a blank
+// "Search or enter website name" page that had to be closed manually
+// before the workout reappeared.
+//
+// Cause is window.open(url, '_blank') from a standalone iOS PWA: it
+// creates a new browsing context that outlives the navigation, so the
+// empty shell is still sitting there on return. A real anchor the person
+// taps hands off to the browser cleanly and comes back to the PWA — which
+// is why the guide links elsewhere in the app have never done this.
 function openYouTubeSearch(exName) {
-  const q = encodeURIComponent(exName + ' form');
-  window.open('https://www.youtube.com/results?search_query=' + q, '_blank');
+  const url = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(exName + ' form');
+  const root = document.getElementById('modalRoot');
+  if (!root) return;
+  root.innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet">' +
+    '<div class="modal-handle"></div>' +
+    '<div class="modal-title">' + sanitizeUserText(exName) + '</div>' +
+    '<div class="modal-body">No built-in form guide for this one yet — this opens a YouTube search in your browser.</div>' +
+    '<a class="btn btn-gold mt12" style="display:block;text-align:center;text-decoration:none" href="' + url + '" target="_blank" rel="noopener" onclick="closeModal()">▶ Watch on YouTube</a>' +
+    '<button class="btn btn-outline mt8" onclick="closeModal()">Cancel</button>' +
+    '</div></div>';
 }
 
 

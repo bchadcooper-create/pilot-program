@@ -2478,8 +2478,15 @@ const limitHTML_check = (result) => {
   handleFoodRecognitionResult(result);
   return _fakeEl.innerHTML;
 };
-const limitMsg = limitHTML_check({ error: 'limit_reached', used: 5, limit: 5 });
-log('food photo: hitting the daily cap shows an upgrade-oriented message, not a raw error', limitMsg.includes('Pro') && limitMsg.includes('5'), '');
+// Hitting the cap now opens the paywall itself rather than printing a line
+// of text that mentions Pro with no way to act on it.
+let paywallReason = null;
+const origShowPaywall = showPaywall;
+showPaywall = (r) => { paywallReason = r; };
+handleFoodRecognitionResult({ error: 'limit_reached', used: FREE_WEEKLY_PHOTOS, limit: FREE_WEEKLY_PHOTOS });
+log('food photo: hitting the free cap opens the paywall, naming photos as the reason', paywallReason === 'photos', String(paywallReason));
+log('food photo: the analyzing spinner is cleared when the cap is hit, not left spinning', ST.foodPhotoAnalyzing === false, String(ST.foodPhotoAnalyzing));
+showPaywall = origShowPaywall;
 const notFoundMsg = limitHTML_check({ error: 'vision_api_failed' });
 log('food photo: a server-side failure shows a retry-or-manual-entry message', notFoundMsg.includes('manually'), '');
 
@@ -3008,6 +3015,59 @@ log('shouldRetryOuraActivity: never retries without a valid access token', shoul
 ST.ouraConnected = false;
 ST.ouraAccessToken = null;
 ST.ouraData = null;
+
+// ── SUBSCRIPTION ENTITLEMENT ──
+// Entitlement is READ-ONLY on the client; the subscriptions table grants
+// SELECT and nothing else, so Pro can't be switched on from a console. Every
+// paid capability is still enforced again server-side.
+const origSub = ST.subscription;
+ST.subscription = null;
+log('no subscription row means free', isPro() === false, '');
+ST.subscription = { tier:'pro', status:'active', current_period_end: new Date(Date.now()+30*86400000).toISOString() };
+log('an active, unexpired Pro subscription grants access', isPro() === true, '');
+ST.subscription = { tier:'pro', status:'grace', current_period_end: new Date(Date.now()+3*86400000).toISOString() };
+log('a billing-retry grace period keeps access rather than cutting someone off mid-renewal', isPro() === true, '');
+ST.subscription = { tier:'pro', status:'expired', current_period_end: new Date(Date.now()-86400000).toISOString() };
+log('an expired subscription does not grant access', isPro() === false, '');
+ST.subscription = { tier:'pro', status:'active', current_period_end: new Date(Date.now()-86400000).toISOString() };
+log('a period end in the past does not grant access even if the row still says active — the row can lag the real state', isPro() === false, '');
+ST.subscription = { tier:'free', status:'active', current_period_end: null };
+log('an active row on the FREE tier is not Pro', isPro() === false, '');
+ST.subscription = origSub;
+
+// ── PAYWALL ──
+const pwEl = { innerHTML: '' };
+const origPwGetById = document.getElementById;
+document.getElementById = (id) => (id === 'modalRoot' ? pwEl : _fakeEl);
+showPaywall('photos');
+log('the paywall names the specific thing that was blocked rather than a generic upsell', pwEl.innerHTML.includes(String(FREE_WEEKLY_PHOTOS)) && /photo analyses this week/.test(pwEl.innerHTML), '');
+log('the paywall offers both annual and monthly', pwEl.innerHTML.includes(PRO_ANNUAL_PRICE) && pwEl.innerHTML.includes(PRO_MONTHLY_PRICE), '');
+log('the paywall offers Restore purchases — Apple requires a restore path for non-consumables', pwEl.innerHTML.includes('Restore purchases'), '');
+
+// Purchases must fail honestly outside the native shell rather than
+// pretending to charge anyone.
+let infoTitle = null;
+const origInfoModal = showInfoModal;
+showInfoModal = (t2) => { infoTitle = t2; };
+await startProPurchase(PRO_PRODUCT_ANNUAL);
+log('a purchase attempt with no StoreKit bridge says so plainly instead of failing silently', /not available/i.test(infoTitle || ''), infoTitle);
+showInfoModal = origInfoModal;
+
+// ── ACCOUNT DELETION (Apple-mandatory) ──
+confirmDeleteAccount();
+log('account deletion requires typing DELETE rather than a single tap, since it is irreversible', pwEl.innerHTML.includes('deleteConfirmInput') && pwEl.innerHTML.includes('Type DELETE'), '');
+log('the deletion dialog states plainly that it cannot be undone', /cannot be undone/i.test(pwEl.innerHTML), '');
+
+let delToast = null;
+const origDelToast = showBigToast;
+showBigToast = (m) => { delToast = m; };
+document.getElementById = (id) => (id === 'deleteConfirmInput' ? { value: 'delete me' } : (id === 'modalRoot' ? pwEl : _fakeEl));
+ST.user = { id:'u1', email:'a@b.c' };
+await performAccountDeletion();
+log('a wrong confirmation phrase does NOT delete the account', /type delete/i.test(delToast || ''), delToast);
+showBigToast = origDelToast;
+document.getElementById = origPwGetById;
+ST.user = null;
 
 // ── BUG FIX (reported): opening an exercise guide on YouTube and coming
 // back landed on a blank browser page with an empty address bar, which had

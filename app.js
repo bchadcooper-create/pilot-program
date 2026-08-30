@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.37.1';
+const FCF_VERSION = 'v5.38.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -14,7 +14,47 @@ const OURA_REDIRECT_URI = 'https://flightcrew.fit/';
 const OURA_EDGE_FN      = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/oura-auth';
 const USDA_EDGE_FN      = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/usda-food';
 const FOOD_RECOGNITION_EDGE_FN = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/fcf-food-recognition';
-const DAILY_PHOTO_LIMIT = 5; // must match DAILY_PHOTO_LIMIT in the edge function — shown in UI copy only, the server enforces the real limit
+const ACCOUNT_DELETE_EDGE_FN = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/fcf-delete-account';
+const PRIVACY_POLICY_URL = 'https://flightcrew.fit/privacy.html';
+const TERMS_URL = 'https://flightcrew.fit/terms.html';
+// ─── SUBSCRIPTION TIERS ─────────────────────────────────────────────────
+// Free keeps unlimited workout logging and manual meal entry — the habit
+// has to form before there's anything worth paying for. What's gated is
+// the work that costs money to run: vision-model photo analysis and AI
+// coaching carry a real per-use API cost, which is also why this is a
+// subscription rather than a one-time purchase.
+const FREE_WEEKLY_PHOTOS = 3;
+const PRO_WEEKLY_PHOTOS = 0;        // 0 = unlimited
+const PRO_ANNUAL_PRICE = '$59.99';
+const PRO_MONTHLY_PRICE = '$7.99';
+const PRO_PRODUCT_ANNUAL = 'fcf_pro_annual';
+const PRO_PRODUCT_MONTHLY = 'fcf_pro_monthly';
+
+// Entitlement is only ever READ here. The server decides it after receipt
+// validation — the subscriptions table grants the client SELECT and nothing
+// else, so Pro can't be switched on from the console. This function is a
+// convenience for what to SHOW; every paid capability is enforced again
+// server-side in the edge function.
+function isPro() {
+  const s = ST.subscription;
+  if (!s) return false;
+  if (s.tier !== 'pro') return false;
+  if (s.status !== 'active' && s.status !== 'grace') return false;
+  if (s.current_period_end && new Date(s.current_period_end) < new Date()) return false;
+  return true;
+}
+
+async function loadSubscription() {
+  if (!ST.user) { ST.subscription = null; return; }
+  try {
+    const { data, error } = await SB.from('subscriptions')
+      .select('*').eq('user_id', ST.user.id).maybeSingle();
+    if (error) throw error;
+    ST.subscription = data || null;
+  } catch(e) { ST.subscription = null; }
+}
+
+const DAILY_PHOTO_LIMIT = 5; // legacy constant, retained only for older call sites
 const FEEDBACK_EDGE_FN  = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/feedback-submit';
 const OURA_SCOPES       = 'daily personal workout tag'; // readiness, sleep, activity, personal info, workouts, tags
 // Supabase anon key sent as auth header — required when Edge Function JWT verification is enabled
@@ -49,6 +89,7 @@ const ST = {
   flightSchedule: null, flightScheduleRaw: null, scheduleEnvNote: null,
   ouraDismissedIds: [], ouraImportQueue: [],
   ouraSteps: null, ouraActiveCal: null,
+  subscription: null,
   nutritionGoals: null, goalDraft: 'maintain', trainDaysDraft: '3-4',
   manualTargetsOpen: false, manualCal: '', manualProtein: '', manualCarbs: '', manualFat: '', manualTargetsWarning: null,
   sleepBaselineScore: null,
@@ -2535,7 +2576,7 @@ async function bootApp() {
   ST.disclaimerAccepted = localStorage.getItem('fcf_disclaimer_accepted') === '1';
   // All three boot fetches are independent — run them in ONE parallel window
   // so a cold offline launch waits ~6s total, not stacked timeouts.
-  const [profile, lastSession] = await Promise.all([dbGetProfile(), dbGetLastSession(), loadSessionCache()]);
+  const [profile, lastSession] = await Promise.all([dbGetProfile(), dbGetLastSession(), loadSessionCache(), loadSubscription()]);
   applyProfileToState(profile);
   ST.lastSession = lastSession;
   if (ST.lastSession && !ST.sessionCache.find(s => s.date === ST.lastSession.date)) {
@@ -2780,6 +2821,147 @@ async function withDialogSpinner(label, fn) {
   } finally {
     clearTimeout(timer);
     if (shown) hideLoadingOverlay();
+  }
+}
+
+// ─── PAYWALL ────────────────────────────────────────────────────────────
+// Shown when a gated capability is reached, naming the specific thing that
+// was blocked rather than a generic upsell — someone who just hit the photo
+// limit should be told that, not sold a feature list.
+function showPaywall(reason) {
+  const root = document.getElementById('modalRoot');
+  if (!root) return;
+  const why = {
+    photos: 'You\'ve used your ' + FREE_WEEKLY_PHOTOS + ' free photo analyses this week.',
+    coach:  'AI coaching is a Pro feature.',
+  }[reason] || 'This is a Pro feature.';
+
+  const parts = [];
+  parts.push('<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet">');
+  parts.push('<div class="modal-handle"></div>');
+  parts.push('<div class="modal-title">Flight Crew Fitness Pro</div>');
+  parts.push('<div class="modal-body" style="margin-bottom:14px">'+why+'</div>');
+
+  parts.push('<div class="card" style="padding:14px;margin-bottom:12px">');
+  [['📷','Unlimited food photo analysis'],
+   ['✦','AI coaching and meal assessment'],
+   ['🏨','Hotel and layover gym workout generation'],
+   ['📊','Full trend history and exports']].forEach(([icon,label]) => {
+    parts.push('<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px"><span>'+icon+'</span><span style="font-size:13px">'+label+'</span></div>');
+  });
+  parts.push('</div>');
+
+  parts.push('<button class="btn btn-gold" onclick="startProPurchase(\''+PRO_PRODUCT_ANNUAL+'\')">'+PRO_ANNUAL_PRICE+' / year</button>');
+  parts.push('<div style="text-align:center;font-size:11px;color:var(--muted);margin:6px 0 10px">Works out at $5.00 a month</div>');
+  parts.push('<button class="btn btn-outline" onclick="startProPurchase(\''+PRO_PRODUCT_MONTHLY+'\')">'+PRO_MONTHLY_PRICE+' / month</button>');
+
+  parts.push('<button class="btn-ghost" style="display:block;width:100%;text-align:center;margin-top:12px" onclick="restoreProPurchases()">Restore purchases</button>');
+  parts.push('<button class="btn-ghost" style="display:block;width:100%;text-align:center;margin-top:10px" onclick="closeModal()">Not now</button>');
+  parts.push('</div></div>');
+  root.innerHTML = parts.join('');
+}
+
+// Purchases run through StoreKit on iOS. The native shell exposes a bridge;
+// until that shell exists (or in a plain browser, where Apple's IAP rules
+// don't apply but StoreKit also isn't present) this says so plainly instead
+// of failing silently or pretending to charge anyone.
+function storeKitBridge() {
+  return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.FCFPurchases) || null;
+}
+
+async function startProPurchase(productId) {
+  const bridge = storeKitBridge();
+  if (!bridge) {
+    showInfoModal('Not available here',
+      'Subscriptions are purchased through the App Store, which is only available in the installed iOS app. This build is running in a browser.');
+    return;
+  }
+  try {
+    await withDialogSpinner('Contacting the App Store…', () => bridge.purchase({ productId }));
+    // Entitlement is written server-side after receipt validation, so the
+    // client re-reads rather than assuming the purchase succeeded.
+    await loadSubscription();
+    closeModal();
+    renderPage();
+    showBigToast(isPro() ? '✓ Pro active — thanks.' : 'Purchase received. Entitlement will appear shortly.', 'ok');
+  } catch (e) {
+    showBigToast('Purchase did not complete: ' + (e?.message || 'cancelled'), 'warn');
+  }
+}
+
+async function restoreProPurchases() {
+  const bridge = storeKitBridge();
+  if (!bridge) { showInfoModal('Not available here', 'Restoring purchases requires the installed iOS app.'); return; }
+  try {
+    await withDialogSpinner('Restoring…', () => bridge.restore());
+    await loadSubscription();
+    closeModal();
+    renderPage();
+    showBigToast(isPro() ? '✓ Pro restored.' : 'No active subscription found for this Apple ID.', isPro() ? 'ok' : 'info');
+  } catch (e) {
+    showBigToast('Could not restore: ' + (e?.message || 'unknown error'), 'warn');
+  }
+}
+
+// ─── ACCOUNT DELETION ───────────────────────────────────────────────────
+// Apple has required in-app account deletion since 2022 for any app that
+// supports account creation. Its absence is an automatic rejection, and it
+// has to actually delete rather than just sign out or open a support email.
+//
+// Two-step by design: this is irreversible and takes every workout, meal
+// and biometric with it, so it asks for the word DELETE rather than relying
+// on a button that could be tapped by accident.
+function confirmDeleteAccount() {
+  const root = document.getElementById('modalRoot');
+  if (!root) return;
+  root.innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet">' +
+    '<div class="modal-handle"></div>' +
+    '<div class="modal-title" style="color:var(--red)">Delete Account</div>' +
+    '<div class="modal-body">This permanently deletes your account and everything in it — every workout, meal, biometric reading, schedule and personal record. It cannot be undone and there is no backup.</div>' +
+    '<div class="modal-body" style="margin-top:10px">Export your data first if you want to keep it.</div>' +
+    '<div class="field" style="margin-top:14px"><label>Type DELETE to confirm</label>' +
+    '<input type="text" id="deleteConfirmInput" autocapitalize="characters" autocomplete="off" placeholder="DELETE"></div>' +
+    '<button class="btn btn-outline" style="color:var(--red);border-color:var(--red)" onclick="performAccountDeletion()">Permanently Delete My Account</button>' +
+    '<button class="btn-ghost" style="display:block;width:100%;text-align:center;margin-top:12px" onclick="closeModal()">Cancel</button>' +
+    '</div></div>';
+}
+
+async function performAccountDeletion() {
+  const typed = (document.getElementById('deleteConfirmInput')?.value || '').trim().toUpperCase();
+  if (typed !== 'DELETE') { showBigToast('Type DELETE to confirm.', 'warn'); return; }
+  if (!ST.user) { showBigToast('Not signed in.', 'warn'); return; }
+  const uid = ST.user.id;
+
+  try {
+    await withDialogSpinner('Deleting your account…', async () => {
+      // User-owned rows first, so nothing is orphaned if the auth deletion
+      // fails partway. Each is allowed to fail independently — a missing
+      // table must not strand someone half-deleted with no way to retry.
+      const tables = ['workout_sessions','meal_logs','weight_log','oura_daily',
+                      'daily_inputs','food_photo_usage','photo_quota_weekly'];
+      for (const t of tables) {
+        try { await SB.from(t).delete().eq('user_id', uid); } catch(e) {}
+      }
+      // The auth user itself needs elevated privileges, so it goes through
+      // an edge function rather than the client.
+      const { data: { session } } = await SB.auth.getSession();
+      if (session) {
+        await fetch(ACCOUNT_DELETE_EDGE_FN, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+        }).catch(() => {});
+      }
+    });
+
+    try { localStorage.clear(); } catch(e) {}
+    await SB.auth.signOut().catch(() => {});
+    ST.user = null; ST.authed = false; ST.subscription = null;
+    closeModal();
+    showInfoModal('Account deleted', 'Your account and all associated data have been removed. Sorry to see you go.');
+    setTimeout(() => location.reload(), 2500);
+  } catch (e) {
+    showBigToast('Could not complete deletion: ' + (e?.message || 'unknown error') + '. Nothing was partially removed — please try again.', 'warn');
   }
 }
 
@@ -7761,6 +7943,39 @@ function renderMore(p) {
 
   parts.push('<div class="card mb12"><div class="disclaimer-banner">Flight Crew Fitness is a training tool, not medical advice. Consult a physician before beginning any new exercise program. Exercise at your own risk and within your own physical limits.</div></div>');
   parts.push('<button class="btn btn-red-outline" onclick="doSignOut()">Sign Out</button>');
+
+  // Subscription status, and the legal links Apple requires to be reachable
+  // from inside the app rather than only on the store listing.
+  parts.push('<div class="section-label" style="margin-top:20px">SUBSCRIPTION</div>');
+  parts.push('<div class="card mb12">');
+  if (isPro()) {
+    const until = ST.subscription?.current_period_end
+      ? new Date(ST.subscription.current_period_end).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : null;
+    parts.push('<div class="fb"><span style="font-size:13px;font-weight:600;color:var(--gold)">✦ Pro</span>'
+      + '<span style="font-size:11px;color:var(--muted)">'+(ST.subscription?.status==='grace'?'Renewal pending':'Active')+'</span></div>');
+    if (until) parts.push('<div style="font-size:11px;color:var(--muted);margin-top:4px">Renews '+until+'</div>');
+    parts.push('<div style="font-size:11px;color:var(--muted);margin-top:8px">Manage or cancel in your Apple ID subscription settings.</div>');
+  } else {
+    parts.push('<div style="font-size:13px;margin-bottom:8px">Free plan — '+FREE_WEEKLY_PHOTOS+' photo analyses per week.</div>');
+    parts.push('<button class="btn btn-gold" onclick="showPaywall()">✦ Upgrade to Pro — '+PRO_ANNUAL_PRICE+'/year</button>');
+    parts.push('<button class="btn-ghost" style="display:block;width:100%;text-align:center;margin-top:10px" onclick="restoreProPurchases()">Restore purchases</button>');
+  }
+  parts.push('</div>');
+
+  parts.push('<div class="card mb12" style="padding:12px">');
+  parts.push('<a class="modal-link" href="'+PRIVACY_POLICY_URL+'" '+externalLinkAttrs()+'>Privacy Policy</a>');
+  parts.push('<span style="color:var(--muted);margin:0 8px">·</span>');
+  parts.push('<a class="modal-link" href="'+TERMS_URL+'" '+externalLinkAttrs()+'>Terms of Use</a>');
+  parts.push('</div>');
+
+  // Apple has required in-app account deletion since 2022 for any app that
+  // supports account creation — its absence is an automatic rejection.
+  parts.push('<div class="section-label" style="margin-top:20px;color:var(--red)">DANGER ZONE</div>');
+  parts.push('<div class="card mb12">');
+  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Permanently deletes your account and every workout, meal, biometric and schedule stored with it. This cannot be undone.</div>');
+  parts.push('<button class="btn btn-outline" style="color:var(--red);border-color:var(--red)" onclick="confirmDeleteAccount()">Delete Account</button>');
+  parts.push('</div>');
+
   p.innerHTML = parts.join('');
 }
 
@@ -9461,9 +9676,13 @@ function handleFoodRecognitionResult(result) {
   if (!box) return;
   if (!result) { box.innerHTML = ''; return; }
   if (result.error === 'limit_reached') {
-    box.innerHTML = '<div class="card mt8" style="font-size:12px">' +
-      'You\'ve used all ' + result.limit + ' free photo analyses today. Resets tomorrow — or ' +
-      '<span style="color:var(--gold)">upgrade to Pro for 20+/day</span> plus AI coaching features.</div>';
+    // Straight to the paywall rather than a line of text that mentions Pro
+    // and leaves no way to act on it. The photo is not consumed — the
+    // server only counts a scan that actually produced a result.
+    box.innerHTML = '';
+    ST.foodPhotoAnalyzing = false;
+    renderMealBuilder();
+    showPaywall('photos');
     return;
   }
   if (result.error) {

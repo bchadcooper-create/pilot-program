@@ -32,7 +32,36 @@ const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
 // unlimited photos for testing. Keep these two in sync if the admin
 // account ever changes.
 const ADMIN_EMAIL = 'b.chad.cooper@gmail.com';
-const DAILY_PHOTO_LIMIT = 5;
+
+// Free tier: 3 photo analyses per WEEK. Pro: unlimited. Enforced here rather
+// than in the client, because a client-side limit is a suggestion — the
+// vision call costs real money per invocation, so the gate has to sit in
+// front of the API call itself.
+const FREE_WEEKLY_PHOTOS = 3;
+
+// Monday-based week start, computed in UTC. The boundary only needs to be
+// stable and roughly weekly; anchoring it to a fixed day avoids a rolling
+// window that would let someone drip past the limit indefinitely.
+function weekStartISO(d: Date) {
+  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const dow = (t.getUTCDay() + 6) % 7;          // 0 = Monday
+  t.setUTCDate(t.getUTCDate() - dow);
+  return t.toISOString().slice(0, 10);
+}
+
+// Reads entitlement from the subscriptions table, which only a service-role
+// or receipt-validation path can write.
+async function isProUser(supabase: any, userId: string) {
+  try {
+    const { data } = await supabase.from('subscriptions')
+      .select('tier,status,current_period_end').eq('user_id', userId).maybeSingle();
+    if (!data) return false;
+    if (data.tier !== 'pro') return false;
+    if (data.status !== 'active' && data.status !== 'grace') return false;
+    if (data.current_period_end && new Date(data.current_period_end) < new Date()) return false;
+    return true;
+  } catch (_) { return false; }
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -130,14 +159,15 @@ serve(async (req) => {
       if (!image) return json({ error: 'image required' }, 400);
       if (!ANTHROPIC_API_KEY) return json({ error: `${ANTHROPIC_KEY_NAME} secret not configured` }, 500);
 
-      let usedToday = 0;
-      const today = new Date().toISOString().slice(0, 10);
-      if (!isSuperUser) {
-        const { data: usageRow } = await supabase.from('food_photo_usage')
-          .select('photo_count').eq('user_id', user.id).eq('usage_date', today).maybeSingle();
-        usedToday = usageRow?.photo_count || 0;
-        if (usedToday >= DAILY_PHOTO_LIMIT) {
-          return json({ error: 'limit_reached', used: usedToday, limit: DAILY_PHOTO_LIMIT }, 429);
+      const pro = isSuperUser || await isProUser(supabase, user.id);
+      const weekStart = weekStartISO(new Date());
+      let usedThisWeek = 0;
+      if (!pro) {
+        const { data: usageRow } = await supabase.from('photo_quota_weekly')
+          .select('photo_count').eq('user_id', user.id).eq('week_start', weekStart).maybeSingle();
+        usedThisWeek = usageRow?.photo_count || 0;
+        if (usedThisWeek >= FREE_WEEKLY_PHOTOS) {
+          return json({ error: 'limit_reached', used: usedThisWeek, limit: FREE_WEEKLY_PHOTOS, tier: 'free' }, 429);
         }
       }
 
@@ -214,15 +244,15 @@ Nutrient numbers should be your best real estimate for the portion shown, not pl
 
       // Only counts against quota on a successful analysis — a failed
       // vision call shouldn't cost the user one of their 5.
-      let newUsed = usedToday;
-      if (!isSuperUser) {
-        newUsed = usedToday + 1;
-        await supabase.from('food_photo_usage')
-          .upsert({ user_id: user.id, usage_date: today, photo_count: newUsed },
-            { onConflict: 'user_id,usage_date' });
+      let newUsed = usedThisWeek;
+      if (!pro) {
+        newUsed = usedThisWeek + 1;
+        await supabase.from('photo_quota_weekly')
+          .upsert({ user_id: user.id, week_start: weekStart, photo_count: newUsed },
+            { onConflict: 'user_id,week_start' });
       }
 
-      return json({ ...result, quota: { used: isSuperUser ? 0 : newUsed, limit: DAILY_PHOTO_LIMIT, unlimited: isSuperUser } });
+      return json({ ...result, quota: { used: pro ? 0 : newUsed, limit: FREE_WEEKLY_PHOTOS, unlimited: pro, period: 'week' } });
     }
 
     return json({ error: 'invalid action, expected "photo" or "barcode"' }, 400);

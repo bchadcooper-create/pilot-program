@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.39.0';
+const FCF_VERSION = 'v5.40.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2609,6 +2609,7 @@ async function bootApp() {
     setTimeout(() => syncOuraData().catch(() => {}), 1500);
     scheduleOuraActivityRetry();
   }
+  scheduleEntitlementRefresh();
   // Badges only ever got checked as a side effect of a brand-new workout or
   // biometric save — anyone with existing history never had it evaluated
   // retroactively. Run it once per boot; awardBadges() already skips
@@ -2883,7 +2884,12 @@ async function startProPurchase(productId) {
     return;
   }
   try {
-    await withDialogSpinner('Contacting the App Store…', () => bridge.purchase({ productId }));
+    // appAccountToken is what ties Apple's server notifications back to an
+    // account. Apple has no idea who our users are; without this the webhook
+    // receives a renewal it cannot attribute to anyone, and entitlement is
+    // never written. It must be a UUID, which the Supabase user id already is.
+    await withDialogSpinner('Contacting the App Store…',
+      () => bridge.purchase({ productId, appAccountToken: ST.user?.id || null }));
     // Entitlement is written server-side after receipt validation, so the
     // client re-reads rather than assuming the purchase succeeded.
     await loadSubscription();
@@ -7702,6 +7708,18 @@ function scheduleOuraActivityRetry() {
   // next 30-minute tick if Oura posted the data in the meantime.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') checkAndRetry();
+  });
+}
+
+// Subscriptions change while the app is closed — a renewal succeeds, a card
+// expires, a refund lands. Re-reading entitlement on resume means the paywall
+// reflects reality rather than whatever was true at last launch.
+function scheduleEntitlementRefresh() {
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState !== 'visible' || !ST.user) return;
+    const was = isPro();
+    await loadSubscription();
+    if (isPro() !== was) renderPage();
   });
 }
 

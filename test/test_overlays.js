@@ -3016,6 +3016,47 @@ ST.ouraConnected = false;
 ST.ouraAccessToken = null;
 ST.ouraData = null;
 
+// ── APP STORE NOTIFICATION -> ENTITLEMENT MAPPING ──
+// Mirrors entitlementFor() in edge-functions/fcf-appstore-notifications.
+// Kept in sync deliberately: this is the logic that decides who has paid
+// access, and it is worth being able to assert it without deploying.
+function entitlementForTest(type, subtype) {
+  switch (type) {
+    case 'SUBSCRIBED': case 'DID_RENEW': case 'OFFER_REDEEMED': case 'DID_CHANGE_RENEWAL_PREF':
+      return { tier:'pro', status:'active' };
+    case 'DID_FAIL_TO_RENEW':
+      return subtype === 'GRACE_PERIOD' ? { tier:'pro', status:'grace' } : { tier:'free', status:'expired' };
+    case 'EXPIRED': case 'GRACE_PERIOD_EXPIRED':
+      return { tier:'free', status:'expired' };
+    case 'REFUND': case 'REVOKE':
+      return { tier:'free', status:'expired', revoked:true };
+    default: return null;
+  }
+}
+const ent = (t,s) => JSON.stringify(entitlementForTest(t,s));
+
+log('a new subscription grants Pro', ent('SUBSCRIBED') === JSON.stringify({tier:'pro',status:'active'}), ent('SUBSCRIBED'));
+log('a renewal keeps Pro', ent('DID_RENEW') === JSON.stringify({tier:'pro',status:'active'}), '');
+log('a failed renewal INSIDE the grace period keeps access — a declined card must not cut someone off instantly', ent('DID_FAIL_TO_RENEW','GRACE_PERIOD') === JSON.stringify({tier:'pro',status:'grace'}), ent('DID_FAIL_TO_RENEW','GRACE_PERIOD'));
+log('a failed renewal with no grace period ends access', ent('DID_FAIL_TO_RENEW') === JSON.stringify({tier:'free',status:'expired'}), '');
+log('expiry ends access', ent('EXPIRED') === JSON.stringify({tier:'free',status:'expired'}), '');
+log('grace period running out ends access', ent('GRACE_PERIOD_EXPIRED') === JSON.stringify({tier:'free',status:'expired'}), '');
+log('a refund revokes access immediately rather than waiting for the period end — the money has gone back', entitlementForTest('REFUND').revoked === true, ent('REFUND'));
+log('a revoke does the same', entitlementForTest('REVOKE').revoked === true, '');
+
+// The one that is easy to get wrong: turning off auto-renew is NOT a
+// cancellation. Access must continue for time already paid for.
+log('turning OFF auto-renew does not end access — it only means no future renewal', entitlementForTest('DID_CHANGE_RENEWAL_STATUS') === null, ent('DID_CHANGE_RENEWAL_STATUS'));
+log('an unrecognised notification type changes nothing rather than guessing', entitlementForTest('SOMETHING_NEW_APPLE_ADDED') === null, '');
+
+// The client's own view must agree with what the webhook writes.
+const origEntSub = ST.subscription;
+ST.subscription = { tier:'pro', status:'grace', current_period_end:new Date(Date.now()+2*86400000).toISOString() };
+log('a grace-period row reads as Pro on the client, matching what the webhook wrote', isPro() === true, '');
+ST.subscription = { tier:'free', status:'expired', current_period_end:new Date().toISOString() };
+log('a revoked row reads as not-Pro on the client', isPro() === false, '');
+ST.subscription = origEntSub;
+
 // ── TRACKING TOGGLES ──
 // Someone here purely for training shouldn't be nagged about protein or
 // water. Turning tracking off has to remove the PROMPTS as well as the

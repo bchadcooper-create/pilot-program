@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.38.0';
+const FCF_VERSION = 'v5.39.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -90,6 +90,8 @@ const ST = {
   ouraDismissedIds: [], ouraImportQueue: [],
   ouraSteps: null, ouraActiveCal: null,
   subscription: null,
+  trackNutrition: true,   // meals, macros and the Fuel card
+  trackHydration: true,   // water logging and the hydration gate
   nutritionGoals: null, goalDraft: 'maintain', trainDaysDraft: '3-4',
   manualTargetsOpen: false, manualCal: '', manualProtein: '', manualCarbs: '', manualFat: '', manualTargetsWarning: null,
   sleepBaselineScore: null,
@@ -2473,6 +2475,10 @@ function applyProfileToState(profile) {
   ST.ouraDismissedIds = profile.ouraDismissedIds || [];
   ST.nutritionGoals = profile.nutritionGoals || null;
   ST.flightScheduleRaw = profile.flightScheduleRaw || null;
+  // Default ON for existing users — someone who has been logging meals
+  // shouldn't lose the feature because a new preference defaulted to off.
+  ST.trackNutrition = profile.trackNutrition !== false;
+  ST.trackHydration = profile.trackHydration !== false;
 
   // BUG FIX (reported): the parser fix in v5.36.0 changed nothing on a
   // schedule already uploaded. Events are parsed once at upload and the
@@ -2963,6 +2969,56 @@ async function performAccountDeletion() {
   } catch (e) {
     showBigToast('Could not complete deletion: ' + (e?.message || 'unknown error') + '. Nothing was partially removed — please try again.', 'warn');
   }
+}
+
+
+// ─── TRACKING PREFERENCES ───────────────────────────────────────────────
+// Not everyone wants a nutrition tracker. Someone here purely for training
+// and schedule-aware programming shouldn't be nagged about protein or
+// water, and turning it off has to remove the PROMPTS as well as the
+// screens — a hidden tab that still generates "nothing logged yet today"
+// on the Today briefing would be worse than leaving it on.
+//
+// Logged data is never deleted by toggling; switching back restores it.
+async function setTrackingPref(key, on) {
+  ST[key] = !!on;
+  try {
+    const profile = (await dbGetProfile()) || {};
+    profile[key] = !!on;
+    await dbSetProfile(profile);
+  } catch(e) { showBigToast('Saved on this device, but could not sync.', 'warn'); }
+  renderPage();
+}
+
+// The hydration line on Today. Extracted so it can appear inside the Fuel
+// card when nutrition is tracked, or stand alone when it isn't, without the
+// two copies drifting apart — which is exactly how the Today tab and the
+// workout screen previously ended up disagreeing about the same number.
+function hydrationRowHTML(ctx, standalone) {
+  const hs = hydroStatus(ctx.now);
+  // Tappable — reading your hydration status and wanting to log water are
+  // the same moment, so the number itself is the control.
+  return '<div class="fb" style="'+(standalone?'':'margin-top:10px;padding-top:10px;border-top:1px solid var(--border);')+'cursor:pointer;padding-bottom:2px" onclick="openQuickWaterLog()">' +
+    '<span style="font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--muted)">💧 HYDRATION</span>' +
+    '<span style="font-family:var(--mono);font-size:10px;color:'+hs.color+'">'+ST.waterIn.toFixed(1)+'/'+hydroTarget().toFixed(1)+'L · '+hs.label+' <span style="color:var(--gold)">+ LOG</span></span></div>';
+}
+
+function renderTrackingToggles() {
+  const row = (key, label, sub) =>
+    '<div class="fb" style="padding:10px 0;border-bottom:1px solid var(--border)">' +
+      '<div style="flex:1;padding-right:12px">' +
+        '<div style="font-size:14px">'+label+'</div>' +
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+sub+'</div>' +
+      '</div>' +
+      '<button class="btn-ghost" style="font-size:20px;padding:0 4px" onclick="setTrackingPref(\''+key+'\','+(!ST[key])+')">' +
+        (ST[key] ? '🟢' : '⚪') + '</button>' +
+    '</div>';
+  return '<div class="section-label" style="margin-top:20px">TRACKING</div>' +
+    '<div class="card mb12">' +
+      row('trackNutrition','Nutrition','Meals, macros and the Fuel card') +
+      row('trackHydration','Hydration','Water logging and hydration status') +
+      '<div style="font-size:11px;color:var(--muted);margin-top:10px">Turning these off hides the screens and stops the reminders. Nothing you have already logged is deleted.</div>' +
+    '</div>';
 }
 
 function showInfoModal(title, text) {
@@ -4549,6 +4605,7 @@ async function renderPreflight(p) {
   // Preflight's job is launching a session quickly, not looking back.
 
   // Hydration
+  if (ST.trackHydration) {
   parts.push('<div class="section-label">HYDRATION PAYLOAD</div>');
   parts.push('<div class="card mb12">');
   if (!ST.flightHrsTouched && ST.flightSchedule && computeTodaysFlightHours(ST.flightSchedule) !== null) {
@@ -4566,6 +4623,7 @@ async function renderPreflight(p) {
   parts.push('<div id="hydroPctText" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px;text-align:right">'+Math.round(pct*100)+'% of target</div>');
   parts.push('<div id="hydroAdviceBox">'+(adv ? '<div class="alert alert-warn mt8"><div class="alert-icon">💧</div><div>'+adv+'</div></div>' : '<div class="alert alert-ok mt8"><div class="alert-icon">✅</div><div>Hydration nominal. Cleared for workout operations.</div></div>')+'</div>');
   parts.push('</div>');
+  } // end hydration tracking block
 
   // Last mission
   if (ST.lastSession) {
@@ -7931,7 +7989,7 @@ function renderMore(p) {
   parts.push(item('⌚','Connected Devices','Oura Ring — more devices coming',"switchTab('devices')"));
   parts.push(item('📖','Flight Deck Wisdom','Daily training wisdom cards',"switchTab('wisdom')"));
   parts.push(item('📊','Data & Import/Export','Flight schedule import, CSV export, AI prompt',"switchTab('data')"));
-  parts.push(item('🍽️','Nutrition Log','Log meals, search foods, track macros',"switchTab('nutrition')"));
+  if (ST.trackNutrition) parts.push(item('🍽️','Nutrition Log','Log meals, search foods, track macros',"switchTab('nutrition')"));
   if (isSuperUser()) {
     parts.push(item('🛡️','Super User','Activity report — real usage, not signups',"switchTab('superuser')"));
   }
@@ -7946,6 +8004,8 @@ function renderMore(p) {
 
   // Subscription status, and the legal links Apple requires to be reachable
   // from inside the app rather than only on the store listing.
+  parts.push(renderTrackingToggles());
+
   parts.push('<div class="section-label" style="margin-top:20px">SUBSCRIPTION</div>');
   parts.push('<div class="card mb12">');
   if (isPro()) {
@@ -8857,7 +8917,7 @@ function buildTodayBriefing(ctx) {
 function buildTodayGaps(ctx) {
   const gaps = [];
   const { nutrition, training, hour } = ctx;
-  if (!nutrition.mealCount && hour >= 11) gaps.push({ icon:'🍽️', text:'Nothing logged yet today', fn:"switchTab('nutrition')" });
+  if (ST.trackNutrition && !nutrition.mealCount && hour >= 11) gaps.push({ icon:'🍽️', text:'Nothing logged yet today', fn:"switchTab('nutrition')" });
   else if (nutrition.goals && nutrition.proteinPct !== null && nutrition.proteinPct < 70 && hour >= 15) {
     gaps.push({ icon:'🥩', text:'Protein at '+nutrition.proteinPct+'% of target', fn:"switchTab('nutrition')" });
   }
@@ -8869,7 +8929,7 @@ function buildTodayGaps(ctx) {
   // at the exact same moment the workout screen showed 100%/nominal —
   // two screens disagreeing about the same number. Both now read from
   // hydroTarget()/ST.waterIn, so they can't diverge again.
-  const hydro = hydroStatus(ctx.now);
+  const hydro = ST.trackHydration ? hydroStatus(ctx.now) : { label: 'NOMINAL' };
   if (hydro.label === 'DEFICIT') gaps.push({ icon:'💧', text:'Water is well behind pace today', fn:"switchTab('preflight')" });
   else if (hydro.label === 'CAUTION') gaps.push({ icon:'💧', text:'Water is light so far', fn:"switchTab('preflight')" });
   return gaps;
@@ -8926,6 +8986,7 @@ function renderToday(p) {
 
   const n = ctx.nutrition;
   if (n.goals) {
+    if (ST.trackNutrition) {
     parts.push('<div class="section-label">FUEL</div>');
     parts.push('<div class="card mb12">');
     parts.push('<div class="fb" style="align-items:baseline;margin-bottom:10px"><span style="font-family:var(--mono);font-size:22px">'+Math.round(n.consumed.calories).toLocaleString()+'</span><span style="font-family:var(--mono);font-size:10px;color:var(--muted)">OF '+n.goals.calories.toLocaleString()+' CAL</span></div>');
@@ -8935,18 +8996,20 @@ function renderToday(p) {
       parts.push('<div style="height:3px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+col+';border-radius:2px"></div></div></div>');
     });
 
-    // Hydration status now lives here too — previously the only place to
-    // check it was the Preflight/workout screen's Hydration Payload
-    // widget, so there was no way to see it from Today without switching
-    // tabs. Reads the same hydroStatus()/hydroTarget() as that widget and
-    // the Still Open list, so all three can never show conflicting numbers.
-    const hs = hydroStatus(ctx.now);
-    // Tappable — reading your hydration status and wanting to log water are
-    // the same moment, so the number itself is the control rather than
-    // making you go find one.
-    parts.push('<div class="fb" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);cursor:pointer;padding-bottom:2px" onclick="openQuickWaterLog()">' +
-      '<span style="font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--muted)">💧 HYDRATION</span>' +
-      '<span style="font-family:var(--mono);font-size:10px;color:'+hs.color+'">'+ST.waterIn.toFixed(1)+'/'+hydroTarget().toFixed(1)+'L · '+hs.label+' <span style="color:var(--gold)">+ LOG</span></span></div>');
+    // Hydration sits inside the Fuel card when both are tracked, but it is
+    // gated separately — someone who wants water tracking without calorie
+    // tracking must not lose it just because it happens to render here.
+    if (ST.trackHydration) parts.push(hydrationRowHTML(ctx));
+    parts.push('</div>');
+    } // end nutrition tracking block
+  }
+
+  // Hydration on, nutrition off: it still needs somewhere to live, so it
+  // gets its own card rather than disappearing with the Fuel block.
+  if (ST.trackHydration && !ST.trackNutrition) {
+    parts.push('<div class="section-label">HYDRATION</div>');
+    parts.push('<div class="card mb12">');
+    parts.push(hydrationRowHTML(ctx, true));
     parts.push('</div>');
   }
 

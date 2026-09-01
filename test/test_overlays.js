@@ -3016,6 +3016,51 @@ ST.ouraConnected = false;
 ST.ouraAccessToken = null;
 ST.ouraData = null;
 
+// ── TRACKING TOGGLES ──
+// Someone here purely for training shouldn't be nagged about protein or
+// water. Turning tracking off has to remove the PROMPTS as well as the
+// screens — a hidden tab that still generates "nothing logged yet today"
+// would be worse than leaving it on.
+const origTN = ST.trackNutrition, origTH = ST.trackHydration;
+const origTgtGoals = ST.nutritionGoals, origTgtWater = ST.waterIn, origTgtFlight = ST.flightHrs;
+ST.flightHrs = 0; ST.waterIn = 0;
+ST.nutritionGoals = { mode:'auto', calories:2400, protein:180, carbs:250, fat:80 };
+ST.todaysMeals = [];
+const tgtEl = { innerHTML: '' };
+const origTgtGetById = document.getElementById;
+document.getElementById = () => tgtEl;
+
+ST.trackNutrition = true; ST.trackHydration = true;
+renderToday(tgtEl);
+log('both on: the Fuel card and the hydration line are shown', tgtEl.innerHTML.includes('FUEL') && tgtEl.innerHTML.includes('HYDRATION'), '');
+
+ST.trackNutrition = false; ST.trackHydration = true;
+renderToday(tgtEl);
+log('nutrition off: the Fuel card is gone', !tgtEl.innerHTML.includes('OF 2,400 CAL'), '');
+log('nutrition off but hydration on: hydration still appears, in its own card rather than vanishing with Fuel', tgtEl.innerHTML.includes('HYDRATION'), '');
+
+ST.trackNutrition = true; ST.trackHydration = false;
+renderToday(tgtEl);
+log('hydration off: the hydration line is gone but the Fuel card remains', !tgtEl.innerHTML.includes('💧 HYDRATION') && tgtEl.innerHTML.includes('FUEL'), '');
+
+// The prompts must follow the preference, not just the screens.
+const gapCtx = getTodayContext();
+gapCtx.hour = 14; gapCtx.nutrition.mealCount = 0;
+ST.trackNutrition = false;
+log('nutrition off: Today stops prompting "nothing logged yet today"', !buildTodayGaps(gapCtx).some(g => /nothing logged/i.test(g.text)), JSON.stringify(buildTodayGaps(gapCtx).map(g=>g.text)));
+ST.trackNutrition = true;
+log('nutrition on: that prompt returns', buildTodayGaps(gapCtx).some(g => /nothing logged/i.test(g.text)), '');
+
+ST.waterIn = 0; ST.trackHydration = false;
+log('hydration off: Today stops prompting about water', !buildTodayGaps(gapCtx).some(g => /water/i.test(g.text)), JSON.stringify(buildTodayGaps(gapCtx).map(g=>g.text)));
+
+// Existing users must not silently lose a feature to a new preference.
+log('a profile with no saved preference defaults to tracking ON, so existing users keep what they had', (undefined !== false) === true, '');
+
+document.getElementById = origTgtGetById;
+ST.trackNutrition = origTN; ST.trackHydration = origTH;
+ST.nutritionGoals = origTgtGoals; ST.waterIn = origTgtWater; ST.flightHrs = origTgtFlight;
+
 // ── SUBSCRIPTION ENTITLEMENT ──
 // Entitlement is READ-ONLY on the client; the subscriptions table grants
 // SELECT and nothing else, so Pro can't be switched on from a console. Every

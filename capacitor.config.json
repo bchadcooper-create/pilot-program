@@ -1,0 +1,19 @@
+{
+  "appId": "fit.flightcrew.app",
+  "appName": "Flight Crew Fitness",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#0a0f1a",
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "server": {
+    "iosScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "backgroundColor": "#0a0f1a"
+    }
+  }
+}

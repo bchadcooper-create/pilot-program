@@ -3016,6 +3016,58 @@ ST.ouraConnected = false;
 ST.ouraAccessToken = null;
 ST.ouraData = null;
 
+// ── STRIPE (WEB) vs STOREKIT (iOS) ROUTING ──
+// Apple still requires IAP for in-app digital purchases, so the two paths
+// must stay completely separate: the installed iOS app must never route to
+// Stripe, and the web must never wait on a StoreKit bridge that isn't there.
+const origStripeUser = ST.user;
+ST.user = { id:'u-stripe', email:'a@b.c' };
+
+// Web: no Capacitor bridge present.
+let webCheckoutPlan = null;
+const origStartWebCheckout = startWebCheckout;
+startWebCheckout = async (plan) => { webCheckoutPlan = plan; };
+const origCap = window.Capacitor;
+window.Capacitor = undefined;
+
+await startProPurchase(PRO_PRODUCT_ANNUAL);
+log('web: the annual button routes to Stripe checkout, not an App Store apology', webCheckoutPlan === 'annual', String(webCheckoutPlan));
+webCheckoutPlan = null;
+await startProPurchase(PRO_PRODUCT_MONTHLY);
+log('web: the monthly button maps to the monthly plan', webCheckoutPlan === 'monthly', String(webCheckoutPlan));
+
+// iOS shell present: StoreKit must be used, and Stripe must NOT be.
+let storeKitCalled = null;
+window.Capacitor = { Plugins: { FCFPurchases: {
+  purchase: async (o) => { storeKitCalled = o; },
+  restore: async () => {},
+} } };
+webCheckoutPlan = null;
+await startProPurchase(PRO_PRODUCT_ANNUAL);
+log('iOS: purchases go through StoreKit', storeKitCalled?.productId === PRO_PRODUCT_ANNUAL, JSON.stringify(storeKitCalled));
+log('iOS: Stripe is NOT used — routing a web checkout from inside the app would breach Apple\'s IAP rule', webCheckoutPlan === null, String(webCheckoutPlan));
+log('iOS: appAccountToken is sent, without which Apple\'s renewal notifications cannot be attributed to an account', storeKitCalled?.appAccountToken === 'u-stripe', String(storeKitCalled?.appAccountToken));
+
+window.Capacitor = origCap;
+startWebCheckout = origStartWebCheckout;
+ST.user = origStripeUser;
+
+// ── STRIPE STATUS -> ENTITLEMENT ──
+// Mirrors entitlementForStripe() in the webhook.
+function entForStripe(s) {
+  switch (s) {
+    case 'active': case 'trialing': return { tier:'pro', status:'active' };
+    case 'past_due': return { tier:'pro', status:'grace' };
+    case 'canceled': case 'unpaid': case 'incomplete_expired': return { tier:'free', status:'expired' };
+    default: return null;
+  }
+}
+log('an active Stripe subscription grants Pro', JSON.stringify(entForStripe('active')) === JSON.stringify({tier:'pro',status:'active'}), '');
+log('a trial grants Pro', JSON.stringify(entForStripe('trialing')) === JSON.stringify({tier:'pro',status:'active'}), '');
+log('past_due keeps access while Stripe retries — the direct analogue of Apple\'s grace period', JSON.stringify(entForStripe('past_due')) === JSON.stringify({tier:'pro',status:'grace'}), '');
+log('a cancelled subscription ends access', JSON.stringify(entForStripe('canceled')) === JSON.stringify({tier:'free',status:'expired'}), '');
+log('an incomplete checkout changes nothing rather than granting or revoking on a half-finished payment', entForStripe('incomplete') === null, '');
+
 // ── APP STORE NOTIFICATION -> ENTITLEMENT MAPPING ──
 // Mirrors entitlementFor() in edge-functions/fcf-appstore-notifications.
 // Kept in sync deliberately: this is the logic that decides who has paid
@@ -3130,14 +3182,17 @@ log('the paywall names the specific thing that was blocked rather than a generic
 log('the paywall offers both annual and monthly', pwEl.innerHTML.includes(PRO_ANNUAL_PRICE) && pwEl.innerHTML.includes(PRO_MONTHLY_PRICE), '');
 log('the paywall offers Restore purchases — Apple requires a restore path for non-consumables', pwEl.innerHTML.includes('Restore purchases'), '');
 
-// Purchases must fail honestly outside the native shell rather than
-// pretending to charge anyone.
-let infoTitle = null;
-const origInfoModal = showInfoModal;
-showInfoModal = (t2) => { infoTitle = t2; };
+// Outside the native shell there IS a real path now — Stripe — so a
+// purchase must route there rather than apologise about the App Store.
+let pwWebPlan = null;
+const origPwWebCheckout = startWebCheckout;
+startWebCheckout = async (plan) => { pwWebPlan = plan; };
+const origPwCap = window.Capacitor;
+window.Capacitor = undefined;
 await startProPurchase(PRO_PRODUCT_ANNUAL);
-log('a purchase attempt with no StoreKit bridge says so plainly instead of failing silently', /not available/i.test(infoTitle || ''), infoTitle);
-showInfoModal = origInfoModal;
+log('with no StoreKit bridge, a purchase routes to Stripe rather than dead-ending', pwWebPlan === 'annual', String(pwWebPlan));
+window.Capacitor = origPwCap;
+startWebCheckout = origPwWebCheckout;
 
 // ── ACCOUNT DELETION (Apple-mandatory) ──
 confirmDeleteAccount();

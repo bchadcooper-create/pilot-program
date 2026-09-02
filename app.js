@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.40.1';
+const FCF_VERSION = 'v5.41.0';
 const FCF_BUILD   = '20260711';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -15,6 +15,7 @@ const OURA_EDGE_FN      = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1
 const USDA_EDGE_FN      = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/usda-food';
 const FOOD_RECOGNITION_EDGE_FN = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/fcf-food-recognition';
 const ACCOUNT_DELETE_EDGE_FN = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/fcf-delete-account';
+const STRIPE_CHECKOUT_EDGE_FN = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/fcf-stripe-checkout';
 const PRIVACY_POLICY_URL = 'https://flightcrew.fit/privacy.html';
 const TERMS_URL = 'https://flightcrew.fit/terms.html';
 // ─── SUBSCRIPTION TIERS ─────────────────────────────────────────────────
@@ -2610,6 +2611,19 @@ async function bootApp() {
     scheduleOuraActivityRetry();
   }
   scheduleEntitlementRefresh();
+  // Returning from Stripe Checkout. The webhook may land a moment after the
+  // redirect, so this re-reads a few times rather than once and giving up.
+  if (/[?&]checkout=success/.test(location.search)) {
+    history.replaceState({}, '', location.pathname);
+    (async () => {
+      for (let i = 0; i < 6 && !isPro(); i++) {
+        await new Promise(r => setTimeout(r, i === 0 ? 1200 : 2500));
+        await loadSubscription();
+      }
+      renderPage();
+      showBigToast(isPro() ? '✓ Pro active — thanks.' : 'Payment received. Access will appear shortly.', 'ok');
+    })();
+  }
   // Badges only ever got checked as a side effect of a brand-new workout or
   // biometric save — anyone with existing history never had it evaluated
   // retroactively. Run it once per boot; awardBadges() already skips
@@ -2876,12 +2890,37 @@ function storeKitBridge() {
   return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.FCFPurchases) || null;
 }
 
+// Web subscribers go through Stripe. Deliberately NOT offered inside the
+// iOS app: Apple still requires IAP for in-app digital purchases, and the
+// link-out route needs an entitlement, a disclosure sheet and transaction
+// reporting. A standalone web purchase carries none of that — and no
+// commission — so the two paths stay completely separate.
+async function startWebCheckout(plan) {
+  if (!ST.user) { showBigToast('Sign in first.', 'warn'); return; }
+  try {
+    const { data: { session } } = await SB.auth.getSession();
+    if (!session) { showBigToast('Sign in first.', 'warn'); return; }
+    const res = await withDialogSpinner('Opening secure checkout…', () =>
+      fetch(STRIPE_CHECKOUT_EDGE_FN, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+        body: JSON.stringify({ plan }),
+      }).then(r => r.json()));
+    if (!res?.url) throw new Error(res?.error || 'could not start checkout');
+    // Same tab. Stripe returns to success_url, and the app re-reads
+    // entitlement on load, so the round trip completes on its own.
+    location.href = res.url;
+  } catch (e) {
+    showBigToast('Could not open checkout: ' + (e?.message || 'unknown error'), 'warn');
+  }
+}
+
 async function startProPurchase(productId) {
   const bridge = storeKitBridge();
   if (!bridge) {
-    showInfoModal('Not available here',
-      'Subscriptions are purchased through the App Store, which is only available in the installed iOS app. This build is running in a browser.');
-    return;
+    // In a browser or installed PWA, Stripe is the correct path rather than
+    // an apology about the App Store.
+    return startWebCheckout(productId === PRO_PRODUCT_MONTHLY ? 'monthly' : 'annual');
   }
   try {
     // appAccountToken is what ties Apple's server notifications back to an
@@ -2903,7 +2942,14 @@ async function startProPurchase(productId) {
 
 async function restoreProPurchases() {
   const bridge = storeKitBridge();
-  if (!bridge) { showInfoModal('Not available here', 'Restoring purchases requires the installed iOS app.'); return; }
+  if (!bridge) {
+    // Nothing to "restore" on web — entitlement lives against the account,
+    // not the device. Re-reading it is the equivalent action.
+    await withDialogSpinner('Checking…', () => loadSubscription());
+    closeModal(); renderPage();
+    showBigToast(isPro() ? '✓ Pro active.' : 'No active subscription on this account.', isPro() ? 'ok' : 'info');
+    return;
+  }
   try {
     await withDialogSpinner('Restoring…', () => bridge.restore());
     await loadSubscription();

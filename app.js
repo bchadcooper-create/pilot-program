@@ -28,8 +28,8 @@ const FREE_WEEKLY_PHOTOS = 3;
 const PRO_WEEKLY_PHOTOS = 0;        // 0 = unlimited
 const PRO_ANNUAL_PRICE = '$59.99';
 const PRO_MONTHLY_PRICE = '$7.99';
-const PRO_PRODUCT_ANNUAL = 'fcf_pro_annual';
-const PRO_PRODUCT_MONTHLY = 'fcf_pro_monthly';
+const PRO_PRODUCT_ANNUAL = 'FCFProAnnual';
+const PRO_PRODUCT_MONTHLY = 'FCFProMonthly';
 
 // Entitlement is only ever READ here. The server decides it after receipt
 // validation — the subscriptions table grants the client SELECT and nothing

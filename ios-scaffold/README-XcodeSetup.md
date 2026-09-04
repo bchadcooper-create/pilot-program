@@ -62,14 +62,16 @@ Open `Main.storyboard`:
 2. Select the **FlightCrewFitness target**
 3. Go to **Signing & Capabilities**
 4. Set Team to your account
-5. Make sure these capabilities are listed (they should match what's in App ID):
+5. Click **+ Capability** and add each of these (Xcode fills in the matching entitlements automatically — don't type them by hand):
    - HealthKit
    - In-App Purchase
    - Push Notifications
    - Sign In with Apple
    - Time Sensitive Notifications
-   - Sustained Execution (add via + Capability if missing)
+   - Sustained Execution
 6. Under **Signing**, confirm Xcode auto-selects the Distribution provisioning profile you created
+
+**Important:** don't hand-edit the `aps-environment` value in the entitlements file. Xcode sets it to `development` while you're running on your cloud Mac and swaps it to `production` automatically when you archive. If you ever see a code-signing error mentioning `aps-environment`, it usually means this got hardcoded — just remove that line and let the Push Notifications capability toggle manage it.
 
 ---
 

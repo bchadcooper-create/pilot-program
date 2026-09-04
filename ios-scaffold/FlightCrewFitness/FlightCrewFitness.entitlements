@@ -12,16 +12,23 @@
   <key>com.apple.developer.healthkit.recalibrate-estimates</key>
   <true/>
 
-  <!-- 3. In-App Purchase -->
-  <key>com.apple.developer.in-app-payments</key>
-  <array>
-    <string>fit.flightcrew.app.pro.monthly</string>
-    <string>fit.flightcrew.app.pro.annual</string>
-  </array>
+  <!-- 3. In-App Purchase — NO entitlement key needed.
+       BUG FIX: the previous version put product IDs under
+       com.apple.developer.in-app-payments — that key is for Apple Pay
+       merchant IDs, unrelated to StoreKit/IAP. Using it here was wrong
+       and could fail codesign validation. StoreKit 2 IAP just needs the
+       "In-App Purchase" capability added in Xcode's Signing & Capabilities
+       tab — it writes nothing to this file. -->
 
-  <!-- 4. Push Notifications -->
-  <key>aps-environment</key>
-  <string>production</string>
+  <!-- 4. Push Notifications
+       BUG FIX: do NOT hardcode "production" here. Xcode sets this
+       automatically based on which provisioning profile is active
+       (development while you're running/debugging on your cloud Mac,
+       production only for the archive you upload to App Store Connect).
+       Hardcoding "production" will make Debug runs on a real device
+       fail to code-sign, because development profiles only grant the
+       "development" value. Just add the "Push Notifications" capability
+       in Xcode's Signing & Capabilities tab and let it manage this key. -->
 
   <!-- 5. Sign In with Apple -->
   <key>com.apple.developer.applesignin</key>
@@ -29,7 +36,15 @@
     <string>Default</string>
   </array>
 
-  <!-- 6. Sustained Execution -->
+  <!-- 6. Sustained Execution
+       Note: despite the name, this is NOT about running in the background.
+       It tells the system to hold your app at a consistent GPU/performance
+       level rather than boosting and throttling — mainly relevant for
+       games or heavy graphics work. It's a plain boolean; no other code
+       is needed for it. If FCF doesn't do sustained graphics-heavy work,
+       it's harmless to leave enabled but doesn't do anything for you either.
+       Actual background execution (push, background refresh) is handled
+       by UIBackgroundModes in Info.plist, not by this key. -->
   <key>com.apple.developer.sustained-execution</key>
   <true/>
 

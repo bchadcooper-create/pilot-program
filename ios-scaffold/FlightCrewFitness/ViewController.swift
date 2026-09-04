@@ -80,10 +80,16 @@ class ViewController: UIViewController {
     // MARK: - JS → Native Bridge
 
     private func postToWeb(_ event: String, data: [String: Any]) {
-        // BUG FIX: evaluateJavaScript must run on main thread
         guard let payload = try? JSONSerialization.data(withJSONObject: data),
-              let payloadString = String(data: payload, encoding: .utf8) else { return }
+              var payloadString = String(data: payload, encoding: .utf8) else { return }
+        // JSON allows U+2028/U+2029 inside strings, but raw JS statement syntax
+        // does not — a free-text field (e.g. a name from Sign In with Apple)
+        // containing one of these would silently break this script. Escape them.
+        payloadString = payloadString
+            .replacingOccurrences(of: "\u{2028}", with: "\\u2028")
+            .replacingOccurrences(of: "\u{2029}", with: "\\u2029")
         let js = "window.dispatchEvent(new CustomEvent('\(event)', { detail: \(payloadString) }));"
+        // evaluateJavaScript must run on the main thread.
         DispatchQueue.main.async {
             self.webView.evaluateJavaScript(js)
         }
@@ -329,6 +335,8 @@ extension ViewController: ASAuthorizationControllerDelegate,
     }
 
     func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-        return view.window!
+        // BUG FIX: avoid a force-unwrap crash in the rare case this fires
+        // before the view is attached to a window.
+        return view.window ?? UIWindow()
     }
 }

@@ -134,22 +134,15 @@
     <string>fetch</string>                 <!-- Background refresh -->
   </array>
 
-  <!-- App Transport Security — allow flightcrew.fit + all subdomains -->
-  <key>NSAppTransportSecurity</key>
-  <dict>
-    <key>NSAllowsArbitraryLoads</key>
-    <false/>
-    <key>NSExceptionDomains</key>
-    <dict>
-      <key>flightcrew.fit</key>
-      <dict>
-        <key>NSExceptionAllowsInsecureHTTPLoads</key>
-        <false/>
-        <key>NSIncludesSubdomains</key>
-        <true/>
-      </dict>
-    </dict>
-  </dict>
+  <!-- Note: no NSAppTransportSecurity block needed — ATS already allows
+       HTTPS by default. An exception-domain entry only matters if you
+       need to relax ATS (e.g. allow HTTP), which flightcrew.fit doesn't. -->
+
+  <!-- Export compliance: FCF only uses standard HTTPS/TLS, which is
+       exempt from export reporting. Declaring this here means App Store
+       Connect won't ask the export-compliance question on every upload. -->
+  <key>ITSAppUsesNonExemptEncryption</key>
+  <false/>
 
 </dict>
 </plist>

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+
+  <!-- 1. HealthKit -->
+  <key>com.apple.developer.healthkit</key>
+  <true/>
+
+  <!-- 2. HealthKit Estimate Recalibration -->
+  <key>com.apple.developer.healthkit.recalibrate-estimates</key>
+  <true/>
+
+  <!-- 3. In-App Purchase -->
+  <key>com.apple.developer.in-app-payments</key>
+  <array>
+    <string>fit.flightcrew.app.pro.monthly</string>
+    <string>fit.flightcrew.app.pro.annual</string>
+  </array>
+
+  <!-- 4. Push Notifications -->
+  <key>aps-environment</key>
+  <string>production</string>
+
+  <!-- 5. Sign In with Apple -->
+  <key>com.apple.developer.applesignin</key>
+  <array>
+    <string>Default</string>
+  </array>
+
+  <!-- 6. Sustained Execution -->
+  <key>com.apple.developer.sustained-execution</key>
+  <true/>
+
+  <!-- 7. Time Sensitive Notifications -->
+  <key>com.apple.developer.usernotifications.time-sensitive</key>
+  <true/>
+
+</dict>
+</plist>

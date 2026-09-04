@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+
+  <!-- App display name -->
+  <key>CFBundleDisplayName</key>
+  <string>Flight Crew Fitness</string>
+
+  <!-- Bundle identity -->
+  <key>CFBundleIdentifier</key>
+  <string>fit.flightcrew.app</string>
+
+  <key>CFBundleName</key>
+  <string>FlightCrewFitness</string>
+
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+
+  <key>CFBundleVersion</key>
+  <string>1</string>
+
+  <key>CFBundleShortVersionString</key>
+  <string>1.0</string>
+
+  <key>CFBundleExecutable</key>
+  <string>$(EXECUTABLE_NAME)</string>
+
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+
+  <!-- iOS minimum version -->
+  <key>MinimumOSVersion</key>
+  <string>16.0</string>
+
+  <!-- Supported devices: iPhone + iPad -->
+  <key>UIDeviceFamily</key>
+  <array>
+    <integer>1</integer>
+    <integer>2</integer>
+  </array>
+
+  <!-- Orientations -->
+  <key>UISupportedInterfaceOrientations</key>
+  <array>
+    <string>UIInterfaceOrientationPortrait</string>
+    <string>UIInterfaceOrientationLandscapeLeft</string>
+    <string>UIInterfaceOrientationLandscapeRight</string>
+  </array>
+  <key>UISupportedInterfaceOrientations~ipad</key>
+  <array>
+    <string>UIInterfaceOrientationPortrait</string>
+    <string>UIInterfaceOrientationPortraitUpsideDown</string>
+    <string>UIInterfaceOrientationLandscapeLeft</string>
+    <string>UIInterfaceOrientationLandscapeRight</string>
+  </array>
+
+  <!-- Scene-based lifecycle -->
+  <key>UIApplicationSceneManifest</key>
+  <dict>
+    <key>UIApplicationSupportsMultipleScenes</key>
+    <false/>
+    <key>UISceneConfigurations</key>
+    <dict>
+      <key>UIWindowSceneSessionRoleApplication</key>
+      <array>
+        <dict>
+          <key>UISceneConfigurationName</key>
+          <string>Default Configuration</string>
+          <key>UISceneDelegateClassName</key>
+          <string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+          <key>UISceneStoryboardFile</key>
+          <string>Main</string>
+        </dict>
+      </array>
+    </dict>
+  </dict>
+
+  <!-- Launch screen -->
+  <key>UILaunchStoryboardName</key>
+  <string>LaunchScreen</string>
+
+  <!-- Main storyboard -->
+  <key>UIMainStoryboardFile</key>
+  <string>Main</string>
+
+  <!-- Status bar -->
+  <key>UIStatusBarStyle</key>
+  <string>UIStatusBarStyleLightContent</string>
+  <key>UIViewControllerBasedStatusBarAppearance</key>
+  <false/>
+
+  <!-- ─────────────────────────────────────────────
+       PERMISSION USAGE DESCRIPTIONS
+       All strings shown to user in iOS permission dialogs.
+       ───────────────────────────────────────────── -->
+
+  <!-- HealthKit -->
+  <key>NSHealthShareUsageDescription</key>
+  <string>Flight Crew Fitness reads your activity, sleep, and health data from Apple Health to power your daily briefing and fitness trends.</string>
+
+  <key>NSHealthUpdateUsageDescription</key>
+  <string>Flight Crew Fitness does not write to Apple Health.</string>
+
+  <!-- Camera — food photo recognition -->
+  <key>NSCameraUsageDescription</key>
+  <string>Flight Crew Fitness uses your camera to identify foods from photos for nutrition logging.</string>
+
+  <!-- Photo library — attach meal photos -->
+  <key>NSPhotoLibraryUsageDescription</key>
+  <string>Flight Crew Fitness accesses your photo library so you can attach meal photos for nutrition logging.</string>
+
+  <!-- Microphone — reserved for future voice logging -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Flight Crew Fitness may use your microphone for voice-based food logging.</string>
+
+  <!-- Location — not used currently, omit unless added -->
+  <!-- <key>NSLocationWhenInUseUsageDescription</key> -->
+  <!-- <string>...</string> -->
+
+  <!-- Push notifications are requested at runtime; no plist key needed -->
+
+  <!-- ─────────────────────────────────────────────
+       BACKGROUND MODES
+       ───────────────────────────────────────────── -->
+  <key>UIBackgroundModes</key>
+  <array>
+    <string>remote-notification</string>   <!-- Push notifications -->
+    <string>processing</string>            <!-- Sustained Execution -->
+    <string>fetch</string>                 <!-- Background refresh -->
+  </array>
+
+  <!-- App Transport Security — allow flightcrew.fit + all subdomains -->
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsArbitraryLoads</key>
+    <false/>
+    <key>NSExceptionDomains</key>
+    <dict>
+      <key>flightcrew.fit</key>
+      <dict>
+        <key>NSExceptionAllowsInsecureHTTPLoads</key>
+        <false/>
+        <key>NSIncludesSubdomains</key>
+        <true/>
+      </dict>
+    </dict>
+  </dict>
+
+</dict>
+</plist>

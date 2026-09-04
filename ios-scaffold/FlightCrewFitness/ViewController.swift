@@ -17,6 +17,7 @@ class ViewController: UIViewController {
         setupWebView()
         loadApp()
         observePushTaps()
+        listenForTransactions()  // BUG FIX: was defined but never called
     }
 
     // MARK: - WebView Setup
@@ -26,11 +27,14 @@ class ViewController: UIViewController {
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
 
-        // Message handlers — JS calls window.webkit.messageHandlers.X.postMessage(...)
+        // BUG FIX: Use weak reference to avoid retain cycle.
+        // contentController.add(self, ...) holds a strong ref to self.
+        // Using a WeakScriptDelegate breaks the cycle.
         let contentController = WKUserContentController()
-        contentController.add(self, name: "storeKit")       // IAP
-        contentController.add(self, name: "signInWithApple") // SIWA
-        contentController.add(self, name: "pushToken")       // Push token relay
+        let weakDelegate = WeakScriptDelegate(delegate: self)
+        contentController.add(weakDelegate, name: "storeKit")
+        contentController.add(weakDelegate, name: "signInWithApple")
+        contentController.add(weakDelegate, name: "pushToken")
         config.userContentController = contentController
 
         webView = WKWebView(frame: .zero, configuration: config)
@@ -40,9 +44,10 @@ class ViewController: UIViewController {
         webView.allowsBackForwardNavigationGestures = false
         webView.scrollView.bounces = false
 
+        // BUG FIX: Pin to safeAreaLayoutGuide top so content isn't hidden under status bar
         view.addSubview(webView)
         NSLayoutConstraint.activate([
-            webView.topAnchor.constraint(equalTo: view.topAnchor),
+            webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
@@ -74,12 +79,29 @@ class ViewController: UIViewController {
 
     // MARK: - JS → Native Bridge
 
-    /// Send a result back to the web app
     private func postToWeb(_ event: String, data: [String: Any]) {
-        let payload = (try? JSONSerialization.data(withJSONObject: data))
-            .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
-        let js = "window.dispatchEvent(new CustomEvent('\(event)', { detail: \(payload) }));"
-        webView.evaluateJavaScript(js)
+        // BUG FIX: evaluateJavaScript must run on main thread
+        guard let payload = try? JSONSerialization.data(withJSONObject: data),
+              let payloadString = String(data: payload, encoding: .utf8) else { return }
+        let js = "window.dispatchEvent(new CustomEvent('\(event)', { detail: \(payloadString) }));"
+        DispatchQueue.main.async {
+            self.webView.evaluateJavaScript(js)
+        }
+    }
+}
+
+// MARK: - Weak Script Delegate (breaks retain cycle)
+// WKUserContentController strongly retains its message handlers.
+// Wrapping self in a weak holder prevents ViewController from leaking.
+
+class WeakScriptDelegate: NSObject, WKScriptMessageHandler {
+    weak var delegate: (WKScriptMessageHandler & AnyObject)?
+    init(delegate: WKScriptMessageHandler & AnyObject) {
+        self.delegate = delegate
+    }
+    func userContentController(_ userContentController: WKUserContentController,
+                               didReceive message: WKScriptMessage) {
+        delegate?.userContentController(userContentController, didReceive: message)
     }
 }
 
@@ -89,16 +111,12 @@ extension ViewController: WKScriptMessageHandler {
     func userContentController(_ userContentController: WKUserContentController,
                                didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any] else { return }
-
         switch message.name {
         case "storeKit":
             handleStoreKitMessage(body)
         case "signInWithApple":
             handleSignInWithApple()
         case "pushToken":
-            // Web app requesting the APNs token (e.g. after login)
-            // The token was already sent to backend in AppDelegate;
-            // here we can relay it to the web layer if needed.
             break
         default:
             break
@@ -110,10 +128,15 @@ extension ViewController: WKScriptMessageHandler {
 
 extension ViewController: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        // BUG FIX: Don't show offline page for cancelled loads (e.g. redirect mid-load)
+        let nsError = error as NSError
+        if nsError.code == NSURLErrorCancelled { return }
         showOfflinePage()
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        let nsError = error as NSError
+        if nsError.code == NSURLErrorCancelled { return }
         showOfflinePage()
     }
 
@@ -140,7 +163,6 @@ extension ViewController: WKUIDelegate {
                  initiatedByFrame frame: WKFrameInfo,
                  type: WKMediaCaptureType,
                  decisionHandler: @escaping (WKPermissionDecision) -> Void) {
-        // Allow camera (food photo recognition) and mic from flightcrew.fit only
         if origin.host == "flightcrew.fit" {
             decisionHandler(.grant)
         } else {
@@ -208,8 +230,9 @@ extension ViewController {
                         "productId": transaction.productID,
                         "transactionId": "\(transaction.id)"
                     ])
-                case .unverified:
-                    postToWeb("fcf:purchase", data: ["error": "Purchase could not be verified"])
+                case .unverified(_, let error):
+                    // BUG FIX: capture the error reason, was dropping it
+                    postToWeb("fcf:purchase", data: ["error": "Verification failed: \(error.localizedDescription)"])
                 }
             case .userCancelled:
                 postToWeb("fcf:purchase", data: ["cancelled": true])
@@ -241,7 +264,7 @@ extension ViewController {
         }
     }
 
-    /// Listen for StoreKit transactions that complete outside the app (e.g. Ask to Buy approval)
+    // Called from viewDidLoad — handles purchases approved outside the app (Ask to Buy, etc.)
     func listenForTransactions() {
         Task {
             for await result in Transaction.updates {
@@ -299,6 +322,9 @@ extension ViewController: ASAuthorizationControllerDelegate,
 
     func authorizationController(controller: ASAuthorizationController,
                                  didCompleteWithError error: Error) {
+        // BUG FIX: Don't report user cancellation as an error to the web app
+        if let authError = error as? ASAuthorizationError,
+           authError.code == .canceled { return }
         postToWeb("fcf:siwa:error", data: ["error": error.localizedDescription])
     }
 

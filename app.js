@@ -96,6 +96,7 @@ const ST = {
   nutritionGoals: null, goalDraft: 'maintain', trainDaysDraft: '3-4',
   manualTargetsOpen: false, manualCal: '', manualProtein: '', manualCarbs: '', manualFat: '', manualTargetsWarning: null,
   sleepBaselineScore: null,
+  healthkit: null,        // populated after iOS HealthKit permission granted
 
   tab: 'today',
   env: 'comm',
@@ -2620,6 +2621,12 @@ async function bootApp() {
     setTimeout(() => syncOuraData().catch(() => {}), 1500);
     scheduleOuraActivityRetry();
   }
+  // Request HealthKit permission once after login (iOS only).
+  // On web this is a no-op. The permission sheet appears once and is
+  // remembered by iOS — subsequent boots skip straight to data sync.
+  if (typeof FCFBridge !== 'undefined' && FCFBridge.isNative) {
+    setTimeout(() => FCFBridge.requestHealthKit(), 2000);
+  }
   scheduleEntitlementRefresh();
   // Returning from Stripe Checkout. The webhook may land a moment after the
   // redirect, so this re-reads a few times rather than once and giving up.
@@ -3420,6 +3427,13 @@ async function initApp() {
 }
 
 document.addEventListener('DOMContentLoaded', initApp);
+
+// HealthKit data arrives asynchronously from the native shell after permission
+// is granted. Store it in ST and re-render so Connected Devices updates.
+window.addEventListener('fcf:healthkit', (e) => {
+  ST.healthkit = e.detail || {};
+  renderPage();
+});
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
   setTimeout(initApp, 0);
 }
@@ -8116,8 +8130,68 @@ function renderMore(p) {
 
 function renderDevices(p) {
   const parts = [moreBackLink()];
+  const hk = ST.healthkit;
+  const isNative = typeof FCFBridge !== 'undefined' && FCFBridge.isNative;
+
+  // ── Apple Health / HealthKit ──────────────────────────────────────────────
   parts.push('<div class="card mb12">');
-  parts.push('<div class="section-label" style="margin-top:0">OURA RING INTEGRATION</div>');
+  parts.push('<div class="section-label" style="margin-top:0">APPLE HEALTH</div>');
+  if (!isNative) {
+    parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.65">Apple Health integration is available in the iOS app.</div>');
+  } else if (!hk) {
+    parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.65;margin-bottom:12px">Requesting access to Apple Health…</div>');
+  } else if (!hk.granted) {
+    parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.65;margin-bottom:12px">Health access was not granted. You can change this in Settings → Privacy & Security → Health → Flight Crew Fitness.</div>');
+  } else {
+    // Connected — show detected devices
+    const devices = hk.detectedDevices || [];
+    const deviceIcons = { appleWatch: '⌚', oura: '💍', whoop: '⌚', garmin: '🏃', iphone: '📱', other: '📡' };
+    const appleWatch = devices.find(d => d.kind === 'appleWatch');
+    const ouraHK = devices.find(d => d.kind === 'oura');
+
+    parts.push('<div style="font-size:11px;color:var(--green);margin-bottom:10px">✓ Connected via HealthKit</div>');
+
+    if (devices.length > 0) {
+      parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:6px;letter-spacing:.05em">DETECTED SOURCES</div>');
+      devices.forEach(d => {
+        const icon = deviceIcons[d.kind] || '📡';
+        parts.push('<div style="font-size:13px;padding:6px 0;border-bottom:1px solid var(--border)">'+icon+' '+d.name+'</div>');
+      });
+      parts.push('<div style="margin-top:8px"></div>');
+    }
+
+    // Show a quick stats snapshot
+    const statsRows = [];
+    if (hk.stepsToday != null) statsRows.push(['Steps Today', hk.stepsToday.toLocaleString()]);
+    if (hk.restingHR != null) statsRows.push(['Resting HR', hk.restingHR + ' bpm']);
+    if (hk.hrv != null) statsRows.push(['HRV (SDNN)', hk.hrv + ' ms']);
+    if (hk.sleepMinutes != null) {
+      const h = Math.floor(hk.sleepMinutes / 60), m = hk.sleepMinutes % 60;
+      statsRows.push(['Last Sleep', h + 'h ' + m + 'm']);
+    }
+    if (statsRows.length > 0) {
+      parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">');
+      statsRows.forEach(([lbl, val]) => {
+        parts.push('<div class="stat-box"><div class="stat-val" style="font-size:15px">'+val+'</div><div class="stat-lbl">'+lbl+'</div></div>');
+      });
+      parts.push('</div>');
+    }
+
+    parts.push('<button class="btn btn-outline" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.syncHealthKit()">↻ Refresh</button>');
+
+    // If Oura is detected via HealthKit, note that direct Oura OAuth gives richer data
+    if (ouraHK) {
+      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5">Oura data detected via Apple Health. Connect directly below for full readiness scores.</div>');
+    }
+    if (appleWatch) {
+      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5">Apple Watch detected — workouts, HR, and HRV sync automatically.</div>');
+    }
+  }
+  parts.push('</div>');
+
+  // ── Oura Direct (optional, enhanced) ────────────────────────────────────
+  parts.push('<div class="card mb12">');
+  parts.push('<div class="section-label" style="margin-top:0">OURA RING — ENHANCED</div>');
   if (ST.ouraConnected && ST.ouraScore !== null) {
     const scoreColor = ST.ouraScore >= 70 ? 'var(--green)' : ST.ouraScore >= 60 ? 'var(--amber)' : 'var(--red)';
     const scoreLabel = ST.ouraScore >= 70 ? '🟢 GO' : ST.ouraScore >= 60 ? '🟡 MARGINAL' : '🔴 NO-GO';
@@ -8137,11 +8211,11 @@ function renderDevices(p) {
     parts.push('<button class="btn btn-outline" onclick="syncOuraData(true)">↻ Sync Now</button>');
     parts.push('<button class="btn btn-outline mt8" onclick="importHistoricalOura(180)">📥 Import Last 6 Months</button>');
   } else {
-    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.65">Connect your Oura Ring to automatically set your Pilot Condition based on your daily readiness score. Readiness 70+ = GO, 60-69 = MARGINAL, below 60 = NO-GO. These bands match Oura\'s own Good/Fair/Pay Attention categories.</div>');
-    parts.push('<button class="btn btn-outline" onclick="connectOura()">Connect Oura Ring →</button>');
+    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.65">Optional — connect directly to Oura for full readiness scores used to auto-set your Pilot Condition. Readiness 70+ = GO, 60–69 = MARGINAL, below 60 = NO-GO.</div>');
+    parts.push('<button class="btn btn-outline" onclick="connectOura()">Connect Oura Directly →</button>');
   }
   parts.push('</div>');
-  parts.push('<div class="card mb12"><div class="section-label" style="margin-top:0">APPLE HEALTH &amp; APPLE WATCH</div><div style="font-size:12px;color:var(--muted);line-height:1.65;margin-bottom:10px">Flight Crew Fitness reads workouts, heart rate, HRV, sleep, and activity directly from Apple Health — which includes your Apple Watch automatically. Manage permissions in the iOS Health app under Sources.</div><div style="font-size:11px;color:var(--green)">✓ Connected via HealthKit</div></div>');
+
   p.innerHTML = parts.join('');
 }
 

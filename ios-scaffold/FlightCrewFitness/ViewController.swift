@@ -2,6 +2,7 @@ import UIKit
 import WebKit
 import AuthenticationServices
 import StoreKit
+import HealthKit
 
 class ViewController: UIViewController {
 
@@ -35,6 +36,7 @@ class ViewController: UIViewController {
         contentController.add(weakDelegate, name: "storeKit")
         contentController.add(weakDelegate, name: "signInWithApple")
         contentController.add(weakDelegate, name: "pushToken")
+        contentController.add(weakDelegate, name: "healthkit")
         config.userContentController = contentController
 
         webView = WKWebView(frame: .zero, configuration: config)
@@ -122,6 +124,8 @@ extension ViewController: WKScriptMessageHandler {
             handleStoreKitMessage(body)
         case "signInWithApple":
             handleSignInWithApple()
+        case "healthkit":
+            handleHealthKitMessage(body)
         case "pushToken":
             break
         default:
@@ -338,5 +342,29 @@ extension ViewController: ASAuthorizationControllerDelegate,
         // BUG FIX: avoid a force-unwrap crash in the rare case this fires
         // before the view is attached to a window.
         return view.window ?? UIWindow()
+    }
+}
+
+// MARK: - HealthKit
+
+extension ViewController {
+    private func handleHealthKitMessage(_ body: [String: Any]) {
+        guard let action = body["action"] as? String else { return }
+        switch action {
+        case "requestPermission":
+            // Called once after login. Shows the iOS Health permission sheet,
+            // then immediately syncs and posts results back to the web app.
+            HealthKitManager.shared.requestPermissionAndSync { [weak self] payload in
+                self?.postToWeb("fcf:healthkit", data: payload)
+            }
+        case "sync":
+            // Called by the web app to refresh data (e.g. when user opens
+            // Connected Devices page). Skips the permission sheet — just reads.
+            HealthKitManager.shared.syncAll { [weak self] payload in
+                self?.postToWeb("fcf:healthkit", data: payload)
+            }
+        default:
+            break
+        }
     }
 }

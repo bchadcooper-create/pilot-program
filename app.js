@@ -3,8 +3,8 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.41.0';
-const FCF_BUILD   = '20260711';
+const FCF_VERSION = 'v5.41.1';
+const FCF_BUILD   = '20260905';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
 // Replace OURA_CLIENT_ID with your actual Client ID from cloud.ouraring.com/oauth/applications
@@ -1483,14 +1483,14 @@ function renderLanding(root) {
     ['🚦','Fatigue-gated intensity','A pilot condition toggle (Go / Marginal / No-Go) reduces or removes heavy lifting when you\'re running on insufficient rest — auto-set from your Oura Ring if you wear one, or a 15-second self-check if you don\'t.'],
     ['⌚','Oura Ring auto-sync','Connect once and your daily readiness, sleep, and HRV drive your workout intensity automatically — no manual logging required.'],
     ['🏆','Leaderboards, scored fairly','Compete on bench, squat, deadlift, and more against fellow pilots — ranked by DOTS score, which adjusts for bodyweight and sex, so a 160 lb first officer and a 220 lb captain are compared on equal footing, not just raw weight. Opt-in only — no call sign, nothing is shared.'],
-    ['🎖️','Badges for showing up','Training streaks, PRs, and consistency get recognized automatically — pulled from your real logged history, not just a login count.'],
+    ['🎖️','Badges for reaching goals','Hit a personal record, a training streak, or a milestone and it gets recognized automatically — pulled from your real logged history, not just a login count.'],
     ['🩹','Injury-aware programming','Flag a sore shoulder or knee and the app automatically swaps in a safer alternative where one exists, or flags the exercise so you can decide — instead of just handing you the same plan regardless.'],
-    ['⏱️','Built for a 20-minute layover','Tell it how much time you actually have and it trims the session to fit — protecting your warmup and cooldown, never your actual lift.'],
+    ['⏱️','Fits the time you actually have','Tell it how much time you\'ve got and it trims the session to fit — protecting your warmup and cooldown, never your actual lift.'],
     ['🎯','Goal-driven programming','Seven mission objectives — from Vertical Jump to Glute Emphasis to Overall Strength — each with real, distinct exercise programming behind it, not just a label.'],
     ['💧','Hydration math built in','0.3L per flight hour, with a sensible floor on no-fly days. The app tells you exactly how much to drink and when.'],
     ['🛫','Aviation-phased structure','Every workout follows Taxi (warmup) → Takeoff (heavy) → En Route (volume) → Landing (decompression) — a logical, recoverable structure, not just a random exercise list.'],
     ['📊','Real biometric tracking','Weight, waist, blood pressure, and fasting glucose — with the actual clinical protocol for measuring each one correctly.'],
-    ['📶','Works with no signal','Installs like a real app and keeps working with zero connectivity — at altitude, in a dead-zone layover hotel, wherever.'],
+    ['📶','Works with no signal','Keeps working with zero connectivity — at altitude, in a dead-zone layover hotel, wherever.'],
   ];
   features.forEach(([icon,title,desc]) => {
     parts.push('<div class="feature-row"><div class="feature-icon">'+icon+'</div><div class="feature-text"><h4>'+title+'</h4><p>'+desc+'</p></div></div>');
@@ -1723,6 +1723,16 @@ function renderRoot() {
   tabbar.style.display = 'flex';
   page.style.padding = '16px 16px calc(60px + var(--safe-bot))';
   document.getElementById('topbarSub').textContent = FCF_VERSION + ' · MISSION CONTROL';
+  void topbar.offsetHeight;
+  void tabbar.offsetHeight;
+  requestAnimationFrame(() => {
+    topbar.style.opacity = '0.999';
+    tabbar.style.opacity = '0.999';
+    requestAnimationFrame(() => {
+      topbar.style.opacity = '';
+      tabbar.style.opacity = '';
+    });
+  });
   renderPage();
 }
 

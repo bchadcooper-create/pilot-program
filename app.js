@@ -3074,7 +3074,6 @@ async function performAccountDeletion() {
 //
 // Logged data is never deleted by toggling; switching back restores it.
 async function setTrackingPref(key, on) {
-  haptic('selection'); // immediate feedback — don't wait for async save
   ST[key] = !!on;
   renderPage(); // optimistic update — toggle appears instant
   try {
@@ -3098,16 +3097,27 @@ function hydrationRowHTML(ctx, standalone) {
 }
 
 function renderTrackingToggles() {
-  const row = (key, label, sub) =>
-    '<div class="fb" style="padding:12px 0;border-bottom:1px solid var(--border);align-items:center">' +
-      '<div style="flex:1;padding-right:16px">' +
-        '<div style="font-size:14px">'+label+'</div>' +
-        '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+sub+'</div>' +
-      '</div>' +
-      '<div onclick="setTrackingPref(\''+key+'\','+(!ST[key])+')" style="cursor:pointer;flex-shrink:0;width:46px;height:26px;border-radius:13px;background:'+(ST[key]?'var(--gold)':'var(--border)')+';position:relative;transition:background 0.2s">' +
-        '<div style="position:absolute;top:3px;left:'+(ST[key]?'23px':'3px')+';width:20px;height:20px;border-radius:50%;background:#fff;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.4)"></div>' +
-      '</div>' +
-    '</div>';
+  const row = (key, label, sub) => {
+    const on = !!ST[key];
+    const knobLeft = on ? '23px' : '3px';
+    const bg       = on ? 'var(--gold)' : 'rgba(255,255,255,0.12)';
+    return (
+      '<div class="fb" style="padding:12px 0;border-bottom:1px solid var(--border);align-items:center">' +
+        '<div style="flex:1;padding-right:16px">' +
+          '<div style="font-size:14px">'+label+'</div>' +
+          '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+sub+'</div>' +
+        '</div>' +
+        // Button instead of div — gets immediate iOS touch response, no 300ms delay
+        '<button onclick="haptic(\'selection\');setTrackingPref(\''+key+'\','+(!on)+')" style="' +
+          'cursor:pointer;flex-shrink:0;width:46px;height:26px;border-radius:13px;' +
+          'background:'+bg+';position:relative;border:none;padding:0;' +
+          'transition:background 0.15s;-webkit-tap-highlight-color:transparent;touch-action:manipulation">' +
+          '<div style="position:absolute;top:3px;left:'+knobLeft+';width:20px;height:20px;' +
+            'border-radius:50%;background:#fff;transition:left 0.15s;box-shadow:0 1px 3px rgba(0,0,0,0.4)"></div>' +
+        '</button>' +
+      '</div>'
+    );
+  };
   return '<div class="section-label" style="margin-top:20px">TRACKING</div>' +
     '<div class="card mb12">' +
       row('trackNutrition','Nutrition','Meals, macros and the Fuel card') +

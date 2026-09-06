@@ -8247,8 +8247,12 @@ function renderMore(p) {
       parts.push('<div style="font-size:11px;color:'+proColor+';padding:8px 0 8px 8px;'+border+';text-align:center;font-weight:'+(pro!=='—'?'600':'400')+'">'+pro+'</div>');
     });
     parts.push('</div>');
-    parts.push('<button class="btn btn-gold" onclick="showPaywall()">❖ Upgrade to Pro — '+PRO_ANNUAL_PRICE+'/year</button>');
-    parts.push('<button class="btn-ghost" style="display:block;width:100%;text-align:center;margin-top:10px" onclick="restoreProPurchases()">Restore purchases</button>');
+    parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px">');
+    parts.push('<button class="btn btn-gold" onclick="haptic(\'medium\');startProPurchase(\''+PRO_PRODUCT_ANNUAL+'\')"><div style="font-size:13px;font-weight:700">❖ '+PRO_ANNUAL_PRICE+'</div><div style="font-size:10px;opacity:0.8;margin-top:2px">per year</div></button>');
+    parts.push('<button class="btn btn-outline" onclick="haptic(\'medium\');startProPurchase(\''+PRO_PRODUCT_MONTHLY+'\')"><div style="font-size:13px;font-weight:700">'+PRO_MONTHLY_PRICE+'</div><div style="font-size:10px;opacity:0.8;margin-top:2px">per month</div></button>');
+    parts.push('</div>');
+    parts.push('<div style="font-size:10px;color:var(--muted);text-align:center;margin-bottom:8px">Annual saves ~37%</div>');
+    parts.push('<button class="btn-ghost" style="display:block;width:100%;text-align:center" onclick="restoreProPurchases()">Restore purchases</button>');
   }
   parts.push('</div>');
 

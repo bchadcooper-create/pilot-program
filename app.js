@@ -9937,17 +9937,253 @@ async function handleFoodPhotoFile(input) {
   }
 }
 
+// ─── IN-APP CAMERA ────────────────────────────────────────────────────────────
+// Fullscreen live viewfinder using getUserMedia — stays inside the app like
+// Oura does, rather than handing off to the native camera app. Shutter,
+// flash toggle, front/rear flip, and a bottom sheet with Text/Recent/Favorites.
+// Falls back to the native <input capture> if getUserMedia is unavailable.
+
+const FCFCamera = (() => {
+  let _stream    = null;
+  let _videoEl   = null;
+  let _facingMode = 'environment'; // start rear camera
+  let _onCapture = null; // callback(dataUrl, mimeType)
+
+  // ── Public: open the camera overlay ────────────────────────────────────────
+  function open(onCapture) {
+    _onCapture = onCapture;
+    _render();
+    _startStream();
+  }
+
+  // ── Public: close the camera overlay ───────────────────────────────────────
+  function close() {
+    _stopStream();
+    const root = document.getElementById('fcfCameraRoot');
+    if (root) root.innerHTML = '';
+  }
+
+  // ── Render the full overlay ────────────────────────────────────────────────
+  function _render() {
+    const root = document.getElementById('fcfCameraRoot');
+    if (!root) return;
+    root.innerHTML = `
+      <div id="fcfCamOverlay" style="
+        position:fixed;inset:0;z-index:9000;background:#000;
+        display:flex;flex-direction:column;overflow:hidden;
+      ">
+        <!-- Viewfinder -->
+        <div style="position:relative;flex:1;overflow:hidden;background:#000;">
+          <video id="fcfCamVideo" autoplay playsinline muted
+            style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;"></video>
+
+          <!-- Top controls -->
+          <div style="position:absolute;top:0;left:0;right:0;
+            display:flex;justify-content:space-between;align-items:flex-start;
+            padding:16px 16px 0;">
+            <!-- Close -->
+            <button onclick="FCFCamera.close()" style="
+              width:44px;height:44px;border-radius:50%;
+              background:rgba(0,0,0,0.55);border:none;color:#fff;
+              font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
+            <!-- Flash + Flip -->
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <button id="fcfCamFlash" onclick="FCFCamera.toggleFlash()" style="
+                width:44px;height:44px;border-radius:50%;
+                background:rgba(0,0,0,0.55);border:none;color:#fff;
+                font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;">⚡</button>
+              <button onclick="FCFCamera.flipCamera()" style="
+                width:44px;height:44px;border-radius:50%;
+                background:rgba(0,0,0,0.55);border:none;color:#fff;
+                font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;">🔄</button>
+            </div>
+          </div>
+
+          <!-- Center hint -->
+          <div style="
+            position:absolute;bottom:24px;left:0;right:0;
+            text-align:center;pointer-events:none;">
+            <div style="font-size:22px;font-weight:300;color:#fff;letter-spacing:.02em">Take a photo</div>
+            <div style="font-size:14px;color:rgba(255,255,255,0.75);margin-top:4px">Your meal items will be analyzed.</div>
+          </div>
+        </div>
+
+        <!-- Bottom sheet -->
+        <div style="
+          background:rgba(20,20,22,0.97);
+          padding:16px 0 max(24px, env(safe-area-inset-bottom));
+          display:flex;flex-direction:column;align-items:center;gap:16px;">
+
+          <!-- Shutter row -->
+          <div style="display:flex;align-items:center;justify-content:center;">
+            <button id="fcfCamShutter" onclick="FCFCamera.capture()" style="
+              width:72px;height:72px;border-radius:50%;
+              border:4px solid #fff;background:transparent;cursor:pointer;
+              display:flex;align-items:center;justify-content:center;
+              transition:transform 0.1s;">
+              <div style="width:56px;height:56px;border-radius:50%;background:#fff;"></div>
+            </button>
+          </div>
+
+          <!-- Tab row -->
+          <div style="display:flex;gap:0;width:100%;padding:0 8px;">
+            <button onclick="FCFCamera._tabTextInput()" style="
+              flex:1;background:none;border:none;color:rgba(255,255,255,0.65);
+              font-size:14px;padding:8px 4px;cursor:pointer;letter-spacing:.03em;">Text input</button>
+            <button onclick="FCFCamera._tabRecentMeals()" style="
+              flex:1;background:none;border:none;color:rgba(255,255,255,0.65);
+              font-size:14px;padding:8px 4px;cursor:pointer;letter-spacing:.03em;">Recent meals</button>
+            <button onclick="FCFCamera._tabLibrary()" style="
+              flex:1;background:none;border:none;color:rgba(255,255,255,0.65);
+              font-size:14px;padding:8px 4px;cursor:pointer;letter-spacing:.03em;">Library</button>
+          </div>
+        </div>
+      </div>
+    `;
+    _videoEl = document.getElementById('fcfCamVideo');
+  }
+
+  // ── Start getUserMedia stream ──────────────────────────────────────────────
+  async function _startStream() {
+    _stopStream();
+    try {
+      _stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: _facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false
+      });
+      if (_videoEl) _videoEl.srcObject = _stream;
+    } catch (err) {
+      // getUserMedia failed — fall back to native input
+      console.warn('FCFCamera getUserMedia failed:', err);
+      close();
+      _fallbackToNativeCamera();
+    }
+  }
+
+  function _stopStream() {
+    if (_stream) {
+      _stream.getTracks().forEach(t => t.stop());
+      _stream = null;
+    }
+    if (_videoEl) _videoEl.srcObject = null;
+  }
+
+  // ── Capture a frame from the video stream ─────────────────────────────────
+  function capture() {
+    if (!_videoEl || !_stream) return;
+    // Shutter animation
+    const shutter = document.getElementById('fcfCamShutter');
+    if (shutter) { shutter.style.transform = 'scale(0.88)'; setTimeout(() => { shutter.style.transform = ''; }, 150); }
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = _videoEl.videoWidth  || 1920;
+    canvas.height = _videoEl.videoHeight || 1080;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(_videoEl, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    close();
+    if (_onCapture) _onCapture(dataUrl, 'image/jpeg');
+  }
+
+  // ── Flash toggle ──────────────────────────────────────────────────────────
+  let _flashOn = false;
+  function toggleFlash() {
+    _flashOn = !_flashOn;
+    const btn = document.getElementById('fcfCamFlash');
+    if (btn) btn.style.color = _flashOn ? '#FFD700' : '#fff';
+    if (_stream) {
+      const track = _stream.getVideoTracks()[0];
+      if (track && track.getCapabilities && track.getCapabilities().torch) {
+        track.applyConstraints({ advanced: [{ torch: _flashOn }] }).catch(() => {});
+      }
+    }
+  }
+
+  // ── Flip front/rear ───────────────────────────────────────────────────────
+  function flipCamera() {
+    _facingMode = _facingMode === 'environment' ? 'user' : 'environment';
+    _startStream();
+  }
+
+  // ── Bottom sheet tabs ─────────────────────────────────────────────────────
+  function _tabTextInput() {
+    close();
+    // Open meal builder in text search mode
+    if (!ST.mealBuilder) {
+      ST.mealBuilder = { mealType: autoMealTypeForTime(new Date()), items: [], frequentFoods: null, editingId: null, editingLoggedAt: null };
+    }
+    ST.foodSearchMode = true;
+    renderMealBuilder();
+    getFrequentFoodsForMealBuilder().then(foods => {
+      if (ST.mealBuilder) { ST.mealBuilder.frequentFoods = foods; renderMealBuilder(); }
+    });
+  }
+
+  function _tabRecentMeals() {
+    close();
+    if (!ST.mealBuilder) {
+      ST.mealBuilder = { mealType: autoMealTypeForTime(new Date()), items: [], frequentFoods: null, editingId: null, editingLoggedAt: null };
+    }
+    renderMealBuilder();
+    getFrequentFoodsForMealBuilder().then(foods => {
+      if (ST.mealBuilder) { ST.mealBuilder.frequentFoods = foods; renderMealBuilder(); }
+    });
+  }
+
+  function _tabLibrary() {
+    close();
+    analyzeFoodPhotoFromLibrary();
+  }
+
+  // ── Native fallback ───────────────────────────────────────────────────────
+  function _fallbackToNativeCamera() {
+    bindFoodPhotoInputs();
+    const el = document.getElementById('foodCameraInput');
+    if (el) { el.value = ''; el.click(); }
+  }
+
+  return { open, close, capture, toggleFlash, flipCamera, _tabTextInput, _tabRecentMeals, _tabLibrary };
+})();
+
 // MUST stay synchronous through to .click(). iOS only allows a
 // programmatic file-input click inside a live user gesture, and any
 // await beforehand — even awaiting a non-Promise — ends that gesture and
 // gets the picker silently blocked with no error.
 function analyzeFoodPhoto() {
   if (!ST.user) { showBigToast('Sign in to analyze food photos.', 'warn'); return; }
-  bindFoodPhotoInputs();
-  const el = document.getElementById('foodCameraInput');
-  if (!el) { showBigToast('Camera unavailable — try reloading the app.', 'warn'); return; }
-  el.value = '';
-  el.click();
+  // Try in-app camera first; falls back to native if getUserMedia unavailable
+  if (navigator.mediaDevices?.getUserMedia) {
+    FCFCamera.open((dataUrl, mimeType) => {
+      _handleFoodPhotoDataUrl(dataUrl, mimeType);
+    });
+  } else {
+    bindFoodPhotoInputs();
+    const el = document.getElementById('foodCameraInput');
+    if (!el) { showBigToast('Camera unavailable — try reloading the app.', 'warn'); return; }
+    el.value = '';
+    el.click();
+  }
+}
+
+async function _handleFoodPhotoDataUrl(dataUrl, mimeType) {
+  if (!ST.mealBuilder) {
+    ST.mealBuilder = { mealType: autoMealTypeForTime(new Date()), items: [], frequentFoods: null, editingId: null, editingLoggedAt: null };
+    getFrequentFoodsForMealBuilder().then(foods => {
+      if (ST.mealBuilder) { ST.mealBuilder.frequentFoods = foods; renderMealBuilder(); }
+    });
+  }
+  ST.foodPhotoAnalyzing = true;
+  renderMealBuilder();
+  try {
+    window._foodRecPendingImageUrl = dataUrl;
+    const result = await callFoodRecognitionEdge({ action: 'photo', image: dataUrl.split(',')[1], mediaType: mimeType || 'image/jpeg' });
+    ST.foodPhotoAnalyzing = false;
+    handleFoodRecognitionResult(result);
+  } catch (e) {
+    ST.foodPhotoAnalyzing = false;
+    renderMealBuilder();
+    showBigToast('Couldn\'t analyze that photo: ' + (e.message || 'unknown error'), 'warn');
+  }
 }
 
 function analyzeFoodPhotoFromLibrary() {

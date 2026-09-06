@@ -41,6 +41,7 @@ class ViewController: UIViewController {
         contentController.add(weakDelegate, name: "healthkit")
         contentController.add(weakDelegate, name: "calendar")
         contentController.add(weakDelegate, name: "notifications")
+        contentController.add(weakDelegate, name: "haptics")
         config.userContentController = contentController
 
         webView = WKWebView(frame: .zero, configuration: config)
@@ -134,6 +135,8 @@ extension ViewController: WKScriptMessageHandler {
             handleCalendarMessage(body)
         case "notifications":
             handleNotificationsMessage(body)
+        case "haptics":
+            handleHapticsMessage(body)
         case "pushToken":
             break
         default:
@@ -428,6 +431,36 @@ extension ViewController {
             NotificationManager.shared.cancelAll()
         default:
             break
+        }
+    }
+}
+
+// MARK: - Haptics
+
+extension ViewController {
+    private func handleHapticsMessage(_ body: [String: Any]) {
+        let style = body["style"] as? String ?? "medium"
+        DispatchQueue.main.async {
+            switch style {
+            case "light":
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            case "heavy":
+                UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+            case "soft":
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+            case "rigid":
+                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+            case "success":
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            case "warning":
+                UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            case "error":
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+            case "selection":
+                UISelectionFeedbackGenerator().selectionChanged()
+            default: // "medium"
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            }
         }
     }
 }

@@ -1754,6 +1754,7 @@ function playPageTransition(el, className) {
 }
 
 function switchTab(tab) {
+  haptic('light');
   const prevTab = ST.tab;
   if (ST.tab === 'fuelplan' && tab !== 'fuelplan') { ST.fuelPlanDraftSynced = false; ST.manualTargetsOpen = false; ST.manualTargetsWarning = null; }
   ST.tab = tab;
@@ -2680,6 +2681,14 @@ async function checkDB() {
 }
 
 // ─── TOAST ────────────────────────────────────────────────────────────────────
+// ── Haptic feedback ───────────────────────────────────────────────────────────
+// Fires native iOS haptic feedback via the bridge. No-op on web.
+// Styles: light, medium (default), heavy, soft, rigid,
+//         success, warning, error, selection
+function haptic(style) {
+  window.webkit?.messageHandlers?.haptics?.postMessage({ style: style || 'medium' });
+}
+
 function showBigToast(msg, type) {
   const old = document.getElementById('fcf-big-toast');
   if (old) old.remove();
@@ -2880,6 +2889,7 @@ async function withDialogSpinner(label, fn) {
 // was blocked rather than a generic upsell — someone who just hit the photo
 // limit should be told that, not sold a feature list.
 function showPaywall(reason) {
+  haptic('medium');
   const root = document.getElementById('modalRoot');
   if (!root) return;
   const why = {
@@ -2946,6 +2956,7 @@ async function startWebCheckout(plan) {
 }
 
 async function startProPurchase(productId) {
+  haptic('heavy');
   const bridge = storeKitBridge();
   if (!bridge) {
     // In a browser or installed PWA, Stripe is the correct path rather than
@@ -3063,13 +3074,14 @@ async function performAccountDeletion() {
 //
 // Logged data is never deleted by toggling; switching back restores it.
 async function setTrackingPref(key, on) {
+  haptic('selection'); // immediate feedback — don't wait for async save
   ST[key] = !!on;
+  renderPage(); // optimistic update — toggle appears instant
   try {
     const profile = (await dbGetProfile()) || {};
     profile[key] = !!on;
     await dbSetProfile(profile);
   } catch(e) { showBigToast('Saved on this device, but could not sync.', 'warn'); }
-  renderPage();
 }
 
 // The hydration line on Today. Extracted so it can appear inside the Fuel
@@ -8819,6 +8831,8 @@ function scheduleContextForToday(schedule, now) {
   const trip = currentTripContext(schedule, now);
   ctx.legsCompleted = trip.legsCompleted;
   ctx.legsRemaining = trip.legsRemaining;
+  ctx.legsTodayCompleted = trip.legsTodayCompleted;
+  ctx.legsTodayRemaining = trip.legsTodayRemaining;
   ctx.dutyEndsToday = trip.dutyEndsToday;
   ctx.currentType = trip.currentType;
   if (trip.current) ctx.current = trip.current;
@@ -8872,12 +8886,23 @@ function currentTripContext(schedule, now) {
   if (!activeTrip) return { legsCompleted: 0, legsRemaining: 0, current: null, dutyEndsAt: null };
 
   let legsCompleted = 0, legsRemaining = 0, current = null, dutyEndsAt = null;
+  let legsTodayCompleted = 0, legsTodayRemaining = 0;
+  const todayStart = new Date(now); todayStart.setHours(0,0,0,0);
+  const todayEnd   = new Date(now); todayEnd.setHours(23,59,59,999);
+  const todayStartMs = todayStart.getTime(), todayEndMs = todayEnd.getTime();
+
   activeTrip.forEach(e => {
     if (t >= e.s && t <= e.en) current = e;
     if (e.type === 'flight') {
       if (e.en <= t) legsCompleted++;
       else if (e.s > t) legsRemaining++;
       if (!dutyEndsAt || e.en > dutyEndsAt) dutyEndsAt = e.en;
+      // Today-only counts
+      const flightIsToday = e.s <= todayEndMs && e.en >= todayStartMs;
+      if (flightIsToday) {
+        if (e.en <= t) legsTodayCompleted++;
+        else if (e.s > t) legsTodayRemaining++;
+      }
     }
   });
 
@@ -8897,7 +8922,8 @@ function currentTripContext(schedule, now) {
     if (e.en > t && (!dutyEndsToday || e.en > dutyEndsToday)) dutyEndsToday = e.en;
   });
 
-  return { legsCompleted, legsRemaining, current, dutyEndsAt, dutyEndsToday,
+  return { legsCompleted, legsRemaining, legsTodayCompleted, legsTodayRemaining,
+           current, dutyEndsAt, dutyEndsToday,
            currentType: current ? current.type : null };
 }
 
@@ -9079,16 +9105,10 @@ function buildTodayBriefing(ctx) {
   // next flight" branch below could never be reached.
   const isTurn = gapMin !== null && gapMin <= TURN_MAX_MIN;
   if (isTurn && sched.legsRemaining > 0 && sched.legsCompleted > 0) {
-    const ord = ['','First','Second','Third','Fourth','Fifth'][sched.legsCompleted] || 'Latest';
-    // BUG FIX (reported): the deplaning buffer was subtracted unconditionally,
-    // so someone finishing a 13-hour overnight layover was told their morning
-    // was shortened by "deplaning duties" — from an aircraft they left the
-    // previous evening. justLandedMinAgo was already being computed for
-    // exactly this and simply never read.
-    //
-    // Deplaning only eats into THIS window if it hasn't happened yet, so
-    // subtract what's actually left of it: all of it right after landing,
-    // none of it once that time has already passed.
+    const ord = ['',' First','Second','Third','Fourth','Fifth'][sched.legsTodayCompleted] || (sched.legsTodayCompleted + 'th');
+    const legsLeftToday = sched.legsTodayRemaining;
+    const legWord = legsLeftToday === 1 ? 'one more leg today' : legsLeftToday + ' more legs today';
+
     const deplaningLeftMin = sched.justLandedMinAgo === null
       ? POST_LANDING_BUFFER_MIN
       : Math.max(0, POST_LANDING_BUFFER_MIN - sched.justLandedMinAgo);
@@ -9097,12 +9117,29 @@ function buildTodayBriefing(ctx) {
     const hrs = Math.floor(gapMin/60), mins = gapMin%60;
     const gapStr = (hrs > 0 ? hrs+'h '+(mins?mins+'m':'') : gapMin+' min').trim();
     const where = sched.layoverAirport ? ' in '+sched.layoverAirport : '';
-    // dutyEndsToday, not dutyEndsAt — see currentTripContext. And a bare
-    // time is only safe once it's known to BE today.
     const dutyEnd = fmtDutyEnd(sched.dutyEndsToday);
-    const legWord = sched.legsRemaining === 1 ? 'one more leg' : sched.legsRemaining+' more legs';
     const ate = ctx.nutrition.mealCount > 0;
-    let body = ord+' leg done, '+legWord+' to go'+(dutyEnd ? ' — you\'re off at '+dutyEnd+'.' : '.')+' ';
+
+    // Late landing: duty ends after 10pm — no session, restaurants closing
+    const dutyEndMs = sched.dutyEndsToday;
+    const dutyEndHour = dutyEndMs ? new Date(dutyEndMs).getHours() : null;
+    const isLateLanding = dutyEndHour !== null && (dutyEndHour >= 22 || dutyEndHour < 3);
+
+    let body = ord + ' leg done, ' + legWord + (dutyEnd ? ' — off at ' + dutyEnd + '.' : '.') + ' ';
+
+    if (isLateLanding) {
+      if (!ate && usableMin >= 10) {
+        body += 'Grab dinner now — most places will be closed by the time you land. Something portable is worth taking for later too.';
+      } else if (ate) {
+        body += 'Late landing — sleep is the priority tonight. Skip the session, get horizontal as soon as you can.';
+      } else {
+        body += 'Not enough ground time for a real meal. Late landing means restaurants will be closed — grab anything portable you can find now.';
+      }
+      const action = (!ate && usableMin >= 10)
+        ? { label: 'Fuel up — log a meal', fn: "switchTab('nutrition')" }
+        : null;
+      return { tone: 'neutral', headline: ord + ' leg done — ' + gapStr + where, body, action };
+    }
 
     if (usableMin >= 20 && !ate) {
       body += gapStr+' on the ground is really about '+usableMin+' min once '
@@ -10148,6 +10185,7 @@ const FCFCamera = (() => {
   // ── Capture a frame from the video stream ─────────────────────────────────
   function capture() {
     if (!_videoEl || !_stream) return;
+    haptic('medium');
     // Shutter animation
     const shutter = document.getElementById('fcfCamShutter');
     if (shutter) { shutter.style.transform = 'scale(0.88)'; setTimeout(() => { shutter.style.transform = ''; }, 150); }

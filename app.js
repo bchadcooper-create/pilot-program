@@ -3067,13 +3067,14 @@ function hydrationRowHTML(ctx, standalone) {
 
 function renderTrackingToggles() {
   const row = (key, label, sub) =>
-    '<div class="fb" style="padding:10px 0;border-bottom:1px solid var(--border)">' +
-      '<div style="flex:1;padding-right:12px">' +
+    '<div class="fb" style="padding:12px 0;border-bottom:1px solid var(--border);align-items:center">' +
+      '<div style="flex:1;padding-right:16px">' +
         '<div style="font-size:14px">'+label+'</div>' +
         '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+sub+'</div>' +
       '</div>' +
-      '<button class="btn-ghost" style="font-size:20px;padding:0 4px" onclick="setTrackingPref(\''+key+'\','+(!ST[key])+')">' +
-        (ST[key] ? '🟢' : '⚪') + '</button>' +
+      '<div onclick="setTrackingPref(\''+key+'\','+(!ST[key])+')" style="cursor:pointer;flex-shrink:0;width:46px;height:26px;border-radius:13px;background:'+(ST[key]?'var(--gold)':'var(--border)')+';position:relative;transition:background 0.2s">' +
+        '<div style="position:absolute;top:3px;left:'+(ST[key]?'23px':'3px')+';width:20px;height:20px;border-radius:50%;background:#fff;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.4)"></div>' +
+      '</div>' +
     '</div>';
   return '<div class="section-label" style="margin-top:20px">TRACKING</div>' +
     '<div class="card mb12">' +
@@ -8060,7 +8061,7 @@ function renderMore(p) {
   const earnedCount = BADGES.filter(b => ST.badges[b.id]).length;
   parts.push(item('👤','Pilot Profile','Call sign, body metrics, objective',"switchTab('profile')"));
   parts.push(item('🏅','Badges',earnedCount+' of '+BADGES.length+' earned',"switchTab('badges')"));
-  parts.push(item('⌚','Connected Devices','Oura Ring — more devices coming',"switchTab('devices')"));
+  parts.push(item('⌚','Connected Devices','Apple Health, Apple Watch, Oura Ring',"switchTab('devices')"));
   parts.push(item('📖','Flight Deck Wisdom','Daily training wisdom cards',"switchTab('wisdom')"));
   parts.push(item('📊','Data & Import/Export','Flight schedule import, CSV export, AI prompt',"switchTab('data')"));
   if (ST.trackNutrition) parts.push(item('🍽️','Nutrition Log','Log meals, search foods, track macros',"switchTab('nutrition')"));
@@ -8140,7 +8141,7 @@ function renderDevices(p) {
     parts.push('<button class="btn btn-outline" onclick="connectOura()">Connect Oura Ring →</button>');
   }
   parts.push('</div>');
-  parts.push('<div class="card mb12"><div style="font-size:11px;color:var(--muted);line-height:1.6">More device integrations (Whoop, Garmin, Apple Health) are on the roadmap.</div></div>');
+  parts.push('<div class="card mb12"><div class="section-label" style="margin-top:0">APPLE HEALTH &amp; APPLE WATCH</div><div style="font-size:12px;color:var(--muted);line-height:1.65;margin-bottom:10px">Flight Crew Fitness reads workouts, heart rate, HRV, sleep, and activity directly from Apple Health — which includes your Apple Watch automatically. Manage permissions in the iOS Health app under Sources.</div><div style="font-size:11px;color:var(--green)">✓ Connected via HealthKit</div></div>');
   p.innerHTML = parts.join('');
 }
 

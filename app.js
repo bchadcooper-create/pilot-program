@@ -2927,7 +2927,16 @@ function showPaywall(reason) {
 // don't apply but StoreKit also isn't present) this says so plainly instead
 // of failing silently or pretending to charge anyone.
 function storeKitBridge() {
-  return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.FCFPurchases) || null;
+  // Returns the WKWebView StoreKit message handler if running inside the
+  // FCF native iOS shell. Returns null in a browser/PWA — those users
+  // go through Stripe web checkout instead.
+  const handler = window.webkit?.messageHandlers?.storeKit;
+  if (!handler) return null;
+  return {
+    getProducts: () => handler.postMessage({ action: 'getProducts' }),
+    purchase:    (opts) => handler.postMessage({ action: 'purchase', productId: opts.productId, appAccountToken: opts.appAccountToken }),
+    restore:     () => handler.postMessage({ action: 'restore' }),
+  };
 }
 
 // Web subscribers go through Stripe. Deliberately NOT offered inside the

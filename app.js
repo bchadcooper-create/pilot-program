@@ -2069,7 +2069,7 @@ async function loadLeaderboardGlance() {
     results.forEach(({ id, rows }) => {
       const isRunning = id === 'running';
       const name = isRunning ? 'Running' : (LEADERBOARD_EXERCISES.find(e => e.id === id)?.name || id);
-      parts.push('<div class="card" style="padding:10px;cursor:pointer" onclick="'+(isRunning ? "ST.lbCategory='running';renderPage()" : "ST.lbCategory='strength';ST.lbEx='"+id+"';localStorage.setItem('fcf_lb_ex','"+id+"');renderPage()")+'">');
+      parts.push('<div class="card" style="padding:10px;cursor:pointer;touch-action:manipulation" onclick="haptic('light');'+(isRunning ? "ST.lbCategory='running';renderPage()" : "ST.lbCategory='strength';ST.lbEx='"+id+"';localStorage.setItem('fcf_lb_ex','"+id+"');renderPage()")+'">');
       parts.push('<div style="font-size:11px;font-weight:600;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+name+'</div>');
       if (!rows.length) {
         parts.push('<div style="font-size:10px;color:var(--muted)">No entries yet</div>');
@@ -3091,7 +3091,7 @@ function hydrationRowHTML(ctx, standalone) {
   const hs = hydroStatus(ctx.now);
   // Tappable — reading your hydration status and wanting to log water are
   // the same moment, so the number itself is the control.
-  return '<div class="fb" style="'+(standalone?'':'margin-top:10px;padding-top:10px;border-top:1px solid var(--border);')+'cursor:pointer;padding-bottom:2px" onclick="openQuickWaterLog()">' +
+  return '<div class="fb" style="'+(standalone?'':'margin-top:10px;padding-top:10px;border-top:1px solid var(--border);')+'cursor:pointer;padding-bottom:2px" onclick="haptic('light');openQuickWaterLog()">' +
     '<span style="font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--muted)">💧 HYDRATION</span>' +
     '<span style="font-family:var(--mono);font-size:10px;color:'+hs.color+'">'+ST.waterIn.toFixed(1)+'/'+hydroTarget().toFixed(1)+'L · '+hs.label+' <span style="color:var(--gold)">+ LOG</span></span></div>';
 }
@@ -4578,7 +4578,7 @@ function confirmDeleteCustomProfile(id) {
     '<div class="modal-title">Delete "'+cp.name+'"?</div>' +
     '<div class="modal-body" style="margin-bottom:14px">This permanently deletes the saved routine. Completed sessions logged with it stay in your history.</div>' +
     '<button class="btn" style="background:var(--red);color:#fff" onclick="deleteCustomProfileConfirmed(\''+id+'\')">🗑 CONFIRM DELETE</button>' +
-    '<button class="btn btn-outline mt8" onclick="openProfileManager()">CANCEL</button>' +
+    '<button class="btn btn-outline mt8" onclick="haptic('light');openProfileManager()">CANCEL</button>' +
     '</div></div>';
 }
 async function deleteCustomProfileConfirmed(id) {
@@ -4628,7 +4628,7 @@ async function renderPreflight(p) {
   parts.push('<div class="section-label">PREFLIGHT BRIEFING — '+FCF_VERSION+'</div>');
   parts.push(installPromptHtml);
   if (profileIncomplete) {
-    parts.push('<div class="card mb12" style="border-color:var(--gold);cursor:pointer" onclick="switchTab(\'profile\')">');
+    parts.push('<div class="card mb12" style="border-color:var(--gold);cursor:pointer" onclick="haptic('light');switchTab('profile')">');
     parts.push('<div class="fb"><div><div style="font-size:13px;font-weight:600">👤 Complete your profile</div>');
     parts.push('<div style="font-size:11px;color:var(--muted);margin-top:3px">Set sex and training objective to unlock personalized programming.</div></div>');
     parts.push('<div style="font-size:18px;color:var(--gold)">→</div></div>');
@@ -4678,7 +4678,7 @@ async function renderPreflight(p) {
     parts.push('<div class="mg-pill" style="border-style:dashed;color:var(--gold)" onclick="openProfileBuilder()">＋ Build Your Own</div>');
     parts.push('</div>');
     if (ST.customProfiles.length) {
-      parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin:-6px 0 10px;cursor:pointer" onclick="openProfileManager()">✎ MANAGE SAVED ROUTINES</div>');
+      parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin:-6px 0 10px;cursor:pointer" onclick="haptic('light');openProfileManager()">✎ MANAGE SAVED ROUTINES</div>');
     }
 
     parts.push('<div class="section-label">TIME AVAILABLE <span class="info-i" onclick="showBioInfo(\'timeAvail\')">i</span></div>');
@@ -4715,7 +4715,7 @@ async function renderPreflight(p) {
   // ── Pilot Condition — one-line status by default, full input on tap ──
   const condMetaLine = {go:['🟢','GO'], marginal:['🟡','MARGINAL'], nogo:['🔴','NO-GO']}[ST.fatigue];
   const showCond = ST.showConditionDetail || isNewUser;
-  parts.push('<div class="card mb12" style="cursor:pointer" onclick="ST.showConditionDetail=!ST.showConditionDetail;renderPage()">');
+  parts.push('<div class="card mb12" style="cursor:pointer" onclick="haptic('light');ST.showConditionDetail=!ST.showConditionDetail;renderPage()">');
   parts.push('<div class="fb"><div style="font-size:13px">'+condMetaLine[0]+' Pilot Condition: <strong>'+condMetaLine[1]+'</strong></div><div style="font-family:var(--mono);font-size:10px;color:var(--gold)">'+(showCond?'HIDE ▴':'ADJUST ▾')+'</div></div>');
   parts.push('</div>');
 
@@ -4749,7 +4749,7 @@ async function renderPreflight(p) {
       const condMeta = {go:['🟢','GO — full protocol'], marginal:['🟡','MARGINAL — light only'], nogo:['🔴','NO-GO — mobility only']}[ST.fatigue];
       parts.push('<div class="fb" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">');
       parts.push('<div style="font-size:12px">Pilot Condition: <strong>'+condMeta[0]+' '+condMeta[1]+'</strong></div>');
-      parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);cursor:pointer" onclick="ST.showCondOverride=!ST.showCondOverride;renderPage()">'+(ST.showCondOverride?'HIDE':'OVERRIDE')+'</div>');
+      parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);cursor:pointer" onclick="haptic('light');ST.showCondOverride=!ST.showCondOverride;renderPage()">'+(ST.showCondOverride?'HIDE':'OVERRIDE')+'</div>');
       parts.push('</div>');
       if (ST.showCondOverride) parts.push(condBtns);
       parts.push('<div style="font-size:10px;color:var(--muted);line-height:1.5">Connect your Oura Ring in Profile and this is set automatically from your readiness score each morning.</div>');
@@ -4765,7 +4765,7 @@ async function renderPreflight(p) {
 
   // ── Injury Flag — one-line status by default, region grid on tap ──
   const showInjury = ST.showInjuryDetail || isNewUser;
-  parts.push('<div class="card mb12" style="cursor:pointer" onclick="ST.showInjuryDetail=!ST.showInjuryDetail;renderPage()">');
+  parts.push('<div class="card mb12" style="cursor:pointer" onclick="haptic('light');ST.showInjuryDetail=!ST.showInjuryDetail;renderPage()">');
   if (ST.injuries.length) {
     parts.push('<div class="fb"><div style="font-size:13px">🩹 '+ST.injuries.map(r=>INJURY_REGIONS[r].label).join(', ')+'</div><div style="font-family:var(--mono);font-size:10px;color:var(--gold)">'+(showInjury?'HIDE ▴':'EDIT ▾')+'</div></div>');
   } else {
@@ -5749,7 +5749,7 @@ function renderFlight(p) {
     if (!exercises || !exercises.length) return;
     parts.push('<div class="phase-header"><div class="phase-badge '+phase.cls+'">'+phase.icon+' '+phase.label+'</div><div>');
     if (phase.key === 'landing') {
-      parts.push('<div class="phase-title" onclick="showCNSInfo()" style="cursor:pointer">'+phase.sub+'</div>');
+      parts.push('<div class="phase-title" onclick="haptic('light');showCNSInfo()" style="cursor:pointer">'+phase.sub+'</div>');
     } else {
       parts.push('<div class="phase-title">'+phase.sub+'</div>');
     }
@@ -9444,7 +9444,7 @@ function renderNutritionGoalsSetup(p) {
   ];
   goalOpts.forEach(([val,label,desc]) => {
     const on = (ST.goalDraft || 'maintain') === val;
-    parts.push('<div onclick="ST.goalDraft=\''+val+'\';renderPage()" style="padding:12px;border:1px solid '+(on?'var(--gold)':'var(--border)')+';border-radius:9px;margin-bottom:8px;cursor:pointer;background:'+(on?'rgba(201,168,76,0.07)':'transparent')+'">');
+    parts.push('<div onclick="haptic('light');ST.goalDraft=\''+val+'\';renderPage()" style="padding:12px;border:1px solid '+(on?'var(--gold)':'var(--border)')+';border-radius:9px;margin-bottom:8px;cursor:pointer;background:'+(on?'rgba(201,168,76,0.07)':'transparent')+'">');
     parts.push('<div style="font-size:14px;font-weight:600;color:'+(on?'var(--gold)':'var(--text)')+'">'+label+'</div>');
     parts.push('<div style="font-size:11px;color:var(--muted);margin-top:3px">'+desc+'</div>');
     parts.push('</div>');
@@ -9596,7 +9596,7 @@ function openQuickActions() {
     '<button class="btn btn-gold mb8" onclick="closeModal();switchTab(\'preflight\')">⚡ Start a Workout</button>' +
     '<button class="btn btn-outline mb8" onclick="quickLogMeal()">🍽️ Log a Meal</button>' +
     '<button class="btn btn-outline mb8" onclick="closeModal();switchTab(\'trends\')">⚖️ Log Weight / BP / Glucose</button>' +
-    '<button class="btn btn-outline mb8" onclick="openQuickWaterLog()">💧 Log Water</button>' +
+    '<button class="btn btn-outline mb8" onclick="haptic('light');openQuickWaterLog()">💧 Log Water</button>' +
     '<button class="btn-ghost" onclick="closeModal()">Cancel</button>' +
     '</div></div>';
 }
@@ -9652,7 +9652,7 @@ function openQuickWaterLog(mode) {
   if (setMode) {
     parts.push('<div class="field"><label>Set today\'s total to (liters)</label><input type="text" inputmode="decimal" id="quickWaterInput" value="'+(ST.waterInRaw||'')+'" placeholder="e.g. 1.2"></div>');
     parts.push('<button class="btn btn-gold mt8" onclick="saveQuickWater(true)">Save Total</button>');
-    parts.push('<button class="btn-ghost" style="display:block;width:100%;text-align:center;margin-top:12px" onclick="openQuickWaterLog()">← Add water instead</button>');
+    parts.push('<button class="btn-ghost" style="display:block;width:100%;text-align:center;margin-top:12px" onclick="haptic('light');openQuickWaterLog()">← Add water instead</button>');
   } else {
     parts.push('<div style="display:flex;gap:8px;margin-bottom:10px">');
     WATER_QUICK_ADDS.forEach(a => {

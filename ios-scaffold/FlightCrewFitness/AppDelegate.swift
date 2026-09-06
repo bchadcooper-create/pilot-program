@@ -29,10 +29,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let token = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
-        print("APNs token: \(token)")
-        // TODO: Send token to your Supabase backend
-        // POST https://your-project.supabase.co/functions/v1/register-push-token
-        // Body: { "token": token, "userId": currentUserId }
+        // Post token to web app so it can forward to Supabase with the user's JWT
+        NotificationCenter.default.post(
+            name: .fcfAPNsTokenReceived,
+            object: nil,
+            userInfo: ["token": token]
+        )
     }
 
     func application(_ application: UIApplication,
@@ -59,7 +61,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         completionHandler([.banner, .badge, .sound])
     }
 
-    // Handle notification tap
+    // Handle notification tap — route deep link to web app
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
@@ -71,4 +73,5 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
 
 extension Notification.Name {
     static let fcfPushNotificationTapped = Notification.Name("fcfPushNotificationTapped")
+    static let fcfAPNsTokenReceived      = Notification.Name("fcfAPNsTokenReceived")
 }

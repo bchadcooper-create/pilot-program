@@ -19,6 +19,7 @@ class ViewController: UIViewController {
         setupWebView()
         loadApp()
         observePushTaps()
+        observeAPNsToken()
         listenForTransactions()  // BUG FIX: was defined but never called
     }
 
@@ -39,6 +40,7 @@ class ViewController: UIViewController {
         contentController.add(weakDelegate, name: "pushToken")
         contentController.add(weakDelegate, name: "healthkit")
         contentController.add(weakDelegate, name: "calendar")
+        contentController.add(weakDelegate, name: "notifications")
         config.userContentController = contentController
 
         webView = WKWebView(frame: .zero, configuration: config)
@@ -130,6 +132,8 @@ extension ViewController: WKScriptMessageHandler {
             handleHealthKitMessage(body)
         case "calendar":
             handleCalendarMessage(body)
+        case "notifications":
+            handleNotificationsMessage(body)
         case "pushToken":
             break
         default:
@@ -387,6 +391,41 @@ extension ViewController {
             CalendarManager.shared.syncEvents { [weak self] payload in
                 self?.postToWeb("fcf:calendar", data: payload)
             }
+        default:
+            break
+        }
+    }
+}
+
+// MARK: - Notifications
+
+extension ViewController {
+
+    /// Observe the APNs token emitted by AppDelegate and forward it to the web app.
+    /// The web app then POSTs it to Supabase with the user's JWT so the server
+    /// can send targeted push notifications later.
+    func observeAPNsToken() {
+        NotificationCenter.default.addObserver(
+            forName: .fcfAPNsTokenReceived,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let token = notification.userInfo?["token"] as? String else { return }
+            self?.postToWeb("fcf:apnsToken", data: ["token": token])
+        }
+    }
+
+    private func handleNotificationsMessage(_ body: [String: Any]) {
+        guard let action = body["action"] as? String else { return }
+        switch action {
+        case "schedule":
+            // Web app sends full prefs + upcoming flights for preflight scheduling
+            NotificationManager.shared.scheduleAll(prefs: body)
+        case "cancelWorkoutReminder":
+            // Called when user logs a workout — suppresses the 3-day nag
+            NotificationManager.shared.cancelWorkoutReminder()
+        case "cancelAll":
+            NotificationManager.shared.cancelAll()
         default:
             break
         }

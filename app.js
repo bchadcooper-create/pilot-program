@@ -17,6 +17,7 @@ const FOOD_RECOGNITION_EDGE_FN = 'https://dnxkydxbyihgsictbzjz.supabase.co/funct
 const ACCOUNT_DELETE_EDGE_FN = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/fcf-delete-account';
 const STRIPE_CHECKOUT_EDGE_FN = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/fcf-stripe-checkout';
 const CALENDAR_CLASSIFY_EDGE_FN = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/fcf-calendar-classify';
+const PUSH_TOKEN_EDGE_FN        = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/fcf-push-token';
 const PRIVACY_POLICY_URL = 'https://flightcrew.fit/privacy.html';
 const TERMS_URL = 'https://flightcrew.fit/terms.html';
 // ─── SUBSCRIPTION TIERS ─────────────────────────────────────────────────
@@ -2637,6 +2638,7 @@ async function bootApp() {
   if (typeof FCFBridge !== 'undefined' && FCFBridge.isNative) {
     setTimeout(() => FCFBridge.requestHealthKit(), 2000);
     setTimeout(() => FCFBridge.requestCalendar(), 3500);
+    setTimeout(() => scheduleNotifications(), 5000);
   }
   scheduleEntitlementRefresh();
   // Returning from Stripe Checkout. The webhook may land a moment after the
@@ -3453,7 +3455,58 @@ window.addEventListener('fcf:calendar', async (e) => {
   ST.calendarGranted = !!payload.granted;
   if (!payload.granted || !payload.events?.length) { renderPage(); return; }
   await classifyCalendarEvents(payload.events, payload.fingerprint);
+  // Reschedule preflight notifications now that we have flight data
+  scheduleNotifications();
 });
+
+// APNs token arrives from the native shell after iOS registers for push.
+// Forward it to Supabase so the server can send targeted notifications.
+window.addEventListener('fcf:apnsToken', async (e) => {
+  const token = e.detail?.token;
+  if (!token || !ST.user) return;
+  try {
+    const { data: { session } } = await SB.auth.getSession();
+    if (!session) return;
+    await fetch(PUSH_TOKEN_EDGE_FN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+      body: JSON.stringify({ token, platform: 'apns' })
+    });
+  } catch (e) { console.warn('push token registration failed:', e); }
+});
+
+// Schedule all enabled notifications via the native bridge.
+// Called after login, after calendar sync, and after prefs change.
+function scheduleNotifications() {
+  if (typeof FCFBridge === 'undefined' || !FCFBridge.isNative) return;
+  const profile = window._lastProfile || {};
+  const pro = isPro();
+
+  // Build upcoming flights list from classified calendar events
+  const upcomingFlights = (ST.calendarEvents || [])
+    .filter(e => e.type === 'flight' && new Date(e.start) > new Date())
+    .map(e => ({ start: e.start, origin: e.origin || '', destination: e.destination || '' }))
+    .slice(0, 10);
+
+  const prefs = {
+    action:            'schedule',
+    workoutReminder:   true,                           // free — always on
+    waterReminder:     ST.trackHydration ?? false,     // free if hydration on
+    preflightCheck:    upcomingFlights.length > 0,     // free if flights detected
+    upcomingFlights,
+    hrvAlert:          pro && !!(ST.healthkit?.hrv),   // pro
+    weeklySummary:     pro,                            // pro
+    hrvBaseline:       ST.healthkit?.hrv || null,
+  };
+  window.webkit?.messageHandlers?.notifications?.postMessage(prefs);
+}
+
+// Called immediately after a workout is logged — tells iOS to suppress
+// the 3-day reminder since the user just trained.
+function cancelWorkoutReminderNative() {
+  if (typeof FCFBridge === 'undefined' || !FCFBridge.isNative) return;
+  window.webkit?.messageHandlers?.notifications?.postMessage({ action: 'cancelWorkoutReminder' });
+}
 
 async function classifyCalendarEvents(events, fingerprint) {
   try {
@@ -6544,6 +6597,7 @@ async function setTheChocks() {
     }]);
     if (error) throw error;
     showToast('✅ Chocks set. Data synced.');
+    cancelWorkoutReminderNative(); // suppress 3-day reminder — user just trained
   } catch(e) {
     showToast('⚠️ Saved locally — will sync when online.');
     localStorage.setItem('fcf_session_' + Date.now(), JSON.stringify(session));
@@ -8141,21 +8195,44 @@ function renderMore(p) {
   if (isPro()) {
     const until = ST.subscription?.current_period_end
       ? new Date(ST.subscription.current_period_end).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : null;
-    parts.push('<div class="fb"><span style="font-size:13px;font-weight:600;color:var(--gold)">✦ Pro</span>'
-      + '<span style="font-size:11px;color:var(--muted)">'+(ST.subscription?.status==='grace'?'Renewal pending':'Active')+'</span></div>');
-    if (until) parts.push('<div style="font-size:11px;color:var(--muted);margin-top:4px">Renews '+until+'</div>');
+    parts.push('<div class="fb"><span style="font-size:13px;font-weight:600;color:var(--gold)">❖ Pro — all features unlocked</span></div>');
+    if (until) parts.push('<div style="font-size:11px;color:var(--muted);margin-top:4px">'+(ST.subscription?.status==='grace'?'Renewal pending — ':'Renews ')+until+'</div>');
     parts.push('<div style="font-size:11px;color:var(--muted);margin-top:8px">Manage or cancel in your Apple ID subscription settings.</div>');
   } else {
-    parts.push('<div style="font-size:13px;margin-bottom:8px">Free plan — '+FREE_WEEKLY_PHOTOS+' photo analyses per week.</div>');
-    parts.push('<button class="btn btn-gold" onclick="showPaywall()">✦ Upgrade to Pro — '+PRO_ANNUAL_PRICE+'/year</button>');
+    const rows = [
+      ['Workout logging',             '✓',       '✓'],
+      ['Basic trends (30 days)',       '✓',       '✓'],
+      ['3-day workout reminder',       '✓',       '✓'],
+      ['Water & pre-flight reminders', '✓',       '✓'],
+      ['Food photo analysis',          '3/week',  'Unlimited'],
+      ['AI calendar classification',   '1/month', 'Unlimited'],
+      ['Full trends history',          '—',       '✓'],
+      ['Oura Ring direct connect',     '—',       '✓'],
+      ['HRV drop alert',               '—',       '✓'],
+      ['Layover workout reminder',     '—',       '✓'],
+      ['Weekly training summary',      '—',       '✓'],
+    ];
+    parts.push('<div style="display:grid;grid-template-columns:1fr auto auto;gap:0;margin-bottom:14px">');
+    parts.push('<div style="font-size:10px;color:var(--muted);letter-spacing:.06em;padding:0 0 6px 0"></div>');
+    parts.push('<div style="font-size:10px;color:var(--muted);letter-spacing:.06em;padding:0 10px 6px;text-align:center">FREE</div>');
+    parts.push('<div style="font-size:10px;color:var(--gold);letter-spacing:.06em;padding:0 0 6px 8px;text-align:center">PRO</div>');
+    rows.forEach(([label, free, pro], i) => {
+      const border = i < rows.length - 1 ? 'border-bottom:1px solid var(--border)' : '';
+      const proColor = pro === '—' ? 'var(--muted)' : pro === '✓' ? 'var(--green)' : 'var(--gold)';
+      const freeColor = free === '—' ? 'var(--muted)' : free === '✓' ? 'var(--green)' : 'var(--muted)';
+      parts.push('<div style="font-size:12px;padding:8px 0;'+border+'">'+label+'</div>');
+      parts.push('<div style="font-size:11px;color:'+freeColor+';padding:8px 10px;'+border+';text-align:center">'+free+'</div>');
+      parts.push('<div style="font-size:11px;color:'+proColor+';padding:8px 0 8px 8px;'+border+';text-align:center;font-weight:'+(pro!=='—'?'600':'400')+'">'+pro+'</div>');
+    });
+    parts.push('</div>');
+    parts.push('<button class="btn btn-gold" onclick="showPaywall()">❖ Upgrade to Pro — '+PRO_ANNUAL_PRICE+'/year</button>');
     parts.push('<button class="btn-ghost" style="display:block;width:100%;text-align:center;margin-top:10px" onclick="restoreProPurchases()">Restore purchases</button>');
   }
   parts.push('</div>');
 
-  parts.push('<div class="card mb12" style="padding:12px">');
-  parts.push('<a class="modal-link" href="'+PRIVACY_POLICY_URL+'" '+externalLinkAttrs()+'>Privacy Policy</a>');
-  parts.push('<span style="color:var(--muted);margin:0 8px">·</span>');
-  parts.push('<a class="modal-link" href="'+TERMS_URL+'" '+externalLinkAttrs()+'>Terms of Use</a>');
+  parts.push('<div class="card mb12" style="padding:0">');
+  parts.push('<a class="modal-link" style="display:block;padding:14px 16px;border-bottom:1px solid var(--border)" href="'+PRIVACY_POLICY_URL+'" '+externalLinkAttrs()+'>Privacy Policy</a>');
+  parts.push('<a class="modal-link" style="display:block;padding:14px 16px" href="'+TERMS_URL+'" '+externalLinkAttrs()+'>Terms of Use</a>');
   parts.push('</div>');
 
   // Apple has required in-app account deletion since 2022 for any app that

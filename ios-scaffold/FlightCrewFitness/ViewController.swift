@@ -79,9 +79,12 @@ class ViewController: UIViewController {
 
     @objc private func handlePushTap(_ notification: Foundation.Notification) {
         guard let userInfo = notification.userInfo,
-              let deepLink = userInfo["deepLink"] as? String,
-              let url = URL(string: "https://flightcrew.fit\(deepLink)") else { return }
-        webView.load(URLRequest(url: url))
+              let deepLink = userInfo["deepLink"] as? String else { return }
+        // Post to the web app so it can switchTab() without reloading the page.
+        // A full URL load would re-initialize the entire app and lose all state.
+        var data: [String: Any] = ["tab": deepLink]
+        if let type = userInfo["type"] as? String { data["type"] = type }
+        postToWeb("fcf:pushTap", data: data)
     }
 
     // MARK: - JS → Native Bridge

@@ -90,12 +90,42 @@ serve(async (req) => {
       const cachedClassified  = cached?.profile_data?.calendarClassified;
       
       if (cachedFingerprint === fingerprint && cachedClassified?.length) {
-        // Calendar hasn't changed — return cached result immediately
+        // Calendar hasn't changed — return cached result immediately (free for cache hits)
         return new Response(JSON.stringify({
           classified: cachedClassified,
           fingerprint,
           cached: true
         }), { headers: { ...CORS, 'Content-Type': 'application/json' } });
+      }
+
+      // Free tier: check subscription before running a fresh AI classification
+      const { data: sub } = await supabase
+        .from('subscriptions')
+        .select('tier, status')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      const isPro = sub?.tier === 'pro' && (sub?.status === 'active' || sub?.status === 'grace');
+
+      if (!isPro) {
+        // Free users get 1 fresh AI classification per calendar month.
+        // Cache hits above are always free — this only counts new AI calls.
+        const lastClassifiedAt = cached?.profile_data?.calendarClassifiedAt;
+        if (lastClassifiedAt) {
+          const lastDate = new Date(lastClassifiedAt);
+          const now = new Date();
+          const sameMonth = lastDate.getFullYear() === now.getFullYear() &&
+                            lastDate.getMonth() === now.getMonth();
+          if (sameMonth) {
+            // Return cached result with a limit notice
+            return new Response(JSON.stringify({
+              classified: cachedClassified || [],
+              fingerprint,
+              cached: true,
+              limitReached: true,
+              limitMessage: 'Free plan includes 1 calendar classification per month. Upgrade to Pro for unlimited.'
+            }), { headers: { ...CORS, 'Content-Type': 'application/json' } });
+          }
+        }
       }
     }
 

@@ -30,8 +30,8 @@ const FREE_WEEKLY_PHOTOS = 3;
 const PRO_WEEKLY_PHOTOS = 0;        // 0 = unlimited
 const PRO_ANNUAL_PRICE = '$59.99';
 const PRO_MONTHLY_PRICE = '$7.99';
-const PRO_PRODUCT_ANNUAL = 'FCFProAnnual';
-const PRO_PRODUCT_MONTHLY = 'FCFProMonthly';
+const PRO_PRODUCT_ANNUAL = 'fit.flightcrew.app.pro.annual';
+const PRO_PRODUCT_MONTHLY = 'fit.flightcrew.app.pro.monthly';
 
 // Entitlement is only ever READ here. The server decides it after receipt
 // validation — the subscriptions table grants the client SELECT and nothing
@@ -2968,34 +2968,26 @@ async function startProPurchase(productId) {
   haptic('heavy');
   const bridge = storeKitBridge();
   if (!bridge) {
-    // In a browser or installed PWA, Stripe is the correct path rather than
-    // an apology about the App Store.
     return startWebCheckout(productId === PRO_PRODUCT_MONTHLY ? 'monthly' : 'annual');
   }
-  try {
-    // appAccountToken is what ties Apple's server notifications back to an
-    // account. Apple has no idea who our users are; without this the webhook
-    // receives a renewal it cannot attribute to anyone, and entitlement is
-    // never written. It must be a UUID, which the Supabase user id already is.
-    await withDialogSpinner('Contacting the App Store…',
-      () => bridge.purchase({ productId, appAccountToken: ST.user?.id || null }));
-    // Entitlement is written server-side after receipt validation, so the
-    // client re-reads rather than assuming the purchase succeeded.
-    await loadSubscription();
-    closeModal();
-    renderPage();
-    showBigToast(isPro() ? '✓ Pro active — thanks.' : 'Purchase received. Entitlement will appear shortly.', 'ok');
-  } catch (e) {
-    showBigToast('Purchase did not complete: ' + (e?.message || 'cancelled'), 'warn');
-  }
+  if (!ST.user) { showBigToast('Sign in first.', 'warn'); return; }
+  // Fire and forget — result arrives asynchronously via fcf:purchase event listener above.
+  // Do NOT await this; postMessage() returns undefined, not a Promise.
+  bridge.purchase({ productId, appAccountToken: ST.user?.id || null });
+  showBigToast('Opening App Store…', 'info');
 }
 
 async function restoreProPurchases() {
   const bridge = storeKitBridge();
   if (!bridge) {
-    // Nothing to "restore" on web — entitlement lives against the account,
-    // not the device. Re-reading it is the equivalent action.
     await withDialogSpinner('Checking…', () => loadSubscription());
+    showBigToast(isPro() ? '✓ Pro active.' : 'No active subscription found.', isPro() ? 'ok' : 'info');
+    return;
+  }
+  // Result arrives via fcf:restore event listener — don't await.
+  bridge.restore();
+  showBigToast('Contacting App Store…', 'info');
+}
     closeModal(); renderPage();
     showBigToast(isPro() ? '✓ Pro active.' : 'No active subscription on this account.', isPro() ? 'ok' : 'info');
     return;
@@ -3472,8 +3464,79 @@ async function initApp() {
 
 document.addEventListener('DOMContentLoaded', initApp);
 
-// HealthKit data arrives asynchronously from the native shell after permission
-// is granted. Store it in ST and re-render so Connected Devices updates.
+// ── Native → Web event listeners ─────────────────────────────────────────────
+// These handle all async responses from the iOS native shell.
+// postMessage() returns undefined — results always come back as CustomEvents.
+
+// IAP: purchase result
+window.addEventListener('fcf:purchase', async (e) => {
+  const d = e.detail || {};
+  if (d.cancelled) {
+    showBigToast('Purchase cancelled.', 'info');
+  } else if (d.pending) {
+    showBigToast('Purchase pending approval (Ask to Buy).', 'info');
+  } else if (d.success) {
+    // Entitlement written server-side — re-read it
+    await loadSubscription();
+    closeModal();
+    renderPage();
+    showBigToast(isPro() ? '✓ Pro active — thanks.' : 'Purchase received. Entitlement will appear shortly.', 'ok');
+  } else if (d.error) {
+    showBigToast('Purchase did not complete: ' + d.error, 'warn');
+  }
+});
+
+// IAP: restore result
+window.addEventListener('fcf:restore', async (e) => {
+  const d = e.detail || {};
+  if (d.error) {
+    showBigToast('Restore failed: ' + d.error, 'warn');
+    return;
+  }
+  await loadSubscription();
+  renderPage();
+  showBigToast(isPro() ? '✓ Pro restored.' : 'No active subscription found for this Apple ID.', isPro() ? 'ok' : 'info');
+});
+
+// IAP: product list (for future use — price display)
+window.addEventListener('fcf:products', (e) => {
+  const d = e.detail || {};
+  if (d.products) ST.skProducts = d.products;
+});
+
+// Sign In with Apple: success
+window.addEventListener('fcf:siwa:success', async (e) => {
+  const d = e.detail || {};
+  if (!d.identityToken) { ST.authErr = 'Sign in failed — no identity token returned.'; renderRoot(); return; }
+  try {
+    const { data, error } = await SB.auth.signInWithIdToken({
+      provider: 'apple',
+      token: d.identityToken,
+      nonce: undefined,
+    });
+    if (error) throw error;
+    ST.user = data.user;
+    ST.authed = true;
+    ST.authErr = '';
+    await bootApp();
+  } catch (err) {
+    ST.authErr = 'Sign in with Apple failed: ' + (err.message || 'unknown error');
+    renderRoot();
+  }
+});
+
+// Sign In with Apple: error
+window.addEventListener('fcf:siwa:error', (e) => {
+  const d = e.detail || {};
+  ST.authErr = 'Sign in with Apple failed: ' + (d.error || 'unknown error');
+  renderRoot();
+});
+
+// Push notification tap — navigate to the right tab without reloading
+window.addEventListener('fcf:pushTap', (e) => {
+  const tab = e.detail?.tab;
+  if (tab && ST.authed) switchTab(tab);
+});
 window.addEventListener('fcf:healthkit', (e) => {
   ST.healthkit = e.detail || {};
   renderPage();
@@ -3510,7 +3573,6 @@ window.addEventListener('fcf:apnsToken', async (e) => {
 // Called after login, after calendar sync, and after prefs change.
 function scheduleNotifications() {
   if (typeof FCFBridge === 'undefined' || !FCFBridge.isNative) return;
-  const profile = window._lastProfile || {};
   const pro = isPro();
 
   // Build upcoming flights list from classified calendar events
@@ -3522,7 +3584,7 @@ function scheduleNotifications() {
   const prefs = {
     action:            'schedule',
     workoutReminder:   true,                           // free — always on
-    waterReminder:     ST.trackHydration ?? false,     // free if hydration on
+    waterReminder:     !!(ST.trackHydration),          // free if hydration on
     preflightCheck:    upcomingFlights.length > 0,     // free if flights detected
     upcomingFlights,
     hrvAlert:          pro && !!(ST.healthkit?.hrv),   // pro
@@ -3550,6 +3612,15 @@ async function classifyCalendarEvents(events, fingerprint) {
     });
     if (!res.ok) { console.warn('Calendar classify failed:', await res.text()); return; }
     const data = await res.json();
+    if (data.limitReached) {
+      showBigToast('Calendar AI limit reached for this month. Upgrade to Pro for unlimited.', 'info');
+      if (data.classified?.length) {
+        ST.calendarEvents = data.classified;
+        ST.calendarFingerprint = fingerprint;
+        renderPage();
+      }
+      return;
+    }
     if (data.classified?.length) {
       ST.calendarEvents = data.classified;
       ST.calendarFingerprint = fingerprint;
@@ -9128,7 +9199,7 @@ function buildTodayBriefing(ctx) {
   // next flight" branch below could never be reached.
   const isTurn = gapMin !== null && gapMin <= TURN_MAX_MIN;
   if (isTurn && sched.legsRemaining > 0 && sched.legsCompleted > 0) {
-    const ord = ['',' First','Second','Third','Fourth','Fifth'][sched.legsTodayCompleted] || (sched.legsTodayCompleted + 'th');
+    const ord = ['','First','Second','Third','Fourth','Fifth'][sched.legsTodayCompleted] || (sched.legsTodayCompleted + 'th');
     const legsLeftToday = sched.legsTodayRemaining;
     const legWord = legsLeftToday === 1 ? 'one more leg today' : legsLeftToday + ' more legs today';
 

@@ -106,6 +106,10 @@
   <key>NSHealthUpdateUsageDescription</key>
   <string>Flight Crew Fitness does not write to Apple Health.</string>
 
+  <!-- Calendar — flight schedule and workout window detection -->
+  <key>NSCalendarsFullAccessUsageDescription</key>
+  <string>Flight Crew Fitness reads your calendar to detect your flight schedule, layovers, and personal commitments — so it can recommend when to train around your actual day.</string>
+
   <!-- Camera — food photo recognition -->
   <key>NSCameraUsageDescription</key>
   <string>Flight Crew Fitness uses your camera to identify foods from photos for nutrition logging.</string>

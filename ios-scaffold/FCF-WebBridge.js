@@ -3,7 +3,7 @@
  *
  * Detects whether the page is running inside the FCF native wrapper
  * and exposes a clean API for IAP, Sign In with Apple, push tokens,
- * and HealthKit.
+ * HealthKit, and Calendar.
  *
  * Usage:
  *   if (FCFBridge.isNative) { ... }
@@ -12,7 +12,9 @@
  *   FCFBridge.restore()
  *   FCFBridge.signInWithApple()
  *   FCFBridge.requestHealthKit()   // call once after login — shows iOS permission sheet
- *   FCFBridge.syncHealthKit()      // call to refresh data without re-prompting
+ *   FCFBridge.syncHealthKit()      // refresh data without re-prompting
+ *   FCFBridge.requestCalendar()    // call once after login — shows calendar permission sheet
+ *   FCFBridge.syncCalendar()       // refresh calendar events without re-prompting
  */
 
 const FCFBridge = (() => {
@@ -57,6 +59,19 @@ const FCFBridge = (() => {
     send('healthkit', { action: 'sync' });
   }
 
+  // ── Calendar ──────────────────────────────────────────────────────────────
+  // Call requestCalendar() once after login. iOS shows the Calendar permission
+  // sheet on first call. Results arrive as a fcf:calendar CustomEvent with
+  // the raw event list — the web app then sends them to the AI classifier.
+
+  function requestCalendar() {
+    send('calendar', { action: 'requestPermission' });
+  }
+
+  function syncCalendar() {
+    send('calendar', { action: 'sync' });
+  }
+
   // ── Event listeners (native → web) ───────────────────────────────────────
   // Listen like: window.addEventListener('fcf:purchase', e => console.log(e.detail))
 
@@ -77,6 +92,16 @@ const FCFBridge = (() => {
   //   lastWorkoutSource?: string,
   //   detectedDevices?: [{ name: string, kind: 'appleWatch'|'oura'|'whoop'|'garmin'|'iphone'|'other' }]
   // }
+  // fcf:calendar      → {
+  //   granted: bool,
+  //   events: [{ id, title, calendar, isAllDay, start, end, location?, notes? }],
+  //   eventCount: number,
+  //   calendarNames: string[],
+  //   fingerprint: string,
+  //   windowStart: string,   // ISO8601 — 7 days ago
+  //   windowEnd: string      // ISO8601 — 60 days from now
+  // }
 
-  return { isNative, getProducts, purchase, restore, signInWithApple, requestHealthKit, syncHealthKit };
+  return { isNative, getProducts, purchase, restore, signInWithApple,
+           requestHealthKit, syncHealthKit, requestCalendar, syncCalendar };
 })();

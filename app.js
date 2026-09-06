@@ -16,6 +16,7 @@ const USDA_EDGE_FN      = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1
 const FOOD_RECOGNITION_EDGE_FN = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/fcf-food-recognition';
 const ACCOUNT_DELETE_EDGE_FN = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/fcf-delete-account';
 const STRIPE_CHECKOUT_EDGE_FN = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/fcf-stripe-checkout';
+const CALENDAR_CLASSIFY_EDGE_FN = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/fcf-calendar-classify';
 const PRIVACY_POLICY_URL = 'https://flightcrew.fit/privacy.html';
 const TERMS_URL = 'https://flightcrew.fit/terms.html';
 // ─── SUBSCRIPTION TIERS ─────────────────────────────────────────────────
@@ -97,6 +98,9 @@ const ST = {
   manualTargetsOpen: false, manualCal: '', manualProtein: '', manualCarbs: '', manualFat: '', manualTargetsWarning: null,
   sleepBaselineScore: null,
   healthkit: null,        // populated after iOS HealthKit permission granted
+  calendarEvents: null,   // classified calendar events from Apple Calendar or ICS
+  calendarGranted: false, // whether Apple Calendar permission was granted
+  calendarFingerprint: null, // fingerprint of last classified event set
 
   tab: 'today',
   env: 'comm',
@@ -2487,6 +2491,12 @@ function applyProfileToState(profile) {
   ST.ouraDismissedIds = profile.ouraDismissedIds || [];
   ST.nutritionGoals = profile.nutritionGoals || null;
   ST.flightScheduleRaw = profile.flightScheduleRaw || null;
+  // Restore classified calendar events if available
+  if (profile.calendarClassified?.length) {
+    ST.calendarEvents = profile.calendarClassified;
+    ST.calendarFingerprint = profile.calendarFingerprint || null;
+    ST.calendarGranted = true;
+  }
   // Default ON for existing users — someone who has been logging meals
   // shouldn't lose the feature because a new preference defaulted to off.
   ST.trackNutrition = profile.trackNutrition !== false;
@@ -2626,6 +2636,7 @@ async function bootApp() {
   // remembered by iOS — subsequent boots skip straight to data sync.
   if (typeof FCFBridge !== 'undefined' && FCFBridge.isNative) {
     setTimeout(() => FCFBridge.requestHealthKit(), 2000);
+    setTimeout(() => FCFBridge.requestCalendar(), 3500);
   }
   scheduleEntitlementRefresh();
   // Returning from Stripe Checkout. The webhook may land a moment after the
@@ -3434,6 +3445,36 @@ window.addEventListener('fcf:healthkit', (e) => {
   ST.healthkit = e.detail || {};
   renderPage();
 });
+
+// Calendar data arrives from the native shell. Run it through the AI
+// classifier — the edge function handles caching via fingerprint comparison.
+window.addEventListener('fcf:calendar', async (e) => {
+  const payload = e.detail || {};
+  ST.calendarGranted = !!payload.granted;
+  if (!payload.granted || !payload.events?.length) { renderPage(); return; }
+  await classifyCalendarEvents(payload.events, payload.fingerprint);
+});
+
+async function classifyCalendarEvents(events, fingerprint) {
+  try {
+    const { data: { session } } = await SB.auth.getSession();
+    if (!session) return;
+    const res = await fetch(CALENDAR_CLASSIFY_EDGE_FN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+      body: JSON.stringify({ events, fingerprint })
+    });
+    if (!res.ok) { console.warn('Calendar classify failed:', await res.text()); return; }
+    const data = await res.json();
+    if (data.classified?.length) {
+      ST.calendarEvents = data.classified;
+      ST.calendarFingerprint = fingerprint;
+      renderPage();
+    }
+  } catch(e) {
+    console.warn('classifyCalendarEvents error:', e);
+  }
+}
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
   setTimeout(initApp, 0);
 }
@@ -9115,8 +9156,43 @@ function renderToday(p) {
   // outcome, since a low-readiness day (or several other rules) would
   // otherwise completely bypass the only place this used to be mentioned,
   // meaning most schedule-less users would never actually see it.
-  if (!ST.flightSchedule) {
-    parts.push('<div class="card mb12"><div class="fb" style="align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:600;margin-bottom:4px">📅 No flight schedule uploaded</div><div style="font-size:11px;color:var(--muted);line-height:1.5">Upload your crew schedule and this briefing gets a lot more specific — layovers, duty-day length, real windows to train.</div></div></div><button class="btn-outline mt8" onclick="switchTab(\'data\')">Upload Schedule</button></div>');
+  const hasAnySchedule = ST.flightSchedule?.length || ST.calendarEvents?.length;
+  if (!hasAnySchedule) {
+    const isNative = typeof FCFBridge !== 'undefined' && FCFBridge.isNative;
+    if (isNative && !ST.calendarGranted) {
+      parts.push('<div class="card mb12"><div class="fb" style="align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:600;margin-bottom:4px">📅 Connect your calendar</div><div style="font-size:11px;color:var(--muted);line-height:1.5">Grant calendar access and FCF will automatically detect your flights, layovers, and free time — no manual upload needed.</div></div></div><button class="btn-outline mt8" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.requestCalendar()">Connect Calendar</button></div>');
+    } else {
+      parts.push('<div class="card mb12"><div class="fb" style="align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:600;margin-bottom:4px">📅 No flight schedule</div><div style="font-size:11px;color:var(--muted);line-height:1.5">Upload your crew schedule and this briefing gets a lot more specific — layovers, duty-day length, real windows to train.</div></div></div><button class="btn-outline mt8" onclick="switchTab(\'data\')">Upload Schedule</button></div>');
+    }
+  }
+
+  // Show today's classified calendar events if available
+  if (ST.calendarEvents?.length) {
+    const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+    const todayEnd   = new Date(); todayEnd.setHours(23,59,59,999);
+    const todayEvents = ST.calendarEvents.filter(e => {
+      const s = new Date(e.start), en = new Date(e.end);
+      return s <= todayEnd && en >= todayStart && e.type !== 'personal';
+    }).sort((a,b) => new Date(a.start) - new Date(b.start));
+
+    if (todayEvents.length) {
+      const typeIcon = { flight:'✈️', layover:'🏨', reserve:'📟', training:'🎓', duty:'📋', rest:'😴', unknown:'📅' };
+      parts.push('<div class="section-label">TODAY\'S SCHEDULE</div>');
+      parts.push('<div class="card mb12">');
+      todayEvents.slice(0, 6).forEach(e => {
+        const s = new Date(e.start), en = new Date(e.end);
+        const icon = typeIcon[e.type] || '📅';
+        const timeStr = e.isAllDay ? 'All day' :
+          s.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false}) + '–' +
+          en.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
+        const label = e.origin && e.destination ? e.origin + ' → ' + e.destination : e.title;
+        parts.push('<div class="fb" style="padding:7px 0;border-bottom:1px solid var(--border)">');
+        parts.push('<span style="font-family:var(--mono);font-size:11px;color:var(--muted);min-width:90px">'+timeStr+'</span>');
+        parts.push('<span style="font-size:12px;flex:1;text-align:right">'+icon+' '+label+'</span>');
+        parts.push('</div>');
+      });
+      parts.push('</div>');
+    }
   }
 
   if (ctx.sched.todayEvents.length) {
@@ -10188,19 +10264,43 @@ function renderBadges(p) {
 
 function renderData(p) {
   const parts = [moreBackLink()];
+  const isNative = typeof FCFBridge !== 'undefined' && FCFBridge.isNative;
+
+  // ── Apple Calendar (iOS native) ───────────────────────────────────────────
+  if (isNative) {
+    parts.push('<div class="card mb12">');
+    parts.push('<div class="section-label" style="margin-top:0">APPLE CALENDAR</div>');
+    if (ST.calendarGranted && ST.calendarEvents?.length) {
+      const flights = ST.calendarEvents.filter(e => e.type === 'flight').length;
+      const total   = ST.calendarEvents.length;
+      parts.push('<div style="font-size:11px;color:var(--green);margin-bottom:8px">✅ Connected — '+total+' events classified ('+flights+' flights)</div>');
+      parts.push('<button class="btn btn-outline" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.syncCalendar()">↻ Sync Now</button>');
+    } else if (ST.calendarGranted && !ST.calendarEvents?.length) {
+      parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Calendar access granted but no events found in the next 60 days.</div>');
+      parts.push('<button class="btn btn-outline" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.syncCalendar()">↻ Sync Now</button>');
+    } else {
+      parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Grant access to your Apple Calendar and FCF will automatically detect your flights, layovers, and personal commitments — no manual upload needed.</div>');
+      parts.push('<button class="btn btn-outline" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.requestCalendar()">Connect Apple Calendar</button>');
+    }
+    parts.push('</div>');
+  }
+
+  // ── ICS Upload (fallback / web PWA) ──────────────────────────────────────
   parts.push('<div class="card mb12">');
-  parts.push('<div class="section-label" style="margin-top:0">FLIGHT SCHEDULE</div>');
-  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Upload your crew schedule as an .ics file — Preflight will automatically default your Mission Environment based on whether you\'re on a layover or at home today, and it stays available here to re-download alongside your CSV export.</div>');
+  parts.push('<div class="section-label" style="margin-top:0">'+(isNative ? 'ICS UPLOAD — OPTIONAL FALLBACK' : 'FLIGHT SCHEDULE')+'</div>');
+  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">'+(isNative ? 'If your airline gives you a .ics export from their crew scheduling app, you can upload it here as an alternative or supplement to Apple Calendar.' : 'Upload your crew schedule as an .ics file — Preflight will automatically default your Mission Environment based on whether you\'re on a layover or at home today.')+'</div>');
   if (ST.flightSchedule && ST.flightSchedule.length) {
     const dates = ST.flightSchedule.map(e => new Date(e.start)).sort((a,b)=>a-b);
     const first = dates[0].toLocaleDateString('en-US',{month:'short',day:'numeric'});
-    const last = dates[dates.length-1].toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    const last  = dates[dates.length-1].toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
     parts.push('<div style="font-size:11px;color:var(--green);margin-bottom:8px">✅ Schedule loaded — covers '+first+' to '+last+' ('+ST.flightSchedule.length+' events)</div>');
     parts.push('<button class="btn btn-outline" onclick="downloadFlightScheduleICS()">📅 Download My Uploaded Schedule</button>');
   }
   parts.push('<input type="file" id="icsFileInput" accept=".ics" style="display:none" onchange="handleICSUpload(this.files[0])">');
   parts.push('<button class="btn btn-outline mt8" onclick="document.getElementById(\'icsFileInput\').click()">'+(ST.flightSchedule?.length ? '🔄 Replace Schedule' : '📤 Upload .ics Schedule')+'</button>');
   parts.push('</div>');
+
+  // ── Export ────────────────────────────────────────────────────────────────
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">EXPORT DATA</div>');
   parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Exports everything the app holds, in one CSV with labelled sections: workouts (one row per set, biometrics joined by date), Oura daily metrics, every logged food item, hydration and flight hours, and your scheduled flights. Optimized for AI analysis.</div>');

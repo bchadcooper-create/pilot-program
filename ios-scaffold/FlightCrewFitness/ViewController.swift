@@ -3,6 +3,7 @@ import WebKit
 import AuthenticationServices
 import StoreKit
 import HealthKit
+import EventKit
 
 class ViewController: UIViewController {
 
@@ -37,6 +38,7 @@ class ViewController: UIViewController {
         contentController.add(weakDelegate, name: "signInWithApple")
         contentController.add(weakDelegate, name: "pushToken")
         contentController.add(weakDelegate, name: "healthkit")
+        contentController.add(weakDelegate, name: "calendar")
         config.userContentController = contentController
 
         webView = WKWebView(frame: .zero, configuration: config)
@@ -126,6 +128,8 @@ extension ViewController: WKScriptMessageHandler {
             handleSignInWithApple()
         case "healthkit":
             handleHealthKitMessage(body)
+        case "calendar":
+            handleCalendarMessage(body)
         case "pushToken":
             break
         default:
@@ -362,6 +366,26 @@ extension ViewController {
             // Connected Devices page). Skips the permission sheet — just reads.
             HealthKitManager.shared.syncAll { [weak self] payload in
                 self?.postToWeb("fcf:healthkit", data: payload)
+            }
+        default:
+            break
+        }
+    }
+}
+
+// MARK: - Calendar
+
+extension ViewController {
+    private func handleCalendarMessage(_ body: [String: Any]) {
+        guard let action = body["action"] as? String else { return }
+        switch action {
+        case "requestPermission":
+            CalendarManager.shared.requestPermissionAndSync { [weak self] payload in
+                self?.postToWeb("fcf:calendar", data: payload)
+            }
+        case "sync":
+            CalendarManager.shared.syncEvents { [weak self] payload in
+                self?.postToWeb("fcf:calendar", data: payload)
             }
         default:
             break

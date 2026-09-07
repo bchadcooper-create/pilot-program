@@ -10739,6 +10739,19 @@ function renderData(p) {
   const parts = [moreBackLink()];
   const isNative = typeof FCFBridge !== 'undefined' && FCFBridge.isNative;
 
+  // ── Context banner ────────────────────────────────────────────────────────
+  if (!isNative) {
+    // Web/PWA users — explain that iOS gets this automatically
+    parts.push('<div class="card mb12" style="border-left:3px solid var(--gold)">');
+    parts.push('<div style="font-size:13px;font-weight:600;margin-bottom:6px">📅 Schedule Import</div>');
+    parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.65">');
+    parts.push('On the <strong style="color:var(--text)">iOS app</strong>, your flights sync automatically from Apple Calendar — no upload needed. ');
+    parts.push('If you\'re using the web version, or your airline gives you a schedule export, upload it as an <strong style="color:var(--text)">.ics file</strong> below. ');
+    parts.push('Most crew scheduling systems (Crew Web, PBS, Google Calendar) can export .ics. ');
+    parts.push('If yours exports CSV, email it to yourself, open it in Google Calendar, and export from there as .ics.');
+    parts.push('</div></div>');
+  }
+
   // ── Apple Calendar (iOS native) ───────────────────────────────────────────
   if (isNative) {
     parts.push('<div class="card mb12">');

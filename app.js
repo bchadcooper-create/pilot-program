@@ -695,7 +695,6 @@ WORKOUTS.comm['Stretch'] = {
   ],
 };
 WORKOUTS.hotel['Stretch'] = WORKOUTS.comm['Stretch'];
-WORKOUTS.room['Stretch']  = WORKOUTS.comm['Stretch'];
 
 WORKOUTS.hotel['Cardio'] = {
   taxi: WORKOUTS.comm['Cardio'].taxi,
@@ -808,6 +807,7 @@ WORKOUTS.room['Longevity'] = {
   ],
   landing: WORKOUTS.comm['Longevity'].landing,
 };
+WORKOUTS.room['Stretch'] = WORKOUTS.comm['Stretch'];
 WORKOUTS.room['Cardio'] = {
   taxi: WORKOUTS.comm['Cardio'].taxi,
   takeoff: [

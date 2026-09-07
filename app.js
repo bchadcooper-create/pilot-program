@@ -7054,7 +7054,6 @@ async function renderTrends(p) {
       '<div style="font-size:10px;letter-spacing:.1em;color:var(--gold);margin-bottom:6px;font-family:var(--mono)">✦ AI COACH — YOUR PATTERNS</div>' +
       '<div id="aiProgressionText" style="font-size:13px;color:var(--muted);line-height:1.65"></div>' +
       '</div>');
-    setTimeout(() => loadProgressionAnalytics(), 300);
   }
 
   parts.push('<div class="section-label">BIOMETRICS LOG &amp; TRENDS</div>');
@@ -7153,6 +7152,8 @@ async function renderTrends(p) {
   p.innerHTML = parts.join('');
   scrollCalendarToToday();
   setTimeout(() => loadAndDrawCharts(), 50);
+  // Fired after innerHTML so the card element definitely exists
+  if (isPro()) loadProgressionAnalytics();
   // Load fresh signed URLs after render — patches only the photo section, not the whole page
   if (ST.user) setTimeout(() => loadPhotoTimeline().catch(()=>{}), 100);
 }
@@ -9618,7 +9619,6 @@ function renderToday(p) {
       '<div style="font-size:10px;letter-spacing:.1em;color:var(--gold);margin-bottom:6px;font-family:var(--mono)">✦ AI COACH</div>' +
       '<div id="aiFatigueText" style="font-size:13px;color:var(--muted);line-height:1.65"></div>' +
       '</div>');
-    setTimeout(() => loadFatigueCalibration(ctx), 300);
   }
 
   // Standalone, always-shown prompt — not folded into one specific briefing
@@ -9718,6 +9718,8 @@ function renderToday(p) {
 
   parts.push('<button class="btn btn-outline" onclick="switchTab(\'nutrition\')">🍽️ Log a meal</button>');
   p.innerHTML = parts.join('');
+  // Fired after innerHTML so the card element definitely exists
+  if (isPro()) loadFatigueCalibration(ctx);
 }
 
 // Manual entry goes through the exact same guardrail function as the
@@ -9900,7 +9902,6 @@ async function renderNutrition(p) {
       '<div style="font-size:10px;letter-spacing:.1em;color:var(--gold);margin-bottom:6px;font-family:var(--mono)">✦ AI COACH — TODAY\'S FUELING</div>' +
       '<div id="aiFuelText" style="font-size:13px;color:var(--muted);line-height:1.65"></div>' +
       '</div>');
-    setTimeout(() => loadFuelLogistics(), 300);
   }
 
   // Moved up per direct feedback — this used to be the last thing on the
@@ -9939,6 +9940,8 @@ async function renderNutrition(p) {
   }
 
   p.innerHTML = parts.join('');
+  // Fired after innerHTML so the card element definitely exists
+  if (isPro() && hasScheduleForFueling) loadFuelLogistics();
 }
 
 // ─── QUICK ACTIONS (the "+" tab-bar button) ────────────────────────────────

@@ -22,6 +22,39 @@
 <meta name="twitter:description" content="Engineered for the flight deck. Built for the layover.">
 <meta name="twitter:image" content="https://flightcrew.fit/icon-512.png">
 <title>Flight Crew Fitness</title>
+<script>
+  // Global crash catcher — runs before ANY other script. If app.js or a
+  // dependency throws at any point, including during initial parse/load,
+  // this writes the actual error directly onto the page. There is no
+  // console access on a phone, so this is the only way to see what broke
+  // without a laptop and a USB cable.
+  window.addEventListener('error', function(e) {
+    var box = document.getElementById('fcfCrashBox');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'fcfCrashBox';
+      box.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#3a0d0d;color:#fff;padding:16px;font-family:monospace;font-size:12px;white-space:pre-wrap;word-break:break-word;max-height:60vh;overflow-y:auto;border-bottom:3px solid #ef4444';
+      document.body.appendChild(box);
+    }
+    var line = 'JS ERROR: ' + (e.message || 'unknown') +
+      '\nFile: ' + (e.filename || '?') + ':' + (e.lineno || '?') + ':' + (e.colno || '?') +
+      (e.error && e.error.stack ? '\nStack: ' + e.error.stack : '');
+    box.textContent = (box.textContent ? box.textContent + '\n\n---\n\n' : '') + line;
+  });
+  window.addEventListener('unhandledrejection', function(e) {
+    var box = document.getElementById('fcfCrashBox');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'fcfCrashBox';
+      box.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#3a0d0d;color:#fff;padding:16px;font-family:monospace;font-size:12px;white-space:pre-wrap;word-break:break-word;max-height:60vh;overflow-y:auto;border-bottom:3px solid #ef4444';
+      document.body.appendChild(box);
+    }
+    var reason = e.reason;
+    var line = 'UNHANDLED PROMISE REJECTION: ' + (reason && reason.message ? reason.message : String(reason)) +
+      (reason && reason.stack ? '\nStack: ' + reason.stack : '');
+    box.textContent = (box.textContent ? box.textContent + '\n\n---\n\n' : '') + line;
+  });
+</script>
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="manifest" href="manifest.json">
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

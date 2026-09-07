@@ -9137,22 +9137,29 @@ function usdaReferenceLabel(food) {
 // data doesn't have the signal to support.
 const STAPLE_FOOD_BOOSTS = {
   chicken: /chicken.*breast/i,
+  'grilled chicken': /^chicken.*breast.*grilled|chicken.*breast.*roasted/i, // BUG FIX: two-word query fell through to raw ranking, surfaced branded fast food first
+  'chicken breast': /^chicken.*breast/i,
   beef: /beef.*ground/i,
+  'ground beef': /^beef,\s*ground/i,
   egg: /^egg,?\s*whole/i,
   eggs: /^egg,?\s*whole/i,
   rice: /rice,\s*white|rice,\s*brown/i,
+  'brown rice': /rice,\s*brown.*cooked/i, // BUG FIX: same multi-word gap as grilled chicken
+  'white rice': /rice,\s*white.*cooked/i,
   salmon: /salmon/i,
   turkey: /turkey.*breast/i,
   oatmeal: /^oats\b/i,
   oats: /^oats\b/i,
   broccoli: /^broccoli,\s*raw/i,
   potato: /potato.*baked|potato.*boiled/i,
+  'sweet potato': /^sweet\s*potato.*baked|^sweet\s*potato.*cooked/i,
   banana: /^bananas,\s*raw/i,
   apple: /^apples,\s*raw/i,
   yogurt: /yogurt.*plain/i,
+  'greek yogurt': /yogurt.*greek.*plain/i,
   milk: /^milk,/i,
   croissant: /^croissants?,/i,
-  bacon: /^bacon,\s*(cured|raw|cooked)/i, // BUG FIX: "bacon" surfaced "Bacon, meatless" first with no boost defined
+  bacon: /^bacon,\s*(cured|raw|cooked)/i,
   ham: /^ham,/i,
   sausage: /^sausage,/i,
   toast: /^bread,/i,
@@ -9168,6 +9175,8 @@ const STAPLE_FOOD_BOOSTS = {
   shrimp: /^shrimp,/i,
   pasta: /^pasta,/i,
   quinoa: /^quinoa,\s*cooked/i,
+  'black pepper chicken': /chicken.*breast/i, // Panda Express style dishes have no clean generic match — steer toward plain chicken breast rather than a branded/odd result
+  'mushroom chicken': /chicken.*breast/i,
 };
 
 // ─── FOOD EMOJI ─────────────────────────────────────────────────────────
@@ -9237,12 +9246,27 @@ function foodEmoji(description) {
   return '🍽️'; // generic fallback so every food row still has an icon slot
 }
 
+// Finds the best staple boost for a query. Exact key match wins outright;
+// otherwise falls back to the LONGEST key that appears as a substring of
+// the query, so "grilled chicken breast" still matches the "grilled
+// chicken" entry even though it's not a verbatim match, and a more
+// specific multi-word key (e.g. "grilled chicken") wins over a shorter
+// one ("chicken") when both could apply.
+function findStapleBoost(q) {
+  if (STAPLE_FOOD_BOOSTS[q]) return STAPLE_FOOD_BOOSTS[q];
+  let bestKey = null;
+  for (const key in STAPLE_FOOD_BOOSTS) {
+    if (q.includes(key) && (!bestKey || key.length > bestKey.length)) bestKey = key;
+  }
+  return bestKey ? STAPLE_FOOD_BOOSTS[bestKey] : null;
+}
+
 async function searchUSDAFoods(query) {
   if (!query || query.trim().length < 2) return [];
   const q = query.trim().toLowerCase();
   const res = await usdaFetch('search', { query: query.trim() });
   const foods = res?.foods || [];
-  const staplePattern = STAPLE_FOOD_BOOSTS[q];
+  const staplePattern = findStapleBoost(q);
   // Three sort tiers: (1) a curated staple match, if the query is one of
   // the common cases above, always wins outright; (2) generic before
   // branded; (3) within each tier, results starting with the search term

@@ -1,6 +1,6 @@
 // Flight Crew Fitness — Service Worker
-// Version: 5.41.3
-const CACHE = 'fcf-v5-41-3';
+// Version: 5.41.4
+const CACHE = 'fcf-v5-41-4';
 const CORE = [
   './',
   './index.html',
@@ -44,17 +44,37 @@ self.addEventListener('fetch', e => {
   );
 
   if (isPassthrough) {
-    // Simple network passthrough — do NOT attempt to cache or clone
     e.respondWith(fetch(e.request));
     return;
   }
 
-  // Cache-first for app shell files only
+  // Network-first for core app files — ensures WKWebView always gets the
+  // latest version. Falls back to cache only when offline.
+  const isCoreFile = (
+    url.pathname === '/' ||
+    url.pathname === '/index.html' ||
+    url.pathname === '/app.js' ||
+    url.pathname === '/sw.js'
+  );
+
+  if (isCoreFile) {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        if (res.status === 200) {
+          const resClone = res.clone();
+          caches.open(CACHE).then(c => c.put(e.request, resClone));
+        }
+        return res;
+      }).catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // Cache-first for everything else (fonts, icons, etc.)
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
       return fetch(e.request).then(res => {
-        // Only cache successful GET responses for same-origin app files
         if (e.request.method === 'GET' && res.status === 200 &&
             url.hostname === self.location.hostname) {
           const resClone = res.clone();

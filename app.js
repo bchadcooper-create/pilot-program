@@ -10691,6 +10691,22 @@ function renderMealBuilder() {
   parts.push('</div>');
   parts.push('</div>');
   box.innerHTML = parts.join('');
+
+  // BUG FIX: ST.foodSearchMode was set by the camera sheet's "Text input"
+  // tab but never actually read anywhere — someone who explicitly asked
+  // to type a food name still landed on the top of the full meal builder
+  // (calorie ring, macro bars, AI fueling card) with the actual input box
+  // scrolled off the bottom of the screen. Jump straight to it instead.
+  if (ST.foodSearchMode) {
+    ST.foodSearchMode = false; // one-shot — don't keep re-scrolling on every re-render
+    const input = document.getElementById('foodSearchInput');
+    if (input) {
+      setTimeout(() => {
+        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        input.focus();
+      }, 50);
+    }
+  }
 }
 
 async function finishMealBuilder() {

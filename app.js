@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.41.5';
+const FCF_VERSION = 'v5.42.0';
 const FCF_BUILD   = '20260906';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -18,6 +18,7 @@ const ACCOUNT_DELETE_EDGE_FN = 'https://dnxkydxbyihgsictbzjz.supabase.co/functio
 const STRIPE_CHECKOUT_EDGE_FN = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/fcf-stripe-checkout';
 const CALENDAR_CLASSIFY_EDGE_FN = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/fcf-calendar-classify';
 const PUSH_TOKEN_EDGE_FN        = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/fcf-push-token';
+const AI_COACH_EDGE_FN          = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/fcf-ai-coach';
 const PRIVACY_POLICY_URL = 'https://flightcrew.fit/privacy.html';
 const TERMS_URL = 'https://flightcrew.fit/terms.html';
 // ─── SUBSCRIPTION TIERS ─────────────────────────────────────────────────
@@ -2930,8 +2931,8 @@ function showPaywall(reason) {
 
   parts.push('<div class="card" style="padding:14px;margin-bottom:12px">');
   [['📷','Unlimited food photo analysis'],
-   ['✦','AI coaching and meal assessment'],
-   ['🏨','Hotel and layover gym workout generation'],
+   ['✦','AI Coach — pattern analysis, fatigue calibration, fueling logistics'],
+   ['📅','Unlimited AI calendar classification'],
    ['📊','Full trend history and exports']].forEach(([icon,label]) => {
     parts.push('<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px"><span>'+icon+'</span><span style="font-size:13px">'+label+'</span></div>');
   });
@@ -3610,6 +3611,206 @@ function scheduleNotifications() {
 function cancelWorkoutReminderNative() {
   if (typeof FCFBridge === 'undefined' || !FCFBridge.isNative) return;
   window.webkit?.messageHandlers?.notifications?.postMessage({ action: 'cancelWorkoutReminder' });
+}
+
+// ── AI Coach (Pro) ────────────────────────────────────────────────────────────
+// Generic caller for the three coaching modes: weekly_summary,
+// fatigue_calibration, fuel_logistics. All three are Pro-gated server-side —
+// this just handles the request/response plumbing and error states.
+async function callAICoach(mode, context) {
+  if (!isPro()) return { error: 'pro_required' };
+  try {
+    const { data: { session } } = await SB.auth.getSession();
+    if (!session) return { error: 'not_signed_in' };
+    const res = await fetch(AI_COACH_EDGE_FN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+      body: JSON.stringify({ mode, context })
+    });
+    const data = await res.json();
+    if (!res.ok) return { error: data.error || 'ai_failed' };
+    return { text: data.text, cached: data.cached };
+  } catch (e) {
+    console.warn('callAICoach error:', e);
+    return { error: 'network_error' };
+  }
+}
+
+// AI Crew-Specific Progression Analytics — the flagship Pro feature.
+// Pulls workout history + trip/pairing context + biometrics over the past
+// several weeks and asks the AI to find patterns tied to flying schedule
+// specifically, not generic fitness commentary. Server-side cached 24h.
+let _progressionCallInFlight = false;
+async function loadProgressionAnalytics() {
+  if (_progressionCallInFlight) return;
+  _progressionCallInFlight = true;
+  try {
+    const cutoff = new Date(Date.now() - 42 * 24 * 60 * 60 * 1000); // 6 weeks of history
+
+    // Workout sessions with date + muscle group + rough volume
+    const sessions = (ST.sessionCache || [])
+      .filter(s => s.date && new Date(s.date) >= cutoff)
+      .map(s => ({
+        date: s.date,
+        muscleGroup: s.muscle_group || null,
+        durationMinutes: s.durationMinutes || null,
+        environment: s.env || null,
+      }));
+
+    if (sessions.length < 3) {
+      // Not enough data yet — don't waste an API call on "not enough data"
+      // when the client can determine that itself.
+      _progressionCallInFlight = false;
+      return;
+    }
+
+    // Match each session's date against classified calendar events to find
+    // trip-day context — this is what makes the insight "crew-specific"
+    // rather than a generic weekly recap.
+    const tripContextForDate = (dateStr) => {
+      if (!ST.calendarEvents?.length) return null;
+      const day = new Date(dateStr);
+      const dayStart = new Date(day); dayStart.setHours(0,0,0,0);
+      const dayEnd = new Date(day); dayEnd.setHours(23,59,59,999);
+      const flightsThatDay = ST.calendarEvents.filter(e =>
+        e.type === 'flight' && new Date(e.start) <= dayEnd && new Date(e.end) >= dayStart
+      );
+      const layoverThatDay = ST.calendarEvents.find(e =>
+        e.type === 'layover' && new Date(e.start) <= dayEnd && new Date(e.end) >= dayStart
+      );
+      return {
+        flightLegsThatDay: flightsThatDay.length,
+        onLayover: !!layoverThatDay,
+      };
+    };
+
+    const sessionsWithTripContext = sessions.map(s => ({
+      ...s,
+      tripContext: tripContextForDate(s.date),
+    }));
+
+    // Weight trend
+    let weightTrend = [];
+    try {
+      const filter = ST.user ? SB.from('weight_log').select('weight_lb,logged_at').eq('user_id', ST.user.id) : null;
+      if (filter) {
+        const { data } = await filter.gte('logged_at', cutoff.toISOString()).order('logged_at', { ascending: true });
+        weightTrend = (data || []).map(d => ({ date: d.logged_at, weight: d.weight_lb }));
+      }
+    } catch (e) { /* non-fatal — proceed without it */ }
+
+    // Oura biometrics for the same window, if connected
+    let biometrics = [];
+    if (ST.ouraConnected) {
+      try {
+        const { data } = await SB.from('oura_daily').select('date,readiness_score,sleep_score,hrv_balance')
+          .eq('user_id', ST.user.id).gte('date', cutoff.toISOString().slice(0,10)).order('date', { ascending: true });
+        biometrics = data || [];
+      } catch (e) { /* non-fatal */ }
+    }
+
+    const context = {
+      windowDays: 42,
+      sessions: sessionsWithTripContext,
+      weightTrend,
+      biometrics,
+    };
+
+    const result = await callAICoach('weekly_summary', context);
+    const card = document.getElementById('aiProgressionCard');
+    const textEl = document.getElementById('aiProgressionText');
+    if (!card || !textEl) return;
+    if (result.error) return; // silent fail — rest of Trends page still works
+    textEl.textContent = result.text;
+    card.style.display = '';
+  } finally {
+    _progressionCallInFlight = false;
+  }
+}
+
+// AI Tactical Fueling Logistics — reasons over today's classified schedule
+// and what's already been eaten to recommend flight-bag vs terminal food.
+let _fuelCallInFlight = false;
+async function loadFuelLogistics() {
+  if (_fuelCallInFlight) return;
+  _fuelCallInFlight = true;
+  try {
+    const now = new Date();
+    const todayStart = new Date(now); todayStart.setHours(0,0,0,0);
+    const todayEnd   = new Date(now); todayEnd.setHours(23,59,59,999);
+
+    // Today's schedule events — from Apple Calendar (classified) or ICS upload
+    const events = (ST.calendarEvents?.length ? ST.calendarEvents : ST.flightSchedule || [])
+      .filter(e => {
+        const s = new Date(e.start), en = new Date(e.end);
+        return s <= todayEnd && en >= todayStart;
+      })
+      .map(e => ({
+        type: e.type || 'flight',
+        start: e.start, end: e.end,
+        origin: e.origin || null, destination: e.destination || null,
+      }));
+
+    if (!events.length) { _fuelCallInFlight = false; return; }
+
+    const meals = ST.todaysMeals || [];
+    const context = {
+      currentTime: now.toISOString(),
+      todaysSchedule: events,
+      mealsAlreadyLoggedToday: meals.map(m => ({
+        type: m.meal_type,
+        loggedAt: m.logged_at,
+      })),
+    };
+
+    const result = await callAICoach('fuel_logistics', context);
+    const card = document.getElementById('aiFuelCard');
+    const textEl = document.getElementById('aiFuelText');
+    if (!card || !textEl) return;
+    if (result.error) return; // silent fail — rest of nutrition tab still works
+    textEl.textContent = result.text;
+    card.style.display = '';
+  } finally {
+    _fuelCallInFlight = false;
+  }
+}
+
+// AI Fatigue Calibration — gathers today's readiness, trip context, and
+// recent training load, then asks the AI coach for a scaling judgment.
+// Cached per-day-per-user server-side isn't needed here since it's cheap
+// and the inputs (readiness, duty context) can change through the day.
+let _fatigueCallInFlight = false;
+async function loadFatigueCalibration(ctx) {
+  if (_fatigueCallInFlight) return;
+  _fatigueCallInFlight = true;
+  try {
+    const sched = ctx.sched || {};
+    const context = {
+      readiness: ctx.oura.readiness ?? null,
+      sleepScore: ctx.oura.sleep ?? null,
+      sleepHours: ST.sleepHours ?? null,
+      selfReportedFatigue: ST.readiness ?? null, // 1-5 scale, used when no Oura connected
+      tripDayNumber: sched.legsCompleted != null ? (sched.legsCompleted + sched.legsRemaining > 0 ? sched.legsCompleted + 1 : null) : null,
+      legsCompletedToday: sched.legsTodayCompleted ?? 0,
+      legsRemainingToday: sched.legsTodayRemaining ?? 0,
+      dutyEndsToday: sched.dutyEndsToday ? new Date(sched.dutyEndsToday).toISOString() : null,
+      layoverAirport: sched.layoverAirport || null,
+      workoutLoggedToday: ctx.training?.workoutToday ?? false,
+    };
+    const result = await callAICoach('fatigue_calibration', context);
+    const card = document.getElementById('aiFatigueCard');
+    const textEl = document.getElementById('aiFatigueText');
+    if (!card || !textEl) return; // user navigated away before this resolved
+    if (result.error) {
+      // Silent fail — the rule-based briefing above already covers this,
+      // so a failed AI call just means one fewer card, not a broken page.
+      return;
+    }
+    textEl.textContent = result.text;
+    card.style.display = '';
+  } finally {
+    _fatigueCallInFlight = false;
+  }
 }
 
 async function classifyCalendarEvents(events, fingerprint) {
@@ -6861,6 +7062,17 @@ function getFuelTrends(mealLogs, goals) {
 
 async function renderTrends(p) {
   const parts = [];
+
+  // AI Progression Analytics — Pro only. The headline insight for the whole
+  // Trends screen, so it goes first. Cached server-side for 24h.
+  if (isPro()) {
+    parts.push('<div id="aiProgressionCard" class="card mb12" style="border-left:3px solid var(--gold);display:none">' +
+      '<div style="font-size:10px;letter-spacing:.1em;color:var(--gold);margin-bottom:6px;font-family:var(--mono)">✦ AI COACH — YOUR PATTERNS</div>' +
+      '<div id="aiProgressionText" style="font-size:13px;color:var(--muted);line-height:1.65"></div>' +
+      '</div>');
+    setTimeout(() => loadProgressionAnalytics(), 300);
+  }
+
   parts.push('<div class="section-label">BIOMETRICS LOG &amp; TRENDS</div>');
 
   // Shown only when free-tier trimming actually hid data (set in loadAndDrawCharts)
@@ -8358,6 +8570,9 @@ function renderMore(p) {
       ['Water & pre-flight reminders', '✓',       '✓'],
       ['Food photo analysis',          '3/week',  'Unlimited'],
       ['AI calendar classification',   '1/month', 'Unlimited'],
+      ['AI progression analytics',     '—',       '✓'],
+      ['AI fatigue calibration',       '—',       '✓'],
+      ['AI fueling logistics',         '—',       '✓'],
       ['Full trends history',          '—',       '✓'],
       ['Oura Ring direct connect',     '—',       '✓'],
       ['HRV drop alert',               '—',       '✓'],
@@ -9411,6 +9626,17 @@ function renderToday(p) {
   if (brief.action) parts.push('<button class="btn btn-gold" style="margin-top:14px" onclick="'+brief.action.fn+'">'+brief.action.label+'</button>');
   parts.push('</div>');
 
+  // AI Fatigue Calibration — Pro only. Adds trip-context reasoning on top of
+  // the rule-based briefing above, rather than replacing it. Loads async so
+  // it never blocks the page render.
+  if (isPro()) {
+    parts.push('<div id="aiFatigueCard" class="card mb12" style="border-left:3px solid var(--gold);display:none">' +
+      '<div style="font-size:10px;letter-spacing:.1em;color:var(--gold);margin-bottom:6px;font-family:var(--mono)">✦ AI COACH</div>' +
+      '<div id="aiFatigueText" style="font-size:13px;color:var(--muted);line-height:1.65"></div>' +
+      '</div>');
+    setTimeout(() => loadFatigueCalibration(ctx), 300);
+  }
+
   // Standalone, always-shown prompt — not folded into one specific briefing
   // outcome, since a low-readiness day (or several other rules) would
   // otherwise completely bypass the only place this used to be mentioned,
@@ -9680,6 +9906,17 @@ async function renderNutrition(p) {
   } else {
     // "Just track" mode still gets a real number, no targets to compare against
     parts.push('<div class="card mb12"><div class="fb" style="align-items:baseline"><span style="font-family:var(--mono);font-size:26px">'+Math.round(dayTotals.calories).toLocaleString()+'</span><span style="font-family:var(--mono);font-size:11px;color:var(--muted)">CAL TODAY · P'+Math.round(dayTotals.protein)+'g · C'+Math.round(dayTotals.carbs)+'g · F'+Math.round(dayTotals.fat)+'g</span></div></div>');
+  }
+
+  // AI Tactical Fueling Logistics — Pro only, and only useful when there's
+  // an actual schedule to reason over (calendar or uploaded ICS).
+  const hasScheduleForFueling = ST.flightSchedule?.length || ST.calendarEvents?.length;
+  if (isPro() && hasScheduleForFueling) {
+    parts.push('<div id="aiFuelCard" class="card mb12" style="border-left:3px solid var(--gold);display:none">' +
+      '<div style="font-size:10px;letter-spacing:.1em;color:var(--gold);margin-bottom:6px;font-family:var(--mono)">✦ AI COACH — TODAY\'S FUELING</div>' +
+      '<div id="aiFuelText" style="font-size:13px;color:var(--muted);line-height:1.65"></div>' +
+      '</div>');
+    setTimeout(() => loadFuelLogistics(), 300);
   }
 
   // Moved up per direct feedback — this used to be the last thing on the

@@ -373,7 +373,7 @@ function updateHydrationUI() {
   persistDailyInputs();
 }
 
-const MUSCLE_GROUPS = ['Lower Body','Upper Push','Upper Pull','Power / Plyo','Full Body','Longevity','Cardio','Run'];
+const MUSCLE_GROUPS = ['Lower Body','Upper Push','Upper Pull','Power / Plyo','Full Body','Longevity','Stretch','Cardio','Run'];
 
 // ─── EXERCISE BUILDER ─────────────────────────────────────────────────────────
 // rest: suggested rest in seconds for the heaviest set in this exercise (phase-aware default applied separately)
@@ -663,6 +663,40 @@ WORKOUTS.hotel['Full Body'] = {
   ],
 };
 WORKOUTS.hotel['Longevity'] = WORKOUTS.comm['Longevity'];
+
+// A pure stretching/mobility session — zero equipment, identical across all
+// three environments since it needs none of the room/hotel/comm distinction
+// the strength workouts require. Built specifically for pilots' known
+// problem areas: hip flexors and thoracic spine from hours seated, neck
+// and shoulders from headset/yoke posture.
+WORKOUTS.comm['Stretch'] = {
+  taxi: [
+    ex('c_st_t1','Neck Rolls','2×5/direction',2,'Slow, controlled circles. Stop anywhere that pinches rather than pulls.',false,'reps_only'),
+    ex('c_st_t2','Shoulder Rolls','2×10',2,'Big, slow circles forward then back. Releases the shoulders after hours in a seat.',false,'reps_only'),
+    ex('c_st_t3','Cat-Cow','2×10',2,'Slow spinal articulation. Inhale on extension, exhale on flexion.',false,'reps_only'),
+  ],
+  takeoff: [
+    ex('c_st_to1','Chest Doorway Stretch','45s/side',1,'Forearm on a doorframe, step through gently until you feel the stretch across the chest.',true,'timed_bilateral'),
+    ex('c_st_to2','Cross-Body Shoulder Stretch','45s/side',1,'Pull one arm across the chest with the other. Hold, don\'t bounce.',true,'timed_bilateral'),
+    ex('c_st_to3','Triceps Overhead Stretch','45s/side',1,'Elbow up and back behind the head, gentle pull with the opposite hand.',true,'timed_bilateral'),
+    ex('c_st_to4','Thread the Needle','45s/side',1,'On all fours, thread one arm under the body to open the upper back and shoulder.',true,'timed_bilateral'),
+  ],
+  enroute: [
+    ex('c_st_er1','Hip Flexor Stretch','60s/side',1,'Half-kneeling lunge position, gentle push of the hips forward. The single most valuable stretch for anyone sitting all day.',true,'timed_bilateral'),
+    ex('c_st_er2','Seated Figure-4 Stretch','60s/side',1,'Ankle on opposite knee, lean forward from the hips. Opens the glute and outer hip.',true,'timed_bilateral'),
+    ex('c_st_er3','Standing Hamstring Stretch','45s/side',1,'Heel on a low surface, hinge forward from the hips with a flat back.',true,'timed_bilateral'),
+    ex('c_st_er4','Quad Stretch','45s/side',1,'Standing, pull heel to glute, knees together. Hold something for balance if needed.',true,'timed_bilateral'),
+    ex('c_st_er5','World\'s Greatest Stretch','60s/side',1,'Deep lunge, hand down, rotate the opposite elbow to the sky. Hits hips, hamstrings, and thoracic spine in one move.',true,'timed_bilateral'),
+  ],
+  landing: [
+    ex('c_st_l1','90/90 Hip Switch','2×8/side',2,'Slow controlled rotation between internal and external hip position. The most important mobility work for a pilot.',false,'reps_only'),
+    ex('c_st_l2','Child\'s Pose','90s',1,'Sink hips to heels, arms extended forward. Full relaxation of the lower back.',true,'timed'),
+    ex('c_st_l3','Box Breathing','2 min',1,'4 seconds in, 4 hold, 4 out, 4 hold. Settles the nervous system before rest.',true,'timed'),
+  ],
+};
+WORKOUTS.hotel['Stretch'] = WORKOUTS.comm['Stretch'];
+WORKOUTS.room['Stretch']  = WORKOUTS.comm['Stretch'];
+
 WORKOUTS.hotel['Cardio'] = {
   taxi: WORKOUTS.comm['Cardio'].taxi,
   takeoff: [
@@ -3643,6 +3677,31 @@ function cancelWorkoutReminderNative() {
 }
 
 // ── AI Coach (Pro) ────────────────────────────────────────────────────────────
+
+// Format a date for an AI payload in the USER'S LOCAL TIME, not UTC.
+//
+// BUG FIX (reported): every AI context was sending .toISOString(), which is
+// UTC. The model has no way to know the user's offset, so it read those as
+// wall-clock times — a 1:28 PM local departure got described back to the
+// user as 8:28 PM. Anything the model reasons about time with has to be
+// pre-converted to local and clearly labelled as such.
+function fmtLocalForAI(d) {
+  if (!d) return null;
+  const dt = (d instanceof Date) ? d : new Date(d);
+  if (isNaN(dt.getTime())) return null;
+  return dt.toLocaleString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  });
+}
+
+// The user's IANA timezone, sent alongside formatted times so the model can
+// reason about "late at night" / "restaurants will be closed" correctly.
+function localTimezoneName() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown'; }
+  catch(e) { return 'unknown'; }
+}
+
 // Generic caller for the three coaching modes: weekly_summary,
 // fatigue_calibration, fuel_logistics. All three are Pro-gated server-side —
 // this just handles the request/response plumbing and error states.
@@ -3673,7 +3732,10 @@ async function loadProgressionAnalytics() {
   try {
     const cutoff = new Date(Date.now() - 42 * 24 * 60 * 60 * 1000); // 6 weeks of history
 
-    // Workout sessions with date + muscle group + rough volume
+    // Workout sessions, each enriched with what was happening on the
+    // calendar that day. This is what makes the analysis crew-specific —
+    // and it's why the model should never need to ask the user to hand-log
+    // "trip context" in a notes field: the calendar already knows.
     const sessions = (ST.sessionCache || [])
       .filter(s => s.date && new Date(s.date) >= cutoff)
       .map(s => ({
@@ -3689,29 +3751,44 @@ async function loadProgressionAnalytics() {
       return;
     }
 
-    // Match each session's date against classified calendar events to find
-    // trip-day context — this is what makes the insight "crew-specific"
-    // rather than a generic weekly recap.
-    const tripContextForDate = (dateStr) => {
-      if (!ST.calendarEvents?.length) return null;
+    // Derive each session's schedule context from the calendar directly.
+    const dayContextFor = (dateStr) => {
       const day = new Date(dateStr);
       const dayStart = new Date(day); dayStart.setHours(0,0,0,0);
       const dayEnd = new Date(day); dayEnd.setHours(23,59,59,999);
-      const flightsThatDay = ST.calendarEvents.filter(e =>
-        e.type === 'flight' && new Date(e.start) <= dayEnd && new Date(e.end) >= dayStart
-      );
-      const layoverThatDay = ST.calendarEvents.find(e =>
-        e.type === 'layover' && new Date(e.start) <= dayEnd && new Date(e.end) >= dayStart
-      );
-      return {
-        flightLegsThatDay: flightsThatDay.length,
-        onLayover: !!layoverThatDay,
+      const out = {
+        dayOfWeek: day.toLocaleDateString('en-US', { weekday: 'long' }),
+        localDate: day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        timeOfDayLocal: day.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
       };
+      if (!ST.calendarEvents?.length) { out.scheduleKnown = false; return out; }
+      out.scheduleKnown = true;
+      const overlaps = (e) => new Date(e.start) <= dayEnd && new Date(e.end) >= dayStart;
+      const flightsThatDay = ST.calendarEvents.filter(e => e.type === 'flight' && overlaps(e));
+      const layoverThatDay = ST.calendarEvents.find(e => e.type === 'layover' && overlaps(e));
+      out.flightLegsThatDay = flightsThatDay.length;
+      out.onLayover = !!layoverThatDay;
+      out.layoverAirport = layoverThatDay?.airport || layoverThatDay?.destination || null;
+      // Working vs. at home — the single most useful distinction, and one
+      // the calendar can answer without the user annotating anything.
+      out.workingThatDay = flightsThatDay.length > 0 || !!layoverThatDay;
+      if (flightsThatDay.length) {
+        out.dutyHoursThatDay = Math.round(flightsThatDay.reduce((sum, e) =>
+          sum + (new Date(e.end) - new Date(e.start)) / 3600000, 0) * 10) / 10;
+      }
+      // Which day of that trip it was, using the same trip-partitioning
+      // logic the rest of the app uses, so "day 3 of a 4-day" is accurate.
+      const trip = currentTripContext(ST.calendarEvents, day);
+      if (trip?.tripDayNumber) {
+        out.tripDayNumber = trip.tripDayNumber;
+        out.tripTotalDays = trip.tripTotalDays;
+      }
+      return out;
     };
 
     const sessionsWithTripContext = sessions.map(s => ({
       ...s,
-      tripContext: tripContextForDate(s.date),
+      dayContext: dayContextFor(s.date),
     }));
 
     // Weight trend
@@ -3759,7 +3836,8 @@ async function loadFuelLogistics() {
     const todayStart = new Date(now); todayStart.setHours(0,0,0,0);
     const todayEnd   = new Date(now); todayEnd.setHours(23,59,59,999);
 
-    // Today's schedule events — from Apple Calendar (classified) or ICS upload
+    // Today's schedule events — from Apple Calendar (classified) or ICS upload.
+    // All times converted to LOCAL before they reach the model (see fmtLocalForAI).
     const events = (ST.calendarEvents?.length ? ST.calendarEvents : ST.flightSchedule || [])
       .filter(e => {
         const s = new Date(e.start), en = new Date(e.end);
@@ -3767,19 +3845,22 @@ async function loadFuelLogistics() {
       })
       .map(e => ({
         type: e.type || 'flight',
-        start: e.start, end: e.end,
-        origin: e.origin || null, destination: e.destination || null,
+        route: (e.origin && e.destination) ? e.origin + '→' + e.destination : null,
+        startsLocal: fmtLocalForAI(e.start),
+        endsLocal: fmtLocalForAI(e.end),
+        alreadyPast: new Date(e.end).getTime() < now.getTime(),
       }));
 
     if (!events.length) return;
 
     const meals = ST.todaysMeals || [];
     const context = {
-      currentTime: now.toISOString(),
+      currentLocalTime: fmtLocalForAI(now),
+      timezone: localTimezoneName(),
       todaysSchedule: events,
       mealsAlreadyLoggedToday: meals.map(m => ({
         type: m.meal_type,
-        loggedAt: m.logged_at,
+        loggedAtLocal: fmtLocalForAI(m.logged_at),
       })),
     };
 
@@ -3800,16 +3881,32 @@ async function loadFuelLogistics() {
 async function loadFatigueCalibration(ctx) {
   try {
     const sched = ctx.sched || {};
+    const now = new Date();
+    // Today's remaining flights, in local time, so the model can see the
+    // actual shape of the day rather than inferring it from counts.
+    const todaysFlights = (sched.todayEvents || [])
+      .filter(e => e.type === 'flight')
+      .map(e => ({
+        route: (e.origin && e.destination) ? e.origin + '→' + e.destination : (e.title || 'flight'),
+        departsLocal: fmtLocalForAI(e.start),
+        arrivesLocal: fmtLocalForAI(e.end),
+        alreadyFlown: new Date(e.end).getTime() < now.getTime(),
+      }));
     const context = {
+      currentLocalTime: fmtLocalForAI(now),
+      timezone: localTimezoneName(),
       readiness: ctx.oura.readiness ?? null,
       sleepScore: ctx.oura.sleep ?? null,
       sleepHours: ST.sleepHours ?? null,
       selfReportedFatigue: ST.readiness ?? null, // 1-5 scale, used when no Oura connected
-      tripDayNumber: sched.legsCompleted != null ? (sched.legsCompleted + sched.legsRemaining > 0 ? sched.legsCompleted + 1 : null) : null,
+      tripDayNumber: sched.tripDayNumber ?? null,
+      tripTotalDays: sched.tripTotalDays ?? null,
       legsCompletedToday: sched.legsTodayCompleted ?? 0,
       legsRemainingToday: sched.legsTodayRemaining ?? 0,
-      dutyEndsToday: sched.dutyEndsToday ? new Date(sched.dutyEndsToday).toISOString() : null,
-      layoverAirport: sched.layoverAirport || null,
+      todaysFlights,
+      dutyEndsLocal: fmtLocalForAI(sched.dutyEndsToday),
+      currentlyAtLayoverAirport: sched.layoverAirport || null,
+      tonightsLayoverAirport: sched.nextLayoverAirport || null,
       workoutLoggedToday: ctx.training?.workoutToday ?? false,
     };
     const result = await callAICoach('fatigue_calibration', context);
@@ -3983,7 +4080,7 @@ function buildCalendarHTML(rangeData) {
       // One icon, as requested — but it represents the TRAINING session
       // where there is one, so a leg day isn't hidden behind a walk that
       // happened to be logged first. A count marks days holding more.
-      const ICONS = {'Lower Body':'🦵','Upper Push':'💪','Upper Pull':'🎯','Power / Plyo':'⚡','Full Body':'🔥','Longevity':'🌿','Cardio':'❤️','Run':'🏃','Walk':'🚶'};
+      const ICONS = {'Lower Body':'🦵','Upper Push':'💪','Upper Pull':'🎯','Power / Plyo':'⚡','Full Body':'🔥','Longevity':'🌿','Stretch':'🧘','Cardio':'❤️','Run':'🏃','Walk':'🚶'};
       const primary = day.sessions.find(isRotationStep) || day.sessions[0];
       const icon = ICONS[primary.muscle_group] || '✓';
       const extra = day.sessions.length > 1
@@ -8897,6 +8994,22 @@ const STAPLE_FOOD_BOOSTS = {
   yogurt: /yogurt.*plain/i,
   milk: /^milk,/i,
   croissant: /^croissants?,/i,
+  bacon: /^bacon,\s*(cured|raw|cooked)/i, // BUG FIX: "bacon" surfaced "Bacon, meatless" first with no boost defined
+  ham: /^ham,/i,
+  sausage: /^sausage,/i,
+  toast: /^bread,/i,
+  bread: /^bread,/i,
+  cheese: /^cheese,\s*cheddar/i,
+  butter: /^butter,\s*(salted|without)/i,
+  avocado: /^avocados?,\s*raw/i,
+  spinach: /^spinach,\s*raw/i,
+  tomato: /^tomatoes?,\s*raw/i,
+  peanut: /^peanut\s*butter,/i,
+  almond: /^almonds,\s*(raw|dry)/i,
+  tuna: /^fish,\s*tuna/i,
+  shrimp: /^shrimp,/i,
+  pasta: /^pasta,/i,
+  quinoa: /^quinoa,\s*cooked/i,
 };
 
 // ─── FOOD EMOJI ─────────────────────────────────────────────────────────
@@ -9240,6 +9353,10 @@ function scheduleContextForToday(schedule, now) {
   ctx.legsRemaining = trip.legsRemaining;
   ctx.legsTodayCompleted = trip.legsTodayCompleted;
   ctx.legsTodayRemaining = trip.legsTodayRemaining;
+  ctx.tripDayNumber = trip.tripDayNumber ?? null;
+  ctx.tripTotalDays = trip.tripTotalDays ?? null;
+  ctx.nextLayoverAirport = trip.nextLayoverAirport || null;
+  ctx.nextLayoverStart = trip.nextLayoverStart || null;
   ctx.dutyEndsToday = trip.dutyEndsToday;
   ctx.currentType = trip.currentType;
   if (trip.current) ctx.current = trip.current;
@@ -9329,8 +9446,24 @@ function currentTripContext(schedule, now) {
     if (e.en > t && (!dutyEndsToday || e.en > dutyEndsToday)) dutyEndsToday = e.en;
   });
 
+  // Which DAY of the trip is today — counted in local calendar days from the
+  // trip's first event, NOT in legs flown. These are completely different
+  // numbers: five legs on day two is still day two.
+  const tripStartDay = new Date(activeTrip[0].s); tripStartDay.setHours(0,0,0,0);
+  const tripDayNumber = Math.floor((todayStartMs - tripStartDay.getTime()) / 86400000) + 1;
+  // Total days the trip spans, so "day 2 of 4" can be stated rather than
+  // just "day 2" with no sense of how much is left.
+  const tripEndDay = new Date(activeTrip[activeTrip.length-1].en); tripEndDay.setHours(0,0,0,0);
+  const tripTotalDays = Math.floor((tripEndDay.getTime() - tripStartDay.getTime()) / 86400000) + 1;
+
   return { legsCompleted, legsRemaining, legsTodayCompleted, legsTodayRemaining,
            current, dutyEndsAt, dutyEndsToday,
+           tripDayNumber, tripTotalDays,
+           // Where the next rest period actually is — NOT the layover they
+           // woke up in. "Eat well in Abilene tonight" was wrong because it
+           // used the current layover instead of the one coming up.
+           nextLayoverAirport: upcomingLayover?.airport || null,
+           nextLayoverStart: upcomingLayover?.s || null,
            currentType: current ? current.type : null };
 }
 

@@ -2644,6 +2644,33 @@ function applyScheduleFlightHours() {
 }
 
 async function bootApp() {
+  try {
+    await bootAppInner();
+  } catch (e) {
+    // CRITICAL: without this catch, any uncaught error anywhere in
+    // bootAppInner (a bad Supabase response, a malformed calendar event,
+    // anything) leaves the page permanently blank — the topbar/tabbar are
+    // static HTML and still render, but #mainPage never gets filled in
+    // because renderRoot() is never reached. This guarantees the user
+    // always sees SOMETHING (even a degraded state) rather than nothing,
+    // and logs the real error for diagnosis instead of failing silently.
+    console.error('bootApp failed:', e);
+    ST.authed = !!ST.user;
+    try { renderRoot(); } catch (e2) { console.error('renderRoot also failed:', e2); }
+    // Surface the real error directly on-screen — there's no console access
+    // on a phone, so this is the only way to actually see what broke.
+    const mainPage = document.getElementById('mainPage');
+    if (mainPage) {
+      mainPage.innerHTML = '<div class="card mb12" style="border-color:var(--red)">' +
+        '<div style="font-weight:700;color:var(--red);margin-bottom:8px">⚠ Load error</div>' +
+        '<div style="font-size:12px;color:var(--muted);font-family:var(--mono);word-break:break-word">' +
+        sanitizeUserText(e?.message || String(e)) + '</div></div>' + (mainPage.innerHTML || '');
+    }
+    showBigToast('Something didn\'t load correctly. Pull to refresh or reopen the app.', 'warn');
+  }
+}
+
+async function bootAppInner() {
   ST.disclaimerAccepted = localStorage.getItem('fcf_disclaimer_accepted') === '1';
   // All three boot fetches are independent — run them in ONE parallel window
   // so a cold offline launch waits ~6s total, not stacked timeouts.
@@ -3497,6 +3524,15 @@ async function checkForAppUpdate() {
 }
 
 async function initApp() {
+  try {
+    await initAppInner();
+  } catch (e) {
+    console.error('initApp failed:', e);
+    try { renderRoot(); } catch (e2) { console.error('renderRoot also failed:', e2); }
+  }
+}
+
+async function initAppInner() {
   // Password recovery link (Supabase sets #...&type=recovery in the hash) —
   // checked via the hash specifically so this can never collide with the
   // Oura OAuth callback below, which uses a ?code= query parameter instead.

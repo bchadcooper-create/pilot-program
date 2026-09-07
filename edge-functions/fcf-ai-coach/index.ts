@@ -95,7 +95,12 @@ serve(async (req) => {
     // but never trust the client alone for a paid feature.
     const { data: sub } = await supabase
       .from('subscriptions').select('tier, status').eq('user_id', user.id).maybeSingle();
-    const isPro = sub?.tier === 'pro' && (sub?.status === 'active' || sub?.status === 'grace');
+    // DEV OVERRIDE — matches the client-side override in app.js isPro(),
+    // scoped to the same single account for testing AI coach features
+    // while App Store Connect IAP products are still being verified.
+    // REMOVE both overrides together before public release.
+    const isDevTestAccount = user.id === '7e41ca46-6e00-4c54-bc3f-2e45d923fe0b';
+    const isPro = isDevTestAccount || (sub?.tier === 'pro' && (sub?.status === 'active' || sub?.status === 'grace'));
     if (!isPro) {
       return new Response(JSON.stringify({ error: 'pro_required' }), { status: 402, headers: CORS });
     }

@@ -11213,6 +11213,15 @@ function handleFoodRecognitionResult(result) {
     quota: result.quota,
   };
   renderMealBuilder();
+
+  // BUG FIX (reported): after a successful photo analysis the result landed
+  // wherever the page happened to be scrolled — usually far below the fold
+  // behind the calorie ring, macro bars, and AI fueling card — so it looked
+  // like the analysis had silently failed even though it worked correctly.
+  setTimeout(() => {
+    const resultBox = document.getElementById('foodPhotoResultRoot');
+    if (resultBox) resultBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 50);
 }
 
 const QUALITY_RATINGS = [

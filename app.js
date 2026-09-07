@@ -3923,6 +3923,53 @@ async function loadFatigueCalibration(ctx) {
   } catch (e) { console.warn('loadFatigueCalibration error:', e); }
 }
 
+// AI Preflight Schedule Mapping — looks at the whole current/upcoming trip
+// (not just today) and calls which days should carry heavy training load
+// vs. light/rest, based on report times and layover lengths across the trip.
+// Server-side cached per-trip, not per-day — see fcf-ai-coach for the key.
+async function loadTripPlan() {
+  try {
+    if (!ST.calendarEvents?.length) return; // no synced calendar — nothing to plan around
+    const bounds = getTripBounds(ST.calendarEvents, new Date());
+    if (!bounds || bounds.totalDays < 2) return; // single-day trips don't need a multi-day plan
+
+    // How many sessions have already been logged since this trip started —
+    // feeds the cache key so the plan can react to training that happened
+    // mid-trip without regenerating on every single page load.
+    const tripStartMs = new Date(bounds.tripStart).getTime();
+    const sessionsLoggedThisTrip = (ST.sessionCache || [])
+      .filter(s => s.date && new Date(s.date).getTime() >= tripStartMs).length;
+
+    const context = {
+      tripStart: bounds.tripStart,
+      tripEnd: bounds.tripEnd,
+      totalDays: bounds.totalDays,
+      days: bounds.days,
+      sessionsLoggedThisTrip,
+    };
+
+    const result = await callAICoach('trip_plan', context);
+    const card = document.getElementById('aiTripPlanCard');
+    const textEl = document.getElementById('aiTripPlanText');
+    if (!card || !textEl) return; // user navigated away before this resolved
+    if (result.error) return; // silent fail — Today tab works fine without this card
+
+    // Split into lines and highlight today's line — the model returns one
+    // "Day N:" line per day; find the one matching bounds.days[].isToday.
+    const todayEntry = bounds.days.find(d => d.isToday);
+    const lines = result.text.split('\n').map(l => l.trim()).filter(Boolean);
+    const html = lines.map(line => {
+      const isToday = todayEntry && line.startsWith('Day ' + todayEntry.dayNumber + ':');
+      return '<div style="' + (isToday
+        ? 'font-weight:600;color:var(--text);padding:6px 0;'
+        : 'color:var(--muted);padding:6px 0;opacity:0.75;') +
+        'border-bottom:1px solid rgba(255,255,255,0.06)">' + line + '</div>';
+    }).join('');
+    textEl.innerHTML = html;
+    card.style.display = '';
+  } catch (e) { console.warn('loadTripPlan error:', e); }
+}
+
 async function classifyCalendarEvents(events, fingerprint) {
   try {
     const { data: { session } } = await SB.auth.getSession();
@@ -5992,6 +6039,25 @@ function showAlternates(exId, exName, phaseKey) {
   parts.push('<div id="swapSearchResults"></div>');
   parts.push('</div>');
 
+  // AI substitute — Pro only. The fallback tier below curated alternates
+  // and catalog search: for when neither has a good option because the
+  // constraint is unusual (no equipment at all, an odd hotel room setup).
+  // Deliberately reuses swapExercise() unchanged — the AI's only job is to
+  // pick { name, target, note, inputType }, everything else about how a
+  // swap is applied stays exactly as it already works for the manual path.
+  if (isPro()) {
+    const exItem = (ST.workout?.[phaseKey] || []).find(e => e.id === exId);
+    parts.push('<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">');
+    parts.push('<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">');
+    parts.push('<span style="font-size:12px">✦</span><span style="font-size:12px;font-weight:600">AI Coach — Don\'t have any of this?</span>');
+    parts.push('</div>');
+    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Describe what you actually have access to and the AI will pick a substitute that trains the same thing.</div>');
+    parts.push('<div class="field"><input type="text" id="aiSubExplain" placeholder="e.g. hotel room, no equipment, carpeted floor" autocomplete="off"></div>');
+    parts.push('<div id="aiSubResult"></div>');
+    parts.push('<button class="btn btn-outline" onclick=\'requestAISubstitute("'+exId+'","'+phaseKey+'",'+JSON.stringify(exItem)+')\'>Ask AI Coach</button>');
+    parts.push('</div>');
+  }
+
   parts.push('<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">');
   parts.push('<div style="font-size:12px;font-weight:600;margin-bottom:10px">✏️ Or Create Your Own</div>');
   parts.push('<div class="field"><label>Exercise Name</label><input id="altName" type="text" placeholder="e.g. Cable Squat"></div>');
@@ -6066,6 +6132,56 @@ function swapAddCatalogExercise(exId, matchIdx, q) {
   if (!exDef) return;
   swapExercise(exId, { name: exDef.name, target: exDef.target, note: exDef.note||'Swapped from catalog.', inputType: exDef.inputType });
   closeModal();
+}
+
+// AI Adaptive Environment Routing — one exercise in, one exercise out.
+// Calls the AI, parses the strict-JSON response, and feeds the result
+// straight into the EXISTING swapExercise() — no new swap machinery.
+async function requestAISubstitute(exId, phaseKey, exItem) {
+  const input = document.getElementById('aiSubExplain');
+  const resultBox = document.getElementById('aiSubResult');
+  const available = (input?.value || '').trim();
+  if (!available) { showBigToast('Describe what you have access to first.', 'warn'); return; }
+  if (!exItem) { showBigToast('Could not read the current exercise — try closing and reopening this sheet.', 'warn'); return; }
+
+  if (resultBox) resultBox.innerHTML = '<div style="font-size:11px;color:var(--muted);margin:8px 0">Asking the AI coach…</div>';
+
+  const context = {
+    exerciseName: exItem.name,
+    currentTarget: exItem.target,
+    currentInputType: exItem.inputType,
+    isTimed: !!exItem.timed,
+    whatIsAvailable: available,
+    trainingGoal: ST.goal || null,
+  };
+
+  const result = await callAICoach('exercise_substitute', context);
+  if (!resultBox) return; // sheet closed while waiting
+
+  if (result.error) {
+    resultBox.innerHTML = '<div style="font-size:11px;color:var(--amber);margin:8px 0">Couldn\'t get a suggestion — try describing it differently, or use catalog search above.</div>';
+    return;
+  }
+
+  let alt;
+  try {
+    alt = JSON.parse(result.text.replace(/```json|```/g, '').trim());
+  } catch (e) {
+    resultBox.innerHTML = '<div style="font-size:11px;color:var(--amber);margin:8px 0">Got an unreadable response — try again.</div>';
+    return;
+  }
+  if (alt.error || !alt.name) {
+    resultBox.innerHTML = '<div style="font-size:11px;color:var(--muted);margin:8px 0">No good substitute found for that — try catalog search above, or describe what you have differently.</div>';
+    return;
+  }
+
+  resultBox.innerHTML =
+    '<div style="background:var(--bg3);border:1.5px solid var(--gold);border-radius:10px;padding:14px;margin:10px 0">' +
+    '<div style="font-weight:700;font-size:14px;margin-bottom:3px">'+sanitizeUserText(alt.name)+'</div>' +
+    '<div style="font-family:var(--mono);font-size:10px;color:var(--gold);margin-bottom:6px">'+sanitizeUserText(alt.target||'')+'</div>' +
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">'+sanitizeUserText(alt.note||'')+'</div>' +
+    '<button class="btn btn-gold btn-sm" onclick=\'swapExercise("'+exId+'",'+JSON.stringify(alt)+');closeModal()\'>Swap In</button>' +
+    '</div>';
 }
 
 function swapCustomAlternate(exId) {
@@ -9467,6 +9583,97 @@ function currentTripContext(schedule, now) {
            currentType: current ? current.type : null };
 }
 
+// ── Preflight Schedule Mapping ────────────────────────────────────────────────
+// Builds the full day-by-day structure of the CURRENT trip (not just today),
+// for the AI to reason over which days should carry heavy training load and
+// which should be light. Reuses the exact same trip-partitioning rule as
+// currentTripContext (a 20+ hour gap ends a trip) so a session is never
+// treated as "day 3" by one function and "a different trip" by another.
+//
+// Deliberately scoped to CONFIRMED FLIGHT PAIRINGS only — reserve/on-call
+// periods have no fixed structure to plan around, so if the active trip is
+// reserve rather than scheduled flights, this returns null and the caller
+// shows nothing rather than guessing at a plan.
+function getTripBounds(schedule, now) {
+  const t = now.getTime();
+  const DUTYFREE_GAP_MS = 20 * 3600000;
+  const events = (schedule || [])
+    .filter(e => e.type === 'flight' || e.type === 'layover')
+    .map(e => { const s = new Date(e.start).getTime(), en = new Date(e.end).getTime(); return { ...e, s, en }; })
+    .filter(e => !isNaN(e.s) && !isNaN(e.en))
+    .sort((a,b) => a.s - b.s);
+
+  const trips = [];
+  let cur = [];
+  events.forEach(e => {
+    if (cur.length && (e.s - cur[cur.length-1].en) > DUTYFREE_GAP_MS) { trips.push(cur); cur = []; }
+    cur.push(e);
+  });
+  if (cur.length) trips.push(cur);
+
+  let activeTrip = trips.find(trip => trip.some(e => t >= e.s && t <= e.en))
+                 || trips.find(trip => t >= trip[0].s && t <= trip[trip.length-1].en);
+  if (!activeTrip) {
+    const ended = trips.filter(trip => trip[trip.length-1].en < t)
+                        .sort((a,b) => b[b.length-1].en - a[a.length-1].en);
+    if (ended.length && (t - ended[0][ended[0].length-1].en) <= DUTYFREE_GAP_MS) activeTrip = ended[0];
+    const upcoming = trips.filter(trip => trip[0].s > t)
+                           .sort((a,b) => a[0].s - b[0].s);
+    // A trip that hasn't started yet but is visible on the calendar still
+    // gets a plan — no reason to wait until wheels-up to tell someone which
+    // days of their upcoming trip are good for a heavy session.
+    if (!activeTrip && upcoming.length && (upcoming[0][0].s - t) <= 48 * 3600000) activeTrip = upcoming[0];
+  }
+  if (!activeTrip) return null;
+  // Reserve stretches produce no flight/layover events at all, so they never
+  // reach this function in the first place — the filter above already
+  // excludes everything except flight/layover types.
+
+  const flightsOnly = activeTrip.filter(e => e.type === 'flight');
+  if (!flightsOnly.length) return null; // shouldn't happen, but never plan around zero flights
+
+  const tripStartDay = new Date(flightsOnly[0].s); tripStartDay.setHours(0,0,0,0);
+  const tripEndDay = new Date(activeTrip[activeTrip.length-1].en); tripEndDay.setHours(0,0,0,0);
+  const totalDays = Math.floor((tripEndDay.getTime() - tripStartDay.getTime()) / 86400000) + 1;
+
+  // One entry per CALENDAR day of the trip — a single long duty day with
+  // three legs is still one day, not three. This is the exact distinction
+  // that caused the "day 4" / "legs flown" confusion earlier at the
+  // single-day level; the same care applies here across the whole trip.
+  const days = [];
+  for (let i = 0; i < totalDays; i++) {
+    const dayStart = new Date(tripStartDay.getTime() + i * 86400000);
+    const dayEnd = new Date(dayStart.getTime() + 86400000 - 1);
+    const dayStartMs = dayStart.getTime(), dayEndMs = dayEnd.getTime();
+
+    const flightsThatDay = activeTrip.filter(e => e.type === 'flight' && e.s <= dayEndMs && e.en >= dayStartMs);
+    const layoverThatDay = activeTrip.find(e => e.type === 'layover' && e.s <= dayEndMs && e.en >= dayStartMs);
+
+    days.push({
+      dayNumber: i + 1,
+      date: dayStart.toISOString().slice(0, 10),
+      dayOfWeek: dayStart.toLocaleDateString('en-US', { weekday: 'long' }),
+      flightCount: flightsThatDay.length,
+      firstReportLocal: flightsThatDay.length ? fmtLocalForAI(new Date(Math.min(...flightsThatDay.map(f => f.s)))) : null,
+      lastDutyEndLocal: flightsThatDay.length ? fmtLocalForAI(new Date(Math.max(...flightsThatDay.map(f => f.en)))) : null,
+      dutyHours: flightsThatDay.length
+        ? Math.round(flightsThatDay.reduce((sum, f) => sum + (f.en - f.s) / 3600000, 0) * 10) / 10
+        : 0,
+      layoverAirport: layoverThatDay ? (layoverThatDay.airport || layoverThatDay.destination || null) : null,
+      layoverHours: layoverThatDay ? Math.round((layoverThatDay.en - layoverThatDay.s) / 3600000 * 10) / 10 : null,
+      isPast: dayEndMs < t,
+      isToday: t >= dayStartMs && t <= dayEndMs,
+    });
+  }
+
+  return {
+    tripStart: tripStartDay.toISOString().slice(0, 10),
+    tripEnd: tripEndDay.toISOString().slice(0, 10),
+    totalDays,
+    days,
+  };
+}
+
 // Adjacent, identically-labeled events — e.g. an export that creates one
 // "Duty free period" block per calendar day of a multi-day stretch, with
 // one block ending the exact instant the next begins — merge into a single
@@ -9806,6 +10013,14 @@ function renderToday(p) {
   if (brief.action) parts.push('<button class="btn btn-gold" style="margin-top:14px" onclick="'+brief.action.fn+'">'+brief.action.label+'</button>');
   parts.push('</div>');
 
+  // AI Preflight Schedule Mapping — Pro only, shown before Fatigue
+  // Calibration since a multi-day trip overview is more useful context to
+  // see first than a single-day scaling call. Only fires when there's an
+  // actual multi-day trip on the calendar; loadTripPlan no-ops otherwise.
+  if (isPro()) {
+    parts.push(aiCoachCard('aiTripPlanCard', 'aiTripPlanText', 'AI COACH — TRIP PLAN', 'blue'));
+  }
+
   // AI Fatigue Calibration — Pro only. Adds trip-context reasoning on top of
   // the rule-based briefing above, rather than replacing it. Loads async so
   // it never blocks the page render.
@@ -9911,6 +10126,7 @@ function renderToday(p) {
   parts.push('<button class="btn btn-outline" onclick="switchTab(\'nutrition\')">🍽️ Log a meal</button>');
   p.innerHTML = parts.join('');
   // Fired after innerHTML so the card element definitely exists
+  if (isPro()) loadTripPlan();
   if (isPro()) loadFatigueCalibration(ctx);
 }
 

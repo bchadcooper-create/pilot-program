@@ -91,6 +91,43 @@ logistics report. If there's genuinely no good window left, say that straight an
 instead.
 
 2-3 sentences, warm and practical, no jargon.`,
+
+  trip_plan: `You're a strength coach mapping out training for a pilot or flight crew member's upcoming or
+current multi-day trip. You will receive the trip's day-by-day structure — each day's flight count, duty hours,
+first report and last duty-end times (already in local time), and layover length/airport if any — plus their
+recent training history so you know what they've already hit this week.
+
+Your job is to call each day of the trip: which day(s) can carry a real, heavy session (long layover, early duty
+end, no early report the next morning) and which day(s) should be light, mobility-only, or rest (short overnight,
+early report, already a heavy duty day). Base this on the actual numbers you're given — duty hours and layover
+length are the signal, not guesswork.
+
+Format: one line per day, in order. Each line starts with "Day N:" and gives the call in a handful of words, then
+a short reason tied to that day's actual numbers. Example shape (do not copy the wording, generate your own):
+"Day 1: light session only — early report, short turn." / "Day 2: your best day — 14hr layover, no early duty
+after." Keep every line to one sentence. Do not add a summary, intro, or closing line — just the day-by-day list.
+No headers, no bullet symbols — plain "Day N:" prefixes only.`,
+
+  exercise_substitute: `You're a strength coach picking a one-for-one substitute exercise for a pilot or
+flight crew member who can't do the exercise as programmed — usually because of what's actually available where
+they are (hotel room, no equipment, resistance bands only, etc.).
+
+You will receive: the exercise being replaced (name, target sets/reps, target muscle, whether it's a timed hold
+or a reps-based movement), what the user says they have available, and their training goal.
+
+Pick ONE substitute that trains the same movement pattern and muscle group as closely as possible given the
+constraint. Preserve the training intent — a heavy compound lift becomes a hard bodyweight or band equivalent,
+not something unrelated just because it's available.
+
+Respond with ONLY a JSON object, no markdown fences, no explanation before or after. Exact shape:
+{"name": "Exercise Name", "target": "3x12" or "45s/side" (match the style of the original target),
+ "note": "one short sentence of form cue or context, same tone as a coach giving a quick tip",
+ "inputType": one of "reps_weight" | "reps_only" | "reps_height" | "timed" | "timed_bilateral"}
+
+inputType must be "timed" or "timed_bilateral" if the original exercise was timed, matching its bilateral-ness.
+Otherwise pick "reps_weight" if the substitute still uses external load (dumbbell, band with real resistance),
+or "reps_only" for pure bodyweight. If you cannot find a reasonable substitute given what's available, respond
+with {"error": "no_good_substitute"} instead — do not force a bad pick.`,
 };
 
 serve(async (req) => {
@@ -143,7 +180,25 @@ serve(async (req) => {
       }
     }
 
-    const MAX_TOKENS_BY_MODE = { weekly_summary: 220, fatigue_calibration: 180, fuel_logistics: 180 };
+    // Trip plan is cached per-trip, not per-day — it only needs to regenerate
+    // when the trip's own bounds change (schedule updated) or the number of
+    // sessions logged this trip changes (so a plan can react to what's
+    // already been trained), not every time the user opens Today.
+    let tripPlanCacheKey = null;
+    if (mode === 'trip_plan') {
+      tripPlanCacheKey = `${context.tripStart}_${context.tripEnd}_${context.sessionsLoggedThisTrip ?? 0}`;
+      const { data: cached } = await supabase
+        .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
+      const cachedKey = cached?.profile_data?.tripPlanCacheKey;
+      if (cachedKey === tripPlanCacheKey && cached?.profile_data?.tripPlanText) {
+        return new Response(JSON.stringify({
+          text: cached.profile_data.tripPlanText,
+          cached: true
+        }), { headers: { ...CORS, 'Content-Type': 'application/json' } });
+      }
+    }
+
+    const MAX_TOKENS_BY_MODE = { weekly_summary: 220, fatigue_calibration: 180, fuel_logistics: 180, trip_plan: 400, exercise_substitute: 200 };
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -184,6 +239,21 @@ serve(async (req) => {
           user_id: user.id, profile_data: profile, updated_at: new Date().toISOString()
         }, { onConflict: 'user_id' });
       } catch (e) { console.error('Cache write error:', e); }
+    }
+
+    // Cache trip plan, keyed to this specific trip's bounds + session count
+    if (mode === 'trip_plan' && text && tripPlanCacheKey) {
+      try {
+        const { data: profileData } = await supabase
+          .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
+        const profile = profileData?.profile_data || {};
+        profile.tripPlanText = text;
+        profile.tripPlanCacheKey = tripPlanCacheKey;
+        profile.tripPlanGeneratedAt = new Date().toISOString();
+        await supabase.from('user_profiles').upsert({
+          user_id: user.id, profile_data: profile, updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' });
+      } catch (e) { console.error('Trip plan cache write error:', e); }
     }
 
     return new Response(JSON.stringify({ text, cached: false }), {

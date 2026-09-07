@@ -7324,7 +7324,7 @@ async function renderTrends(p) {
   parts.push('</div>');
 
   parts.push('<div class="field" style="margin-bottom:12px"><label>Fasting Glucose (mg/dL) <span class="info-i" onclick="showBioInfo(\'glucose\')">i</span></label><input type="number" inputmode="numeric" id="inp_gluc" placeholder="e.g. 95"></div>');
-  parts.push('<button class="btn btn-gold" onclick="saveBio()">LOG DATA</button>');
+  parts.push('<button class="btn btn-gold" onclick="saveBio()">LOG METRICS</button>');
   parts.push('</div>');
 
   parts.push('<div class="section-label">TRENDS</div>');
@@ -7342,7 +7342,11 @@ async function renderTrends(p) {
       parts.push('<div class="fb mb8"><div style="font-size:13px">🥩 Protein adherence</div><div style="font-size:12px;text-align:right"><span style="color:'+color2+'">'+arrow2+' '+fuelTrend.avgProteinPct+'% of target</span><div style="font-family:var(--mono);font-size:9px;color:var(--muted)">'+fuelTrend.daysLogged+' days logged</div></div></div>');
       parts.push('<div class="fb"><div style="font-size:13px">🔥 Avg calories/day</div><div style="font-family:var(--mono);font-size:12px">'+fuelTrend.avgCalories.toLocaleString()+'</div></div>');
     } else {
-      parts.push('<div style="font-size:12px;color:var(--muted)">'+fuelTrend.daysLogged+' day(s) logged so far — a trend needs at least 4 days of history.</div>');
+      const remaining = 4 - fuelTrend.daysLogged;
+      const msg = fuelTrend.daysLogged === 0
+        ? 'Log meals for 4 days to unlock your fuel trend.'
+        : 'Log meals for ' + remaining + ' more day' + (remaining === 1 ? '' : 's') + ' to unlock your fuel trend.';
+      parts.push('<div style="font-size:12px;color:var(--muted)">'+msg+'</div>');
     }
     parts.push('</div>');
   }
@@ -8792,14 +8796,14 @@ function renderMore(p) {
     '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+sub+'</div></div></div>' +
     '<div style="color:var(--muted)">→</div></div></div>';
   const earnedCount = BADGES.filter(b => ST.badges[b.id]).length;
-  parts.push(item('👤','Pilot Profile','Call sign, body metrics, objective',"switchTab('profile')"));
+  parts.push(item('👤','Pilot Profile','Identity, metrics &amp; mission objectives',"switchTab('profile')"));
   parts.push(item('🏅','Badges',earnedCount+' of '+BADGES.length+' earned',"switchTab('badges')"));
   parts.push(item('⌚','Connected Devices','Apple Health, Apple Watch, Oura Ring',"switchTab('devices')"));
   parts.push(item('📖','Flight Deck Wisdom','Daily training wisdom cards',"switchTab('wisdom')"));
   parts.push(item('📊','Data & Import/Export','Flight schedule import, CSV export, AI prompt',"switchTab('data')"));
   if (ST.trackNutrition) parts.push(item('🍽️','Nutrition Log','Log meals, search foods, track macros',"switchTab('nutrition')"));
   if (isSuperUser()) {
-    parts.push(item('🛡️','Super User','Activity report — real usage, not signups',"switchTab('superuser')"));
+    parts.push(item('🛡️','Super User','Pilot activity insights',"switchTab('superuser')"));
   }
 
   parts.push('<div class="card mb12">');
@@ -8839,17 +8843,19 @@ function renderMore(p) {
       ['Layover workout reminder',     '—',       '✓'],
       ['Weekly training summary',      '—',       '✓'],
     ];
-    parts.push('<div style="display:grid;grid-template-columns:1fr auto auto;gap:0;margin-bottom:14px">');
-    parts.push('<div style="font-size:10px;color:var(--muted);letter-spacing:.06em;padding:0 0 6px 0"></div>');
-    parts.push('<div style="font-size:10px;color:var(--muted);letter-spacing:.06em;padding:0 10px 6px;text-align:center">FREE</div>');
-    parts.push('<div style="font-size:10px;color:var(--gold);letter-spacing:.06em;padding:0 0 6px 8px;text-align:center">PRO</div>');
+    parts.push('<div style="display:grid;grid-template-columns:1fr auto auto;gap:0;margin-bottom:14px;position:relative">');
+    parts.push('<div style="position:absolute;top:0;bottom:0;right:0;width:33%;background:linear-gradient(180deg,rgba(201,168,76,0.08),rgba(201,168,76,0.03));border-radius:8px;pointer-events:none"></div>');
+    parts.push('<div style="font-size:10px;color:var(--muted);letter-spacing:.06em;padding:0 0 6px 0;position:relative">');
+    parts.push('</div>');
+    parts.push('<div style="font-size:10px;color:var(--muted);letter-spacing:.06em;padding:0 10px 6px;text-align:center;position:relative">FREE</div>');
+    parts.push('<div style="font-size:10px;color:var(--gold);letter-spacing:.06em;padding:0 0 6px 8px;text-align:center;font-weight:700;position:relative">PRO</div>');
     rows.forEach(([label, free, pro], i) => {
       const border = i < rows.length - 1 ? 'border-bottom:1px solid var(--border)' : '';
       const proColor = pro === '—' ? 'var(--muted)' : pro === '✓' ? 'var(--green)' : 'var(--gold)';
       const freeColor = free === '—' ? 'var(--muted)' : free === '✓' ? 'var(--green)' : 'var(--muted)';
-      parts.push('<div style="font-size:12px;padding:8px 0;'+border+'">'+label+'</div>');
-      parts.push('<div style="font-size:11px;color:'+freeColor+';padding:8px 10px;'+border+';text-align:center">'+free+'</div>');
-      parts.push('<div style="font-size:11px;color:'+proColor+';padding:8px 0 8px 8px;'+border+';text-align:center;font-weight:'+(pro!=='—'?'600':'400')+'">'+pro+'</div>');
+      parts.push('<div style="font-size:12px;padding:8px 0;'+border+';position:relative">'+label+'</div>');
+      parts.push('<div style="font-size:11px;color:'+freeColor+';padding:8px 10px;'+border+';text-align:center;position:relative">'+free+'</div>');
+      parts.push('<div style="font-size:11px;color:'+proColor+';padding:8px 0 8px 8px;'+border+';text-align:center;font-weight:'+(pro!=='—'?'600':'400')+';position:relative">'+pro+'</div>');
     });
     parts.push('</div>');
     parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px">');
@@ -11367,10 +11373,19 @@ function buildBadgesGridHTML() {
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
   BADGES.forEach(b => {
     const earned = ST.badges[b.id];
-    parts.push('<div style="border:1px solid '+(earned?'var(--gold)':'var(--border)')+';border-radius:8px;padding:10px;text-align:center'+(earned?'':';opacity:0.45')+'">');
-    parts.push('<div style="font-size:22px">'+(earned?b.icon:'🔒')+'</div>');
-    parts.push('<div style="font-size:11px;font-weight:700;margin-top:4px">'+b.title+'</div>');
-    parts.push('<div style="font-size:9px;color:var(--muted);margin-top:2px;line-height:1.4">'+b.desc+'</div>');
+    parts.push('<div style="border:1px solid '+(earned?'var(--gold)':'var(--border)')+';border-radius:8px;padding:10px;text-align:center;position:relative'+(earned?'':';background:rgba(255,255,255,0.015)')+'">');
+    if (earned) {
+      parts.push('<div style="font-size:22px">'+b.icon+'</div>');
+    } else {
+      // Desaturated real icon rather than a plain lock — reads as
+      // "this badge exists and you're working toward it" instead of
+      // "blocked." Small lock badge overlays the corner instead of
+      // replacing the icon entirely.
+      parts.push('<div style="font-size:22px;filter:grayscale(1);opacity:0.35">'+b.icon+'</div>');
+      parts.push('<div style="position:absolute;top:6px;right:6px;font-size:10px;opacity:0.5">🔒</div>');
+    }
+    parts.push('<div style="font-size:11px;font-weight:700;margin-top:4px'+(earned?'':';color:var(--muted)')+'">'+b.title+'</div>');
+    parts.push('<div style="font-size:9px;color:var(--muted);margin-top:2px;line-height:1.4'+(earned?'':';opacity:0.7')+'">'+b.desc+'</div>');
     if (earned) parts.push('<div style="font-family:var(--mono);font-size:8px;color:var(--gold);margin-top:4px">'+new Date(earned).toLocaleDateString()+'</div>');
     parts.push('</div>');
   });

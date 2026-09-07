@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.41.2';
+const FCF_VERSION = 'v5.41.3';
 const FCF_BUILD   = '20260906';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────

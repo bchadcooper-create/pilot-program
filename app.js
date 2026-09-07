@@ -40,6 +40,12 @@ const PRO_PRODUCT_MONTHLY = 'fit.flightcrew.app.pro.monthly';
 // convenience for what to SHOW; every paid capability is enforced again
 // server-side in the edge function.
 function isPro() {
+  // DEV OVERRIDE — scoped to a single account (b.chad.cooper@gmail.com) for
+  // testing Pro features while App Store Connect IAP products are still
+  // being verified. Checks the exact user id, never a blanket bypass.
+  // REMOVE before public release.
+  if (ST.user?.id === '7e41ca46-6e00-4c54-bc3f-2e45d923fe0b') return true;
+
   const s = ST.subscription;
   if (!s) return false;
   if (s.tier !== 'pro') return false;

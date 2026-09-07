@@ -3640,10 +3640,7 @@ async function callAICoach(mode, context) {
 // Pulls workout history + trip/pairing context + biometrics over the past
 // several weeks and asks the AI to find patterns tied to flying schedule
 // specifically, not generic fitness commentary. Server-side cached 24h.
-let _progressionCallInFlight = false;
 async function loadProgressionAnalytics() {
-  if (_progressionCallInFlight) return;
-  _progressionCallInFlight = true;
   try {
     const cutoff = new Date(Date.now() - 42 * 24 * 60 * 60 * 1000); // 6 weeks of history
 
@@ -3660,7 +3657,6 @@ async function loadProgressionAnalytics() {
     if (sessions.length < 3) {
       // Not enough data yet — don't waste an API call on "not enough data"
       // when the client can determine that itself.
-      _progressionCallInFlight = false;
       return;
     }
 
@@ -3723,17 +3719,12 @@ async function loadProgressionAnalytics() {
     if (result.error) return; // silent fail — rest of Trends page still works
     textEl.textContent = result.text;
     card.style.display = '';
-  } finally {
-    _progressionCallInFlight = false;
-  }
+  } catch (e) { console.warn('loadProgressionAnalytics error:', e); }
 }
 
 // AI Tactical Fueling Logistics — reasons over today's classified schedule
 // and what's already been eaten to recommend flight-bag vs terminal food.
-let _fuelCallInFlight = false;
 async function loadFuelLogistics() {
-  if (_fuelCallInFlight) return;
-  _fuelCallInFlight = true;
   try {
     const now = new Date();
     const todayStart = new Date(now); todayStart.setHours(0,0,0,0);
@@ -3751,7 +3742,7 @@ async function loadFuelLogistics() {
         origin: e.origin || null, destination: e.destination || null,
       }));
 
-    if (!events.length) { _fuelCallInFlight = false; return; }
+    if (!events.length) return;
 
     const meals = ST.todaysMeals || [];
     const context = {
@@ -3770,19 +3761,14 @@ async function loadFuelLogistics() {
     if (result.error) return; // silent fail — rest of nutrition tab still works
     textEl.textContent = result.text;
     card.style.display = '';
-  } finally {
-    _fuelCallInFlight = false;
-  }
+  } catch (e) { console.warn('loadFuelLogistics error:', e); }
 }
 
 // AI Fatigue Calibration — gathers today's readiness, trip context, and
 // recent training load, then asks the AI coach for a scaling judgment.
 // Cached per-day-per-user server-side isn't needed here since it's cheap
 // and the inputs (readiness, duty context) can change through the day.
-let _fatigueCallInFlight = false;
 async function loadFatigueCalibration(ctx) {
-  if (_fatigueCallInFlight) return;
-  _fatigueCallInFlight = true;
   try {
     const sched = ctx.sched || {};
     const context = {
@@ -3808,9 +3794,7 @@ async function loadFatigueCalibration(ctx) {
     }
     textEl.textContent = result.text;
     card.style.display = '';
-  } finally {
-    _fatigueCallInFlight = false;
-  }
+  } catch (e) { console.warn('loadFatigueCalibration error:', e); }
 }
 
 async function classifyCalendarEvents(events, fingerprint) {

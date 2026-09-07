@@ -3,7 +3,7 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.41.4';
+const FCF_VERSION = 'v5.41.5';
 const FCF_BUILD   = '20260906';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2915,8 +2915,11 @@ function showPaywall(reason) {
   const root = document.getElementById('modalRoot');
   if (!root) return;
   const why = {
-    photos: 'You\'ve used your ' + FREE_WEEKLY_PHOTOS + ' free photo analyses this week.',
-    coach:  'AI coaching is a Pro feature.',
+    photos:   'You\'ve used your ' + FREE_WEEKLY_PHOTOS + ' free photo analyses this week.',
+    coach:    'AI coaching is a Pro feature.',
+    oura:     'Connecting your Oura Ring directly — for full readiness scores — is a Pro feature.',
+    trends:   'Full trend history beyond 30 days is a Pro feature.',
+    calendar: 'Unlimited AI calendar classification is a Pro feature.',
   }[reason] || 'This is a Pro feature.';
 
   const parts = [];
@@ -6860,6 +6863,11 @@ async function renderTrends(p) {
   const parts = [];
   parts.push('<div class="section-label">BIOMETRICS LOG &amp; TRENDS</div>');
 
+  // Shown only when free-tier trimming actually hid data (set in loadAndDrawCharts)
+  parts.push('<div id="trendsProNote" class="card mb12" style="display:none;border-left:3px solid var(--gold);padding:12px 14px">' +
+    '<div style="font-size:12px;color:var(--muted);line-height:1.6">Showing the last 30 days. ' +
+    '<span style="color:var(--gold);cursor:pointer;font-weight:600" onclick="showPaywall(\'trends\')">Upgrade to Pro</span> for your full history.</div></div>');
+
   // Training calendar — moved here from Preflight. Trends is the review
   // screen; Preflight's job is launching a session quickly, not looking
   // back, so the calendar belongs here and always visible, not behind a
@@ -7027,6 +7035,18 @@ async function loadAndDrawCharts() {
     data = JSON.parse(localStorage.getItem('fcf_bio')||'[]');
   }
   if (!data.length) return;
+
+  // Free tier: trends limited to the last 30 days. Pro sees full history.
+  // This matches what the subscription comparison table advertises.
+  if (!isPro()) {
+    const cutoff = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    const before = data.length;
+    data = data.filter(d => new Date(d.logged_at).getTime() >= cutoff);
+    if (before > data.length) {
+      const el = document.getElementById('trendsProNote');
+      if (el) el.style.display = '';
+    }
+  }
 
   // Each metric is logged independently — a row may have weight but no glucose,
   // or BP but no waist. Filtering per-metric (rather than sharing one labels
@@ -7423,6 +7443,9 @@ async function exportCSV() {
 
 // Step 1: Send user to Oura's authorization page
 function connectOura() {
+  // Oura direct connection is a Pro feature — the comparison table
+  // advertises it as such, so enforce it here rather than only in copy.
+  if (!isPro()) { showPaywall('oura'); return; }
   const state = Math.random().toString(36).slice(2);
   localStorage.setItem('oura_state', state);
   const params = new URLSearchParams({
@@ -8070,7 +8093,7 @@ async function uploadProgressPhoto(useCamera) {
       await loadPhotoTimeline();
     } catch(e) {
       if (e.message?.includes('Bucket not found')) {
-        showBigToast('Create a "progress-photos" bucket in Supabase Storage first.','warn');
+        showBigToast('Photo storage isn\'t set up yet — please try again later or send feedback.','warn');
       } else {
         showBigToast('Upload failed: '+e.message,'warn');
       }
@@ -8453,10 +8476,10 @@ function renderDevices(p) {
     parts.push('<div style="font-size:12px;color:'+scoreColor+';font-weight:600;margin-top:2px">Pilot Condition → '+scoreLabel+'</div>');
     if (ST.ouraData) {
       const hrv = ST.ouraData.hrv_balance || '—';
-      parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:10px">');
-      parts.push('<div class="stat-box"><div class="stat-val" style="font-size:16px">'+(ST.ouraData.sleep_score||'—')+'</div><div class="stat-lbl">Sleep Score</div></div>');
-      parts.push('<div class="stat-box"><div class="stat-val" style="font-size:16px">'+hrv+'</div><div class="stat-lbl">HRV Bal.</div></div>');
-      parts.push('<div class="stat-box"><div class="stat-val" style="font-size:16px">'+(ST.ouraData.activity_score||'—')+'</div><div class="stat-lbl">Activity</div></div>');
+      parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px">');
+      parts.push(glowTile('SLEEP SCORE', ST.ouraData.sleep_score||'—', 'blue'));
+      parts.push(glowTile('HRV BAL.', hrv, 'green'));
+      parts.push(glowTile('ACTIVITY', ST.ouraData.activity_score||'—', 'teal'));
       parts.push('</div>');
     }
     parts.push('</div>');
@@ -10826,12 +10849,3 @@ function downloadFlightScheduleICS() {
   URL.revokeObjectURL(url);
 }
 
-async function saveOuraToken() {
-  const token = document.getElementById('oura_token')?.value?.trim();
-  if (!token) { showBigToast('Enter your Oura access token.','warn'); return; }
-  ST.ouraToken = token;
-  const profile = (await dbGetProfile()) || {};
-  profile.ouraToken = token;
-  await dbSetProfile(profile);
-  showBigToast('Token saved.','ok');
-}

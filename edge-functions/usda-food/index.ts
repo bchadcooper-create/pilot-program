@@ -33,7 +33,17 @@ serve(async (req) => {
       // Branded + Foundation + SR Legacy covers packaged products and generic
       // whole foods — Survey (FNDDS) data is skipped, it's meant for research
       // use and tends to return odd, overly-specific entries for everyday search.
-      url = `${USDA_BASE}/foods/search?query=${encodeURIComponent(query.trim())}&pageSize=15&dataType=Branded,Foundation,SR%20Legacy&api_key=${USDA_API_KEY}`;
+      //
+      // BUG FIX: pageSize was 15. USDA's own relevance ranking for a bare,
+      // common word like "chicken" fills a 15-item window with odd matches
+      // ("Chicken spread", "Chicken, meatless", "Fat, chicken") before ever
+      // reaching "Chicken, broilers or fryers, breast" — which sits further
+      // down because it's a longer, more specific product name. The client
+      // re-sorts what it's given but can't promote something outside the
+      // page it received. 50 gives the client-side staple boost (see
+      // STAPLE_FOOD_BOOSTS in app.js) a wide enough pool to actually find
+      // the generic entry and promote it, at negligible extra payload cost.
+      url = `${USDA_BASE}/foods/search?query=${encodeURIComponent(query.trim())}&pageSize=50&dataType=Branded,Foundation,SR%20Legacy&api_key=${USDA_API_KEY}`;
     } else if (action === 'lookup') {
       if (!fdcId) {
         return new Response(JSON.stringify({ error: 'fdcId required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

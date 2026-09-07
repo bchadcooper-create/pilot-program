@@ -7070,22 +7070,41 @@ async function loadAndDrawCharts() {
     const card = canvas.closest('.card');
     const key = 'c_'+id;
     if (ST.chartInst[key]) { try { ST.chartInst[key].destroy(); } catch(e){} }
-    if (!labels.length) { if (card) card.style.display = 'none'; return; } // nothing logged for this metric yet — hide the whole card, not just an empty canvas
+    if (!labels.length) { if (card) card.style.display = 'none'; return; }
     if (card) card.style.display = '';
     datasets = applyTrendSmoothing(labels, datasets);
-    // Adaptive density for shorter (un-smoothed) series: shrink points as the
-    // series grows so dots don't merge into a blob on a phone screen.
+
+    // Build canvas gradient fills for each dataset that has fill:true
+    const ctx2d = canvas.getContext('2d');
+    datasets.forEach(d => {
+      if (d.fill && d.borderColor && !d.borderDash) {
+        const grad = ctx2d.createLinearGradient(0, 0, 0, canvas.offsetHeight || 160);
+        const hex = d.borderColor.replace('#','');
+        const r = parseInt(hex.slice(0,2),16), g = parseInt(hex.slice(2,4),16), b = parseInt(hex.slice(4,6),16);
+        grad.addColorStop(0, `rgba(${r},${g},${b},0.28)`);
+        grad.addColorStop(0.6, `rgba(${r},${g},${b},0.08)`);
+        grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+        d.backgroundColor = grad;
+        // Glowing data points
+        d.pointBackgroundColor = d.borderColor;
+        d.pointBorderColor = `rgba(${r},${g},${b},0.4)`;
+        d.pointBorderWidth = 3;
+        d.pointRadius = d.pointRadius ?? 4;
+        d.pointHoverRadius = (d.pointRadius ?? 4) + 3;
+      }
+    });
+
     if (labels.length <= SMOOTH_AT) {
       const n = labels.length;
       const pr = n > 21 ? 2.5 : 4;
       datasets.forEach(d => {
-        if (d.borderDash) return; // reference line — leave as-is
+        if (d.borderDash) return;
         d.pointRadius = pr;
         d.borderWidth = 2.5;
         d.pointHitRadius = 8;
       });
     }
-    ST.chartInst[key] = new Chart(canvas.getContext('2d'), { type:'line', data:{labels,datasets}, options:{...OPTS, plugins:{legend:{display:!!legendOn,labels:{filter:legendFilter,font:{size:9,family:'Share Tech Mono'},color:'#64748b'}}}} });
+    ST.chartInst[key] = new Chart(ctx2d, { type:'line', data:{labels,datasets}, options:{...OPTS, plugins:{legend:{display:!!legendOn,labels:{filter:legendFilter,font:{size:9,family:'Share Tech Mono'},color:'#64748b'}}}} });
   }
   const refLine = (n,val,color) => ({ data:Array.from({length:n},()=>val), borderColor:color, borderDash:[4,3], pointRadius:0, fill:false });
 

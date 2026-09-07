@@ -3,8 +3,8 @@
  * Version: 5.0 | Build: 20260617
  */
 
-const FCF_VERSION = 'v5.41.1';
-const FCF_BUILD   = '20260905';
+const FCF_VERSION = 'v5.41.2';
+const FCF_BUILD   = '20260906';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
 // Replace OURA_CLIENT_ID with your actual Client ID from cloud.ouraring.com/oauth/applications
@@ -9351,10 +9351,24 @@ function renderToday(p) {
   parts.push('</div>');
 
   if (ST.ouraConnected && ctx.oura.readiness !== null) {
-    parts.push('<div class="stat-row" style="margin-bottom:16px">');
-    [['READINESS',ctx.oura.readiness],['SLEEP',ctx.oura.sleep],['ACTIVITY',ctx.oura.activity]].forEach(([l,v]) => {
-      const col = v === null ? 'var(--muted)' : v >= 85 ? 'var(--green)' : v >= 70 ? 'var(--text)' : v >= 60 ? 'var(--amber)' : 'var(--red)';
-      parts.push('<div class="stat-box"><div class="stat-val" style="color:'+col+'">'+(v ?? '—')+'</div><div class="stat-lbl">'+l+'</div></div>');
+    parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">');
+    const tiles = [
+      ['READINESS', ctx.oura.readiness, 'rgba(201,168,76,0.18)', 'rgba(201,168,76,0.06)', '#c9a84c'],
+      ['SLEEP',     ctx.oura.sleep,     'rgba(96,165,250,0.18)', 'rgba(96,165,250,0.06)', '#60a5fa'],
+      ['ACTIVITY',  ctx.oura.activity,  'rgba(45,212,191,0.18)', 'rgba(45,212,191,0.06)', '#2dd4bf'],
+    ];
+    tiles.forEach(([l, v, glowStrong, glowFaint, accent]) => {
+      const textColor = v === null ? 'var(--muted)' : v >= 85 ? 'var(--green)' : v >= 70 ? 'var(--text)' : v >= 60 ? 'var(--amber)' : 'var(--red)';
+      parts.push(
+        '<div style="position:relative;border-radius:16px;border:1px solid rgba(255,255,255,0.07);overflow:hidden;padding:12px 10px 10px;min-height:100px;background:#0f1623">' +
+        // Radial glow arc — top-right like Oura
+        '<div style="position:absolute;top:-30px;right:-30px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,' + glowStrong + ' 0%,' + glowFaint + ' 50%,transparent 75%);pointer-events:none"></div>' +
+        // Label top-left
+        '<div style="font-family:var(--mono);font-size:8px;letter-spacing:.12em;color:' + accent + ';opacity:0.9;position:relative;z-index:1">' + l + '</div>' +
+        // Big number bottom-left
+        '<div style="position:absolute;bottom:10px;left:10px;font-family:var(--mono);font-size:34px;font-weight:700;color:' + textColor + ';line-height:1;z-index:1">' + (v ?? '—') + '</div>' +
+        '</div>'
+      );
     });
     parts.push('</div>');
   }

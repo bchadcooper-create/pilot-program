@@ -3404,7 +3404,7 @@ if ('serviceWorker' in navigator) {
 
 // Manual "check now" — used by the top-bar sync indicator.
 async function checkForAppUpdate() {
-  if (!swRegistration) { showToast('Update check unavailable in this browser.'); return; }
+  if (!swRegistration) return; // WKWebView — SW updates automatically, no toast needed
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     showToast('📡 You\'re offline — reconnect to check for updates. The app keeps working normally in the meantime.');
     return;

@@ -2689,6 +2689,28 @@ function haptic(style) {
   window.webkit?.messageHandlers?.haptics?.postMessage({ style: style || 'medium' });
 }
 
+// Oura-style glowing metric tile — large number bottom-left, label top-left,
+// radial glow arc top-right. Colors: gold, blue, teal, green, amber, red.
+const GLOW_COLORS = {
+  gold:  ['rgba(201,168,76,0.2)',  'rgba(201,168,76,0.06)',  '#c9a84c'],
+  blue:  ['rgba(96,165,250,0.2)',  'rgba(96,165,250,0.06)',  '#60a5fa'],
+  teal:  ['rgba(45,212,191,0.2)',  'rgba(45,212,191,0.06)',  '#2dd4bf'],
+  green: ['rgba(34,197,94,0.2)',   'rgba(34,197,94,0.06)',   '#22c55e'],
+  amber: ['rgba(245,158,11,0.2)',  'rgba(245,158,11,0.06)',  '#f59e0b'],
+  red:   ['rgba(239,68,68,0.2)',   'rgba(239,68,68,0.06)',   '#ef4444'],
+};
+function glowTile(label, value, colorKey, valueColor) {
+  const [gs, gf, accent] = GLOW_COLORS[colorKey] || GLOW_COLORS.blue;
+  const vc = valueColor || 'var(--text)';
+  return (
+    '<div style="position:relative;border-radius:16px;border:1px solid rgba(255,255,255,0.07);overflow:hidden;padding:12px 10px 10px;min-height:90px;background:#0f1623">' +
+    '<div style="position:absolute;top:-28px;right:-28px;width:110px;height:110px;border-radius:50%;background:radial-gradient(circle,' + gs + ' 0%,' + gf + ' 50%,transparent 75%);pointer-events:none"></div>' +
+    '<div style="font-family:var(--mono);font-size:8px;letter-spacing:.12em;color:' + accent + ';opacity:0.9;position:relative;z-index:1">' + label + '</div>' +
+    '<div style="position:absolute;bottom:10px;left:10px;font-family:var(--mono);font-size:30px;font-weight:700;color:' + vc + ';line-height:1;z-index:1">' + (value ?? '—') + '</div>' +
+    '</div>'
+  );
+}
+
 function showBigToast(msg, type) {
   const old = document.getElementById('fcf-big-toast');
   if (old) old.remove();
@@ -3875,10 +3897,10 @@ async function showCalendarDay(isoDate) {
     if (si > 0) parts.push('<div style="border-top:1px solid var(--border);margin:20px 0 14px"></div>');
     parts.push('<div class="modal-title">'+(session.muscle_group||'Workout')+(session.importedFromOura ? ' <span style="font-size:11px;color:var(--blue);font-weight:400">📱 via Oura</span>' : '')+'</div>');
     parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:14px">'+sessionDate.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+' at '+sessionDate.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})+'</div>');
-    parts.push('<div class="stat-row">');
-    parts.push('<div class="stat-box"><div class="stat-val">'+(summary.durationMinutes||'—')+'</div><div class="stat-lbl">Minutes</div></div>');
-    parts.push('<div class="stat-box"><div class="stat-val">'+summary.totalSets+'</div><div class="stat-lbl">Sets</div></div>');
-    parts.push('<div class="stat-box"><div class="stat-val">'+summary.estCalories+'</div><div class="stat-lbl">Calories</div></div>');
+    parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">');
+    parts.push(glowTile('MINUTES', summary.durationMinutes||'—', 'gold'));
+    parts.push(glowTile('SETS', summary.totalSets, 'blue'));
+    parts.push(glowTile('CALORIES', summary.estCalories, 'teal'));
     parts.push('</div>');
     parts.push('<div class="modal-body" style="margin-bottom:10px">Environment: '+(session.env||'—')+' · Condition: '+(session.fatigue||'go')+'</div>');
 
@@ -7242,15 +7264,15 @@ function renderDebrief(p) {
   parts.push('<div style="font-size:11px;color:var(--muted);margin-top:4px">'+new Date(session.date).toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+'</div>');
   parts.push('</div>');
 
-  parts.push('<div class="stat-row">');
-  parts.push('<div class="stat-box"><div class="stat-val">'+(s.durationMinutes||'—')+'</div><div class="stat-lbl">Minutes</div></div>');
-  parts.push('<div class="stat-box"><div class="stat-val">'+s.totalSets+'</div><div class="stat-lbl">Sets Logged</div></div>');
-  parts.push('<div class="stat-box"><div class="stat-val">'+s.estCalories+'</div><div class="stat-lbl">Est. Calories</div></div>');
+  parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">');
+  parts.push(glowTile('MINUTES', s.durationMinutes||'—', 'gold'));
+  parts.push(glowTile('SETS', s.totalSets, 'blue'));
+  parts.push(glowTile('CALORIES', s.estCalories, 'teal'));
   parts.push('</div>');
-  parts.push('<div class="stat-row">');
-  parts.push('<div class="stat-box"><div class="stat-val">'+s.totalReps+'</div><div class="stat-lbl">Total Reps</div></div>');
-  parts.push('<div class="stat-box"><div class="stat-val">'+s.totalVolume.toLocaleString()+'</div><div class="stat-lbl">Volume (lb)</div></div>');
-  parts.push('<div class="stat-box"><div class="stat-val">'+s.completionPct+'%</div><div class="stat-lbl">Completion</div></div>');
+  parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">');
+  parts.push(glowTile('REPS', s.totalReps, 'amber'));
+  parts.push(glowTile('VOLUME LB', s.totalVolume.toLocaleString(), 'blue'));
+  parts.push(glowTile('DONE', s.completionPct+'%', s.completionPct>=100?'green':'teal'));
   parts.push('</div>');
 
   parts.push('<div class="section-label">DEBRIEF NOTES</div>');
@@ -8399,9 +8421,10 @@ function renderDevices(p) {
       statsRows.push(['Last Sleep', h + 'h ' + m + 'm']);
     }
     if (statsRows.length > 0) {
-      parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">');
+      const hkColors = { 'Steps Today':'teal', 'Resting HR':'red', 'HRV (SDNN)':'green', 'Last Sleep':'blue' };
+      parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">');
       statsRows.forEach(([lbl, val]) => {
-        parts.push('<div class="stat-box"><div class="stat-val" style="font-size:15px">'+val+'</div><div class="stat-lbl">'+lbl+'</div></div>');
+        parts.push(glowTile(lbl.toUpperCase(), val, hkColors[lbl]||'blue'));
       });
       parts.push('</div>');
     }
@@ -9321,7 +9344,7 @@ function buildTodayGaps(ctx) {
   const gaps = [];
   const { nutrition, training, hour } = ctx;
   if (ST.trackNutrition && !nutrition.mealCount && hour >= 11) gaps.push({ icon:'🍽️', text:'Nothing logged yet today', fn:"switchTab('nutrition')" });
-  else if (nutrition.goals && nutrition.proteinPct !== null && nutrition.proteinPct < 70 && hour >= 15) {
+  else if (ST.trackNutrition && nutrition.goals && nutrition.proteinPct !== null && nutrition.proteinPct < 70 && hour >= 15) {
     gaps.push({ icon:'🥩', text:'Protein at '+nutrition.proteinPct+'% of target', fn:"switchTab('nutrition')" });
   }
   if (!training.workoutToday && hour >= 18) gaps.push({ icon:'💪', text:'No session logged today', fn:"switchTab('preflight')" });
@@ -9352,23 +9375,9 @@ function renderToday(p) {
 
   if (ST.ouraConnected && ctx.oura.readiness !== null) {
     parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">');
-    const tiles = [
-      ['READINESS', ctx.oura.readiness, 'rgba(201,168,76,0.18)', 'rgba(201,168,76,0.06)', '#c9a84c'],
-      ['SLEEP',     ctx.oura.sleep,     'rgba(96,165,250,0.18)', 'rgba(96,165,250,0.06)', '#60a5fa'],
-      ['ACTIVITY',  ctx.oura.activity,  'rgba(45,212,191,0.18)', 'rgba(45,212,191,0.06)', '#2dd4bf'],
-    ];
-    tiles.forEach(([l, v, glowStrong, glowFaint, accent]) => {
-      const textColor = v === null ? 'var(--muted)' : v >= 85 ? 'var(--green)' : v >= 70 ? 'var(--text)' : v >= 60 ? 'var(--amber)' : 'var(--red)';
-      parts.push(
-        '<div style="position:relative;border-radius:16px;border:1px solid rgba(255,255,255,0.07);overflow:hidden;padding:12px 10px 10px;min-height:100px;background:#0f1623">' +
-        // Radial glow arc — top-right like Oura
-        '<div style="position:absolute;top:-30px;right:-30px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,' + glowStrong + ' 0%,' + glowFaint + ' 50%,transparent 75%);pointer-events:none"></div>' +
-        // Label top-left
-        '<div style="font-family:var(--mono);font-size:8px;letter-spacing:.12em;color:' + accent + ';opacity:0.9;position:relative;z-index:1">' + l + '</div>' +
-        // Big number bottom-left
-        '<div style="position:absolute;bottom:10px;left:10px;font-family:var(--mono);font-size:34px;font-weight:700;color:' + textColor + ';line-height:1;z-index:1">' + (v ?? '—') + '</div>' +
-        '</div>'
-      );
+    [['READINESS',ctx.oura.readiness,'gold'],['SLEEP',ctx.oura.sleep,'blue'],['ACTIVITY',ctx.oura.activity,'teal']].forEach(([l,v,col]) => {
+      const vc = v===null?'var(--muted)':v>=85?'var(--green)':v>=70?'var(--text)':v>=60?'var(--amber)':'var(--red)';
+      parts.push(glowTile(l,v,col,vc));
     });
     parts.push('</div>');
   }

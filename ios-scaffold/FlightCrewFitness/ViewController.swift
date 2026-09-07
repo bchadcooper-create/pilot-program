@@ -34,6 +34,33 @@ class ViewController: UIViewController {
         // contentController.add(self, ...) holds a strong ref to self.
         // Using a WeakScriptDelegate breaks the cycle.
         let contentController = WKUserContentController()
+
+        // Inject the FCFBridge before the page JS runs so FCFBridge.isNative
+        // is true by the time app.js executes. Without this, window.webkit
+        // exists but FCFBridge is never defined, so every native feature
+        // silently falls back to the browser/PWA path.
+        let bridgeJS = """
+        const FCFBridge = (() => {
+          const isNative = !!(window.webkit?.messageHandlers?.storeKit);
+          function send(h, p) { window.webkit?.messageHandlers?.[h]?.postMessage(p); }
+          return {
+            isNative,
+            getProducts:      () => send('storeKit',      { action: 'getProducts' }),
+            purchase:         (o) => send('storeKit',      { action: 'purchase', productId: o.productId, appAccountToken: o.appAccountToken }),
+            restore:          () => send('storeKit',      { action: 'restore' }),
+            signInWithApple:  () => send('signInWithApple', {}),
+            requestHealthKit: () => send('healthkit',     { action: 'requestPermission' }),
+            syncHealthKit:    () => send('healthkit',     { action: 'sync' }),
+            requestCalendar:  () => send('calendar',      { action: 'requestPermission' }),
+            syncCalendar:     () => send('calendar',      { action: 'sync' }),
+          };
+        })();
+        """
+        let bridgeScript = WKUserScript(source: bridgeJS,
+                                        injectionTime: .atDocumentStart,
+                                        forMainFrameOnly: true)
+        contentController.addUserScript(bridgeScript)
+
         let weakDelegate = WeakScriptDelegate(delegate: self)
         contentController.add(weakDelegate, name: "storeKit")
         contentController.add(weakDelegate, name: "signInWithApple")

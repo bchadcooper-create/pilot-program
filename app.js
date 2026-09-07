@@ -8388,7 +8388,7 @@ function renderDevices(p) {
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">APPLE HEALTH</div>');
   if (!isNative) {
-    parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.65">Apple Health integration is available in the iOS app.</div>');
+    parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.65">Apple Health syncs automatically when you use the Flight Crew Fitness iOS app. Download it from the App Store and health data will appear here after your first login.</div>');
   } else if (!hk) {
     parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.65;margin-bottom:12px">Requesting access to Apple Health…</div>');
   } else if (!hk.granted) {

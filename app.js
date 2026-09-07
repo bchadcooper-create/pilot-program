@@ -2718,6 +2718,29 @@ function glowTile(label, value, colorKey, valueColor) {
   );
 }
 
+// AI Coach card wrapper — used for all three AI coaching features
+// (Progression Analytics, Fatigue Calibration, Fueling Logistics).
+// Uses the same radial-glow-arc treatment as the Readiness tile on Today so
+// AI content reads as visually distinct from the rest of the app, and is
+// unmistakably marked as AI-generated rather than blending into rule-based
+// copy. `id` is the container's DOM id; `textId` is the inner text node's
+// id that the loader function fills in once the response arrives.
+function aiCoachCard(id, textId, title, colorKey) {
+  const [gs, gf, accent] = GLOW_COLORS[colorKey] || GLOW_COLORS.gold;
+  return (
+    '<div id="' + id + '" style="position:relative;border-radius:16px;border:1px solid rgba(255,255,255,0.08);' +
+      'overflow:hidden;padding:16px;margin-bottom:12px;background:#0f1623;display:none">' +
+    '<div style="position:absolute;top:-50px;right:-40px;width:180px;height:180px;border-radius:50%;' +
+      'background:radial-gradient(circle,' + gs + ' 0%,' + gf + ' 55%,transparent 75%);pointer-events:none"></div>' +
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;position:relative;z-index:1">' +
+      '<span style="font-size:12px">✦</span>' +
+      '<span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:' + accent + '">' + title + '</span>' +
+    '</div>' +
+    '<div id="' + textId + '" style="font-size:13.5px;color:var(--text);line-height:1.6;position:relative;z-index:1"></div>' +
+    '</div>'
+  );
+}
+
 function showBigToast(msg, type) {
   const old = document.getElementById('fcf-big-toast');
   if (old) old.remove();
@@ -7056,10 +7079,7 @@ async function renderTrends(p) {
   // AI Progression Analytics — Pro only. The headline insight for the whole
   // Trends screen, so it goes first. Cached server-side for 24h.
   if (isPro()) {
-    parts.push('<div id="aiProgressionCard" class="card mb12" style="border-left:3px solid var(--gold);display:none">' +
-      '<div style="font-size:10px;letter-spacing:.1em;color:var(--gold);margin-bottom:6px;font-family:var(--mono)">✦ AI COACH — YOUR PATTERNS</div>' +
-      '<div id="aiProgressionText" style="font-size:13px;color:var(--muted);line-height:1.65"></div>' +
-      '</div>');
+    parts.push(aiCoachCard('aiProgressionCard', 'aiProgressionText', 'AI COACH — YOUR PATTERNS', 'gold'));
   }
 
   parts.push('<div class="section-label">BIOMETRICS LOG &amp; TRENDS</div>');
@@ -8010,7 +8030,7 @@ function filterOuraInternalOverlaps(events) {
 // terminal) — a 12-minute strength session is plausibly real training, a
 // 12-minute walk usually isn't.
 const MIN_OURA_IMPORT_MINUTES = 10;
-const MIN_OURA_WALK_MINUTES = 40; // raised from 20 — incidental terminal/gate walking easily runs 20-40+ min
+const MIN_OURA_WALK_MINUTES = 30; // a genuine layover walk is real exercise and should count
 const MIN_OURA_WALK_CAL_PER_MIN = 4; // ~4 kcal/min is a brisk, purposeful pace; ambling through an airport runs lower
 
 function minImportMinutesFor(activity) {
@@ -9657,10 +9677,7 @@ function renderToday(p) {
   // the rule-based briefing above, rather than replacing it. Loads async so
   // it never blocks the page render.
   if (isPro()) {
-    parts.push('<div id="aiFatigueCard" class="card mb12" style="border-left:3px solid var(--gold);display:none">' +
-      '<div style="font-size:10px;letter-spacing:.1em;color:var(--gold);margin-bottom:6px;font-family:var(--mono)">✦ AI COACH</div>' +
-      '<div id="aiFatigueText" style="font-size:13px;color:var(--muted);line-height:1.65"></div>' +
-      '</div>');
+    parts.push(aiCoachCard('aiFatigueCard', 'aiFatigueText', 'AI COACH', 'amber'));
   }
 
   // Standalone, always-shown prompt — not folded into one specific briefing
@@ -9940,10 +9957,7 @@ async function renderNutrition(p) {
   // an actual schedule to reason over (calendar or uploaded ICS).
   const hasScheduleForFueling = ST.flightSchedule?.length || ST.calendarEvents?.length;
   if (isPro() && hasScheduleForFueling) {
-    parts.push('<div id="aiFuelCard" class="card mb12" style="border-left:3px solid var(--gold);display:none">' +
-      '<div style="font-size:10px;letter-spacing:.1em;color:var(--gold);margin-bottom:6px;font-family:var(--mono)">✦ AI COACH — TODAY\'S FUELING</div>' +
-      '<div id="aiFuelText" style="font-size:13px;color:var(--muted);line-height:1.65"></div>' +
-      '</div>');
+    parts.push(aiCoachCard('aiFuelCard', 'aiFuelText', "AI COACH — TODAY'S FUELING", 'teal'));
   }
 
   // Moved up per direct feedback — this used to be the last thing on the

@@ -7881,12 +7881,21 @@ function findExistingOuraImport(ouraId, sessionCache) {
 // as a likely duplicate rather than silently importing a second copy or
 // silently skipping something that might genuinely be different — real
 // ambiguity gets a prompt, not a guess in either direction.
+//
+// BUG FIX: previously excluded any session with an ouraWorkoutId already
+// set, on the theory that "already-imported sessions are handled by the
+// exact-id check instead." That's only true when it's the SAME Oura event
+// id syncing twice. Oura can also emit two DIFFERENT event ids for what
+// was really one continuous real-world activity (e.g. a walk that got
+// split into two workout entries) — the exact-id check can't catch that,
+// and this function was the one place that could, but it was skipping
+// exactly the sessions it needed to compare against.
 function findSimilarSession(ouraEvent, sessionCache) {
   const ouraStart = new Date(ouraEvent.start_datetime).getTime();
   const ouraEnd = new Date(ouraEvent.end_datetime).getTime();
   if (isNaN(ouraStart) || isNaN(ouraEnd)) return null;
   return (sessionCache || []).find(s => {
-    if (s.ouraWorkoutId) return false; // already-imported sessions are handled by the exact-id check instead
+    if (s.ouraWorkoutId === ouraEvent.id) return false; // exact same event — handled by findExistingOuraImport
     const sStart = new Date(s.date).getTime();
     if (isNaN(sStart)) return false;
     const sMinutes = s.durationMinutes || 30;
@@ -7936,7 +7945,14 @@ async function importOuraWorkout(ouraEvent, exDef) {
     }]);
     if (error) throw error;
   } catch(e) {
-    localStorage.setItem('fcf_session_oura_' + ouraEvent.id, JSON.stringify(session));
+    // A unique-violation here (user_id, session_key) means this exact Oura
+    // event was already imported by a concurrent/earlier sync — that's
+    // expected and not a bug, just skip the localStorage fallback in that
+    // case so it isn't queued for a retry that would just fail again.
+    if (e.code !== '23505') {
+      console.warn('importOuraWorkout insert failed:', e);
+      localStorage.setItem('fcf_session_oura_' + ouraEvent.id, JSON.stringify(session));
+    }
   }
   if (!ST.sessionCache.find(s => s.ouraWorkoutId === ouraEvent.id)) ST.sessionCache.push(session);
   if (RUNNING_EXERCISES.includes(exDef.id)) {
@@ -7994,10 +8010,22 @@ function filterOuraInternalOverlaps(events) {
 // terminal) — a 12-minute strength session is plausibly real training, a
 // 12-minute walk usually isn't.
 const MIN_OURA_IMPORT_MINUTES = 10;
-const MIN_OURA_WALK_MINUTES = 20;
+const MIN_OURA_WALK_MINUTES = 40; // raised from 20 — incidental terminal/gate walking easily runs 20-40+ min
+const MIN_OURA_WALK_CAL_PER_MIN = 4; // ~4 kcal/min is a brisk, purposeful pace; ambling through an airport runs lower
 
 function minImportMinutesFor(activity) {
   return /walk/i.test(activity || '') ? MIN_OURA_WALK_MINUTES : MIN_OURA_IMPORT_MINUTES;
+}
+
+// Secondary filter for walking specifically — duration alone can't tell a
+// deliberate fitness walk from wandering an airport for the same amount of
+// time, but Oura's per-event calorie burn can act as an intensity proxy.
+// Only applied to walks; other activity types are trusted on duration alone.
+function passesWalkIntensityCheck(ev) {
+  if (!/walk/i.test(ev.activity || '')) return true;
+  const mins = (new Date(ev.end_datetime) - new Date(ev.start_datetime)) / 60000;
+  if (!ev.calories || !mins || mins <= 0) return true; // no calorie data — don't block on it
+  return (ev.calories / mins) >= MIN_OURA_WALK_CAL_PER_MIN;
 }
 
 
@@ -8014,7 +8042,7 @@ async function syncOuraWorkouts() {
   // standalone activities that remain short even after that merge.
   const events = overlapFiltered.filter(ev => {
     const mins = (new Date(ev.end_datetime) - new Date(ev.start_datetime)) / 60000;
-    return !isNaN(mins) && mins >= minImportMinutesFor(ev.activity);
+    return !isNaN(mins) && mins >= minImportMinutesFor(ev.activity) && passesWalkIntensityCheck(ev);
   });
   ST.ouraImportQueue = ST.ouraImportQueue || [];
   ST.ouraDismissedIds = ST.ouraDismissedIds || [];
@@ -8023,6 +8051,14 @@ async function syncOuraWorkouts() {
     if (ST.ouraDismissedIds.includes(ev.id)) continue;
     const exDef = mapOuraActivityToExercise(ev);
     const similar = findSimilarSession(ev, ST.sessionCache);
+    if (similar?.ouraWorkoutId) {
+      // Overlaps an already-imported Oura event under a DIFFERENT event id —
+      // this is Oura's own double-counting of one real activity, not a
+      // genuine "is this the same as your manual log?" question. Skip
+      // silently rather than asking the user to adjudicate Oura's data
+      // quality issue.
+      continue;
+    }
     if (similar) {
       if (!ST.ouraImportQueue.find(q => q.event.id === ev.id)) ST.ouraImportQueue.push({ event: ev, exDef, similar });
     } else {

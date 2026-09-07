@@ -89,7 +89,11 @@ class ViewController: UIViewController {
     }
 
     private func loadApp() {
-        let request = URLRequest(url: targetURL, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 30)
+        // reloadIgnoringLocalAndRemoteCacheData ensures WKWebView always fetches
+        // the latest index.html and app.js rather than serving a stale cached copy.
+        let request = URLRequest(url: targetURL,
+                                 cachePolicy: .reloadIgnoringLocalAndRemoteCacheData,
+                                 timeoutInterval: 30)
         webView.load(request)
     }
 

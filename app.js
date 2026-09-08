@@ -3975,10 +3975,17 @@ async function loadFatigueCalibration(ctx) {
 // vs. light/rest, based on report times and layover lengths across the trip.
 // Server-side cached per-trip, not per-day — see fcf-ai-coach for the key.
 async function loadTripPlan() {
+  const card = document.getElementById('aiTripPlanCard');
   try {
-    if (!ST.calendarEvents?.length) return; // no synced calendar — nothing to plan around
+    // BUG FIX (reported): every one of these early returns used to exit
+    // BEFORE touching the card at all, leaving it stuck showing the
+    // "Thinking..." placeholder indefinitely — not a failed API call, just
+    // a legitimate "there's nothing to show here" case that never told the
+    // card to hide itself. Card is looked up once at the top now so every
+    // exit path (no calendar, short trip, API error) can hide it.
+    if (!ST.calendarEvents?.length) { if (card) card.style.display = 'none'; console.log('[tripPlan] no calendar events synced'); return; }
     const bounds = getTripBounds(ST.calendarEvents, new Date());
-    if (!bounds || bounds.totalDays < 2) return; // single-day trips don't need a multi-day plan
+    if (!bounds || bounds.totalDays < 2) { if (card) card.style.display = 'none'; console.log('[tripPlan] no multi-day trip found', {bounds}); return; }
 
     // How many sessions have already been logged since this trip started —
     // feeds the cache key so the plan can react to training that happened
@@ -3996,7 +4003,6 @@ async function loadTripPlan() {
     };
 
     const result = await callAICoach('trip_plan', context);
-    const card = document.getElementById('aiTripPlanCard');
     const textEl = document.getElementById('aiTripPlanText');
     if (!card || !textEl) return; // user navigated away before this resolved
     if (result.error) { card.style.display = 'none'; return; } // hide the card, don't leave it stuck on "Thinking..."
@@ -4014,7 +4020,10 @@ async function loadTripPlan() {
     }).join('');
     textEl.innerHTML = html;
     card.style.display = '';
-  } catch (e) { console.warn('loadTripPlan error:', e); }
+  } catch (e) {
+    console.warn('loadTripPlan error:', e);
+    if (card) card.style.display = 'none'; // don't leave it stuck on "Thinking..." after a crash either
+  }
 }
 
 async function classifyCalendarEvents(events, fingerprint) {

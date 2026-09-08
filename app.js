@@ -10009,7 +10009,15 @@ function getTodayContext() {
     now, hour: now.getHours(),
     sched,
     oura: { readiness: ST.ouraScore ?? null, sleep: sleepScore,
-            activity: ST.ouraData?.activity_score ?? null, steps: ST.ouraSteps ?? null,
+            activity: ST.ouraData?.activity_score ?? null,
+            // Prefer Oura's step count (consistent with readiness/sleep/
+            // activity, all Oura-exclusive metrics on this same row) —
+            // fall back to HealthKit's count only when Oura has no value
+            // at all, e.g. not connected or today's activity hasn't synced
+            // yet. Two devices will rarely agree exactly; this just picks
+            // one source of truth rather than silently swapping between
+            // them depending on which happened to sync most recently.
+            steps: ST.ouraSteps ?? ST.healthkit?.stepsToday ?? null,
             napDetected: checkForNapRecovery(sleepScore) },
     nutrition: { consumed, goals: g, mealCount: meals.length,
                  proteinPct: g && g.protein ? Math.round((consumed.protein / g.protein) * 100) : null,

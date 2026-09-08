@@ -6501,7 +6501,7 @@ function buildExCard(exItem, phaseKey) {
       });
       parts.push('</div></div><div class="swipe-hint">← swipe for all sets</div><button class="btn-ghost" style="font-size:11px;margin-top:6px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button>');
       if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
-        parts.push(buildRestTimerWidget(exItem.id, phaseKey));
+        parts.push(buildRestTimerWidget(exItem.id, phaseKey, exItem.target));
       }
     } else if (exItem.inputType === 'reps_distance') {
       parts.push('<div class="sets-wrap"><div class="sets-scroll">');
@@ -6513,7 +6513,7 @@ function buildExCard(exItem, phaseKey) {
       });
       parts.push('</div></div><div class="swipe-hint">← swipe for all sets</div><button class="btn-ghost" style="font-size:11px;margin-top:6px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button>');
       if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
-        parts.push(buildRestTimerWidget(exItem.id, phaseKey));
+        parts.push(buildRestTimerWidget(exItem.id, phaseKey, exItem.target));
       }
     } else if (exItem.inputType === 'reps_only') {
       parts.push('<div class="sets-wrap"><div class="sets-scroll">');
@@ -6537,7 +6537,7 @@ function buildExCard(exItem, phaseKey) {
         parts.push('<div class="fb" style="background:var(--bg3);border:1px solid var(--blue);border-radius:8px;padding:9px 12px;margin-top:8px;align-items:flex-start"><div style="font-size:12px;line-height:1.5;color:var(--text)">🎯 '+autoreg.text+'</div></div>');
       }
       if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
-        parts.push(buildRestTimerWidget(exItem.id, phaseKey));
+        parts.push(buildRestTimerWidget(exItem.id, phaseKey, exItem.target));
       }
     }
 
@@ -6560,7 +6560,39 @@ function toggleEx(id) {
   renderFlight(document.getElementById('mainPage'));
 }
 
-// ─── REST TIMER (between sets, phase-aware default) ──────────────────────────
+// ─── REST TIMER (between sets, rep-range-aware default) ───────────────────────
+//
+// BUG FIX (reported): rest recommendation was keyed purely on workout PHASE
+// ("takeoff" always got 3-4 min), not on what the exercise actually asks for.
+// A 12-rep Cable Row for "back health and posture" was getting the same
+// 3.5-minute strength-training rest as a 1-5 rep heavy squat — which is
+// wrong by every mainstream reference (NSCA Essentials of Strength Training
+// & Conditioning; ACSM position stands): rest should track rep range /
+// training goal, not which quarter of the workout an exercise happens to
+// sit in. Phase remains a reasonable FALLBACK when an exercise's rep count
+// can't be parsed (e.g. distance/time-based cardio), but a real target like
+// "3×12" now drives the actual number.
+//
+// Reference bands (NSCA Essentials of Strength Training & Conditioning):
+//   1-5 reps   (strength/power)   → 2-5 min   (we use 180s / 3 min)
+//   6-12 reps  (hypertrophy)      → 60-90s    (we use 75s)
+//   13+ reps   (muscular endurance) → 30-60s  (we use 40s)
+function restSecondsForTarget(target) {
+  if (!target) return null;
+  // "3×12" captures 12 (reps). Deliberately does NOT match "6×500m" or
+  // "8×30s" — those are distance/time-based (rowing meters, sprint seconds),
+  // not a rep count, and forcing them through this logic previously misread
+  // "500m" as 500 reps. A trailing unit letter right after the number rules
+  // it out; bare numbers or "10/side" style are accepted.
+  const m = String(target).match(/[×xX]\s*(\d+)\b(?!\w)/);
+  if (!m) return null;
+  const reps = parseInt(m[1], 10);
+  if (isNaN(reps)) return null;
+  if (reps <= 5)  return 180; // strength/power range
+  if (reps <= 12) return 75;  // hypertrophy range
+  return 40;                  // muscular endurance range
+}
+
 function ageRestBonus() {
   if (!ST.age) return 0;
   if (ST.age >= 60) return 30;
@@ -6568,15 +6600,26 @@ function ageRestBonus() {
   return 0;
 }
 
-function buildRestTimerWidget(exId, phaseKey) {
-  const defaultSec = (REST_OVERRIDES[exId] || REST_DEFAULTS[phaseKey] || 60) + ageRestBonus();
+function buildRestTimerWidget(exId, phaseKey, target) {
+  const repBased = restSecondsForTarget(target);
+  const baseSec = REST_OVERRIDES[exId] ?? repBased ?? REST_DEFAULTS[phaseKey] ?? 60;
+  const defaultSec = baseSec + ageRestBonus();
   const isActive = ST.restTimer.active && ST.restTimer.exId === exId;
   const mins = Math.floor((isActive?ST.restTimer.seconds:defaultSec)/60);
   const secs = (isActive?ST.restTimer.seconds:defaultSec)%60;
   const display = mins+':'+String(secs).padStart(2,'0');
+  // Label reflects the ACTUAL seconds being used, not a guess from phase —
+  // so if a takeoff-phase exercise resolves to 75s (hypertrophy rep range),
+  // it correctly says "60-90S" instead of always claiming "3-4 MIN".
+  const label = defaultSec >= 150 ? '2-5 MIN RECOMMENDED (STRENGTH)'
+              : defaultSec >= 60  ? '60-90S RECOMMENDED (HYPERTROPHY)'
+              : '30-60S RECOMMENDED (ENDURANCE)';
   const parts = [];
   parts.push('<div class="rest-timer-box" id="rest_'+exId+'">');
-  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">REST TIMER · '+(phaseKey==='takeoff'?'3-4 MIN RECOMMENDED':'60-90S RECOMMENDED')+'</div>');
+  parts.push('<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">');
+  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em">REST TIMER · '+label+'</div>');
+  parts.push('<button onclick="showRestTimerInfo()" style="background:none;border:1px solid var(--muted);border-radius:50%;width:15px;height:15px;color:var(--muted);font-size:9px;line-height:1;cursor:pointer;flex-shrink:0;padding:0">i</button>');
+  parts.push('</div>');
   parts.push('<div class="rest-timer-display" id="rest_disp_'+exId+'">'+display+'</div>');
   if (!isActive) {
     parts.push('<button class="stopwatch-btn btn-blue" onclick="startRestTimer(\''+exId+'\','+defaultSec+')">START REST</button>');
@@ -6585,6 +6628,31 @@ function buildRestTimerWidget(exId, phaseKey) {
   }
   parts.push('</div>');
   return parts.join('');
+}
+
+// The (i) info button — explains WHY rest varies instead of leaving the
+// user (or their personal trainer) to wonder why a set of 12 gets a
+// 3-4 minute timer. Directly addresses the reported confusion.
+function showRestTimerInfo() {
+  const root = document.getElementById('modalRoot');
+  if (!root) return;
+  root.innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet">' +
+    '<div class="modal-handle"></div>' +
+    '<div class="modal-title">Why does rest time change?</div>' +
+    '<div class="modal-body" style="line-height:1.65">' +
+    'Rest time is set by rep range, not by where an exercise sits in the workout — this is standard NSCA guidance, not something specific to this app.' +
+    '<br><br>' +
+    '<strong style="color:var(--text)">1-5 reps (strength/power):</strong> 2-5 min. Heavy loads deplete the phosphagen energy system, which needs several minutes to fully recover.' +
+    '<br><br>' +
+    '<strong style="color:var(--text)">6-12 reps (hypertrophy):</strong> 60-90 sec. Enough recovery to keep form solid without letting the muscle fully cool down between sets.' +
+    '<br><br>' +
+    '<strong style="color:var(--text)">13+ reps (muscular endurance):</strong> 30-60 sec. The goal is working through fatigue, not full recovery between sets.' +
+    '<br><br>' +
+    'A 12-rep set of Cable Rows and a 3-rep heavy Deadlift both being programmed early in a workout doesn\'t mean they need the same rest — the rep count is what matters.' +
+    '</div>' +
+    '<button class="btn btn-outline mt12" onclick="closeModal()">Got it</button>' +
+    '</div></div>';
 }
 
 function startRestTimer(exId, seconds) {

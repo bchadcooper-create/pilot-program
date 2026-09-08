@@ -4,9 +4,10 @@
 <plist version="1.0">
 <dict>
 
-  <!-- App display name -->
+  <!-- App display name — shortened for home screen (avoids "FlightCre..." truncation).
+       Full "Flight Crew Fitness" name stays everywhere else (App Store listing, etc). -->
   <key>CFBundleDisplayName</key>
-  <string>Flight Crew Fitness</string>
+  <string>Flight Fit</string>
 
   <!-- Bundle identity -->
   <key>CFBundleIdentifier</key>

@@ -3755,17 +3755,33 @@ async function callAICoach(mode, context) {
   try {
     const { data: { session } } = await SB.auth.getSession();
     if (!session) return { error: 'not_signed_in' };
-    const res = await fetch(AI_COACH_EDGE_FN, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
-      body: JSON.stringify({ mode, context })
-    });
+    // BUG FIX (reported): this fetch had no timeout at all. If the edge
+    // function or upstream Anthropic call hangs — cold start, network
+    // stall, anything — the promise never settles, so it never reaches
+    // the try/catch's error path OR the success path. No amount of fixing
+    // the CALLING code's error handling can help when the fetch itself
+    // never resolves. 20s is generous for what should be a 2-4s response;
+    // past that, treat it as failed so the card can hide instead of
+    // showing "Thinking..." indefinitely.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    let res;
+    try {
+      res = await fetch(AI_COACH_EDGE_FN, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+        body: JSON.stringify({ mode, context }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
     const data = await res.json();
     if (!res.ok) return { error: data.error || 'ai_failed' };
     return { text: data.text, cached: data.cached };
   } catch (e) {
     console.warn('callAICoach error:', e);
-    return { error: 'network_error' };
+    return { error: e.name === 'AbortError' ? 'timeout' : 'network_error' };
   }
 }
 

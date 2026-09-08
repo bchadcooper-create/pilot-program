@@ -203,7 +203,7 @@ serve(async (req) => {
       }
     }
 
-    const MAX_TOKENS_BY_MODE = { weekly_summary: 150, fatigue_calibration: 100, fuel_logistics: 100, trip_plan: 400, exercise_substitute: 200 };
+    const MAX_TOKENS_BY_MODE = { weekly_summary: 150, fatigue_calibration: 100, fuel_logistics: 100, trip_plan: 180, exercise_substitute: 200 };
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',

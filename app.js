@@ -2788,16 +2788,25 @@ function glowTile(label, value, colorKey, valueColor) {
 // id that the loader function fills in once the response arrives.
 function aiCoachCard(id, textId, title, colorKey) {
   const [gs, gf, accent] = GLOW_COLORS[colorKey] || GLOW_COLORS.gold;
+  // BUG FIX (reported): card was display:none until the AI response landed,
+  // so for the 2-3 seconds a real request takes, there was zero indication
+  // anything was coming — easy to scroll or tab past and never notice the
+  // insight existed at all. Now visible immediately with a pulsing "thinking"
+  // placeholder; loadFatigueCalibration/loadFuelLogistics/etc swap the
+  // textId content in when the real response arrives (see those functions —
+  // they already just do textEl.textContent = result.text, unchanged).
   return (
     '<div id="' + id + '" style="position:relative;border-radius:16px;border:1px solid rgba(255,255,255,0.08);' +
-      'overflow:hidden;padding:16px;margin-bottom:12px;background:#0f1623;display:none">' +
+      'overflow:hidden;padding:16px;margin-bottom:12px;background:#0f1623">' +
     '<div style="position:absolute;top:-50px;right:-40px;width:180px;height:180px;border-radius:50%;' +
       'background:radial-gradient(circle,' + gs + ' 0%,' + gf + ' 55%,transparent 75%);pointer-events:none"></div>' +
     '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;position:relative;z-index:1">' +
       '<span style="font-size:12px">✦</span>' +
       '<span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:' + accent + '">' + title + '</span>' +
     '</div>' +
-    '<div id="' + textId + '" style="font-size:13.5px;color:var(--text);line-height:1.6;position:relative;z-index:1"></div>' +
+    '<div id="' + textId + '" style="font-size:13.5px;color:var(--text);line-height:1.6;position:relative;z-index:1">' +
+      '<span class="ai-thinking-dots" style="color:var(--muted);font-style:italic">Thinking<span class="ai-dot">.</span><span class="ai-dot">.</span><span class="ai-dot">.</span></span>' +
+    '</div>' +
     '</div>'
   );
 }
@@ -3858,7 +3867,7 @@ async function loadProgressionAnalytics() {
     const card = document.getElementById('aiProgressionCard');
     const textEl = document.getElementById('aiProgressionText');
     if (!card || !textEl) return;
-    if (result.error) return; // silent fail — rest of Trends page still works
+    if (result.error) { card.style.display = 'none'; return; } // hide the card, don't leave it stuck on "Thinking..."
     textEl.textContent = result.text;
     card.style.display = '';
   } catch (e) { console.warn('loadProgressionAnalytics error:', e); }
@@ -3904,7 +3913,7 @@ async function loadFuelLogistics() {
     const card = document.getElementById('aiFuelCard');
     const textEl = document.getElementById('aiFuelText');
     if (!card || !textEl) return;
-    if (result.error) return; // silent fail — rest of nutrition tab still works
+    if (result.error) { card.style.display = 'none'; return; } // hide the card, don't leave it stuck on "Thinking..."
     textEl.textContent = result.text;
     card.style.display = '';
   } catch (e) { console.warn('loadFuelLogistics error:', e); }
@@ -3950,8 +3959,10 @@ async function loadFatigueCalibration(ctx) {
     const textEl = document.getElementById('aiFatigueText');
     if (!card || !textEl) return; // user navigated away before this resolved
     if (result.error) {
-      // Silent fail — the rule-based briefing above already covers this,
-      // so a failed AI call just means one fewer card, not a broken page.
+      // Hide the card rather than leaving it stuck on "Thinking..." forever —
+      // the rule-based briefing above already covers this, so a failed AI
+      // call just means one fewer card, not a broken page.
+      card.style.display = 'none';
       return;
     }
     textEl.textContent = result.text;
@@ -3988,7 +3999,7 @@ async function loadTripPlan() {
     const card = document.getElementById('aiTripPlanCard');
     const textEl = document.getElementById('aiTripPlanText');
     if (!card || !textEl) return; // user navigated away before this resolved
-    if (result.error) return; // silent fail — Today tab works fine without this card
+    if (result.error) { card.style.display = 'none'; return; } // hide the card, don't leave it stuck on "Thinking..."
 
     // Split into lines and highlight today's line — the model returns one
     // "Day N:" line per day; find the one matching bounds.days[].isToday.

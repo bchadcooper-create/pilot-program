@@ -6927,7 +6927,17 @@ function buildAddExerciseCard() {
   if (!ST.showAddExercise) {
     parts.push('<button class="btn btn-outline" onclick="ST.showAddExercise=true;renderFlight(document.getElementById(\'mainPage\'))">+ Add Your Own Exercise</button>');
   } else {
-    parts.push('<div class="section-label" style="margin-top:0">CUSTOM EXERCISE</div>');
+    // BUG FIX (reported): this form used to be free-text-only, with no way
+    // to check whether an exercise already exists in the catalog first —
+    // someone typing "Wall Slide" from scratch had no idea a fully-defined
+    // version (with real sets/reps/notes) was already available, and would
+    // end up creating a duplicate, worse-specified copy of it. Search first;
+    // the manual form below stays for anything genuinely not in the catalog.
+    parts.push('<div class="section-label" style="margin-top:0">ADD EXERCISE</div>');
+    parts.push('<div class="field"><label>Search the exercise catalog first</label>');
+    parts.push('<input type="text" id="addExCatalogSearch" placeholder="e.g. wall slide, row, curl…" oninput="filterAddExerciseCatalog(this.value)" autocomplete="off"></div>');
+    parts.push('<div id="addExCatalogResults"></div>');
+    parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin:12px 0 10px;text-align:center">— OR CREATE YOUR OWN BELOW —</div>');
     parts.push('<div class="field"><label>Exercise Name</label><input type="text" id="custom_ex_name" placeholder="e.g. Cable Woodchopper"></div>');
     parts.push('<div class="field-row">');
     parts.push('<div class="field"><label>Target (sets×reps)</label><input type="text" id="custom_ex_target" placeholder="e.g. 3×12"></div>');
@@ -6939,6 +6949,46 @@ function buildAddExerciseCard() {
   }
   parts.push('</div>');
   return parts.join('');
+}
+
+// Catalog search for "Add Your Own Exercise" — same ranking/matching logic
+// as the swap sheet's search, but adds directly to ST.workout.enroute
+// instead of swapping an existing slot (there's nothing to swap here).
+function filterAddExerciseCatalog(q) {
+  const box = document.getElementById('addExCatalogResults');
+  if (!box) return;
+  q = (q||'').trim().toLowerCase();
+  if (!q) { box.innerHTML = ''; return; }
+  const matches = buildExerciseCatalog()
+    .filter(e => exerciseMatchesQuery(e.name, q))
+    .sort((a, b) => exerciseSearchRank(a.name, q) - exerciseSearchRank(b.name, q))
+    .slice(0, 6);
+  const parts = [];
+  matches.forEach((e, i) => {
+    parts.push('<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:13px" onclick="addExistingCatalogExercise('+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+(e.target||'')+'</span></div>');
+  });
+  if (!matches.length) {
+    parts.push('<div style="font-size:11px;color:var(--muted);padding:6px 2px">No catalog match — create it below.</div>');
+  }
+  box.innerHTML = parts.join('');
+}
+
+function addExistingCatalogExercise(matchIdx, q) {
+  const matches = buildExerciseCatalog()
+    .filter(e => exerciseMatchesQuery(e.name, q))
+    .sort((a, b) => exerciseSearchRank(a.name, q) - exerciseSearchRank(b.name, q))
+    .slice(0, 6);
+  const exDef = matches[matchIdx];
+  if (!exDef || !ST.workout) return;
+  const id = exDef.id || ('custom_' + Date.now());
+  const newEx = ex(id, exDef.name, exDef.target, exDef.sets || 3, exDef.note || '', exDef.timed || false, exDef.inputType || 'reps_weight');
+  ST.workout.enroute.push(newEx);
+  const blankSet = newEx.inputType==='timed_distance' ? {seconds:'',miles:''} : newEx.inputType==='timed' ? {seconds:''} : newEx.inputType==='reps_only' ? {reps:''} : {reps:'',weight:''};
+  const setsCount = newEx.sets || 3;
+  ST.sets[id] = Array.from({ length: setsCount }, () => ({...blankSet}));
+  ST.showAddExercise = false;
+  showToast('✅ "'+exDef.name+'" added from the catalog.');
+  renderFlight(document.getElementById('mainPage'));
 }
 
 // Prose rendered INSIDE an element rather than into an attribute.
@@ -10538,11 +10588,20 @@ async function renderNutrition(p) {
 function openQuickActions() {
   const root = document.getElementById('modalRoot');
   if (!root) return;
+  // BUG FIX (reported): this always said "Start a Workout" and routed to
+  // the Preflight tab, even with a session already in progress — landing
+  // on Preflight then showed its OWN smarter "Return to Workout" button,
+  // which is confusing: it looks like tapping + is about to abandon
+  // whatever's already logged. Match the label/destination engageWorkout()
+  // already uses correctly elsewhere, so this sheet is never the odd one out.
+  const hasActiveWorkout = !!ST.workout;
+  const workoutLabel = hasActiveWorkout ? '↩ Return to Workout' : '⚡ Start a Workout';
+  const workoutAction = hasActiveWorkout ? 'closeModal();engageWorkout()' : "closeModal();switchTab('preflight')";
   root.innerHTML =
     '<div class="modal-bg modal-bg-anim" onclick="if(event.target===this)closeModal()"><div class="modal-sheet modal-sheet-anim">' +
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">Quick Actions</div>' +
-    '<button class="btn btn-gold mb8" onclick="closeModal();switchTab(\'preflight\')">⚡ Start a Workout</button>' +
+    '<button class="btn btn-gold mb8" onclick="'+workoutAction+'">'+workoutLabel+'</button>' +
     '<button class="btn btn-outline mb8" onclick="quickLogMeal()">🍽️ Log a Meal</button>' +
     '<button class="btn btn-outline mb8" onclick="closeModal();switchTab(\'trends\')">⚖️ Log Weight / BP / Glucose</button>' +
     '<button class="btn btn-outline mb8" onclick="haptic(\'light\');openQuickWaterLog()">💧 Log Water</button>' +

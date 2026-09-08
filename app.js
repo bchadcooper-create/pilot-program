@@ -6655,8 +6655,25 @@ function showRestTimerInfo() {
     '</div></div>';
 }
 
+// Shared AudioContext, created once on a real user gesture (tapping START
+// REST) and reused for the completion chime. iOS silently blocks a NEW
+// AudioContext created from inside a setInterval callback with no gesture
+// attached to it — which is exactly what was happening: playChime() was
+// creating a fresh context when the timer hit zero, entirely disconnected
+// from any tap, and iOS dropped it with no error (the try/catch masked the
+// silent failure). Creating/resuming the context here, during the actual
+// button tap, means it's already unlocked by the time the timer completes.
+let _chimeCtx = null;
+function unlockChimeAudio() {
+  try {
+    if (!_chimeCtx) _chimeCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_chimeCtx.state === 'suspended') _chimeCtx.resume();
+  } catch(e) {}
+}
+
 function startRestTimer(exId, seconds) {
   if (ST.restTimer.interval) clearInterval(ST.restTimer.interval);
+  unlockChimeAudio(); // must happen here, inside the tap handler — not at chime time
   const now = Date.now();
   ST.restTimer = { active: true, seconds: seconds, total: seconds, exId, interval: null, startTs: now, endTs: now + seconds*1000 };
   persistTimerState();
@@ -6677,6 +6694,7 @@ function tickRestTimer(exId) {
     ST.restTimer.active = false;
     persistTimerState();
     playChime();
+    haptic('success'); // BUG FIX (reported): was never actually called on completion
     showToast('⏱ Rest complete — next set.');
     renderFlight(document.getElementById('mainPage'));
   }
@@ -6853,7 +6871,10 @@ function stopNSDR(exId) {
 // ─── AUDIO CHIME (Web Audio API — no file needed) ────────────────────────────
 function playChime() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // Reuse the context unlocked in startRestTimer's tap handler — creating
+    // a NEW AudioContext here (inside a setInterval callback, no user
+    // gesture) is the failure mode this used to hit silently.
+    const ctx = _chimeCtx || new (window.AudioContext || window.webkitAudioContext)();
     [880, 1320].forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();

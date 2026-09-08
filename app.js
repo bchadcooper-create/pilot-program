@@ -6534,7 +6534,9 @@ function buildExCard(exItem, phaseKey) {
       parts.push('</div></div><div class="swipe-hint">← swipe for all sets</div><button class="btn-ghost" style="font-size:11px;margin-top:6px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button>');
       const autoreg = autoregSuggestion(exItem, sets);
       if (autoreg) {
-        parts.push('<div class="fb" style="background:var(--bg3);border:1px solid var(--blue);border-radius:8px;padding:9px 12px;margin-top:8px;align-items:flex-start"><div style="font-size:12px;line-height:1.5;color:var(--text)">🎯 '+autoreg.text+'</div></div>');
+        const boxColor = autoreg.tone === 'positive' ? 'var(--green)' : autoreg.tone === 'major' ? 'var(--amber)' : 'var(--blue)';
+        const icon = autoreg.tone === 'positive' ? '💪' : '🎯';
+        parts.push('<div class="fb" style="background:var(--bg3);border:1px solid '+boxColor+';border-radius:8px;padding:9px 12px;margin-top:8px;align-items:flex-start"><div style="font-size:12px;line-height:1.5;color:var(--text)">'+icon+' '+autoreg.text+'</div></div>');
       }
       if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
         parts.push(buildRestTimerWidget(exItem.id, phaseKey, exItem.target));
@@ -6761,18 +6763,46 @@ function parseTargetReps(target) {
 // entered) and, if it came in meaningfully under target, returns a plain-
 // language suggestion for the next set. Returns null when on target, when
 // no valid target can be parsed, or when nothing's been logged yet.
+//
+// BUG FIX (reported): this used to compare ONLY reps-vs-target, with no
+// idea whether the weight had changed between sets. Missing a rep target
+// by 2 on the SAME weight as the prior set is a near-miss worth a small
+// correction. Missing by 2 reps on a set where the weight just went UP is
+// the opposite situation — that's genuine effort finding its ceiling, and
+// treating it as something to fix rather than a result to feel good about
+// sends exactly the wrong signal about attempting progressive overload.
 function autoregSuggestion(exItem, sets) {
   const target = parseTargetReps(exItem.target);
   if (!target || target <= 0) return null;
-  let last = null;
+  let lastIdx = -1;
   for (let i = sets.length - 1; i >= 0; i--) {
-    if (sets[i].reps !== '' && sets[i].reps !== undefined && sets[i].reps !== null) { last = sets[i]; break; }
+    if (sets[i].reps !== '' && sets[i].reps !== undefined && sets[i].reps !== null) { lastIdx = i; break; }
   }
-  const actual = last ? parseInt(last.reps) : NaN;
+  if (lastIdx === -1) return null;
+  const last = sets[lastIdx];
+  const actual = parseInt(last.reps);
   if (isNaN(actual)) return null;
   const missedBy = target - actual;
   if (missedBy <= 0) return null; // hit or beat target — nothing to say
+
+  // Was this set's weight higher than the set before it? Only meaningful
+  // when both sets actually logged a weight — bodyweight/reps-only work
+  // has no weight field to compare, so this naturally falls through to
+  // the normal miss/near-miss messages for those exercise types.
+  const lastWeight = parseFloat(last.weight);
+  let priorWeight = null;
+  for (let i = lastIdx - 1; i >= 0; i--) {
+    const w = parseFloat(sets[i].weight);
+    if (!isNaN(w)) { priorWeight = w; break; }
+  }
+  const wentUpInWeight = !isNaN(lastWeight) && priorWeight !== null && lastWeight > priorWeight;
+
   const missedPct = missedBy / target;
+  if (wentUpInWeight && missedPct <= 0.25) {
+    // A near-miss immediately after adding weight is the expected, GOOD
+    // outcome of testing a heavier load — not something to correct.
+    return { tone: 'positive', text: 'Came in at '+actual+'/'+target+' at a heavier weight than last set — that\'s a strong effort, not a miss. That\'s roughly where a top set on a weight increase should land.' };
+  }
   if (missedPct <= 0.2) {
     return { tone: 'minor', text: 'Came in at '+actual+'/'+target+' — close. Hold the same weight and take a bit more rest before the next set.' };
   }

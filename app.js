@@ -7946,7 +7946,15 @@ function renderDebrief(p) {
     parts.push('<div class="alert '+cls+'"><div class="alert-icon">'+m.icon+'</div><div>'+m.text+'</div></div>');
   });
 
-  parts.push('<button class="btn btn-gold mt16" onclick="ST.lastDebrief=null;switchTab(\'preflight\')">Continue to Preflight</button>');
+  // BUG FIX (reported): this sent the user back to Preflight — "start
+  // today's workout" — immediately after they'd just finished one. It
+  // technically worked (Preflight correctly shows the NEXT day's mission,
+  // not the one just completed), but landing on a screen whose whole
+  // purpose is "begin a workout" the moment you finish one reads as the
+  // app not having registered what just happened. Trends is where the
+  // session they just logged actually shows up — calendar, strength
+  // trends, body weight — which is the natural next stop after finishing.
+  parts.push('<button class="btn btn-gold mt16" onclick="ST.lastDebrief=null;switchTab(\'trends\')">View in Trends</button>');
   p.innerHTML = parts.join('');
 }
 

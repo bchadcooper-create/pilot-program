@@ -11502,7 +11502,7 @@ function buildItemReviewCardHTML(index) {
   } else if (meta.brandName) {
     parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + sanitizeUserText(meta.brandName) + '</div>');
   }
-  parts.push('<div class="field"><label>' + foodEmoji(item.description) + ' Description</label><input type="text" id="foodRecDescription" value="' + sanitizeUserText(item.description).replace(/"/g, '&quot;') + '" oninput="updateReviewedItemField(\'description\', this.value)"></div>');
+  parts.push('<div class="field"><label>' + foodEmoji(item.description) + ' Description</label><textarea id="foodRecDescription" rows="2" style="resize:none;font-family:inherit;font-size:inherit;line-height:1.4" oninput="updateReviewedItemField(\'description\', this.value)">' + sanitizeUserText(item.description) + '</textarea></div>');
   if (meta.servingDescription) {
     parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:6px">Estimated portion: ' + sanitizeUserText(meta.servingDescription) + '</div>');
   }

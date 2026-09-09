@@ -4,7 +4,7 @@
  */
 
 const FCF_VERSION = 'v5.42.0';
-const FCF_BUILD   = '20260906';
+const FCF_BUILD   = '20260909';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
 // Replace OURA_CLIENT_ID with your actual Client ID from cloud.ouraring.com/oauth/applications
@@ -3804,6 +3804,13 @@ async function loadProgressionAnalytics() {
         muscleGroup: s.muscle_group || null,
         durationMinutes: s.durationMinutes || null,
         environment: s.env || null,
+        // BUG FIX (reported: AI suggested swapping "shorter cardio blocks"
+        // for strength sessions — those blocks were gate-to-gate airport
+        // walking, not discretionary training time). Flag incidental
+        // Oura-imported walking explicitly so the model can tell the
+        // difference between cardio the user chose and cardio the job
+        // requires, instead of guessing from muscleGroup alone.
+        incidentalWalk: !!(s.importedFromOura && (s.ouraActivity||'').toLowerCase() === 'walking'),
       }));
 
     if (sessions.length < 3) {
@@ -5674,6 +5681,15 @@ function suggestNextWeight(exId, exName, phaseKey) {
   if (!last) return null;
   const name = (exName||'').toLowerCase();
   const isLower = name.includes('squat')||name.includes('deadlift')||name.includes('lunge')||name.includes('rdl');
+  // BUG FIX (reported: "Target -> 37.5 lb" on DB Bench Press, but dumbbells
+  // come in 5 lb increments — 37.5 isn't a weight that exists on a rack).
+  // Barbell/machine work can genuinely move in 2.5 lb plates; dumbbells
+  // can't. Detect DB-based exercises and round the suggestion UP to the
+  // nearest real 5 lb increment instead of just adding a flat amount.
+  const isDumbbell = name.includes('db ') || name.includes('dumbbell') || name.startsWith('db');
+  if (isDumbbell) {
+    return Math.ceil((last + 0.01) / 5) * 5;
+  }
   const increment = (phaseKey==='takeoff' && isLower) ? 5 : 2.5;
   return last + increment;
 }
@@ -7265,9 +7281,20 @@ function buildWorkoutSummary(session, allExDefs, weeklySessions, bodyWeightLb) {
     });
   });
 
+  // BUG FIX (reported: "sessions this week" counting incidental airport
+  // walking as a dedicated training day). Oura auto-imports any walk that
+  // clears MIN_OURA_WALK_MINUTES/MIN_OURA_WALK_CAL_PER_MIN as real activity
+  // — useful for calorie/trend tracking — but gate-to-gate or terminal
+  // walking isn't a discretionary training session the frequency target is
+  // meant to measure, and it's not something that can be "swapped" for a
+  // workout. Excluded here by the same signal used to import it
+  // (importedFromOura + activity === walking), not by muscle_group, so a
+  // deliberately-logged walk workout still counts.
   const sessionsThisWeek = weeklySessions.filter(s => {
     const days = (Date.now() - new Date(s.date).getTime()) / 86400000;
-    return days <= 7;
+    if (days > 7) return false;
+    if (s.importedFromOura && (s.ouraActivity||'').toLowerCase() === 'walking') return false;
+    return true;
   }).length;
   const targetDays = parseInt((FREQUENCY_GUIDE[session.level||'intermediate'].days||'3').split('-')[0]);
 
@@ -8757,7 +8784,17 @@ function shouldRetryOuraActivity() {
 }
 
 const OURA_ACTIVITY_RETRY_MS = 30 * 60 * 1000; // every 30 minutes — cheap enough to just leave running
+// BUG FIX: bootApp() (and therefore this) can run more than once per page
+// load — sign-in, password recovery, and Sign In with Apple success all
+// call it. Without a guard, each run stacked another setInterval AND
+// another visibilitychange listener that never gets cleared, so a user who
+// re-authenticates twice in one session ends up with 2-3x the Oura sync
+// traffic and duplicate-fire retries. One-time guard makes repeat calls a
+// no-op.
+let _ouraActivityRetryScheduled = false;
 function scheduleOuraActivityRetry() {
+  if (_ouraActivityRetryScheduled) return;
+  _ouraActivityRetryScheduled = true;
   const checkAndRetry = () => {
     if (shouldRetryOuraActivity()) syncOuraData(false).catch(() => {});
   };
@@ -8773,7 +8810,14 @@ function scheduleOuraActivityRetry() {
 // Subscriptions change while the app is closed — a renewal succeeds, a card
 // expires, a refund lands. Re-reading entitlement on resume means the paywall
 // reflects reality rather than whatever was true at last launch.
+// BUG FIX: same repeat-bootApp() issue as scheduleOuraActivityRetry above —
+// guard so re-authenticating mid-session doesn't stack duplicate listeners,
+// each of which would call loadSubscription() and renderPage() on every tab
+// focus.
+let _entitlementRefreshScheduled = false;
 function scheduleEntitlementRefresh() {
+  if (_entitlementRefreshScheduled) return;
+  _entitlementRefreshScheduled = true;
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState !== 'visible' || !ST.user) return;
     const was = isPro();

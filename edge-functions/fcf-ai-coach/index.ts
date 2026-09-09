@@ -36,16 +36,35 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Bump this whenever the weekly_summary prompt text changes. Without it,
+// the 24h cache below would keep serving a critique generated under the
+// OLD prompt (e.g. one that doesn't know about incidentalWalk or recency)
+// for up to a full day after the fix ships. Included in the cache check so
+// a prompt change auto-invalidates any stale cached response.
+const WEEKLY_SUMMARY_PROMPT_VERSION = 2; // v2: incidentalWalk awareness + recency check + sandwich structure
+
 // ── Prompts per mode ──────────────────────────────────────────────────────────
 
 const PROMPTS = {
   weekly_summary: `You're a strength coach talking to a pilot or flight crew member for about 15 seconds — this
-is a quick verbal note, not a written report. Say ONE thing that's going well and ONE thing to work on this
-week. That's it. Two ideas, three sentences total, then stop.
+is a quick verbal note, not a written report.
 
 You will receive their workout history, each session already paired with what the calendar says was happening
 that day (day of week, whether they were flying, what day of a trip it was, layover info) — this comes from
 their actual flight schedule, not anything they typed in. You'll also get body weight trend and Oura biometrics.
+
+Each session includes a muscleGroup and an incidentalWalk flag. incidentalWalk: true means the session is
+gate-to-gate or terminal walking that Oura auto-detected during duty — it is NOT discretionary training time.
+Never suggest swapping it for a workout, never count it as a sign the user "already did cardio," and never treat
+it as evidence of anything other than the fact that the job involves walking through airports. Sessions with
+incidentalWalk: false or missing (including a deliberately-logged walk or run) are real training choices and can
+be discussed normally.
+
+CHECK RECENCY BEFORE YOU CRITIQUE. Look at the most recent 5-7 days first, separately from the rest of the
+window. If the thing you were about to flag as a gap (e.g. "you barely strength train") was already directly
+addressed in that recent stretch (e.g. two upper-body sessions back to back this week), do not raise it as a gap
+— that critique is now stale and wrong. Either pick a different, still-true thing to work on, or acknowledge the
+recent improvement directly. Never critique a pattern the user has already just fixed.
 
 Never mention data quality, duplicate entries, timestamps, logging glitches, or anything about HOW the data was
 recorded — not as a fact, not as a hedge, not as a question to the user. If something in the data looks like a
@@ -56,16 +75,18 @@ of their own logging, however gently phrased, breaks the coach illusion and adds
 You have real schedule context already. NEVER ask the user to log notes, tag trip days, or add anything to make
 your job easier.
 
-Pick the ONE most interesting thing going well (consistency, a lift trending up, showing up on hard trip days,
-weight trend moving right) and the ONE most useful thing to work on (a recurring drop tied to a specific
-day-of-trip or duty pattern, a plateau, an imbalance) — not a list of everything you notice, just the single best
-example of each. If nothing stands out yet, say that in one sentence and stop.
+Use this structure — a positive, then a critique, then a positive (the "sandwich"):
+1. Open with the ONE most interesting thing going well right now, weighted toward what actually happened in the
+   last 5-7 days (consistency, a lift trending up, showing up on hard trip days, weight trend moving right).
+2. Then the ONE most useful thing to work on — but only if it's still true after the recency check above. A
+   recurring drop tied to a specific day-of-trip or duty pattern, a plateau, an imbalance. If nothing genuinely
+   stands out here, skip straight to a second positive instead of manufacturing a critique.
+3. Close with a second, different positive or a concrete, encouraging next step — never end on the criticism.
 
-THREE SENTENCES TOTAL. Not four, not five — three. One sentence for what's going well, one for what to work on,
-one for what to do about it this week. If your draft response is longer than three sentences, you have included
-too much detail — cut it down before responding, don't let it run long and get cut off mid-thought. Talk like
-you're texting a friend a quick note, not writing them a memo. No bullet points, no headers, no bold text, no
-jargon, no hedging phrases like "I want to flag" or "the thing I'd point out."`,
+FOUR SENTENCES TOTAL, not five or six. Roughly one sentence per part above, with the middle critique allowed two
+if it needs a reason. If your draft is longer, cut it down before responding — don't let it run long and get cut
+off mid-thought. Talk like you're texting a friend a quick note, not writing them a memo. No bullet points, no
+headers, no bold text, no jargon, no hedging phrases like "I want to flag" or "the thing I'd point out."`,
 
   fatigue_calibration: `You're a strength coach passing a pilot or flight crew member one quick line before they
 train today — this is a text message, not a briefing. Give the call (full send, dial it back, or take the day)
@@ -177,7 +198,9 @@ serve(async (req) => {
       const { data: cached } = await supabase
         .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
       const cachedAt = cached?.profile_data?.weeklyCoachGeneratedAt;
-      if (cachedAt && (Date.now() - new Date(cachedAt).getTime()) < 24 * 60 * 60 * 1000) {
+      const cachedPromptVersion = cached?.profile_data?.weeklyCoachPromptVersion;
+      if (cachedAt && cachedPromptVersion === WEEKLY_SUMMARY_PROMPT_VERSION &&
+          (Date.now() - new Date(cachedAt).getTime()) < 24 * 60 * 60 * 1000) {
         return new Response(JSON.stringify({
           text: cached.profile_data.weeklyCoachText,
           cached: true
@@ -240,6 +263,7 @@ serve(async (req) => {
         const profile = profileData?.profile_data || {};
         profile.weeklyCoachText = text;
         profile.weeklyCoachGeneratedAt = new Date().toISOString();
+        profile.weeklyCoachPromptVersion = WEEKLY_SUMMARY_PROMPT_VERSION;
         await supabase.from('user_profiles').upsert({
           user_id: user.id, profile_data: profile, updated_at: new Date().toISOString()
         }, { onConflict: 'user_id' });

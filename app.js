@@ -9451,6 +9451,15 @@ function loadingCardHTML(label) {
     '</div>';
 }
 
+// Grows a textarea to fit its content — reset height to auto first so
+// shrinking (e.g. after deleting text) is measured correctly, not just
+// growing based on the previous (larger) scrollHeight.
+function autoGrowTextarea(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+
 function foodEmoji(description) {
   const d = description || '';
   for (const [pattern, emoji] of FOOD_EMOJI_PATTERNS) {
@@ -11502,7 +11511,12 @@ function buildItemReviewCardHTML(index) {
   } else if (meta.brandName) {
     parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + sanitizeUserText(meta.brandName) + '</div>');
   }
-  parts.push('<div class="field"><label>' + foodEmoji(item.description) + ' Description</label><textarea id="foodRecDescription" rows="2" style="resize:none;font-family:inherit;font-size:inherit;line-height:1.4" oninput="updateReviewedItemField(\'description\', this.value)">' + sanitizeUserText(item.description) + '</textarea></div>');
+  parts.push('<div class="field"><label>' + foodEmoji(item.description) + ' Description</label><textarea id="foodRecDescription" rows="2" style="resize:none;overflow:hidden;font-family:inherit;font-size:inherit;line-height:1.4" oninput="autoGrowTextarea(this);updateReviewedItemField(\'description\', this.value)">' + sanitizeUserText(item.description) + '</textarea></div>');
+  // Fixed rows="2" clipped anything longer (e.g. "...with granola" losing
+  // its third line with no way to scroll and see it). Auto-grow on render
+  // too, not just on input, so an AI-generated description that's already
+  // 3 lines long is fully visible the moment the card appears.
+  setTimeout(() => { const ta = document.getElementById('foodRecDescription'); if (ta) autoGrowTextarea(ta); }, 0);
   if (meta.servingDescription) {
     parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:6px">Estimated portion: ' + sanitizeUserText(meta.servingDescription) + '</div>');
   }
@@ -11578,7 +11592,7 @@ function updateReviewedItemQuantity() {
   const qtyNum = parseFloat(qty) || 1;
   const baseDesc = (item.description || '').replace(/\s*\(\d+(\.\d+)?x\)\s*$/, '');
   item.description = baseDesc + (qtyNum !== 1 ? ' (' + qty + 'x)' : '');
-  if (descEl) descEl.value = item.description;
+  if (descEl) { descEl.value = item.description; autoGrowTextarea(descEl); }
 }
 
 // "Add More to Your Meal" — clears the review state so the next

@@ -7049,6 +7049,22 @@ function sanitizeUserText(s) {
   return String(s || '').replace(/[<>"'`\\]/g, '').slice(0, 120);
 }
 
+// Same XSS-safe stripping as sanitizeUserText, but WITHOUT the 120-char cap.
+//
+// BUG FIX (reported): the food description textarea was silently truncating
+// AI-generated descriptions mid-word — "...in crispy red chili-dyed corn t"
+// cutting off exactly at character 120. Every earlier attempt to fix this
+// (textarea sizing, auto-grow, box-sizing, event handlers) was chasing a
+// visual symptom of a completely different problem: the STRING ITSELF was
+// already truncated before it ever reached the textarea, so no amount of
+// CSS or JS sizing logic could have shown the rest of text that wasn't
+// there. sanitizeUserText's 120-char limit is appropriate for short fields
+// (exercise names, notes) but wrong for anything that can legitimately run
+// long, like a food description. Use this variant for those contexts.
+function sanitizeUserTextLong(s) {
+  return String(s || '').replace(/[<>"'`\\]/g, '');
+}
+
 async function saveCustomExercise() {
   const name = sanitizeUserText(document.getElementById('custom_ex_name')?.value?.trim());
   const target = sanitizeUserText(document.getElementById('custom_ex_target')?.value?.trim()) || '—';
@@ -11026,7 +11042,7 @@ function addUSDAFoodToMeal() {
   if (!food || !ST.mealBuilder) return;
   const mult = document.getElementById('usdaServingMult')?.value || 1;
   ST.mealBuilder.items.push({
-    description: sanitizeUserText(food.description) + (parseFloat(mult) !== 1 ? ' ('+mult+'x)' : ''),
+    description: sanitizeUserTextLong(food.description) + (parseFloat(mult) !== 1 ? ' ('+mult+'x)' : ''),
     nutrients: scaleNutrients(food.nutrients, mult),
     source: 'usda', fdcId: food.fdcId,
   });
@@ -11434,7 +11450,7 @@ function handleFoodRecognitionResult(result) {
   // recognition succeeds; the card below is for reviewing/correcting
   // what just got added, not deciding whether to add it at all.
   ST.mealBuilder.items.push({
-    description: sanitizeUserText(result.description),
+    description: sanitizeUserTextLong(result.description),
     nutrients: { ...result.nutrients },
     // Persisted on the item, not just held in review meta — this is what
     // lets "Your Usual" later say whether 70 cal means one egg or two.
@@ -11514,8 +11530,7 @@ function buildItemReviewCardHTML(index) {
   } else if (meta.brandName) {
     parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + sanitizeUserText(meta.brandName) + '</div>');
   }
-  parts.push('<div style="font-size:9px;color:var(--muted);opacity:0.5">build-check: textarea-v3</div>');
-  parts.push('<div class="field"><label>' + foodEmoji(item.description) + ' Description</label><textarea id="foodRecDescription" rows="4" style="resize:vertical;overflow:hidden;box-sizing:border-box;font-family:inherit;font-size:inherit;line-height:1.4" oninput="autoGrowTextarea(this);updateReviewedItemField(\'description\', this.value)" onkeyup="autoGrowTextarea(this)">' + sanitizeUserText(item.description) + '</textarea></div>');
+  parts.push('<div class="field"><label>' + foodEmoji(item.description) + ' Description</label><textarea id="foodRecDescription" rows="4" style="resize:vertical;overflow:hidden;box-sizing:border-box;font-family:inherit;font-size:inherit;line-height:1.4" oninput="autoGrowTextarea(this);updateReviewedItemField(\'description\', this.value)" onkeyup="autoGrowTextarea(this)">' + sanitizeUserTextLong(item.description) + '</textarea></div>');
   // Fixed rows="2" clipped anything longer (e.g. "...with granola" losing
   // its third line with no way to scroll and see it). Auto-grow on render
   // too, not just on input, so an AI-generated description that's already
@@ -11574,7 +11589,7 @@ function updateReviewedItemField(field, value) {
   if (idx == null || !ST.mealBuilder?.items[idx]) return;
   const item = ST.mealBuilder.items[idx];
   if (field === 'description') {
-    item.description = sanitizeUserText(value);
+    item.description = sanitizeUserTextLong(value);
   } else {
     item.nutrients[field] = parseFloat(value) || 0;
   }

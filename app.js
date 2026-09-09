@@ -11514,6 +11514,7 @@ function buildItemReviewCardHTML(index) {
   } else if (meta.brandName) {
     parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + sanitizeUserText(meta.brandName) + '</div>');
   }
+  parts.push('<div style="font-size:9px;color:var(--muted);opacity:0.5">build-check: textarea-v3</div>');
   parts.push('<div class="field"><label>' + foodEmoji(item.description) + ' Description</label><textarea id="foodRecDescription" rows="4" style="resize:vertical;overflow:hidden;box-sizing:border-box;font-family:inherit;font-size:inherit;line-height:1.4" oninput="autoGrowTextarea(this);updateReviewedItemField(\'description\', this.value)" onkeyup="autoGrowTextarea(this)">' + sanitizeUserText(item.description) + '</textarea></div>');
   // Fixed rows="2" clipped anything longer (e.g. "...with granola" losing
   // its third line with no way to scroll and see it). Auto-grow on render

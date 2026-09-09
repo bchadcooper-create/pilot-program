@@ -9456,8 +9456,11 @@ function loadingCardHTML(label) {
 // growing based on the previous (larger) scrollHeight.
 function autoGrowTextarea(el) {
   if (!el) return;
+  el.style.boxSizing = 'border-box'; // explicit — don't depend on CSS cascade for this
   el.style.height = 'auto';
-  el.style.height = el.scrollHeight + 'px';
+  // +2px guards against a 1px sub-pixel rounding cutoff on the last visible
+  // line in some mobile browsers, which otherwise clips descenders (g, y, p).
+  el.style.height = (el.scrollHeight + 2) + 'px';
 }
 
 function foodEmoji(description) {
@@ -11511,7 +11514,7 @@ function buildItemReviewCardHTML(index) {
   } else if (meta.brandName) {
     parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + sanitizeUserText(meta.brandName) + '</div>');
   }
-  parts.push('<div class="field"><label>' + foodEmoji(item.description) + ' Description</label><textarea id="foodRecDescription" rows="2" style="resize:none;overflow:hidden;font-family:inherit;font-size:inherit;line-height:1.4" oninput="autoGrowTextarea(this);updateReviewedItemField(\'description\', this.value)">' + sanitizeUserText(item.description) + '</textarea></div>');
+  parts.push('<div class="field"><label>' + foodEmoji(item.description) + ' Description</label><textarea id="foodRecDescription" rows="4" style="resize:vertical;overflow:hidden;box-sizing:border-box;font-family:inherit;font-size:inherit;line-height:1.4" oninput="autoGrowTextarea(this);updateReviewedItemField(\'description\', this.value)" onkeyup="autoGrowTextarea(this)">' + sanitizeUserText(item.description) + '</textarea></div>');
   // Fixed rows="2" clipped anything longer (e.g. "...with granola" losing
   // its third line with no way to scroll and see it). Auto-grow on render
   // too, not just on input, so an AI-generated description that's already

@@ -1984,6 +1984,25 @@ function dotsScore(liftLb, bwLb, sex) {
   return Math.round((liftLb * LB2KG) * 500 / poly * 10) / 10;
 }
 
+// Icon standardization: replaced 🥇🥈🥉 medal emoji (which render as flat,
+// inconsistent colors across platforms) with an actual gold/silver/bronze
+// metallic gradient badge, matching the app's existing --gold-grad token.
+function medalBadge(rank) {
+  if (rank === 0) return '<span class="medal-badge gold">1</span>';
+  if (rank === 1) return '<span class="medal-badge silver">2</span>';
+  if (rank === 2) return '<span class="medal-badge bronze">3</span>';
+  return '<span style="font-family:var(--mono);color:var(--muted)">'+(rank+1)+'</span>';
+}
+
+// A small solid-color dot matching the app's own green/amber/red tokens —
+// replaces 🟢🟡🔴 emoji, which render with inconsistent exact hues and
+// sizes across platforms/OS versions. fatigueKey is 'go'|'marginal'|'nogo'.
+function statusDot(fatigueKey, sizePx) {
+  sizePx = sizePx || 9;
+  const color = fatigueKey === 'go' ? 'var(--green)' : fatigueKey === 'marginal' ? 'var(--amber)' : 'var(--red)';
+  return '<span style="display:inline-block;width:'+sizePx+'px;height:'+sizePx+'px;border-radius:50%;background:'+color+';vertical-align:middle;box-shadow:0 0 6px '+color+'"></span>';
+}
+
 // Weighted barbell/dumbbell lifts where max-weight comparison is meaningful.
 // Canonical catalog ids — swap history resolution keeps these stable.
 const LEADERBOARD_EXERCISES = [
@@ -2116,7 +2135,7 @@ async function loadLeaderboardGlance() {
         parts.push('<div style="font-size:10px;color:var(--muted)">No entries yet</div>');
       } else {
         rows.forEach((r, i) => {
-          const medal = i===0?'🥇':i===1?'🥈':'🥉';
+          const medal = medalBadge(i);
           const val = isRunning ? formatMiPace(r.distance_mi, r.duration_sec) : Math.round(r.weight_lb)+' lb';
           parts.push('<div class="fb" style="padding:2px 0"><span style="font-size:10px">'+medal+' '+sanitizeUserText(r.username)+'</span><span style="font-family:var(--mono);font-size:10px;color:var(--gold)">'+val+'</span></div>');
         });
@@ -2212,7 +2231,7 @@ async function loadLeaderboardRows() {
       const sub = [];
       if (r.reps) sub.push('×'+r.reps);
       if (r.bodyweight_lb) sub.push('@ '+Math.round(r.bodyweight_lb)+' lb bw');
-      const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':'<span style="font-family:var(--mono);color:var(--muted)">'+(i+1)+'</span>';
+      const medal = medalBadge(i);
       parts.push('<div class="fb" style="padding:9px 14px'+(mine?';background:rgba(212,175,55,0.07)':'')+(i<data.length-1?';border-bottom:1px solid var(--border)':'')+'">');
       parts.push('<div style="display:flex;align-items:center;gap:10px;min-width:0"><div style="width:24px;text-align:center;flex-shrink:0">'+medal+'</div>');
       parts.push('<div style="min-width:0"><div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+sanitizeUserText(r.username)+(mine?' <span style="color:var(--gold);font-size:10px">YOU</span>':'')+'</div>');
@@ -2292,7 +2311,7 @@ function renderRunningRows(el, rows) {
   const parts = ['<div class="card mb12" style="padding:8px 0">'];
   rows.forEach((r, i) => {
     const mine = ST.user && r.user_id === ST.user.id;
-    const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':'<span style="font-family:var(--mono);color:var(--muted)">'+(i+1)+'</span>';
+    const medal = medalBadge(i);
     parts.push('<div class="fb" style="padding:9px 14px'+(mine?';background:rgba(212,175,55,0.07)':'')+(i<rows.length-1?';border-bottom:1px solid var(--border)':'')+'">');
     parts.push('<div style="display:flex;align-items:center;gap:10px;min-width:0"><div style="width:24px;text-align:center;flex-shrink:0">'+medal+'</div>');
     parts.push('<div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+sanitizeUserText(r.username)+(mine?' <span style="color:var(--gold);font-size:10px">YOU</span>':'')+'</div></div>');
@@ -2817,11 +2836,20 @@ function showBigToast(msg, type) {
   const bg2 = document.getElementById('fcf-big-toast-bg');
   if (bg2) bg2.remove();
   const color = type === 'ok' ? '#22c55e' : type === 'warn' ? '#f59e0b' : '#3b82f6';
-  const icon  = type === 'ok' ? '✅' : type === 'warn' ? '⚠️' : 'ℹ️';
+  // Icon standardization: swapped emoji (✅⚠️ℹ️, which render inconsistently
+  // across platforms) for a small inline SVG matching the app's outline
+  // icon language (same style as the tab bar). Tinted via `color` so it
+  // still reads correctly at a glance for each toast type.
+  const iconPath = type === 'ok'
+    ? '<polyline points="20 6 9 17 4 12"/>'
+    : type === 'warn'
+    ? '<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'
+    : '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>';
+  const icon = '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="'+color+'" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">'+iconPath+'</svg>';
   const t = document.createElement('div');
   t.id = 'fcf-big-toast';
   t.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#0f1623;border:2px solid '+color+';color:#e2e8f0;padding:28px 36px;border-radius:16px;font-size:18px;font-weight:700;z-index:9999;box-shadow:0 8px 48px rgba(0,0,0,0.7);text-align:center;min-width:200px;transition:opacity 0.4s';
-  t.innerHTML = '<div style="font-size:36px;margin-bottom:12px">'+icon+'</div><div>'+msg+'</div>';
+  t.innerHTML = '<div style="display:flex;justify-content:center;margin-bottom:12px">'+icon+'</div><div>'+msg+'</div>';
   document.body.appendChild(t);
   const bg = document.createElement('div');
   bg.id = 'fcf-big-toast-bg';
@@ -5139,7 +5167,7 @@ async function renderPreflight(p) {
   const fullSessionMin = fullSessionCount * MIN_PER_EXERCISE;
 
   const levelLabel   = {beginner:'Beginner',intermediate:'Intermediate',advanced:'Advanced'}[ST.level];
-  const fatigueLabel = {go:'🟢 GO',marginal:'🟡 MARGINAL',nogo:'🔴 NO-GO'}[ST.fatigue];
+  const fatigueLabel = {go:statusDot('go')+' GO',marginal:statusDot('marginal')+' MARGINAL',nogo:statusDot('nogo')+' NO-GO'}[ST.fatigue];
   const totalEx = wk ? (wk.taxi.length+wk.takeoff.length+wk.enroute.length+wk.landing.length) : 0;
   const recommended = getRecommendedNext();
 
@@ -5241,7 +5269,7 @@ async function renderPreflight(p) {
   }
 
   // ── Pilot Condition — one-line status by default, full input on tap ──
-  const condMetaLine = {go:['🟢','GO'], marginal:['🟡','MARGINAL'], nogo:['🔴','NO-GO']}[ST.fatigue];
+  const condMetaLine = {go:[statusDot('go'),'GO'], marginal:[statusDot('marginal'),'MARGINAL'], nogo:[statusDot('nogo'),'NO-GO']}[ST.fatigue];
   const showCond = ST.showConditionDetail || isNewUser;
   parts.push('<div class="card mb12" style="cursor:pointer" onclick="haptic(\'light\');ST.showConditionDetail=!ST.showConditionDetail;renderPage()">');
   parts.push('<div class="fb"><div style="font-size:13px">'+condMetaLine[0]+' Pilot Condition: <strong>'+condMetaLine[1]+'</strong></div><div style="font-family:var(--mono);font-size:10px;color:var(--gold)">'+(showCond?'HIDE ▴':'ADJUST ▾')+'</div></div>');
@@ -5253,9 +5281,9 @@ async function renderPreflight(p) {
 
     const condBtns =
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">' +
-      '<div class="env-btn '+(ST.fatigue==='go'?'sel':'')+'" onclick="ST.fatigue=\'go\';renderPage()"><div class="ei">🟢</div><div class="el">GO</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Full protocol</div></div>' +
-      '<div class="env-btn '+(ST.fatigue==='marginal'?'sel':'')+'" onclick="ST.fatigue=\'marginal\';renderPage()"><div class="ei">🟡</div><div class="el">MARGINAL</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Light only</div></div>' +
-      '<div class="env-btn '+(ST.fatigue==='nogo'?'sel':'')+'" onclick="ST.fatigue=\'nogo\';renderPage()"><div class="ei">🔴</div><div class="el">NO-GO</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Mobility only</div></div>' +
+      '<div class="env-btn '+(ST.fatigue==='go'?'sel':'')+'" onclick="ST.fatigue=\'go\';renderPage()"><div class="ei">'+statusDot('go', 18)+'</div><div class="el">GO</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Full protocol</div></div>' +
+      '<div class="env-btn '+(ST.fatigue==='marginal'?'sel':'')+'" onclick="ST.fatigue=\'marginal\';renderPage()"><div class="ei">'+statusDot('marginal', 18)+'</div><div class="el">MARGINAL</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Light only</div></div>' +
+      '<div class="env-btn '+(ST.fatigue==='nogo'?'sel':'')+'" onclick="ST.fatigue=\'nogo\';renderPage()"><div class="ei">'+statusDot('nogo', 18)+'</div><div class="el">NO-GO</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Mobility only</div></div>' +
       '</div>';
 
     if (ST.ouraConnected) {
@@ -5274,7 +5302,7 @@ async function renderPreflight(p) {
         parts.push('<div class="env-btn" style="padding:8px 2px'+(ST.readiness===i?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="setReadiness('+i+')"><div style="font-size:15px;font-weight:700">'+i+'</div></div>');
       }
       parts.push('</div>');
-      const condMeta = {go:['🟢','GO — full protocol'], marginal:['🟡','MARGINAL — light only'], nogo:['🔴','NO-GO — mobility only']}[ST.fatigue];
+      const condMeta = {go:[statusDot('go'),'GO — full protocol'], marginal:[statusDot('marginal'),'MARGINAL — light only'], nogo:[statusDot('nogo'),'NO-GO — mobility only']}[ST.fatigue];
       parts.push('<div class="fb" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">');
       parts.push('<div style="font-size:12px">Pilot Condition: <strong>'+condMeta[0]+' '+condMeta[1]+'</strong></div>');
       parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);cursor:pointer" onclick="haptic(\'light\');ST.showCondOverride=!ST.showCondOverride;renderPage()">'+(ST.showCondOverride?'HIDE':'OVERRIDE')+'</div>');
@@ -8735,7 +8763,7 @@ async function syncOuraData(force) {
     // Update app state
     ST.ouraLastSync = Date.now();
     const condition = score >= 70 ? 'go' : score >= 60 ? 'marginal' : 'nogo';
-    const label     = score >= 70 ? '🟢 GO' : score >= 60 ? '🟡 MARGINAL' : '🔴 NO-GO';
+    const label     = statusDot(condition)+' '+(condition==='go'?'GO':condition==='marginal'?'MARGINAL':'NO-GO');
     ST.fatigue    = condition;
     ST.ouraScore  = score;
     // daily_activity was already being fetched for its score; steps and
@@ -9259,7 +9287,8 @@ function renderDevices(p) {
   parts.push('<div class="section-label" style="margin-top:0">OURA RING — ENHANCED</div>');
   if (ST.ouraConnected && ST.ouraScore !== null) {
     const scoreColor = ST.ouraScore >= 70 ? 'var(--green)' : ST.ouraScore >= 60 ? 'var(--amber)' : 'var(--red)';
-    const scoreLabel = ST.ouraScore >= 70 ? '🟢 GO' : ST.ouraScore >= 60 ? '🟡 MARGINAL' : '🔴 NO-GO';
+    const scoreCondition = ST.ouraScore >= 70 ? 'go' : ST.ouraScore >= 60 ? 'marginal' : 'nogo';
+    const scoreLabel = statusDot(scoreCondition)+' '+(scoreCondition==='go'?'GO':scoreCondition==='marginal'?'MARGINAL':'NO-GO');
     parts.push('<div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:8px;padding:12px;margin-bottom:12px">');
     parts.push('<div class="fb"><span style="font-size:12px;color:var(--muted)">Connected ✓</span><button class="btn-ghost" style="font-size:11px;padding:4px 8px" onclick="disconnectOura()">Disconnect</button></div>');
     parts.push('<div class="fb mt8"><span style="font-size:13px">Today\'s Readiness</span><span style="font-family:var(--mono);font-size:18px;font-weight:700;color:'+scoreColor+'">'+ST.ouraScore+'</span></div>');

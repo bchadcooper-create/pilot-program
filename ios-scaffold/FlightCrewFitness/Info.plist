@@ -134,10 +134,22 @@
        ───────────────────────────────────────────── -->
   <key>UIBackgroundModes</key>
   <array>
-    <string>remote-notification</string>   <!-- Push notifications -->
-    <string>processing</string>            <!-- Sustained Execution -->
-    <string>fetch</string>                 <!-- Background refresh -->
+    <string>remote-notification</string>   <!-- Push notifications — the only background mode actually implemented -->
   </array>
+  <!-- BUG FIX: "processing" and "fetch" were previously declared here with
+       nothing behind them — no BGTaskScheduler registration exists anywhere
+       in the codebase, and no performFetchWithCompletionHandler either.
+       "processing" appears to have been added under the mistaken belief it
+       relates to the separate "Sustained Execution" entitlement, which is
+       actually just a GPU/performance-level setting (see the comment in
+       FlightCrewFitness.entitlements) and has nothing to do with background
+       execution. Declaring a background mode with no implementation behind
+       it caused an App Store Connect validation failure requiring a
+       BGTaskSchedulerPermittedIdentifiers array — the correct fix is
+       removing the unused declaration, not inventing a fake identifier to
+       satisfy the check. If background processing or fetch is genuinely
+       needed later, add it back together with the actual
+       BGTaskScheduler.shared.register(...) call it requires. -->
 
   <!-- Note: no NSAppTransportSecurity block needed — ATS already allows
        HTTPS by default. An exception-domain entry only matters if you

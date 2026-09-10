@@ -160,13 +160,30 @@ leaving it stuck.
 ---
 
 ## Pending / not yet done
-1. **Saturday Xcode build session** (reminder set) — needs to happen
-   before ANY native iOS feature works: FCFBridge, HealthKit, Calendar,
-   push notifications, haptics, StoreKit/IAP, app icon wiring. Also:
-   verify IAP products in App Store Connect (`FCFProAnnual` /
-   `FCFProMonthly`, subscription group "FCF Pro" — "Product not found"
-   error previously), remove the dev Pro
-   override from both `isPro()` and the edge function before shipping.
+1. **Xcode build — DONE (Sep 10, 2026).** FlightCrewFitness 1.0 (2)
+   uploaded to App Store Connect successfully, "Uploaded to Apple" status
+   confirmed. Native features now wired in: FCFBridge, HealthKit,
+   Calendar, push notifications, haptics, StoreKit/IAP. Two validation
+   failures were hit and fixed along the way (both real config bugs, not
+   just missing assets — see git log for full detail):
+   - Missing iPad app icon sizes (167x167, 152x152) — the AppIcon catalog
+     only ever covered iPhone slots; iPad support was enabled via
+     UIDeviceFamily but never had matching icons. Fixed by generating
+     icon_76/152/167.png from the 1024 master and adding ipad idiom
+     entries to Contents.json.
+   - Missing BGTaskSchedulerPermittedIdentifiers — UIBackgroundModes
+     declared "processing" and "fetch" with zero implementation anywhere
+     in the codebase (no BGTaskScheduler registration existed). Root
+     cause was likely confusing this with the separate Sustained
+     Execution entitlement (a GPU/performance setting, unrelated to
+     background execution). Fixed by removing both unused modes rather
+     than inventing a fake identifier to pass validation.
+   IAP products (`FCFProAnnual` / `FCFProMonthly`, subscription group
+   "FCF Pro") were verified as correctly configured in App Store Connect
+   before this build.
+   Still open: remove the dev Pro override from both `isPro()` in app.js
+   and the fcf-ai-coach edge function before any public release — left in
+   place intentionally for continued testing after this build.
 2. **Leaderboard seed accounts** — plan is 2-3 real Supabase Auth accounts
    (not fake/display-only) with realistic names, lifts, and workout
    history, using `@flightcrew.fit` email addresses (no email

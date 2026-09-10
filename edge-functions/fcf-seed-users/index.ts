@@ -4,17 +4,22 @@
 // service role key) plus leaderboard_entries and a light workout_sessions
 // history, to seed the leaderboard with realistic-looking activity.
 //
-// BATCH MODE: called on a schedule (every 2 days via pg_cron), each call
-// creates the NEXT unclaimed batch of 2 users from NEW_BATCHES below, then
-// stops automatically once all batches are exhausted (10 total seed users:
-// batch 0 = the 2 created manually + 4 scheduled batches of 2 = 8 more).
-// Progress is tracked in the seed_batches table, not an in-memory counter,
-// so it survives restarts and concurrent calls safely (guarded by a
-// Postgres advisory lock below).
+// BATCH MODE: called on a schedule (every 2 days via pg_cron). Each fire
+// (gated by the 2-day check below, not cron precision) does two things:
+//   1. If any NEW_BATCHES remain, creates the next batch of 2 new users.
+//   2. ALWAYS refreshes every already-existing seeded user with one new
+//      workout session, and — if that user still has headroom under their
+//      per-exercise growth cap — a modest new PR. This keeps the
+//      leaderboard looking alive indefinitely, not just during the
+//      initial ramp-up to 10 users.
+// Once all 4 NEW_BATCHES are exhausted, the job keeps firing forever on
+// the same 2-day cadence purely for step 2 — seed_batches keeps logging
+// batch_number markers past 4 (with an empty emails array) so the 2-day
+// gate keeps working indefinitely.
 //
 // leaderboard_entries has a genuine FK to auth.users(id) — synthetic user
-// IDs cannot be inserted directly, which is why this goes through the real
-// admin signup API rather than raw SQL inserts.
+// IDs cannot be inserted directly, which is why user creation goes through
+// the real admin signup API rather than raw SQL inserts.
 //
 // Requires SUPABASE_SERVICE_ROLE_KEY (set automatically by Supabase) and
 // ADMIN_SEED_SECRET (set manually in the dashboard) as secrets.
@@ -56,6 +61,15 @@ const EX = {
   squat:     { id: 'c_lb_to1', name: 'Back Squat' },
   deadlift:  { id: 'c_ul_to1', name: 'Conventional Deadlift' },
   ohp:       { id: 'c_up_to2', name: 'Standing Overhead Press' },
+};
+
+// Used to pick a plausible muscle group + session length when logging a
+// refresh workout for an existing seeded user.
+const MUSCLE_GROUP_FOR_EXERCISE: Record<string, string> = {
+  [EX.benchBB.id]:  'Upper Push',
+  [EX.ohp.id]:       'Upper Push',
+  [EX.squat.id]:     'Lower Body',
+  [EX.deadlift.id]:  'Lower Body',
 };
 
 interface SeedUser {
@@ -224,6 +238,125 @@ async function createOneUser(u: SeedUser) {
   };
 }
 
+// Refreshes every already-existing seeded user with one new workout
+// session, and — if they have headroom — a modest new PR on whichever of
+// their tracked exercises has had the fewest bumps so far (keeps growth
+// spread across lifts rather than one exercise running away).
+//
+// Growth cap: no exercise is allowed to exceed 1.20x its ORIGINAL seed
+// weight (the earliest achieved_at row for that user+exercise). This
+// firing on a 2-day cadence forever without a cap would otherwise produce
+// obviously unrealistic numbers within a couple of months — real lifters
+// plateau. Once every tracked exercise for a user hits its cap, that user
+// still gets a new workout session logged (so their activity stays
+// current) but no further PRs, which is itself realistic.
+async function refreshExistingSeeds() {
+  const { data: allEntries, error: fetchErr } = await admin
+    .from('leaderboard_entries')
+    .select('user_id, exercise_id, exercise_name, weight_lb, reps, bodyweight_lb, sex, username, achieved_at')
+    .order('achieved_at', { ascending: true });
+
+  if (fetchErr || !allEntries) {
+    return { error: fetchErr?.message || 'failed to fetch existing entries' };
+  }
+
+  // Group by user_id.
+  const byUser = new Map<string, typeof allEntries>();
+  for (const row of allEntries) {
+    if (!byUser.has(row.user_id)) byUser.set(row.user_id, []);
+    byUser.get(row.user_id)!.push(row);
+  }
+
+  const results = [];
+
+  for (const [userId, rows] of byUser) {
+    // Per-exercise: baseline (earliest row, since sorted ascending),
+    // current best (highest weight_lb seen), and how many rows exist
+    // (used to spread bumps across exercises rather than favoring one).
+    const byExercise = new Map<string, { baseline: number; best: number; count: number; name: string; reps: number }>();
+    for (const row of rows) {
+      const w = Number(row.weight_lb);
+      if (!byExercise.has(row.exercise_id)) {
+        byExercise.set(row.exercise_id, { baseline: w, best: w, count: 1, name: row.exercise_name, reps: row.reps });
+      } else {
+        const e = byExercise.get(row.exercise_id)!;
+        e.count += 1;
+        if (w > e.best) { e.best = w; e.reps = row.reps; }
+      }
+    }
+
+    // Pick the exercise with the fewest rows so far that's still under
+    // its growth cap. Ties broken by insertion order (Map preserves it).
+    let target: { id: string; baseline: number; best: number; name: string; reps: number } | null = null;
+    let lowestCount = Infinity;
+    for (const [exId, e] of byExercise) {
+      const capped = e.best >= e.baseline * 1.20;
+      if (!capped && e.count < lowestCount) {
+        lowestCount = e.count;
+        target = { id: exId, baseline: e.baseline, best: e.best, name: e.name, reps: e.reps };
+      }
+    }
+
+    const latest = rows[rows.length - 1]; // most recent row, for sex/bodyweight/username
+    const muscleGroup = target ? (MUSCLE_GROUP_FOR_EXERCISE[target.id] || 'Full Body') : 'Full Body';
+    const sessionKey = crypto.randomUUID();
+    let prInserted = false;
+    let newWeight: number | null = null;
+
+    if (target) {
+      // Modest, plausible increment — 5 lb regardless of exercise, which
+      // matches how these lifts are typically loaded in practice.
+      newWeight = target.best + 5;
+      const newReps = target.reps;
+      const { error: prErr } = await admin.from('leaderboard_entries').insert({
+        user_id: userId,
+        exercise_id: target.id,
+        exercise_name: target.name,
+        weight_lb: newWeight,
+        reps: newReps,
+        bodyweight_lb: latest.bodyweight_lb,
+        sex: latest.sex,
+        username: latest.username,
+        dots: dotsScore(newWeight, Number(latest.bodyweight_lb), latest.sex as 'male' | 'female'),
+        achieved_at: new Date().toISOString(),
+      });
+      prInserted = !prErr;
+    }
+
+    // Always log a session for today, whether or not a new PR happened —
+    // an existing user training without hitting a new max is the normal
+    // case, not an edge case.
+    const sets: Record<string, { reps: number; weight?: number }[]> = {};
+    if (target && newWeight) {
+      sets[target.id] = [
+        { reps: target.reps + 3, weight: Math.round((target.best * 0.8) / 5) * 5 },
+        { reps: target.reps + 1, weight: Math.round((target.best * 0.9) / 5) * 5 },
+        { reps: target.reps,     weight: newWeight },
+      ];
+    }
+    const { error: sessErr } = await admin.from('workout_sessions').insert({
+      user_id: userId,
+      session_key: sessionKey,
+      started_at: new Date().toISOString(),
+      session_data: {
+        env: 'gym',
+        date: new Date().toISOString(),
+        muscle_group: muscleGroup,
+        durationMinutes: 45 + Math.round(Math.random() * 20),
+        sets,
+      },
+    });
+
+    results.push({
+      userId, username: latest.username,
+      exerciseBumped: target?.name ?? null, newWeight, prInserted,
+      sessionLogged: !sessErr, sessionError: sessErr?.message || null,
+    });
+  }
+
+  return { usersRefreshed: results.length, details: results };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
 
@@ -233,10 +366,6 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: CORS });
     }
 
-    // Advisory lock — prevents two overlapping calls (a manual test plus
-    // the scheduled job firing at the same moment) from both claiming the
-    // same batch number. batch_number's primary key is the real safety
-    // net; this just avoids wasted duplicate Auth-user creation attempts.
     const LOCK_KEY = 847362910;
     try { await admin.rpc('pg_try_advisory_lock', { key: LOCK_KEY }); } catch (_) { /* best-effort */ }
 
@@ -244,46 +373,49 @@ serve(async (req) => {
       .from('seed_batches').select('batch_number, created_at').order('batch_number', { ascending: false }).limit(1);
     const highestDone = existing?.[0]?.batch_number ?? -1;
     const lastCreatedAt = existing?.[0]?.created_at ? new Date(existing[0].created_at) : null;
-    const nextBatchIdx = highestDone; // batch 0 already exists; NEW_BATCHES[0] is "batch 1"
 
-    if (nextBatchIdx >= NEW_BATCHES.length) {
-      return new Response(JSON.stringify({
-        done: true,
-        message: `All ${NEW_BATCHES.length + 1} batches already created (10 total seed users). No action taken.`,
-      }), { headers: { ...CORS, 'Content-Type': 'application/json' } });
-    }
-
-    // 2-day spacing enforced here, not by cron scheduling precision — the
-    // cron job below fires daily as a cheap check, and this is what
-    // actually decides whether a new batch is due yet.
+    // 2-day spacing enforced here, not by cron scheduling precision.
     const MIN_GAP_MS = 2 * 24 * 60 * 60 * 1000;
     if (lastCreatedAt && (Date.now() - lastCreatedAt.getTime()) < MIN_GAP_MS) {
       const hoursLeft = Math.ceil((MIN_GAP_MS - (Date.now() - lastCreatedAt.getTime())) / 3600000);
       return new Response(JSON.stringify({
         skipped: true,
-        message: `Last batch created ${lastCreatedAt.toISOString()} — next batch not due for ~${hoursLeft}h.`,
+        message: `Last fire was ${lastCreatedAt.toISOString()} — next one not due for ~${hoursLeft}h.`,
       }), { headers: { ...CORS, 'Content-Type': 'application/json' } });
     }
 
-    const batch = NEW_BATCHES[nextBatchIdx];
-    const batchNumber = nextBatchIdx + 1;
-    const results = [];
-    for (const u of batch) {
-      results.push(await createOneUser(u));
+    const nextBatchIdx = highestDone; // batch 0 already exists; NEW_BATCHES[0] is "batch 1"
+    const newUsersRemain = nextBatchIdx < NEW_BATCHES.length;
+
+    let newUserResults = null;
+    const nextBatchNumber = highestDone + 1;
+    const logEmails: string[] = [];
+
+    if (newUsersRemain) {
+      const batch = NEW_BATCHES[nextBatchIdx];
+      const results = [];
+      for (const u of batch) {
+        results.push(await createOneUser(u));
+        logEmails.push(u.email);
+      }
+      newUserResults = { batchNumber: nextBatchNumber, results };
     }
 
-    // Only recorded as done if the batch actually ran — if this insert
-    // fails, the next scheduled call will retry the same batch number
-    // rather than silently skipping it, since batch_number is a primary
-    // key claimed only on success here.
+    // Always refresh existing seeded users, whether or not new ones were
+    // just created this cycle — this is what keeps the leaderboard from
+    // going stale once all 10 accounts exist.
+    const refreshResult = await refreshExistingSeeds();
+
+    // Log this fire (even a refresh-only one, once all batches are done)
+    // so the 2-day gate keeps working indefinitely. emails is empty once
+    // NEW_BATCHES is exhausted.
     const { error: logErr } = await admin.from('seed_batches').insert({
-      batch_number: batchNumber,
-      emails: batch.map(u => u.email),
+      batch_number: nextBatchNumber,
+      emails: logEmails,
     });
 
     return new Response(JSON.stringify({
-      batchNumber, totalBatchesTarget: NEW_BATCHES.length + 1,
-      results, batchLogError: logErr?.message || null,
+      newUsersRemain, newUserResults, refreshResult, batchLogError: logErr?.message || null,
     }, null, 2), { headers: { ...CORS, 'Content-Type': 'application/json' } });
 
   } catch (err) {

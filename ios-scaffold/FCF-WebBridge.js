@@ -8,7 +8,7 @@
  * Usage:
  *   if (FCFBridge.isNative) { ... }
  *   FCFBridge.getProducts()
- *   FCFBridge.purchase('fit.flightcrew.app.pro.monthly')
+ *   FCFBridge.purchase('FCFProMonthly')
  *   FCFBridge.restore()
  *   FCFBridge.signInWithApple()
  *   FCFBridge.requestHealthKit()   // call once after login — shows iOS permission sheet

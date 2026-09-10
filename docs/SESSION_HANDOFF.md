@@ -163,8 +163,9 @@ leaving it stuck.
 1. **Saturday Xcode build session** (reminder set) — needs to happen
    before ANY native iOS feature works: FCFBridge, HealthKit, Calendar,
    push notifications, haptics, StoreKit/IAP, app icon wiring. Also:
-   verify IAP products in App Store Connect (`fit.flightcrew.app.pro.annual` /
-   `.monthly` — "Product not found" error previously), remove the dev Pro
+   verify IAP products in App Store Connect (`FCFProAnnual` /
+   `FCFProMonthly`, subscription group "FCF Pro" — "Product not found"
+   error previously), remove the dev Pro
    override from both `isPro()` and the edge function before shipping.
 2. **Leaderboard seed accounts** — plan is 2-3 real Supabase Auth accounts
    (not fake/display-only) with realistic names, lifts, and workout

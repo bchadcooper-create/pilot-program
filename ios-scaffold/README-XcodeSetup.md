@@ -133,7 +133,7 @@ window.addEventListener('fcf:products', e => {
 });
 
 // Trigger purchase
-FCFBridge.purchase('fit.flightcrew.app.pro.monthly');
+FCFBridge.purchase('FCFProMonthly');
 window.addEventListener('fcf:purchase', e => {
   if (e.detail.success) {
     // Unlock Pro in Supabase

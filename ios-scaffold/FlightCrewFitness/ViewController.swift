@@ -247,8 +247,8 @@ extension ViewController {
 
     private func fetchProducts() async {
         let productIds: Set<String> = [
-            "fit.flightcrew.app.pro.monthly",
-            "fit.flightcrew.app.pro.annual"
+            "FCFProMonthly",
+            "FCFProAnnual"
         ]
         do {
             let products = try await Product.products(for: productIds)

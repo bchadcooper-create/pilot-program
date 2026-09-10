@@ -107,7 +107,16 @@
   <key>NSHealthUpdateUsageDescription</key>
   <string>Flight Crew Fitness does not write to Apple Health.</string>
 
-  <!-- Calendar — flight schedule and workout window detection -->
+  <!-- Calendar — flight schedule and workout window detection
+       BUG FIX: only the iOS 17+ full-access key existed. CalendarManager.swift
+       falls back to the pre-iOS-17 requestAccess(to:) API on devices below
+       iOS 17 (deployment target is 16.0), which requires the classic
+       NSCalendarsUsageDescription key specifically — App Store Connect
+       validation rejected the build for its absence. Both keys are needed
+       to cover the full deployment target range; they can coexist safely. -->
+  <key>NSCalendarsUsageDescription</key>
+  <string>Flight Crew Fitness reads your calendar to detect your flight schedule, layovers, and personal commitments — so it can recommend when to train around your actual day.</string>
+
   <key>NSCalendarsFullAccessUsageDescription</key>
   <string>Flight Crew Fitness reads your calendar to detect your flight schedule, layovers, and personal commitments — so it can recommend when to train around your actual day.</string>
 

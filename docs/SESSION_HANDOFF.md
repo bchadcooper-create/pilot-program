@@ -181,21 +181,28 @@ leaving it stuck.
    IAP products (`FCFProAnnual` / `FCFProMonthly`, subscription group
    "FCF Pro") were verified as correctly configured in App Store Connect
    before this build.
-   Still open: remove the dev Pro override from both `isPro()` in app.js
-   and the fcf-ai-coach edge function before any public release — left in
-   place intentionally for continued testing after this build.
-2. **Leaderboard seed accounts** — plan is 2-3 real Supabase Auth accounts
-   (not fake/display-only) with realistic names, lifts, and workout
-   history, using `@flightcrew.fit` email addresses (no email
-   verification currently required). `fcf-seed-users` edge function is
-   written but NOT deployed — it needs `ADMIN_SEED_SECRET` set as a
-   Supabase secret first (a generated value was proposed; check if
-   already set — Claude has no tool to set Supabase secrets directly,
-   this must be done by Chad in the Supabase dashboard under Edge
-   Functions → Secrets). Seed data for two accounts (Mike Sorensen,
-   Jennifer Alvarez — realistic lifts/DOTS scores/session history) was
-   drafted in a prior turn; may need to be reconstructed if not saved
-   to the repo.
+   Decision (Sep 10, 2026): the dev Pro override stays permanently — it's
+   correctly scoped to a single hardcoded user ID (7e41ca46-6e00-4c54-bc3f-
+   2e45d923fe0b), verified against auth.users to be b.chad.cooper@gmail.com
+   specifically. Chad wants his own account to always have Pro. This is
+   NOT technical debt to clean up before release — do not remove it.
+2. **Leaderboard seed accounts — DONE (Sep 10, 2026), auto-continuing.**
+   `ADMIN_SEED_SECRET` set in Supabase dashboard, stored in Vault as
+   `fcf_admin_seed_secret` (not embedded in plaintext anywhere). 6 of 10
+   total seed users created so far: Mike Sorensen, Jennifer Alvarez
+   (batch 0, manual), James Whitfield, Sarah Kim (batch 1), Derek Owusu,
+   Amanda Ferreira (batch 2). Remaining 4 (Tom Bracken, Priya Nadella,
+   Chris Delacroix, Lauren Vasquez — batches 3 and 4) create automatically
+   via a daily pg_cron job (`fcf-seed-users-batch-check`, see
+   `sql/seed_batches_and_cron.sql`) that calls `fcf-seed-users`; the
+   function itself enforces a real 2-day gap between batches (tracked via
+   the `seed_batches` table's `created_at`, not cron scheduling precision)
+   and self-stops once all 10 exist — no action needed to let it finish.
+   To check progress: `select * from seed_batches order by batch_number`.
+   To stop early: `select cron.unschedule('fcf-seed-users-batch-check')`.
+   Each account's generated password is only ever returned once in that
+   batch's function response — none are logged anywhere else, and these
+   accounts never need to log in.
 3. **UI/UX polish pass** (reminder set, lower priority) — icon
    standardization across the app (mixed emoji/icon styles), full
    micro-animation pass (button press states, card entrance transitions).

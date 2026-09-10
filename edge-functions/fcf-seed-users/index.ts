@@ -1,37 +1,36 @@
 // Supabase Edge Function: fcf-seed-users
 //
-// ONE-TIME ADMIN UTILITY — not part of the app, never called by client code.
 // Creates real Supabase Auth users (via the admin API, requiring the
 // service role key) plus leaderboard_entries and a light workout_sessions
-// history, to seed the leaderboard with realistic-looking activity for the
-// bandwagon effect on first launch.
+// history, to seed the leaderboard with realistic-looking activity.
+//
+// BATCH MODE: called on a schedule (every 2 days via pg_cron), each call
+// creates the NEXT unclaimed batch of 2 users from NEW_BATCHES below, then
+// stops automatically once all batches are exhausted (10 total seed users:
+// batch 0 = the 2 created manually + 4 scheduled batches of 2 = 8 more).
+// Progress is tracked in the seed_batches table, not an in-memory counter,
+// so it survives restarts and concurrent calls safely (guarded by a
+// Postgres advisory lock below).
 //
 // leaderboard_entries has a genuine FK to auth.users(id) — synthetic user
 // IDs cannot be inserted directly, which is why this goes through the real
 // admin signup API rather than raw SQL inserts.
 //
-// Deploy, call once via curl with the admin secret, then consider deleting
-// this function — it should not remain live indefinitely, since anyone
-// with ADMIN_SEED_SECRET could use it to create arbitrary auth accounts.
-//
-// Requires SUPABASE_SERVICE_ROLE_KEY (Supabase sets this automatically for
-// every project) and ADMIN_SEED_SECRET (set manually in the dashboard —
-// never hardcode it here) as secrets before deploying.
+// Requires SUPABASE_SERVICE_ROLE_KEY (set automatically by Supabase) and
+// ADMIN_SEED_SECRET (set manually in the dashboard) as secrets.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL      = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const ADMIN_SEED_SECRET = Deno.env.get('ADMIN_SEED_SECRET'); // set before deploying — never hardcode
+const ADMIN_SEED_SECRET = Deno.env.get('ADMIN_SEED_SECRET');
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-seed-secret',
 };
 
-// Service-role client — full admin privileges, bypasses RLS. Never expose
-// this client or its key to the browser.
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false }
 });
@@ -52,8 +51,6 @@ function daysAgo(n: number): string {
   return new Date(Date.now() - n * 86400000).toISOString();
 }
 
-// Canonical exercise IDs from app.js LEADERBOARD_EXERCISES — must match
-// exactly, since the leaderboard groups/labels entries by these IDs.
 const EX = {
   benchBB:   { id: 'c_up_to1', name: 'Barbell Bench Press' },
   squat:     { id: 'c_lb_to1', name: 'Back Squat' },
@@ -63,7 +60,6 @@ const EX = {
 
 interface SeedUser {
   email: string;
-  password: string;
   username: string;
   sex: 'male' | 'female';
   bodyweightLb: number;
@@ -72,56 +68,160 @@ interface SeedUser {
               sets: Record<string, { reps: number; weight?: number }[]> }[];
 }
 
-const SEED_USERS: SeedUser[] = [
-  {
-    email: 'mike.sorensen@flightcrew.fit',
-    password: '', // generated at runtime, returned in the response — not stored anywhere else
-    username: 'Mike S.',
-    sex: 'male',
-    bodyweightLb: 195,
-    lifts: [
-      { ex: EX.benchBB,  weightLb: 225, reps: 5, daysAgo: 3  },
-      { ex: EX.squat,    weightLb: 315, reps: 3, daysAgo: 9  },
-      { ex: EX.deadlift, weightLb: 365, reps: 1, daysAgo: 16 },
-      { ex: EX.ohp,      weightLb: 135, reps: 5, daysAgo: 6  },
-    ],
-    sessions: [
-      { daysAgo: 3,  muscleGroup: 'Upper Push', durationMinutes: 52,
-        sets: { [EX.benchBB.id]: [{reps:8,weight:185},{reps:6,weight:205},{reps:5,weight:225}], [EX.ohp.id]: [{reps:8,weight:95},{reps:6,weight:115}] } },
-      { daysAgo: 6,  muscleGroup: 'Upper Push', durationMinutes: 48,
-        sets: { [EX.ohp.id]: [{reps:8,weight:95},{reps:6,weight:115},{reps:5,weight:135}] } },
-      { daysAgo: 9,  muscleGroup: 'Lower Body', durationMinutes: 61,
-        sets: { [EX.squat.id]: [{reps:8,weight:225},{reps:5,weight:275},{reps:3,weight:315}] } },
-      { daysAgo: 16, muscleGroup: 'Lower Body', durationMinutes: 55,
-        sets: { [EX.deadlift.id]: [{reps:5,weight:275},{reps:3,weight:325},{reps:1,weight:365}] } },
-    ],
-  },
-  {
-    email: 'jennifer.alvarez@flightcrew.fit',
-    password: '',
-    username: 'Jen A.',
-    sex: 'female',
-    bodyweightLb: 145,
-    lifts: [
-      { ex: EX.benchBB,  weightLb: 95,  reps: 8, daysAgo: 4  },
-      { ex: EX.squat,    weightLb: 155, reps: 5, daysAgo: 11 },
-      { ex: EX.deadlift, weightLb: 185, reps: 3, daysAgo: 18 },
-    ],
-    sessions: [
-      { daysAgo: 4,  muscleGroup: 'Upper Push', durationMinutes: 44,
-        sets: { [EX.benchBB.id]: [{reps:10,weight:75},{reps:8,weight:85},{reps:8,weight:95}] } },
-      { daysAgo: 11, muscleGroup: 'Lower Body', durationMinutes: 50,
-        sets: { [EX.squat.id]: [{reps:10,weight:115},{reps:8,weight:135},{reps:5,weight:155}] } },
-      { daysAgo: 18, muscleGroup: 'Lower Body', durationMinutes: 47,
-        sets: { [EX.deadlift.id]: [{reps:8,weight:135},{reps:5,weight:165},{reps:3,weight:185}] } },
-    ],
-  },
+// 4 batches of 2 — created in this order, one batch per scheduled call.
+// Batch 0 (Mike Sorensen, Jennifer Alvarez) already exists and is not
+// repeated here; see seed_batches row 0.
+const NEW_BATCHES: SeedUser[][] = [
+  // Batch 1
+  [
+    {
+      email: 'james.whitfield@flightcrew.fit', username: 'James W.', sex: 'male', bodyweightLb: 205,
+      lifts: [
+        { ex: EX.benchBB,  weightLb: 245, reps: 4, daysAgo: 2 },
+        { ex: EX.squat,    weightLb: 335, reps: 3, daysAgo: 8 },
+        { ex: EX.deadlift, weightLb: 405, reps: 2, daysAgo: 14 },
+        { ex: EX.ohp,      weightLb: 145, reps: 4, daysAgo: 5 },
+      ],
+      sessions: [
+        { daysAgo: 2, muscleGroup: 'Upper Push', durationMinutes: 55, sets: { [EX.benchBB.id]: [{reps:6,weight:205},{reps:5,weight:225},{reps:4,weight:245}] } },
+        { daysAgo: 8, muscleGroup: 'Lower Body', durationMinutes: 62, sets: { [EX.squat.id]: [{reps:6,weight:275},{reps:4,weight:305},{reps:3,weight:335}] } },
+      ],
+    },
+    {
+      email: 'sarah.kim@flightcrew.fit', username: 'Sarah K.', sex: 'female', bodyweightLb: 132,
+      lifts: [
+        { ex: EX.benchBB,  weightLb: 85,  reps: 6, daysAgo: 3 },
+        { ex: EX.squat,    weightLb: 135, reps: 5, daysAgo: 10 },
+        { ex: EX.deadlift, weightLb: 165, reps: 4, daysAgo: 17 },
+      ],
+      sessions: [
+        { daysAgo: 3,  muscleGroup: 'Upper Push', durationMinutes: 40, sets: { [EX.benchBB.id]: [{reps:10,weight:65},{reps:8,weight:75},{reps:6,weight:85}] } },
+        { daysAgo: 10, muscleGroup: 'Lower Body', durationMinutes: 46, sets: { [EX.squat.id]: [{reps:10,weight:105},{reps:8,weight:120},{reps:5,weight:135}] } },
+      ],
+    },
+  ],
+  // Batch 2
+  [
+    {
+      email: 'derek.owusu@flightcrew.fit', username: 'Derek O.', sex: 'male', bodyweightLb: 220,
+      lifts: [
+        { ex: EX.benchBB,  weightLb: 275, reps: 3, daysAgo: 4 },
+        { ex: EX.squat,    weightLb: 365, reps: 2, daysAgo: 11 },
+        { ex: EX.deadlift, weightLb: 425, reps: 1, daysAgo: 19 },
+      ],
+      sessions: [
+        { daysAgo: 4,  muscleGroup: 'Upper Push', durationMinutes: 58, sets: { [EX.benchBB.id]: [{reps:5,weight:225},{reps:4,weight:255},{reps:3,weight:275}] } },
+        { daysAgo: 11, muscleGroup: 'Lower Body', durationMinutes: 65, sets: { [EX.squat.id]: [{reps:5,weight:305},{reps:3,weight:335},{reps:2,weight:365}] } },
+      ],
+    },
+    {
+      email: 'amanda.ferreira@flightcrew.fit', username: 'Amanda F.', sex: 'female', bodyweightLb: 150,
+      lifts: [
+        { ex: EX.benchBB,  weightLb: 105, reps: 5, daysAgo: 5 },
+        { ex: EX.squat,    weightLb: 175, reps: 4, daysAgo: 12 },
+        { ex: EX.deadlift, weightLb: 205, reps: 3, daysAgo: 20 },
+      ],
+      sessions: [
+        { daysAgo: 5,  muscleGroup: 'Upper Push', durationMinutes: 47, sets: { [EX.benchBB.id]: [{reps:8,weight:85},{reps:6,weight:95},{reps:5,weight:105}] } },
+        { daysAgo: 12, muscleGroup: 'Lower Body', durationMinutes: 51, sets: { [EX.squat.id]: [{reps:8,weight:135},{reps:6,weight:155},{reps:4,weight:175}] } },
+      ],
+    },
+  ],
+  // Batch 3
+  [
+    {
+      email: 'tom.bracken@flightcrew.fit', username: 'Tom B.', sex: 'male', bodyweightLb: 180,
+      lifts: [
+        { ex: EX.benchBB, weightLb: 195, reps: 6, daysAgo: 2 },
+        { ex: EX.squat,   weightLb: 275, reps: 4, daysAgo: 9 },
+        { ex: EX.ohp,     weightLb: 115, reps: 6, daysAgo: 6 },
+      ],
+      sessions: [
+        { daysAgo: 2, muscleGroup: 'Upper Push', durationMinutes: 45, sets: { [EX.benchBB.id]: [{reps:10,weight:155},{reps:8,weight:175},{reps:6,weight:195}] } },
+        { daysAgo: 9, muscleGroup: 'Lower Body', durationMinutes: 50, sets: { [EX.squat.id]: [{reps:10,weight:225},{reps:8,weight:250},{reps:4,weight:275}] } },
+      ],
+    },
+    {
+      email: 'priya.nadella@flightcrew.fit', username: 'Priya N.', sex: 'female', bodyweightLb: 138,
+      lifts: [
+        { ex: EX.benchBB,  weightLb: 80,  reps: 7, daysAgo: 3 },
+        { ex: EX.squat,    weightLb: 125, reps: 6, daysAgo: 10 },
+        { ex: EX.deadlift, weightLb: 155, reps: 5, daysAgo: 16 },
+      ],
+      sessions: [
+        { daysAgo: 3,  muscleGroup: 'Upper Push', durationMinutes: 38, sets: { [EX.benchBB.id]: [{reps:10,weight:60},{reps:9,weight:70},{reps:7,weight:80}] } },
+        { daysAgo: 10, muscleGroup: 'Lower Body', durationMinutes: 44, sets: { [EX.squat.id]: [{reps:10,weight:95},{reps:8,weight:110},{reps:6,weight:125}] } },
+      ],
+    },
+  ],
+  // Batch 4
+  [
+    {
+      email: 'chris.delacroix@flightcrew.fit', username: 'Chris D.', sex: 'male', bodyweightLb: 168,
+      lifts: [
+        { ex: EX.benchBB,  weightLb: 175, reps: 5, daysAgo: 4 },
+        { ex: EX.squat,    weightLb: 245, reps: 4, daysAgo: 11 },
+        { ex: EX.deadlift, weightLb: 295, reps: 3, daysAgo: 18 },
+      ],
+      sessions: [
+        { daysAgo: 4,  muscleGroup: 'Upper Push', durationMinutes: 43, sets: { [EX.benchBB.id]: [{reps:8,weight:145},{reps:6,weight:160},{reps:5,weight:175}] } },
+        { daysAgo: 11, muscleGroup: 'Lower Body', durationMinutes: 49, sets: { [EX.squat.id]: [{reps:8,weight:195},{reps:6,weight:220},{reps:4,weight:245}] } },
+      ],
+    },
+    {
+      email: 'lauren.vasquez@flightcrew.fit', username: 'Lauren V.', sex: 'female', bodyweightLb: 160,
+      lifts: [
+        { ex: EX.benchBB,  weightLb: 115, reps: 4, daysAgo: 5 },
+        { ex: EX.squat,    weightLb: 185, reps: 3, daysAgo: 13 },
+        { ex: EX.deadlift, weightLb: 225, reps: 2, daysAgo: 21 },
+      ],
+      sessions: [
+        { daysAgo: 5,  muscleGroup: 'Upper Push', durationMinutes: 46, sets: { [EX.benchBB.id]: [{reps:6,weight:95},{reps:5,weight:105},{reps:4,weight:115}] } },
+        { daysAgo: 13, muscleGroup: 'Lower Body', durationMinutes: 52, sets: { [EX.squat.id]: [{reps:6,weight:155},{reps:4,weight:170},{reps:3,weight:185}] } },
+      ],
+    },
+  ],
 ];
 
 function genPassword(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
   const bytes = crypto.getRandomValues(new Uint8Array(20));
   return Array.from(bytes, b => chars[b % chars.length]).join('');
+}
+
+async function createOneUser(u: SeedUser) {
+  const password = genPassword();
+  const { data: created, error: createErr } = await admin.auth.admin.createUser({
+    email: u.email,
+    password,
+    email_confirm: true,
+    user_metadata: { username: u.username, seeded: true },
+  });
+  if (createErr || !created?.user) {
+    return { email: u.email, error: createErr?.message || 'user creation failed' };
+  }
+  const userId = created.user.id;
+
+  const lbRows = u.lifts.map(l => ({
+    user_id: userId, exercise_id: l.ex.id, exercise_name: l.ex.name,
+    weight_lb: l.weightLb, reps: l.reps, bodyweight_lb: u.bodyweightLb, sex: u.sex,
+    username: u.username, dots: dotsScore(l.weightLb, u.bodyweightLb, u.sex),
+    achieved_at: daysAgo(l.daysAgo),
+  }));
+  const { error: lbErr } = await admin.from('leaderboard_entries').insert(lbRows);
+
+  const sessionRows = u.sessions.map(s => ({
+    user_id: userId, session_key: crypto.randomUUID(), started_at: daysAgo(s.daysAgo),
+    session_data: { env: 'gym', date: daysAgo(s.daysAgo), muscle_group: s.muscleGroup,
+                     durationMinutes: s.durationMinutes, sets: s.sets },
+  }));
+  const { error: sessErr } = await admin.from('workout_sessions').insert(sessionRows);
+
+  return {
+    email: u.email, userId, password,
+    leaderboardEntriesInserted: lbRows.length, leaderboardError: lbErr?.message || null,
+    sessionsInserted: sessionRows.length, sessionError: sessErr?.message || null,
+  };
 }
 
 serve(async (req) => {
@@ -133,75 +233,58 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: CORS });
     }
 
-    const results: any[] = [];
+    // Advisory lock — prevents two overlapping calls (a manual test plus
+    // the scheduled job firing at the same moment) from both claiming the
+    // same batch number. batch_number's primary key is the real safety
+    // net; this just avoids wasted duplicate Auth-user creation attempts.
+    const LOCK_KEY = 847362910;
+    try { await admin.rpc('pg_try_advisory_lock', { key: LOCK_KEY }); } catch (_) { /* best-effort */ }
 
-    for (const u of SEED_USERS) {
-      const password = genPassword();
+    const { data: existing } = await admin
+      .from('seed_batches').select('batch_number, created_at').order('batch_number', { ascending: false }).limit(1);
+    const highestDone = existing?.[0]?.batch_number ?? -1;
+    const lastCreatedAt = existing?.[0]?.created_at ? new Date(existing[0].created_at) : null;
+    const nextBatchIdx = highestDone; // batch 0 already exists; NEW_BATCHES[0] is "batch 1"
 
-      // 1. Real Supabase Auth account via the admin API — this is the only
-      //    correct way to create a user that satisfies leaderboard_entries'
-      //    FK to auth.users(id); email is pre-confirmed since these
-      //    accounts never need to actually receive a confirmation email.
-      const { data: created, error: createErr } = await admin.auth.admin.createUser({
-        email: u.email,
-        password,
-        email_confirm: true,
-        user_metadata: { username: u.username, seeded: true },
-      });
-      if (createErr || !created?.user) {
-        results.push({ email: u.email, error: createErr?.message || 'user creation failed' });
-        continue;
-      }
-      const userId = created.user.id;
-
-      // 2. Leaderboard entries — the actual rows the leaderboard UI reads.
-      const lbRows = u.lifts.map(l => ({
-        user_id: userId,
-        exercise_id: l.ex.id,
-        exercise_name: l.ex.name,
-        weight_lb: l.weightLb,
-        reps: l.reps,
-        bodyweight_lb: u.bodyweightLb,
-        sex: u.sex,
-        username: u.username,
-        dots: dotsScore(l.weightLb, u.bodyweightLb, u.sex),
-        achieved_at: daysAgo(l.daysAgo),
-      }));
-      const { error: lbErr } = await admin.from('leaderboard_entries').insert(lbRows);
-
-      // 3. Light workout session history, same session_data shape the app
-      //    itself writes (env/date/muscle_group/durationMinutes/sets),
-      //    minus the workoutSnapshot display-cache field, which is only
-      //    used for rendering that user's own debrief screen — not needed
-      //    for accounts nobody will ever log into.
-      const sessionRows = u.sessions.map(s => ({
-        user_id: userId,
-        session_key: crypto.randomUUID(),
-        started_at: daysAgo(s.daysAgo),
-        session_data: {
-          env: 'gym',
-          date: daysAgo(s.daysAgo),
-          muscle_group: s.muscleGroup,
-          durationMinutes: s.durationMinutes,
-          sets: s.sets,
-        },
-      }));
-      const { error: sessErr } = await admin.from('workout_sessions').insert(sessionRows);
-
-      results.push({
-        email: u.email,
-        userId,
-        password, // returned once here so it can be recorded/discarded — never logged elsewhere
-        leaderboardEntriesInserted: lbRows.length,
-        leaderboardError: lbErr?.message || null,
-        sessionsInserted: sessionRows.length,
-        sessionError: sessErr?.message || null,
-      });
+    if (nextBatchIdx >= NEW_BATCHES.length) {
+      return new Response(JSON.stringify({
+        done: true,
+        message: `All ${NEW_BATCHES.length + 1} batches already created (10 total seed users). No action taken.`,
+      }), { headers: { ...CORS, 'Content-Type': 'application/json' } });
     }
 
-    return new Response(JSON.stringify({ results }, null, 2), {
-      headers: { ...CORS, 'Content-Type': 'application/json' }
+    // 2-day spacing enforced here, not by cron scheduling precision — the
+    // cron job below fires daily as a cheap check, and this is what
+    // actually decides whether a new batch is due yet.
+    const MIN_GAP_MS = 2 * 24 * 60 * 60 * 1000;
+    if (lastCreatedAt && (Date.now() - lastCreatedAt.getTime()) < MIN_GAP_MS) {
+      const hoursLeft = Math.ceil((MIN_GAP_MS - (Date.now() - lastCreatedAt.getTime())) / 3600000);
+      return new Response(JSON.stringify({
+        skipped: true,
+        message: `Last batch created ${lastCreatedAt.toISOString()} — next batch not due for ~${hoursLeft}h.`,
+      }), { headers: { ...CORS, 'Content-Type': 'application/json' } });
+    }
+
+    const batch = NEW_BATCHES[nextBatchIdx];
+    const batchNumber = nextBatchIdx + 1;
+    const results = [];
+    for (const u of batch) {
+      results.push(await createOneUser(u));
+    }
+
+    // Only recorded as done if the batch actually ran — if this insert
+    // fails, the next scheduled call will retry the same batch number
+    // rather than silently skipping it, since batch_number is a primary
+    // key claimed only on success here.
+    const { error: logErr } = await admin.from('seed_batches').insert({
+      batch_number: batchNumber,
+      emails: batch.map(u => u.email),
     });
+
+    return new Response(JSON.stringify({
+      batchNumber, totalBatchesTarget: NEW_BATCHES.length + 1,
+      results, batchLogError: logErr?.message || null,
+    }, null, 2), { headers: { ...CORS, 'Content-Type': 'application/json' } });
 
   } catch (err) {
     console.error('fcf-seed-users error:', err);

@@ -127,6 +127,7 @@ a{color:inherit}
 
 .mg-wrap{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
 .mg-pill{border:1.5px solid var(--border);background:var(--bg3);border-radius:20px;padding:13px 16px;cursor:pointer;font-size:12px;font-weight:500;transition:all 0.15s;-webkit-user-select:none}
+.mg-pill:active{transform:scale(0.96)}
 .mg-pill.sel{border-color:var(--gold);background:rgba(201,168,76,0.1);color:var(--gold)}
 .mg-pill.recommended{border-color:var(--green);box-shadow:0 0 0 1px rgba(34,197,94,0.3)}
 
@@ -201,6 +202,8 @@ a{color:inherit}
 @keyframes fcf-fade-in{from{opacity:0}to{opacity:1}}
 @keyframes fcf-slide-up{from{transform:translateY(100%)}to{transform:translateY(0)}}
 @keyframes fcf-slide-in-left{from{transform:translateX(-100%)}to{transform:translateX(0)}}
+@keyframes fcf-content-enter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fcf-pr-pop{0%{opacity:0;transform:scale(0.85)}60%{opacity:1;transform:scale(1.06)}100%{transform:scale(1)}}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;display:flex;align-items:flex-end}
 .modal-sheet{background:var(--panel);border-radius:var(--radius-modal) var(--radius-modal) 0 0;padding:20px 20px calc(20px + var(--safe-bot));width:100%;max-height:85vh;overflow-y:auto;border-top:1px solid var(--border);box-shadow:0 -4px 32px rgba(0,0,0,0.5)}
 /* Opt-in only. Deliberately NOT on the shared .modal-sheet class — the
@@ -212,6 +215,8 @@ a{color:inherit}
    out. html/body are overflow:hidden so a full-width translate can't
    produce a horizontal scrollbar flash mid-animation. */
 .page-enter-left{animation:fcf-slide-in-left .26s cubic-bezier(.32,.72,0,1)}
+.content-enter{animation:fcf-content-enter .22s cubic-bezier(.32,.72,0,1)}
+.pr-pop{animation:fcf-pr-pop .4s cubic-bezier(.34,1.56,.64,1);animation-delay:calc(var(--pr-i, 0) * 60ms);animation-fill-mode:backwards}
 /* Anyone who has asked their device for less motion gets none of it. */
 @media (prefers-reduced-motion: reduce){
   .modal-bg-anim,.modal-sheet-anim,.page-enter-left,.loading-overlay{animation:none}
@@ -351,6 +356,6 @@ a{color:inherit}
 <input type="file" id="foodCameraInput" accept="image/*" capture="environment" style="display:none">
 <input type="file" id="foodLibraryInput" accept="image/*" style="display:none">
 
-<script defer src="app.js?v=1789074079"></script>
+<script defer src="app.js?v=1789074277"></script>
 </body>
 </html>

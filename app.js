@@ -1811,6 +1811,12 @@ function switchTab(tab) {
     // Only on a genuine tab CHANGE. Firing on every render would replay
     // the slide every time something on the menu page saved or refreshed.
     if (tab === 'more' && prevTab !== 'more') playPageTransition(page, 'page-enter-left');
+    // Same guard, extended to the three primary tab-bar destinations —
+    // this app rebuilds innerHTML on nearly every state change, so this
+    // animation must ONLY fire on an actual tab switch, never on a
+    // same-tab re-render (which happens constantly), or every save/toggle
+    // would replay it and the app would feel jittery instead of polished.
+    if (['today','trends','leaderboard'].includes(tab) && tab !== prevTab) playPageTransition(page, 'content-enter');
     if (tab === 'flight') {
       const curId = getCurrentExerciseId();
       const el = curId ? document.getElementById('excard_'+curId) : null;
@@ -4374,8 +4380,14 @@ async function showCalendarDay(isoDate) {
 
     if (exerciseRows.length) {
       parts.push('<div class="section-label" style="margin-top:4px">EXERCISES</div>');
+      let prIndex = 0;
       exerciseRows.forEach(row => {
-        parts.push('<div class="fb" style="padding:8px 0;border-bottom:1px solid var(--border)">');
+        // PR rows get a celebratory pop-in (staggered slightly if more than
+        // one PR happened this session) — safe here since the debrief
+        // screen renders once after a workout, not on every re-render.
+        const cls = 'fb' + (row.isPR ? ' pr-pop' : '');
+        const style = 'padding:8px 0;border-bottom:1px solid var(--border)' + (row.isPR ? ';--pr-i:' + (prIndex++) : '');
+        parts.push('<div class="'+cls+'" style="'+style+'">');
         parts.push('<div style="font-size:13px">'+(row.isPR?'⭐ ':'')+row.name+'</div>');
         parts.push('<div style="font-family:var(--mono);font-size:12px;color:'+(row.isPR?'var(--gold)':'var(--text)')+';font-weight:'+(row.isPR?'700':'400')+'">'+row.perf+'</div>');
         parts.push('</div>');

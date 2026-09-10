@@ -203,12 +203,30 @@ leaving it stuck.
    Each account's generated password is only ever returned once in that
    batch's function response — none are logged anywhere else, and these
    accounts never need to log in.
-3. **UI/UX polish pass** (reminder set, lower priority) — icon
-   standardization across the app (mixed emoji/icon styles), full
-   micro-animation pass (button press states, card entrance transitions).
+3. **UI/UX polish pass — phases 1 and 2 done (Sep 10, 2026), scoped deliberately.**
+   Icon standardization: converted status/chrome emoji (alert icons,
+   toast icons, leaderboard medals, GO/MARGINAL/NO-GO dots) to consistent
+   CSS/SVG treatments — NOT a full sweep of all ~327 emoji instances in
+   the app. Decorative/flavor emoji (muscle-group category icons,
+   achievement badges, AI-copy accents) were deliberately left alone —
+   different purpose (personality/branding) than functional status
+   icons, and a full sweep would be a much larger separate effort if
+   ever wanted. Added `--silver-grad`/`--bronze-grad` tokens alongside
+   the existing `--gold-grad`, used for real gold/silver/bronze
+   leaderboard medal badges (the concrete "gold metallic" ask).
+   Micro-animations: added a `content-enter` fade+slide for the three
+   main tab-bar destinations (today/trends/leaderboard) and a `pr-pop`
+   celebratory animation for PR rows on the debrief screen — both using
+   the same explicit "only on genuine change, never on re-render" guard
+   pattern the codebase already used correctly for the menu transition.
+   Deliberately did NOT add a blanket entrance animation to the base
+   `.card` class — this app rebuilds innerHTML on nearly every state
+   change, so that would replay constantly instead of only on real
+   entrances. If a broader animation pass is wanted later, it needs the
+   same per-context safety check, not a global CSS rule.
    Most of the Gemini/Grok feedback quick-wins (spacing, eyebrow labels,
-   Pro column emphasis, empty-state copy, locked badge treatment) are
-   already done.
+   Pro column emphasis, empty-state copy, locked badge treatment) were
+   already done in an earlier session.
 4. **Trip Plan card investigation** — added `console.log` diagnostics
    on the two non-obvious early-exit paths in `loadTripPlan()`
    (no calendar synced / trip too short) in case the card silently

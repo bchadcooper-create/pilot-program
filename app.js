@@ -5228,7 +5228,7 @@ async function renderPreflight(p) {
   const showPlan = ST.showChangePlan || isNewUser || !wk;
   parts.push('<div class="edit-row-fb" style="display:flex;justify-content:space-between;align-items:center;padding:8px 2px;font-size:12px;color:var(--muted)" onclick="ST.showChangePlan=!ST.showChangePlan;renderPage()">');
   parts.push('<span>'+(ST.scheduleEnvNote || (ST.activeCustomProfileId ? 'Custom routine, used as saved.' : 'Same as your usual plan.'))+'</span>');
-  parts.push('<span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--gold);cursor:pointer;padding:6px 4px">'+(showPlan?'HIDE ▴':'CHANGE PLAN ▾')+'</span>');
+  parts.push('<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold);cursor:pointer;padding:8px 14px;border:1.5px solid var(--gold);border-radius:8px;background:rgba(201,168,76,0.1);white-space:nowrap">'+(showPlan?'HIDE ▴':'CHANGE PLAN ▾')+'</span>');
   parts.push('</div>');
 
   if (showPlan) {

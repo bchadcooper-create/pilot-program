@@ -1882,7 +1882,17 @@ function computeBadgeStats(sessions, bioRows) {
     let sessionSets = 0;
     Object.keys(s.sets || {}).forEach(exId => {
       let sessionMax = 0;
-      (s.sets[exId]||[]).forEach(set => {
+      // BUG FIX (reported: "Iron Will" — 20+ sets in one session — awarded
+      // to an account that had only logged a handful of real sets).
+      // ST.sets[exId] is pre-scaffolded with one placeholder row per
+      // programmed set for EVERY exercise in the plan (e.g. "5x5" creates
+      // 5 rows before the user fills any in), and this loop was counting
+      // every row unconditionally instead of only the ones actually
+      // logged — an 8-exercise plan easily scaffolds 20+ empty slots.
+      // buildWorkoutSummary() (which feeds the debrief screen's own
+      // "SETS" tile) already filters to loggedSets correctly; this now
+      // matches that same filter so the two counts agree.
+      (s.sets[exId]||[]).filter(set => set.reps||set.weight||set.seconds||set.height||set.distance||set.seconds_left||set.seconds_right).forEach(set => {
         sessionSets++;
         const w = parseFloat(set.weight);
         if (!isNaN(w) && w > sessionMax) sessionMax = w;

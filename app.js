@@ -2846,6 +2846,34 @@ function aiCoachCard(id, textId, title, colorKey) {
   );
 }
 
+// Free-tier teaser for a Pro-only AI card — shown instead of hiding the
+// feature entirely, so free users see what they're missing rather than
+// never knowing it exists. Reuses the same visual container as the real
+// card (glow, accent color, title) so it reads as "this exists, unlock
+// it" rather than a different, lesser thing. Body copy is deliberately
+// generic/plausible-sounding rather than real analysis, and blurred so
+// it's legible as "there's something here" without being readable enough
+// to feel like a bait-and-switch.
+function aiCoachTeaser(title, colorKey, blurb) {
+  const [gs, gf, accent] = GLOW_COLORS[colorKey] || GLOW_COLORS.gold;
+  return (
+    '<div style="position:relative;border-radius:16px;border:1px solid rgba(255,255,255,0.08);' +
+      'overflow:hidden;padding:16px;margin-bottom:12px;background:#0f1623">' +
+    '<div style="position:absolute;top:-50px;right:-40px;width:180px;height:180px;border-radius:50%;' +
+      'background:radial-gradient(circle,' + gs + ' 0%,' + gf + ' 55%,transparent 75%);pointer-events:none"></div>' +
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;position:relative;z-index:1">' +
+      '<span style="font-size:12px">✦</span>' +
+      '<span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:' + accent + '">' + title + '</span>' +
+    '</div>' +
+    '<div style="font-size:13.5px;color:var(--text);line-height:1.6;position:relative;z-index:1;' +
+      'filter:blur(3.5px);user-select:none;pointer-events:none">' + blurb + '</div>' +
+    '<div style="position:relative;z-index:1;margin-top:12px;display:flex;justify-content:center">' +
+      '<button class="btn btn-gold" style="width:auto;padding:8px 18px;font-size:11px" onclick="showPaywall(\'coach\')">🔒 UNLOCK WITH PRO</button>' +
+    '</div>' +
+    '</div>'
+  );
+}
+
 function showBigToast(msg, type) {
   const old = document.getElementById('fcf-big-toast');
   if (old) old.remove();
@@ -7625,8 +7653,14 @@ async function renderTrends(p) {
 
   // AI Progression Analytics — Pro only. The headline insight for the whole
   // Trends screen, so it goes first. Cached server-side for 24h.
+  // CHANGE (Sep 11, 2026): previously omitted entirely for free users —
+  // Chad's call was to show a teaser instead, so the feature isn't
+  // invisible to people who'd never otherwise know it exists.
   if (isPro()) {
     parts.push(aiCoachCard('aiProgressionCard', 'aiProgressionText', 'AI COACH — YOUR PATTERNS', 'gold'));
+  } else {
+    parts.push(aiCoachTeaser('AI COACH — YOUR PATTERNS', 'gold',
+      'You\'ve been consistent with your upper body work this week, and your recovery scores are trending in the right direction — but there\'s a pattern in your training around long duty days worth knowing about.'));
   }
 
   parts.push('<div class="section-label">BIOMETRICS LOG &amp; TRENDS</div>');
@@ -10722,6 +10756,13 @@ async function renderNutrition(p) {
   // Moved up per direct feedback — this used to be the last thing on the
   // screen, after the full meal list, instead of the first action available.
   parts.push('<button class="btn btn-gold mb12" onclick="openMealBuilder()">+ Log a Meal</button>');
+  // ADDED (Sep 11, 2026): the free-tier AI photo-scan limit was previously
+  // only ever mentioned reactively, in the paywall shown AFTER hitting it —
+  // someone could scan 3 times, get blocked, and only then learn a limit
+  // existed at all. This surfaces it up front instead.
+  if (!isPro()) {
+    parts.push('<div style="font-size:10px;color:var(--muted);text-align:center;margin-top:-8px;margin-bottom:12px">📷 AI photo scans: '+FREE_WEEKLY_PHOTOS+'/week free — manual entry and barcode scan are unlimited</div>');
+  }
   parts.push('<div id="mealBuilderRoot"></div>');
 
   if (!meals.length) {

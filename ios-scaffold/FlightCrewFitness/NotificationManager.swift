@@ -8,13 +8,17 @@ import Foundation
 // Notification types and their tier:
 //
 // FREE:
-//   workout_reminder    — fires if no workout logged in 3 days (daily check, 9am)
+//   workout_reminder    — fires exactly 3 days after the last logged workout, 9am
 //   water_reminder      — fires mid-afternoon if hydration tracking is on (2pm)
 //   preflight_readiness — fires the evening before a detected flight (8pm prior day)
 //
 // PRO:
-//   hrv_drop            — fires morning if HRV is significantly below personal baseline
-//   layover_window      — fires during a layover when a workout window is detected
+//   hrv_drop            — fires morning if HRV is genuinely >20% below the user's
+//                          own trailing 14-day average (see scheduleNotifications()
+//                          in app.js for the actual comparison — this file only
+//                          ever receives the already-decided true/false)
+//   layover_window      — fires ~90 min into a detected layover with no workout
+//                          logged yet today and a real window before next duty
 //   weekly_summary      — fires Sunday evening with the week's training recap
 //
 // The web app sends notification preferences via the `notifications` bridge message.
@@ -44,7 +48,11 @@ class NotificationManager {
         let hrvEnabled      = prefs["hrvAlert"]         as? Bool ?? false   // pro
         let weeklyEnabled   = prefs["weeklySummary"]    as? Bool ?? false   // pro
 
-        if workoutEnabled  { scheduleWorkoutReminder() }
+        let iso = ISO8601DateFormatter()
+        if workoutEnabled {
+            let fireAt = (prefs["workoutReminderDate"] as? String).flatMap { iso.date(from: $0) }
+            scheduleWorkoutReminder(fireAt: fireAt)
+        }
         if waterEnabled    { scheduleWaterReminder() }
         if preflightEnabled {
             let flights = prefs["upcomingFlights"] as? [[String: String]] ?? []
@@ -52,23 +60,51 @@ class NotificationManager {
         }
         if hrvEnabled      { scheduleHRVCheck(today: prefs["hrvToday"] as? Int, baseline: prefs["hrvBaseline"] as? Int) }
         if weeklyEnabled   { scheduleWeeklySummary() }
+        // NEW (Pro) — was advertised in the upgrade comparison table but
+        // never actually implemented anywhere until now.
+        if let layover = prefs["layoverReminder"] as? [String: Any],
+           let airport = layover["airport"] as? String,
+           let fireAtStr = layover["fireAt"] as? String,
+           let fireAt = iso.date(from: fireAtStr) {
+            scheduleLayoverWorkoutReminder(airport: airport, fireAt: fireAt)
+        }
     }
 
     // ── FREE: Workout reminder ─────────────────────────────────────────────
-    // Fires daily at 9am. The web app suppresses it by calling
-    // cancelWorkoutReminder() when a workout is logged.
+    // BUG FIX (reported: "haven't trained in 3 days" fired after as little
+    // as one day). This used to be a REPEATING daily 9am trigger,
+    // unconditionally rescheduled on every app boot with no actual
+    // day-count check anywhere — cancelWorkoutReminder() below only ever
+    // cleared it for the exact day a workout finished, with nothing to
+    // correctly bring it back exactly 3 days later. Now takes the real
+    // target date (computed web-side in scheduleNotifications(), from the
+    // user's actual last-workout date) and schedules ONE precise one-time
+    // notification for it — same pattern schedulePreflightChecks already
+    // used correctly for real flight times.
+    // cancelWorkoutReminder() below is no longer called from the current
+    // web app (superseded by re-running the full scheduling pass instead,
+    // which correctly resets the countdown) — left in place harmlessly in
+    // case anything else ever needs a hard cancel without a reschedule.
 
-    func scheduleWorkoutReminder() {
+    func scheduleWorkoutReminder(fireAt: Date?) {
+        guard let fireAt = fireAt else { return }
+        let calendar = Calendar.current
+        // Date is the real, correctly-computed target day; time-of-day is
+        // pinned to 9am regardless of what time fireAt's date component
+        // carries — preserves the original "fires at 9am" design while
+        // fixing which DAY it's allowed to be.
+        var components = calendar.dateComponents([.year, .month, .day], from: fireAt)
+        components.hour   = 9
+        components.minute = 0
+        guard let scheduledDate = calendar.date(from: components), scheduledDate > Date() else { return }
+
         let content = UNMutableNotificationContent()
         content.title = "Time to log a session"
         content.body  = "You haven't trained in 3 days. Even 20 minutes counts — open your plan."
         content.sound = .default
         content.userInfo = ["type": "workout_reminder", "deepLink": "today"]
 
-        var dateComponents = DateComponents()
-        dateComponents.hour   = 9
-        dateComponents.minute = 0
-        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
         let request = UNNotificationRequest(identifier: "fcf_workout_reminder",
                                             content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request) { err in
@@ -177,6 +213,32 @@ class NotificationManager {
                                             content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request) { err in
             if let err = err { print("FCF: HRV alert error:", err) }
+        }
+    }
+
+    // ── PRO: Layover workout window ─────────────────────────────────────────
+    // NEW (was listed in the upgrade comparison table as a Pro feature but
+    // never actually implemented anywhere — no function, no prefs flag,
+    // nothing). Eligibility (currently on a layover, real time before next
+    // duty, not already trained today) is fully decided web-side in
+    // scheduleNotifications(), which has access to the parsed flight
+    // schedule and today's logged sessions — this just fires the already-
+    // computed one-time notification at the already-computed time.
+    func scheduleLayoverWorkoutReminder(airport: String, fireAt: Date) {
+        guard fireAt > Date() else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "Layover window open — \(airport)"
+        content.body  = "You've got time before your next duty. Good window for a session."
+        content.sound = .default
+        content.userInfo = ["type": "layover_window", "deepLink": "today"]
+
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fireAt)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        let request = UNNotificationRequest(identifier: "fcf_layover_window",
+                                            content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(request) { err in
+            if let err = err { print("FCF: layover window notification error:", err) }
         }
     }
 

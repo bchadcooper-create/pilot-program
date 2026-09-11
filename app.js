@@ -3804,7 +3804,7 @@ window.addEventListener('fcf:apnsToken', async (e) => {
 
 // Schedule all enabled notifications via the native bridge.
 // Called after login, after calendar sync, and after prefs change.
-async function scheduleNotifications() {
+async function scheduleNotifications(justTrainedNow) {
   if (typeof FCFBridge === 'undefined' || !FCFBridge.isNative) return;
   const pro = isPro();
 
@@ -3843,9 +3843,68 @@ async function scheduleNotifications() {
     } catch (e) { /* no history yet or query failed — don't alert on incomplete data */ }
   }
 
+  // BUG FIX (reported): "You haven't trained in 3 days" was firing after
+  // as little as one day, sometimes the same day. Root cause: it was a
+  // REPEATING daily 9am local trigger, unconditionally rescheduled on
+  // every single app boot (workoutReminder was hardcoded true with no
+  // day-count logic anywhere), only ever cancelled for the exact day a
+  // workout finished — with no mechanism to bring it back correctly 3
+  // days later specifically. Fixed the same way schedulePreflightChecks
+  // already correctly handles per-flight timing: compute the exact real
+  // target date from the actual last-workout date, and schedule ONE
+  // precise one-time notification for it, not a blind repeating trigger.
+  const lastWorkoutMs = justTrainedNow ? Date.now() : (ST.sessionCache || [])
+    .map(s => new Date(s.date).getTime())
+    .filter(ms => !isNaN(ms))
+    .reduce((max, ms) => Math.max(max, ms), 0);
+  // No history at all (brand new account) still gets a nudge — anchored
+  // to right now rather than left unscheduled indefinitely.
+  const workoutReminderBase = lastWorkoutMs || Date.now();
+  const workoutReminderDate = new Date(workoutReminderBase + 3 * 86400000).toISOString();
+
+  // NEW FEATURE (was advertised in the Pro upgrade comparison table as
+  // "Layover workout reminder" but never actually built anywhere in the
+  // codebase — no scheduling function, no prefs flag, nothing). Reuses
+  // scheduleContextForToday(), the same schedule-analysis function the
+  // rest of the app already relies on for trip-aware recommendations,
+  // rather than re-deriving layover/duty timing from scratch.
+  let layoverReminder = null;
+  // Two separate, unmerged schedule sources exist in this app —
+  // ST.calendarEvents (native Apple Calendar permission, classified) and
+  // ST.flightSchedule (manual .ics upload). The adjacent preflightCheck
+  // code above only ever checks the former; checking both here so a
+  // user who only uses .ics upload doesn't silently miss this feature.
+  const schedule = (ST.calendarEvents?.length ? ST.calendarEvents : null) || ST.flightSchedule;
+  if (pro && schedule?.length) {
+    const ctx = scheduleContextForToday(schedule, new Date());
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const trainedToday = justTrainedNow || (ST.sessionCache || []).some(s => (s.date || '').slice(0, 10) === todayStr);
+    // A real window: currently on a layover, haven't already trained
+    // today, and at least 3 hours of runway before the next duty starts
+    // (or no next duty visible yet at all, i.e. plenty of room).
+    const hasRunway = ctx.freeMinutesUntilDuty == null || ctx.freeMinutesUntilDuty >= 180;
+    if (ctx.layoverAirport && !trainedToday && hasRunway) {
+      // 90 minutes out gives realistic time to deplane and get to the
+      // hotel — never suggested for right this second while still at
+      // the airport. Capped so it can never land inside the pre-duty
+      // buffer of an actually-tight window.
+      let fireInMinutes = 90;
+      if (ctx.freeMinutesUntilDuty != null) {
+        fireInMinutes = Math.min(fireInMinutes, ctx.freeMinutesUntilDuty - 60);
+      }
+      if (fireInMinutes >= 15) { // don't bother for a sliver of a window
+        layoverReminder = {
+          airport: ctx.layoverAirport,
+          fireAt: new Date(Date.now() + fireInMinutes * 60000).toISOString(),
+        };
+      }
+    }
+  }
+
   const prefs = {
     action:            'schedule',
     workoutReminder:   true,                           // free — always on
+    workoutReminderDate,
     waterReminder:     !!(ST.trackHydration),          // free if hydration on
     preflightCheck:    upcomingFlights.length > 0,     // free if flights detected
     upcomingFlights,
@@ -3853,15 +3912,18 @@ async function scheduleNotifications() {
     weeklySummary:     pro,                            // pro
     hrvBaseline:       hrvBaselineAvg,
     hrvToday:          hrvToday,
+    layoverReminder,                                   // pro — null if no window right now
   };
   window.webkit?.messageHandlers?.notifications?.postMessage(prefs);
 }
 
-// Called immediately after a workout is logged — tells iOS to suppress
-// the 3-day reminder since the user just trained.
+// Called immediately after a workout is logged. Re-runs the full
+// scheduling pass (rather than just cancelling the pending 3-day
+// reminder) so the countdown correctly resets to 3 days from THIS
+// workout, not just cleared until the next app boot recomputes it.
 function cancelWorkoutReminderNative() {
   if (typeof FCFBridge === 'undefined' || !FCFBridge.isNative) return;
-  window.webkit?.messageHandlers?.notifications?.postMessage({ action: 'cancelWorkoutReminder' });
+  scheduleNotifications(true); // reschedule everything with today as the new last-workout date
 }
 
 // ── AI Coach (Pro) ────────────────────────────────────────────────────────────

@@ -4828,16 +4828,85 @@ const EXERCISE_SYNONYMS = {
   'cable row': 'Seated Cable Row',
   'seated row': 'Seated Cable Row',
   'seated row machine': 'Seated Cable Row',
+
+  // Band exercises — common alternate names and full "resistance band ___"
+  // phrasings that don't share words with the catalog's shorter "Banded
+  // ___" names (e.g. "resistance band squat" has no word in common with
+  // "Banded Squat" except squat itself already matching directly — this
+  // covers the ones where an extra word like "resistance" would otherwise
+  // block the match).
+  'monster walk': 'Lateral Band Walk',
+  'monster walks': 'Lateral Band Walk',
+  'resistance band squat': 'Banded Squat',
+  'resistance band deadlift': 'Banded Deadlift',
+  'resistance band push up': 'Banded Push-Up',
+  'resistance band pushup': 'Banded Push-Up',
+  'resistance band overhead press': 'Banded Overhead Press',
+  'resistance band shoulder press': 'Banded Overhead Press',
+  'resistance band bent over row': 'Banded Bent-Over Row',
+  'resistance band row': 'Banded Bent-Over Row',
+  'resistance band upright row': 'Banded Upright Row',
+  'resistance band bicep curl': 'Banded Bicep Curl',
+  'resistance band curl': 'Banded Bicep Curl',
+  'resistance band face pull': 'Banded Face Pull',
+  'resistance band single arm row': 'Banded Single-Arm Row',
+  'band tricep extension': 'Banded Tricep Pushdown',
+  'resistance band tricep pushdown': 'Banded Tricep Pushdown',
+  'resistance band tricep extension': 'Banded Tricep Pushdown',
+  'resistance band lateral raise': 'Banded Lateral Raise',
+  'resistance band chest press': 'Banded Single-Arm Chest Press',
+  'resistance band chest fly': 'Banded Single-Arm Chest Press',
+  'band chest fly': 'Banded Single-Arm Chest Press',
+  'resistance band leg curl': 'Banded Leg Curl',
+  'resistance band lateral lunge': 'Banded Lateral Lunge',
+  'band side lunge': 'Banded Lateral Lunge',
+  'resistance band hip thrust': 'Banded Hip Thrust',
+  'band glute bridge': 'Banded Hip Thrust',
+  'donkey kick': 'Standing Banded Glute Kickback',
+  'donkey kicks': 'Standing Banded Glute Kickback',
+  'resistance band woodchop': 'Banded Woodchop',
+  'band wood chop': 'Banded Woodchop',
+  'standing oblique': 'Standing Banded Oblique Twist',
+  'band twist': 'Standing Banded Oblique Twist',
+  'squat to press': 'Banded Thruster',
+  'resistance band thruster': 'Banded Thruster',
+
+  // Kettlebell exercises — kb/kettlebell abbreviation is handled generally
+  // by expandSearchQuery above (covers every KB exercise in the catalog,
+  // not just these); these entries cover wording that's genuinely
+  // different, not just abbreviated.
+  'clean and press': 'Kettlebell Clean & Press',
+  'kb clean and press': 'Kettlebell Clean & Press',
+  'russian swing': 'Kettlebell Swing',
+  'american swing': 'Kettlebell Swing',
+  'turkish getup': 'Turkish Get-Up',
+  'tgu': 'Turkish Get-Up',
+  'one arm kettlebell row': 'Single-Arm Kettlebell Row',
+  'one armed kettlebell row': 'Single-Arm Kettlebell Row',
+
+  // Medicine ball exercises — med ball/medicine ball abbreviation also
+  // handled generally by expandSearchQuery above.
+  'slam ball': 'Medicine Ball Slam',
+  'wall ball slam': 'Medicine Ball Slam',
+  'weighted russian twist': 'Medicine Ball Russian Twist',
+  'wall throw': 'Medicine Ball Rotational Throw',
+  'rotational throw': 'Medicine Ball Rotational Throw',
 };
 
 // Query normalization: expand common abbreviations both directions so a
 // search matches regardless of which form the exercise name uses or the
-// person types. Covers ~15 catalog exercises that use "DB" for dumbbell.
+// person types. Covers ~15 catalog exercises that use "DB" for dumbbell,
+// plus kettlebell and medicine ball exercises (kb/kettlebell, med
+// ball/medicine ball) added alongside the new Band Exercises environment.
 function expandSearchQuery(q) {
   const variants = new Set([q]);
   if (q.includes('dumbbell')) variants.add(q.replace(/dumbbell/g, 'db'));
   if (/\bdb\b/.test(q)) variants.add(q.replace(/\bdb\b/g, 'dumbbell'));
   if (q.includes('barbell')) variants.add(q.replace(/barbell/g, 'bb'));
+  if (q.includes('kettlebell')) variants.add(q.replace(/kettlebell/g, 'kb'));
+  if (/\bkb\b/.test(q)) variants.add(q.replace(/\bkb\b/g, 'kettlebell'));
+  if (q.includes('medicine ball')) variants.add(q.replace(/medicine ball/g, 'med ball'));
+  if (q.includes('med ball')) variants.add(q.replace(/med ball/g, 'medicine ball'));
   // Basic plural handling — "curls" -> "curl", "preacher curls" -> "preacher curl"
   if (q.endsWith('s') && q.length > 3) variants.add(q.slice(0, -1));
   return [...variants];

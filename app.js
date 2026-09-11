@@ -9888,6 +9888,9 @@ const STAPLE_FOOD_BOOSTS = {
   shrimp: /^shrimp,/i,
   pasta: /^pasta,/i,
   quinoa: /^quinoa,\s*cooked/i,
+  'hamburger patty': /^beef,\s*ground.*patty.*cooked/i, // BUG FIX: "hamburger" as a bare USDA description means the whole sandwich (bun, condiments) — nothing without the word "patty" should qualify, so this is anchored specifically to the plain cooked-patty entries, not sharing the bare 'beef'/'ground beef' pattern above
+  'burger patty': /^beef,\s*ground.*patty.*cooked/i,
+  'beef patty': /^beef,\s*ground.*patty.*cooked/i,
   'black pepper chicken': /chicken.*breast/i, // Panda Express style dishes have no clean generic match — steer toward plain chicken breast rather than a branded/odd result
   'mushroom chicken': /chicken.*breast/i,
 };

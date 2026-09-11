@@ -508,6 +508,8 @@ WORKOUTS.comm['Power / Plyo'] = {
     ex('c_pp_er2','Lunge (Walking)','3×10/leg',3,'Light-moderate. Hip flexor strength critical for takeoff mechanics.',false,'reps_only'),
     ex('c_pp_er3','Sprint 40yd','6 reps',6,'Full speed. Walk back. Log time or distance in the notes.',false,'reps_only'),
     ex('c_pp_er4','Ankle Hop','3×20',3,'Minimal knee bend. Fast and springy.',false,'reps_only'),
+    ex('c_pp_er5','Kettlebell Swing','4×15',4,'Explosive hip hinge — the ballistic hip snap this category is all about. Bell floats to chest height, not overhead.'),
+    ex('c_pp_er6','Medicine Ball Rotational Throw','3×8/side',3,'Stand side-on to a wall, rotate and throw the ball hard into the wall at hip height, catch the rebound and reset. Builds rotational core power and hip-shoulder separation.'),
   ],
   landing: [
     ex('c_pp_l1','Achilles / Calf Stretch','90s/side',1,'Step on step edge, drop heel slowly.',true,'timed_bilateral'),
@@ -532,6 +534,13 @@ WORKOUTS.comm['Full Body'] = {
     ex('c_fb_er4','Single Leg Split Squat','3×8/leg',3,'Unilateral leg accessory.',false,'reps_only'),
     ex('c_fb_er5','Sit-Up','3×20',3,'Classic ab exercise, no equipment needed.',false,'reps_only'),
     ex('c_fb_er6','Bicycle Crunch','3×20/side',3,'Opposite elbow to opposite knee, controlled — not a race.',false,'reps_only'),
+    ex('c_fb_er7','Kettlebell Swing','4×15',4,'Hip hinge, not a squat — the power comes from snapping your hips forward, not your arms lifting. Bell floats to chest height, not overhead.'),
+    ex('c_fb_er8','Kettlebell Clean & Press','3×8/side',3,'Clean the bell to your shoulder in one motion, then press overhead. Reset between reps — this isn\'t a swing.'),
+    ex('c_fb_er9','Single-Arm Kettlebell Row','3×10/side',3,'Hinge forward, free hand on a bench for support, row the bell to your hip keeping your elbow close to your body.'),
+    ex('c_fb_er10','Turkish Get-Up','3×3/side',3,'Slow and controlled — this is a mobility and stability drill as much as strength. Start light. Follow the bell with your eyes the entire rep.'),
+    ex('c_fb_er11','Kettlebell Halo','3×8/side',3,'Hold the bell by the horns at chest height, circle it around your head, leading with the same direction each set. Keeps your core braced throughout.'),
+    ex('c_fb_er12','Medicine Ball Slam','3×12',3,'Raise the ball overhead and slam it straight down as hard as you can, catching it on the bounce or picking it back up. Full body — legs, core, and shoulders drive the power.'),
+    ex('c_fb_er13','Medicine Ball Russian Twist','3×16/side',3,'Sit with knees bent, lean back slightly, rotate the ball side to side, tapping it to the floor on each side.',false,'reps_only'),
   ],
   landing: [
     ex('c_fb_l1','Full Body Stretch Circuit','5 min',1,'Child\'s pose → pigeon each side → lat hang → chest doorframe.',true,'timed'),
@@ -640,6 +649,8 @@ WORKOUTS.hotel['Power / Plyo'] = {
     ex('h_pp_er2','Sprint (hall/outside)','6×20yd',6,'Full speed. Walk back.',false,'reps_only'),
     ex('h_pp_er3','Split Jump','3×6',3,'Lunge position, jump and switch.',false,'reps_only'),
     ex('h_pp_er4','Depth Drop','3×5',3,'Step off low bench, land softly, absorb.',false,'reps_only'),
+    ex('h_pp_er5','Kettlebell Swing','4×15',4,'Explosive hip hinge — the ballistic hip snap this category is all about. Bell floats to chest height, not overhead.'),
+    ex('h_pp_er6','Medicine Ball Rotational Throw','3×8/side',3,'Stand side-on to a wall, rotate and throw the ball hard into the wall at hip height, catch the rebound and reset. Builds rotational core power and hip-shoulder separation.'),
   ],
   landing: WORKOUTS.comm['Power / Plyo'].landing,
 };
@@ -656,6 +667,13 @@ WORKOUTS.hotel['Full Body'] = {
     ex('h_fb_er4','DB Row','3×10/side',3,'Back.'),
     ex('h_fb_er5','Sit-Up','3×20',3,'Classic ab exercise, no equipment needed.',false,'reps_only'),
     ex('h_fb_er6','Bicycle Crunch','3×20/side',3,'Opposite elbow to opposite knee, controlled — not a race.',false,'reps_only'),
+    ex('h_fb_er7','Kettlebell Swing','4×15',4,'Hip hinge, not a squat — the power comes from snapping your hips forward, not your arms lifting. Bell floats to chest height, not overhead.'),
+    ex('h_fb_er8','Kettlebell Clean & Press','3×8/side',3,'Clean the bell to your shoulder in one motion, then press overhead. Reset between reps — this isn\'t a swing.'),
+    ex('h_fb_er9','Single-Arm Kettlebell Row','3×10/side',3,'Hinge forward, free hand on a bench for support, row the bell to your hip keeping your elbow close to your body.'),
+    ex('h_fb_er10','Turkish Get-Up','3×3/side',3,'Slow and controlled — this is a mobility and stability drill as much as strength. Start light. Follow the bell with your eyes the entire rep.'),
+    ex('h_fb_er11','Kettlebell Halo','3×8/side',3,'Hold the bell by the horns at chest height, circle it around your head, leading with the same direction each set. Keeps your core braced throughout.'),
+    ex('h_fb_er12','Medicine Ball Slam','3×12',3,'Raise the ball overhead and slam it straight down as hard as you can, catching it on the bounce or picking it back up. Full body — legs, core, and shoulders drive the power.'),
+    ex('h_fb_er13','Medicine Ball Russian Twist','3×16/side',3,'Sit with knees bent, lean back slightly, rotate the ball side to side, tapping it to the floor on each side.',false,'reps_only'),
   ],
   landing: [
     ex('h_fb_l1','Full Body Stretch','5 min',1,'Child\'s pose → pigeon → lat hang → chest stretch.',true,'timed'),
@@ -822,6 +840,81 @@ WORKOUTS.room['Cardio'] = {
   ],
   landing: WORKOUTS.comm['Cardio'].landing,
 };
+
+// ─── BAND EXERCISES ─────────────────────────────────────────────────────────
+// A resistance band folds down to almost nothing and weighs a few ounces —
+// genuinely realistic to carry in a flight bag or suitcase every single trip,
+// unlike dumbbells or a kettlebell. Sourced from Montana State University
+// Extension's resistance band program (montana.edu/extension/wellness) and
+// Under Armour's resistance band exercise guide (underarmour.com/playbooks).
+WORKOUTS.band = {};
+WORKOUTS.band['Lower Body'] = {
+  taxi: WORKOUTS.comm['Lower Body'].taxi,
+  takeoff: [
+    ex('b_lb_to1','Banded Squat','4×15',4,'Stand on the band with feet shoulder-width, bring the ends up over your shoulders or hold at chest height. Full depth — bands add the most resistance at the top, so drive hard out of the bottom.'),
+    ex('b_lb_to2','Banded Deadlift','4×12',4,'Stand on the middle of the band, feet hip-width, hinge down to grip an end in each hand, drive your hips forward to stand tall. Keep the band taut the whole rep — no slack at the bottom.'),
+  ],
+  enroute: [
+    ex('b_lb_er1','Lateral Band Walk','3×15 steps/side',3,'Loop a band above your knees, drop into a quarter-squat, step sideways keeping tension in the band the entire time. Targets glute medius — often neglected.',false,'reps_only'),
+    ex('b_lb_er2','Banded Leg Curl','3×15/side',3,'Anchor the band low to something stable, loop the other end around one ankle, curl your heel toward your glute. Switch legs.',false,'reps_only'),
+    ex('b_lb_er3','Banded Lateral Lunge','3×10/side',3,'Band looped around your ankles. Take a big step to the side, hinge at the hips and sit into the working leg, push back to center.',false,'reps_only'),
+    ex('b_lb_er4','Banded Hip Thrust','3×15',3,'Band across your hips, shoulders on a bench or the floor, feet flat and knees bent. Drive your hips up, squeeze your glutes at the top.'),
+    ex('b_lb_er5','Standing Banded Glute Kickback','3×15/side',3,'Band looped around both ankles. Balance on one leg, kick the other straight back, squeezing the glute at the top.',false,'reps_only'),
+  ],
+  landing: WORKOUTS.comm['Lower Body'].landing,
+};
+WORKOUTS.band['Upper Push'] = {
+  taxi: WORKOUTS.comm['Upper Push'].taxi,
+  takeoff: [
+    ex('b_up_to1','Banded Push-Up','4×15',4,'Loop the band across your upper back, holding one end under each hand. Adds resistance right where a bodyweight push-up gets easiest — the top of the rep.',false,'reps_only'),
+    ex('b_up_to2','Banded Overhead Press','4×15',4,'Stand on the middle of the band, press both ends straight overhead to full lockout. Core braced, don\'t arch your lower back.'),
+  ],
+  enroute: [
+    ex('b_up_er1','Banded Single-Arm Chest Press','3×12/side',3,'Anchor the band behind you at chest height, face away from the anchor, press forward and slightly across your body.'),
+    ex('b_up_er2','Banded Tricep Pushdown','3×15',3,'Anchor the band overhead, elbows pinned to your sides, extend your arms down until straight.'),
+    ex('b_up_er3','Banded Lateral Raise','3×15',3,'Stand on the band, raise both arms out to shoulder height. Light tension, strict form — no swinging.'),
+  ],
+  landing: WORKOUTS.comm['Upper Push'].landing,
+};
+WORKOUTS.band['Upper Pull'] = {
+  taxi: WORKOUTS.comm['Upper Pull'].taxi.slice(0,2),
+  takeoff: [
+    ex('b_ul_to1','Banded Bent-Over Row','4×15',4,'Stand on the band, feet hip-width, hinge forward about 30°. Pull the band to your chest, keeping elbows close to your sides — they should skim your ribs.'),
+    ex('b_ul_to2','Banded Upright Row','4×12',4,'Stand on the band with it crossed into an X in front of you. Pull your hands up to shoulder height, elbows leading out to the sides.'),
+  ],
+  enroute: [
+    ex('b_ul_er1','Banded Bicep Curl','3×15',3,'Stand on the band, curl both hands up toward your shoulders, elbows tucked to your sides throughout.'),
+    ex('b_ul_er2','Banded Face Pull','3×15',3,'Anchor the band at chest height, pull toward your face with your elbows high, squeezing your shoulder blades together.'),
+    ex('b_ul_er3','Banded Single-Arm Row','3×12/side',3,'Anchor the band low, staggered stance, row toward your hip keeping the elbow close to your body.'),
+  ],
+  landing: WORKOUTS.comm['Upper Pull'].landing,
+};
+WORKOUTS.band['Full Body'] = {
+  taxi: [ex('b_fb_t1','Band Mobility Circuit','1 round',1,'10 band pull-aparts → 10 banded good mornings → 10 bodyweight squats with the band looped around your knees.',true,'timed')],
+  takeoff: [
+    ex('b_fb_to1','Banded Squat','4×15',4,'Full depth, band over your shoulders or held at chest height.'),
+    ex('b_fb_to2','Banded Deadlift','4×12',4,'Hip hinge pattern, band taut throughout the entire rep.'),
+  ],
+  enroute: [
+    ex('b_fb_er1','Banded Push-Up','3×15',3,'Band looped across your upper back.',false,'reps_only'),
+    ex('b_fb_er2','Banded Bent-Over Row','3×15',3,'Elbows close to your sides the whole pull.'),
+    ex('b_fb_er3','Banded Woodchop','3×12/side',3,'Anchor the band low or high, rotate it diagonally across your body — the movement should come from your core, not your arms.'),
+    ex('b_fb_er4','Standing Banded Oblique Twist','3×12/side',3,'Band anchored at your side around waist height, twist your torso away from the anchor point and back.'),
+    ex('b_fb_er5','Banded Thruster','3×12',3,'Squat down keeping the band taut, then drive up through your legs and press the band straight overhead in one continuous motion as you stand.'),
+  ],
+  landing: [
+    ex('b_fb_l1','Full Body Stretch','5 min',1,'Child\'s pose → pigeon → lat hang → chest stretch.',true,'timed'),
+    ex('b_fb_l2','Diaphragmatic Breathing','10 breaths',1,'Inhale 4, hold 2, exhale 6.',false,'reps_only'),
+  ],
+};
+// The remaining categories don't have a meaningfully distinct banded
+// version — sharing the closest equipment-matched environment rather than
+// inventing content for its own sake, same pattern already used for
+// Stretch/Longevity across hotel and room above.
+WORKOUTS.band['Power / Plyo'] = WORKOUTS.room['Power / Plyo'];
+WORKOUTS.band['Longevity']   = WORKOUTS.comm['Longevity'];
+WORKOUTS.band['Stretch']     = WORKOUTS.comm['Stretch'];
+WORKOUTS.band['Cardio']      = WORKOUTS.room['Cardio'];
 
 // ─── FATIGUE-AWARE FILTERING ──────────────────────────────────────────────────
 const LEVEL_EX = {
@@ -1526,7 +1619,7 @@ function renderLanding(root) {
   parts.push('<div class="landing-section-title">Why pilots need a different program</div>');
 
   const features = [
-    ['🌍','Environment-aware workouts','Every session adapts automatically to Commercial Gym, Hotel Gym, or just a Hotel Room — no equipment excuses.'],
+    ['🌍','Environment-aware workouts','Every session adapts automatically to Commercial Gym, Hotel Gym, Hotel Room, or just resistance bands — no equipment excuses.'],
     ['🚦','Fatigue-gated intensity','A pilot condition toggle (Go / Marginal / No-Go) reduces or removes heavy lifting when you\'re running on insufficient rest — auto-set from your Oura Ring if you wear one, or a 15-second self-check if you don\'t.'],
     ['⌚','Oura Ring auto-sync','Connect once and your daily readiness, sleep, and HRV drive your workout intensity automatically — no manual logging required.'],
     ['🏆','Leaderboards, scored fairly','Compete on bench, squat, deadlift, and more against fellow pilots — ranked by DOTS score, which adjusts for bodyweight and sex, so a 160 lb first officer and a 220 lb captain are compared on equal footing, not just raw weight. Opt-in only — no call sign, nothing is shared.'],
@@ -1847,7 +1940,7 @@ const BADGES = [
   { id:'century',      icon:'💯', title:'Century Club',     desc:'500 lifetime sets logged',               check:s => s.totalSets >= 500 },
   { id:'iron_will',    icon:'🦾', title:'Iron Will',        desc:'20+ sets in a single session',           check:s => s.maxSetsInSession >= 20 },
   { id:'redline',      icon:'🔴', title:'Redline',          desc:'Trained through NO-GO fatigue 3 times — showing up beats the mood you showed up in', check:s => s.nogoTrainedCount >= 3 },
-  { id:'all_weather',  icon:'🌍', title:'All-Weather',      desc:'Trained in Hotel Room, Hotel Gym, and Commercial Gym', check:s => s.envsTrained >= 3 },
+  { id:'all_weather',  icon:'🌍', title:'All-Weather',      desc:'Trained in 3 different environments (room, gym, or bands)', check:s => s.envsTrained >= 3 },
   { id:'early_bird',   icon:'🌅', title:'Early Bird',       desc:'Logged a workout before 6 AM, 5 times',  check:s => s.earlyBirdCount >= 5 },
   { id:'top_gun',      icon:'🎖️', title:'Top Gun',          desc:'Hold the #1 spot on any leaderboard',    check:null, live:true },
   { id:'debrief',      icon:'💬', title:'Debrief',          desc:'Sent feedback to help improve the app',  check:null, live:true },
@@ -2532,6 +2625,9 @@ WORKOUTS.room['Run'] = {
   ],
   landing: WORKOUTS.comm['Run'].landing,
 };
+// Running doesn't depend on which strength environment you picked —
+// shares the same content as the other three rather than being duplicated.
+WORKOUTS.band['Run'] = WORKOUTS.room['Run'];
 
 function renderPage() {
   const p = document.getElementById('mainPage');
@@ -5378,7 +5474,7 @@ async function renderPreflight(p) {
   const planName = ST.activeCustomProfileId
     ? '🛠 ' + (ST.customProfiles.find(cp => cp.id === ST.activeCustomProfileId)?.name || 'Custom Routine')
     : ST.muscleGroup;
-  const envLabel = {room:'Hotel Room',hotel:'Hotel Gym',comm:'Commercial Gym'}[ST.env];
+  const envLabel = {room:'Hotel Room',hotel:'Hotel Gym',comm:'Commercial Gym',band:'Band Exercises'}[ST.env];
   const planSummary = envLabel + (ST.timeAvailMin ? ' · '+ST.timeAvailMin+' min' : ' · Full Session') + (totalEx ? ' · '+totalEx+' exercises' : '');
 
   if (wk) {
@@ -5434,6 +5530,7 @@ async function renderPreflight(p) {
     parts.push('<div class="env-btn '+(ST.env==='room'?'sel':'')+'" onclick="ST.env=\'room\';renderPage()"><div class="ei">🛏️</div><div class="el">HOTEL ROOM</div></div>');
     parts.push('<div class="env-btn '+(ST.env==='hotel'?'sel':'')+'" onclick="ST.env=\'hotel\';renderPage()"><div class="ei">🏨</div><div class="el">HOTEL GYM</div></div>');
     parts.push('<div class="env-btn '+(ST.env==='comm'?'sel':'')+'" onclick="ST.env=\'comm\';renderPage()"><div class="ei">🏋️</div><div class="el">COMM GYM</div></div>');
+    parts.push('<div class="env-btn '+(ST.env==='band'?'sel':'')+'" onclick="ST.env=\'band\';renderPage()"><div class="ei">➰</div><div class="el">BAND WORK</div></div>');
     parts.push('</div>');
 
     // Detailed phase-by-phase preview only shown while the plan editor is

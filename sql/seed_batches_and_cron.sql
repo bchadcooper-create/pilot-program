@@ -46,3 +46,53 @@ select cron.schedule(
 
 -- To stop this permanently once all 10 users exist:
 --   select cron.unschedule('fcf-seed-users-batch-check');
+
+-- ─── PROMO/COMP CODE SYSTEM (added Sep 11, 2026) ───────────────────────────
+-- Lets Chad manually grant free Pro time (e.g. handed out in person or on
+-- social media) without touching real Stripe/IAP billing at all.
+
+create table if not exists promo_codes (
+  code text primary key,
+  duration_days int not null,
+  max_redemptions int, -- null = unlimited (a batch code handed to many people)
+  redemption_count int not null default 0,
+  active boolean not null default true,
+  note text, -- Chad's own reference, e.g. "handed out at PDX meetup Sep 2026"
+  created_at timestamptz not null default now()
+);
+
+create table if not exists promo_redemptions (
+  code text not null references promo_codes(code),
+  user_id uuid not null,
+  redeemed_at timestamptz not null default now(),
+  primary key (code, user_id)
+);
+
+-- Daily job that expires lapsed promo grants — isPro() itself is untouched;
+-- this just keeps subscriptions.status in sync the same way a Stripe/IAP
+-- webhook would for a real subscription.
+select cron.schedule(
+  'fcf-expire-promo-subscriptions',
+  '0 3 * * *',
+  $$
+  update subscriptions
+  set status = 'expired', updated_at = now()
+  where platform = 'promo'
+    and status = 'active'
+    and current_period_end < now();
+  $$
+);
+
+-- To create a new code, e.g. a single-use 1-month code for one person:
+--   insert into promo_codes (code, duration_days, max_redemptions, note)
+--   values ('YOURCODE', 30, 1, 'who this is for / where met');
+--
+-- Or a reusable batch code handed to many people at an event:
+--   insert into promo_codes (code, duration_days, max_redemptions, note)
+--   values ('MEETUP2026', 30, null, 'handed out at [event name]');
+--
+-- To check redemptions for a code:
+--   select * from promo_redemptions where code = 'YOURCODE';
+--
+-- To deactivate a code early:
+--   update promo_codes set active = false where code = 'YOURCODE';

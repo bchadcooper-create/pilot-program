@@ -3186,6 +3186,47 @@ async function restoreProPurchases() {
   showBigToast('Contacting App Store…', 'info');
 }
 
+// ─── PROMO CODE REDEMPTION ──────────────────────────────────────────────
+async function redeemPromoCode() {
+  const input = document.getElementById('promoCodeInput');
+  const resultEl = document.getElementById('promoCodeResult');
+  const code = (input?.value || '').trim();
+  if (!code) return;
+  if (resultEl) { resultEl.style.color = 'var(--muted)'; resultEl.textContent = 'Checking…'; }
+
+  try {
+    const { data: { session } } = await SB.auth.getSession();
+    if (!session) { if (resultEl) { resultEl.style.color = 'var(--red)'; resultEl.textContent = 'Sign in first.'; } return; }
+
+    const res = await fetch('https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/fcf-redeem-promo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+      body: JSON.stringify({ code }),
+    });
+    const result = await res.json();
+
+    if (!res.ok) {
+      const messages = {
+        invalid_code:     'That code isn\'t valid.',
+        code_exhausted:   'That code has already been fully redeemed.',
+        already_redeemed: 'You\'ve already redeemed this code.',
+        missing_code:     'Enter a code first.',
+      };
+      if (resultEl) { resultEl.style.color = 'var(--red)'; resultEl.textContent = messages[result.error] || 'Something went wrong — try again.'; }
+      return;
+    }
+
+    if (input) input.value = '';
+    if (resultEl) { resultEl.style.color = 'var(--green)'; resultEl.textContent = ''; }
+    await loadSubscription();
+    renderPage();
+    const until = new Date(result.proUntil).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+    showBigToast('✓ Pro unlocked through ' + until + '!', 'ok');
+  } catch (e) {
+    if (resultEl) { resultEl.style.color = 'var(--red)'; resultEl.textContent = 'Network error — try again.'; }
+  }
+}
+
 // ─── ACCOUNT DELETION ───────────────────────────────────────────────────
 // Apple has required in-app account deletion since 2022 for any app that
 // supports account creation. Its absence is an automatic rejection, and it
@@ -9217,8 +9258,15 @@ function renderMore(p) {
     const until = ST.subscription?.current_period_end
       ? new Date(ST.subscription.current_period_end).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : null;
     parts.push('<div class="fb"><span style="font-size:13px;font-weight:600;color:var(--gold)">❖ Pro — all features unlocked</span></div>');
-    if (until) parts.push('<div style="font-size:11px;color:var(--muted);margin-top:4px">'+(ST.subscription?.status==='grace'?'Renewal pending — ':'Renews ')+until+'</div>');
-    parts.push('<div style="font-size:11px;color:var(--muted);margin-top:8px">Manage or cancel in your Apple ID subscription settings.</div>');
+    if (until) {
+      // "Renews" implies auto-billing, which a promo grant doesn't have —
+      // it just runs out. Saying "Renews" for a comped account would be
+      // actively misleading about what happens when the date arrives.
+      const isPromo = ST.subscription?.platform === 'promo';
+      const label = isPromo ? 'Pro (promo) — expires ' : (ST.subscription?.status==='grace'?'Renewal pending — ':'Renews ');
+      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:4px">'+label+until+'</div>');
+    }
+    parts.push('<div style="font-size:11px;color:var(--muted);margin-top:8px">'+(ST.subscription?.platform === 'promo' ? 'Comp/promo access — no billing, nothing to manage.' : 'Manage or cancel in your Apple ID subscription settings.')+'</div>');
   } else {
     const rows = [
       ['Workout logging',             '✓',       '✓'],
@@ -9258,6 +9306,17 @@ function renderMore(p) {
     parts.push('<div style="font-size:10px;color:var(--muted);text-align:center;margin-bottom:8px">Annual saves ~37%</div>');
     parts.push('<button class="btn-ghost" style="display:block;width:100%;text-align:center" onclick="restoreProPurchases()">Restore purchases</button>');
   }
+  parts.push('</div>');
+
+  // Promo/comp code redemption — separate small card, visible regardless
+  // of current tier (a Pro user can still redeem to extend further).
+  parts.push('<div class="card mb12">');
+  parts.push('<div style="font-size:12px;font-weight:600;margin-bottom:8px">Have a promo code?</div>');
+  parts.push('<div style="display:flex;gap:8px">');
+  parts.push('<input id="promoCodeInput" type="text" placeholder="ENTER CODE" autocapitalize="characters" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:var(--mono);font-size:13px;letter-spacing:0.05em" onkeydown="if(event.key===\'Enter\')redeemPromoCode()">');
+  parts.push('<button class="btn btn-outline" style="width:auto;padding:0 18px" onclick="redeemPromoCode()">Redeem</button>');
+  parts.push('</div>');
+  parts.push('<div id="promoCodeResult" style="font-size:11px;margin-top:8px"></div>');
   parts.push('</div>');
 
   parts.push('<div class="card mb12" style="padding:0">');

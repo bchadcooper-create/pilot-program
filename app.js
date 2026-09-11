@@ -3804,7 +3804,7 @@ window.addEventListener('fcf:apnsToken', async (e) => {
 
 // Schedule all enabled notifications via the native bridge.
 // Called after login, after calendar sync, and after prefs change.
-function scheduleNotifications() {
+async function scheduleNotifications() {
   if (typeof FCFBridge === 'undefined' || !FCFBridge.isNative) return;
   const pro = isPro();
 
@@ -3814,15 +3814,45 @@ function scheduleNotifications() {
     .map(e => ({ start: e.start, origin: e.origin || '', destination: e.destination || '' }))
     .slice(0, 10);
 
+  // BUG FIX (reported: "HRV below baseline" notification fired when the
+  // user's own Oura app showed HRV as completely normal). Root cause was
+  // two stacked bugs: hrvAlert only checked "does an HRV value exist"
+  // (not whether it was actually low), and hrvBaseline was being set to
+  // TODAY'S OWN current HRV reading — comparing today's value against
+  // itself, which can never meaningfully signal "below baseline."
+  // NotificationManager.swift's own comment already stated the intended
+  // design ("fires if HRV is more than 20% below baseline") — this
+  // finally implements that for real, using Oura's own hrv_balance
+  // contributor (matches what the user's own Oura app is built on,
+  // rather than inventing separate baseline math from raw HealthKit
+  // SDNN) and a genuine trailing 14-day personal average as the baseline,
+  // the same rolling-window concept Oura itself uses.
+  let hrvIsLow = false, hrvToday = null, hrvBaselineAvg = null;
+  if (pro && ST.user && ST.ouraData?.hrv_balance != null) {
+    hrvToday = ST.ouraData.hrv_balance;
+    try {
+      const since = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
+      const { data: recent } = await SB.from('oura_daily')
+        .select('hrv_balance').eq('user_id', ST.user.id)
+        .gte('date', since).lt('date', ST.ouraData.date)
+        .not('hrv_balance', 'is', null);
+      if (recent && recent.length >= 5) { // need enough history for a meaningful average
+        hrvBaselineAvg = Math.round(recent.reduce((sum, r) => sum + r.hrv_balance, 0) / recent.length);
+        hrvIsLow = hrvToday < hrvBaselineAvg * 0.8; // more than 20% below baseline
+      }
+    } catch (e) { /* no history yet or query failed — don't alert on incomplete data */ }
+  }
+
   const prefs = {
     action:            'schedule',
     workoutReminder:   true,                           // free — always on
     waterReminder:     !!(ST.trackHydration),          // free if hydration on
     preflightCheck:    upcomingFlights.length > 0,     // free if flights detected
     upcomingFlights,
-    hrvAlert:          pro && !!(ST.healthkit?.hrv),   // pro
+    hrvAlert:          hrvIsLow,                       // pro — see computation above
     weeklySummary:     pro,                            // pro
-    hrvBaseline:       ST.healthkit?.hrv || null,
+    hrvBaseline:       hrvBaselineAvg,
+    hrvToday:          hrvToday,
   };
   window.webkit?.messageHandlers?.notifications?.postMessage(prefs);
 }

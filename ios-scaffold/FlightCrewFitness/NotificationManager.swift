@@ -18,10 +18,15 @@ import Foundation
 //   weekly_summary      — fires Sunday evening with the week's training recap
 //
 // The web app sends notification preferences via the `notifications` bridge message.
-// This manager schedules local notifications based on those prefs.
-// Remote (server-push) notifications for hrv_drop and weekly_summary are handled
-// server-side via the fcf-push-notify edge function — this manager covers
-// the local scheduling that works without a network connection.
+// This manager schedules local notifications based on those prefs. The actual
+// hrv_drop eligibility check (is HRV genuinely below the user's own rolling
+// baseline) is computed web-side before this is ever called — see
+// scheduleNotifications() in app.js — since it needs Supabase history the
+// native layer doesn't have. There is no separate server-push path for
+// hrv_drop or weekly_summary; despite an earlier version of this comment
+// describing one via an fcf-push-notify edge function, that function was
+// never actually built. Everything in this file is the real mechanism, not
+// a fallback for one.
 
 class NotificationManager {
 
@@ -45,7 +50,7 @@ class NotificationManager {
             let flights = prefs["upcomingFlights"] as? [[String: String]] ?? []
             schedulePreflightChecks(flights: flights)
         }
-        if hrvEnabled      { scheduleHRVCheck(baseline: prefs["hrvBaseline"] as? Int) }
+        if hrvEnabled      { scheduleHRVCheck(today: prefs["hrvToday"] as? Int, baseline: prefs["hrvBaseline"] as? Int) }
         if weeklyEnabled   { scheduleWeeklySummary() }
     }
 
@@ -146,14 +151,21 @@ class NotificationManager {
     }
 
     // ── PRO: HRV drop alert ────────────────────────────────────────────────
-    // Fires at 7am if HealthKit HRV is more than 20% below baseline.
-    // Actual HRV comparison is done server-side — this schedules a
-    // daily local check that the server can cancel if HRV is normal.
-
-    func scheduleHRVCheck(baseline: Int?) {
+    // BUG FIX (reported: this fired for a user whose own Oura app showed HRV
+    // as completely normal). The eligibility check (is HRV actually more
+    // than 20% below the user's own rolling 14-day baseline) now happens
+    // web-side in scheduleNotifications() before this is ever called —
+    // hrvEnabled being true already MEANS the condition is genuinely met.
+    // today/baseline are passed through purely so the notification body can
+    // state real numbers instead of a generic unverifiable claim.
+    func scheduleHRVCheck(today: Int?, baseline: Int?) {
         let content = UNMutableNotificationContent()
         content.title = "HRV below baseline"
-        content.body  = "Your recovery score is down. Consider scaling today's session."
+        if let today = today, let baseline = baseline {
+            content.body = "Today's HRV balance is \(today), vs. your recent average of \(baseline). Consider scaling today's session."
+        } else {
+            content.body = "Your recovery score is down. Consider scaling today's session."
+        }
         content.sound = .default
         content.userInfo = ["type": "hrv_alert", "deepLink": "today"]
 

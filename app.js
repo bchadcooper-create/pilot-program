@@ -5067,8 +5067,8 @@ function renderSessionEditor() {
 // genuine stored seconds, keeping the underlying data model (MET estimates,
 // running-leaderboard pace, formatSetPerformance) unchanged and correct.
 function liveSetValMin(exId, i, field, value) {
+  ensureSetEntry(exId, i);
   const sets = ST.sets[exId];
-  if (!sets || !sets[i]) return;
   const mins = parseFloat(value);
   sets[i][field] = (isNaN(mins) || mins <= 0) ? '' : String(Math.round(mins * 60));
   persistWorkoutState();
@@ -6873,13 +6873,13 @@ function buildExCard(exItem, phaseKey) {
       parts.push('<div style="display:flex;gap:8px">');
       parts.push('<div class="timed-box" style="flex:1" id="tb_'+exItem.id+'_left">');
       parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">LEFT SIDE</div>');
-      parts.push('<input class="timed-inp" type="number" inputmode="numeric" placeholder="0" value="'+valL+'" oninput="ST.sets[\''+exItem.id+'\'][0].seconds_left=this.value;persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
+      parts.push('<input class="timed-inp" type="number" inputmode="numeric" placeholder="0" value="'+valL+'" oninput="ensureSetEntry(\''+exItem.id+'\',0);ST.sets[\''+exItem.id+'\'][0].seconds_left=this.value;persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
       parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">seconds</div>');
       parts.push(buildStopwatchWidget(exItem.id, 'left', exItem.target));
       parts.push('</div>');
       parts.push('<div class="timed-box" style="flex:1" id="tb_'+exItem.id+'_right">');
       parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">RIGHT SIDE</div>');
-      parts.push('<input class="timed-inp" type="number" inputmode="numeric" placeholder="0" value="'+valR+'" oninput="ST.sets[\''+exItem.id+'\'][0].seconds_right=this.value;persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
+      parts.push('<input class="timed-inp" type="number" inputmode="numeric" placeholder="0" value="'+valR+'" oninput="ensureSetEntry(\''+exItem.id+'\',0);ST.sets[\''+exItem.id+'\'][0].seconds_right=this.value;persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
       parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">seconds</div>');
       parts.push(buildStopwatchWidget(exItem.id, 'right', exItem.target));
       parts.push('</div>');
@@ -6896,7 +6896,7 @@ function buildExCard(exItem, phaseKey) {
       parts.push('<input class="timed-inp" type="text" inputmode="decimal" placeholder="0" value="'+valMin+'" oninput="liveSetValMin(\''+exItem.id+'\',0,\'seconds\',this.value);document.getElementById(\'tb_'+exItem.id+'\').className=\'timed-box\'+(this.value?\' ok\':\'\');">');
       parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">min</div></div>');
       parts.push('<div style="flex:1"><div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">DISTANCE</div>');
-      parts.push('<input class="timed-inp" type="text" inputmode="decimal" placeholder="0" value="'+valMi+'" oninput="ST.sets[\''+exItem.id+'\'][0].miles=this.value;persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
+      parts.push('<input class="timed-inp" type="text" inputmode="decimal" placeholder="0" value="'+valMi+'" oninput="ensureSetEntry(\''+exItem.id+'\',0);ST.sets[\''+exItem.id+'\'][0].miles=this.value;persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
       parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">mi</div></div>');
       parts.push('</div></div>');
     } else if (exItem.timed && isMinuteScale(exItem)) {
@@ -6916,7 +6916,7 @@ function buildExCard(exItem, phaseKey) {
       const val = sets[0]?.seconds || '';
       parts.push('<div class="timed-box '+(val?'ok':'')+'" id="tb_'+exItem.id+'">');
       parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">TOTAL TIME</div>');
-      parts.push('<input class="timed-inp" type="number" inputmode="numeric" placeholder="0" value="'+val+'" oninput="ST.sets[\''+exItem.id+'\'][0].seconds=this.value;document.getElementById(\'tb_'+exItem.id+'\').className=\'timed-box\'+(this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
+      parts.push('<input class="timed-inp" type="number" inputmode="numeric" placeholder="0" value="'+val+'" oninput="ensureSetEntry(\''+exItem.id+'\',0);ST.sets[\''+exItem.id+'\'][0].seconds=this.value;document.getElementById(\'tb_'+exItem.id+'\').className=\'timed-box\'+(this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
       parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">seconds</div>');
       parts.push('</div>');
       parts.push(buildStopwatchWidget(exItem.id, null, exItem.target));
@@ -6924,8 +6924,8 @@ function buildExCard(exItem, phaseKey) {
       parts.push('<div class="sets-wrap"><div class="sets-scroll">');
       sets.forEach((s,i) => {
         parts.push('<div class="set-tile '+(s.reps||s.height?'ok':'')+'" id="st_'+exItem.id+'_'+i+'"><div class="set-lbl">SET '+(i+1)+'</div>');
-        parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value||ST.sets[\''+exItem.id+'\']['+i+'].height?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
-        parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="Height" value="'+(s.height||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].height=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
+        parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value||ST.sets[\''+exItem.id+'\']['+i+'].height?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
+        parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="Height" value="'+(s.height||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].height=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
         parts.push('<div class="set-hint">reps / height (in)</div></div>');
       });
       parts.push('</div></div>'+(sets.length>2?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<button class="btn-ghost" style="font-size:11px;margin-top:6px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button>');
@@ -6936,8 +6936,8 @@ function buildExCard(exItem, phaseKey) {
       parts.push('<div class="sets-wrap"><div class="sets-scroll">');
       sets.forEach((s,i) => {
         parts.push('<div class="set-tile '+(s.reps||s.distance?'ok':'')+'" id="st_'+exItem.id+'_'+i+'"><div class="set-lbl">SET '+(i+1)+'</div>');
-        parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value||ST.sets[\''+exItem.id+'\']['+i+'].distance?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
-        parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="Distance" value="'+(s.distance||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].distance=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
+        parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value||ST.sets[\''+exItem.id+'\']['+i+'].distance?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
+        parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="Distance" value="'+(s.distance||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].distance=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
         parts.push('<div class="set-hint">reps / distance (in)</div></div>');
       });
       parts.push('</div></div>'+(sets.length>2?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<button class="btn-ghost" style="font-size:11px;margin-top:6px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button>');
@@ -6948,7 +6948,7 @@ function buildExCard(exItem, phaseKey) {
       parts.push('<div class="sets-wrap"><div class="sets-scroll">');
       sets.forEach((s,i) => {
         parts.push('<div class="set-tile '+(s.reps?'ok':'')+'" id="st_'+exItem.id+'_'+i+'"><div class="set-lbl">SET '+(i+1)+'</div>');
-        parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
+        parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
         parts.push('<div class="set-hint">reps only</div></div>');
       });
       parts.push('</div></div>'+(sets.length>3?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<button class="btn-ghost" style="font-size:11px;margin-top:6px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button>');
@@ -6956,8 +6956,8 @@ function buildExCard(exItem, phaseKey) {
       parts.push('<div class="sets-wrap"><div class="sets-scroll">');
       sets.forEach((s,i) => {
         parts.push('<div class="set-tile '+(s.reps||s.weight?'ok':'')+'" id="st_'+exItem.id+'_'+i+'"><div class="set-lbl">SET '+(i+1)+'</div>');
-        parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value||ST.sets[\''+exItem.id+'\']['+i+'].weight?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
-        parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="lb" value="'+(s.weight||'')+'" oninput="ST.sets[\''+exItem.id+'\']['+i+'].weight=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
+        parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value||ST.sets[\''+exItem.id+'\']['+i+'].weight?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
+        parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="lb" value="'+(s.weight||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].weight=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
         parts.push('<div class="set-hint">reps / lb</div></div>');
       });
       parts.push('</div></div>'+(sets.length>2?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<button class="btn-ghost" style="font-size:11px;margin-top:6px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button>');
@@ -7000,6 +7000,22 @@ function buildExCard(exItem, phaseKey) {
 // existing persistWorkoutState() call, this does the same kind of cheap,
 // targeted update for those two remaining stale pieces instead of
 // triggering a full re-render on every keystroke.
+// BUG FIX (reported crash: "undefined is not an object (evaluating
+// 'ST.sets[...][0]')" when typing into a timed exercise's field after
+// closing and reopening the app mid-workout). ST.sets[exId][i] is
+// supposed to always be pre-initialized (engageWorkout() and
+// swapExercise() both do this), but a restored session is a straight
+// localStorage replay with no re-validation — if that entry was ever
+// missing or malformed for any reason, every input handler assumed it
+// existed and crashed the instant someone typed into that exact field.
+// Called at the start of every set-input oninput handler now, right
+// before the write it protects, so the class of bug is closed
+// everywhere at once rather than patched for one exercise.
+function ensureSetEntry(exId, i) {
+  if (!ST.sets[exId]) ST.sets[exId] = [];
+  if (!ST.sets[exId][i]) ST.sets[exId][i] = {};
+}
+
 function updateExDoneIndicator(exId) {
   const sets = ST.sets[exId] || [];
   const hasData = sets.some(s => s.reps || s.weight || s.seconds || s.height || s.distance || s.seconds_left || s.seconds_right);
@@ -7310,11 +7326,14 @@ function stopStopwatch(exId, side) {
   if (ST.stopwatch.interval) clearInterval(ST.stopwatch.interval);
   const total = ST.stopwatch.seconds;
   ST.stopwatch.active = false;
-  if (ST.sets[exId]) {
-    if (side === 'left') ST.sets[exId][0].seconds_left = String(total);
-    else if (side === 'right') ST.sets[exId][0].seconds_right = String(total);
-    else ST.sets[exId][0].seconds = String(total);
-  }
+  // BUG FIX: the old guard (`if (ST.sets[exId])`) only checked the array
+  // itself existed, not that index [0] did — an existing-but-empty array
+  // would still crash on .seconds_left = ... the same way the reported
+  // oninput crash did. ensureSetEntry covers both cases.
+  ensureSetEntry(exId, 0);
+  if (side === 'left') ST.sets[exId][0].seconds_left = String(total);
+  else if (side === 'right') ST.sets[exId][0].seconds_right = String(total);
+  else ST.sets[exId][0].seconds = String(total);
   persistTimerState();
   persistWorkoutState();
   showToast('⏱ Recorded '+total+' seconds'+(side?' ('+side+' side)':'')+'.');
@@ -7358,7 +7377,10 @@ function stopNSDR(exId) {
   if (ST.nsdrTimer.interval) clearInterval(ST.nsdrTimer.interval);
   const total = ST.nsdrTimer.seconds;
   ST.nsdrTimer.active = false;
-  if (ST.sets[exId]) ST.sets[exId][0].seconds = String(total);
+  // Same fix as stopStopwatch: `if (ST.sets[exId])` alone isn't enough,
+  // an existing-but-empty array would still crash on [0].seconds = ...
+  ensureSetEntry(exId, 0);
+  ST.sets[exId][0].seconds = String(total);
   persistTimerState();
   persistWorkoutState();
   showToast('NSDR session recorded: '+formatStopwatch(total));

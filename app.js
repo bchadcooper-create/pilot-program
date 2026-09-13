@@ -7917,27 +7917,50 @@ async function loadRecentMealLogs(days) {
 }
 
 // ─── RECENT MEALS ─────────────────────────────────────────────────────
-// BUG FIX (reported: "Recent meals" doesn't bring up anything). Root
-// cause: this required a food to be logged 2+ times with an EXACT
-// (post-normalization) matching description before it would show at
-// all. That threshold assumes atomic, consistently-named food items —
-// it works for a manually-typed "Chicken breast" logged the same way
-// twice. But most real logs here come from photo recognition, which
-// describes the WHOLE PLATE as one fresh AI-generated sentence each
-// time ("Scrambled eggs with beans and papaya" one day, "Scrambled eggs
-// with bacon, yogurt, and coffee" the next) — even a genuinely repeated
-// meal essentially never produces an identical string twice, so the
-// 2+ threshold was almost never met by anyone, for any food. Confirmed
-// against real logged data: zero exact repeats across 20 real entries,
-// despite clearly repeated foods (whey protein shakes, several times).
-//
-// Fix: rank by RECENCY instead of requiring a frequency threshold —
-// this also actually matches what the entry point promises ("Recent
-// meals" is the button/tab label; "frequency" was never what a user
-// tapping that button was asking for). A repeat is still surfaced and
-// still shows its count via timesLogged, it just isn't REQUIRED before
-// something can appear at all.
-const FREQUENT_FOODS_CACHE_KEY = 'fcf_frequent_foods_cache_v2'; // bumped from _v1 — the old key could hold a stale EMPTY result cached under the buggy 2+ threshold; renaming forces a fresh fetch under the fixed logic instead of waiting up to 12h for the old cache to expire
+// BUG FIX ROUND 2 (reported: recency-only ranking meant a single busy
+// day of uniquely-worded photo logs could fill every slot, crowding out
+// real habits from other days — and the user's actual ask was "show me
+// what I normally log," which is frequency, not recency). Root problem
+// underneath both bugs is the same: photo-recognition describes the
+// WHOLE PLATE as a fresh sentence each time, so a genuinely repeated
+// habit (a protein shake, most mornings) almost never produces the same
+// string twice ("Whey protein powder shake (Mocha Cappuccino...)" vs
+// "Whey protein shake (Smores flavored) with a banana" are the same
+// HABIT worded two different ways) — plain string matching can't see
+// that they're the same thing, so the true count for a real habit was
+// getting fragmented across many count-1 entries instead of ever adding
+// up. FOOD_GROUP_PATTERNS below groups by a recognized staple category
+// first (same curated-pattern approach already used for
+// STAPLE_FOOD_BOOSTS in food search), falling back to the literal
+// description only for things that don't match a known category — so a
+// real habit's count now actually reflects how often it happens,
+// regardless of exact wording, and ranking by that count is what
+// surfaces "things you normally log" rather than whatever happened to
+// be logged most recently.
+const FOOD_GROUP_PATTERNS = [
+  { label: 'Protein shake',  re: /protein (shake|powder)/i },
+  { label: 'Eggs',           re: /\beggs?\b/i },
+  { label: 'Chicken breast', re: /chicken breast/i }, // deliberately NOT a bare \bchicken\b — that grouped a burrito bowl, a chicken salad, and a Chick-fil-A sandwich into one misleading "4x" badge, when none of those are actually the same repeated food, just dishes that happen to contain chicken
+  { label: 'Steak',          re: /\bsteak\b/i },
+  { label: 'Ground beef',    re: /ground beef|hamburger patty|beef patty/i },
+  { label: 'Protein bar',    re: /protein bar|granola bar/i },
+  { label: 'Yogurt',         re: /yogurt/i },
+  { label: 'Oatmeal',        re: /oatmeal/i },
+  { label: 'Mixed nuts',     re: /mixed nuts|almonds/i },
+  { label: 'Salad',          re: /\bsalad\b/i },
+  { label: 'Sandwich',       re: /sandwich/i },
+];
+// Checks known staple categories first; only an UNRECOGNIZED food falls
+// back to its own literal (normalized) description as its group key —
+// this is deliberately a fallback, not the primary grouping, since a
+// one-off dish shouldn't be force-fit into an unrelated category.
+function canonicalFoodGroup(description) {
+  const d = description || '';
+  for (const p of FOOD_GROUP_PATTERNS) if (p.re.test(d)) return p.label;
+  return normalizeFoodKey(d);
+}
+
+const FREQUENT_FOODS_CACHE_KEY = 'fcf_frequent_foods_cache_v3'; // bumped from _v2 — grouping logic changed, old cached results were keyed/ranked under the old per-string logic
 const FREQUENT_FOODS_WINDOW_DAYS = 30;
 const FREQUENT_FOODS_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000; // refreshed at most twice a day — this doesn't need to be real-time
 
@@ -7950,25 +7973,29 @@ function normalizeFoodKey(description) {
 }
 
 function getFrequentFoods(mealLogs, limit) {
-  const counts = {}; // normalized key -> { count, lastLoggedAt, item }
+  const counts = {}; // group key -> { count, lastLoggedAt, item }
   (mealLogs || []).forEach(log => {
     (log.meal_data?.items || []).forEach(item => {
-      const key = normalizeFoodKey(item.description);
+      const key = canonicalFoodGroup(item.description);
       if (!key) return;
       if (!counts[key]) counts[key] = { count: 0, lastLoggedAt: null, item: null };
       counts[key].count++;
       // Keep the most recently logged version — nutrients can drift
       // slightly between entries (a different portion typed in, a
-      // corrected photo guess) and the newest is the best guess at how
-      // they'd want it logged again.
+      // corrected photo guess, a different specific flavor) and the
+      // newest is the best guess at how they'd want it logged again.
       if (!counts[key].lastLoggedAt || log.logged_at > counts[key].lastLoggedAt) {
         counts[key].lastLoggedAt = log.logged_at;
         counts[key].item = item;
       }
     });
   });
+  // Frequency first — "what do I normally log" — recency only breaks a
+  // tie between two habits logged equally often. No minimum count
+  // required (that was the original bug): a one-off still shows, it
+  // just won't outrank an actual habit for one of the limited slots.
   return Object.values(counts)
-    .sort((a, b) => new Date(b.lastLoggedAt) - new Date(a.lastLoggedAt))
+    .sort((a, b) => b.count - a.count || new Date(b.lastLoggedAt) - new Date(a.lastLoggedAt))
     .slice(0, limit || 8)
     .map(c => ({ ...c.item, timesLogged: c.count }));
 }

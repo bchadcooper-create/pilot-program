@@ -7916,14 +7916,28 @@ async function loadRecentMealLogs(days) {
   } catch(e) { return []; }
 }
 
-// ─── FREQUENT FOODS ─────────────────────────────────────────────────────
-// Most people rotate through a fairly narrow set of foods week to week.
-// Surfacing what someone has actually logged before — ranked by how often
-// — lets a repeat meal get added with a single tap and zero search,
-// photo, or barcode calls at all, which is where the real API-call
-// savings are: not in making photo analysis cheaper, but in someone not
-// needing it for the fourth Tuesday in a row they've had the same lunch.
-const FREQUENT_FOODS_CACHE_KEY = 'fcf_frequent_foods_cache';
+// ─── RECENT MEALS ─────────────────────────────────────────────────────
+// BUG FIX (reported: "Recent meals" doesn't bring up anything). Root
+// cause: this required a food to be logged 2+ times with an EXACT
+// (post-normalization) matching description before it would show at
+// all. That threshold assumes atomic, consistently-named food items —
+// it works for a manually-typed "Chicken breast" logged the same way
+// twice. But most real logs here come from photo recognition, which
+// describes the WHOLE PLATE as one fresh AI-generated sentence each
+// time ("Scrambled eggs with beans and papaya" one day, "Scrambled eggs
+// with bacon, yogurt, and coffee" the next) — even a genuinely repeated
+// meal essentially never produces an identical string twice, so the
+// 2+ threshold was almost never met by anyone, for any food. Confirmed
+// against real logged data: zero exact repeats across 20 real entries,
+// despite clearly repeated foods (whey protein shakes, several times).
+//
+// Fix: rank by RECENCY instead of requiring a frequency threshold —
+// this also actually matches what the entry point promises ("Recent
+// meals" is the button/tab label; "frequency" was never what a user
+// tapping that button was asking for). A repeat is still surfaced and
+// still shows its count via timesLogged, it just isn't REQUIRED before
+// something can appear at all.
+const FREQUENT_FOODS_CACHE_KEY = 'fcf_frequent_foods_cache_v2'; // bumped from _v1 — the old key could hold a stale EMPTY result cached under the buggy 2+ threshold; renaming forces a fresh fetch under the fixed logic instead of waiting up to 12h for the old cache to expire
 const FREQUENT_FOODS_WINDOW_DAYS = 30;
 const FREQUENT_FOODS_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000; // refreshed at most twice a day — this doesn't need to be real-time
 
@@ -7954,8 +7968,7 @@ function getFrequentFoods(mealLogs, limit) {
     });
   });
   return Object.values(counts)
-    .filter(c => c.count >= 2) // a genuine one-off shouldn't clutter a "usual foods" list
-    .sort((a, b) => b.count - a.count)
+    .sort((a, b) => new Date(b.lastLoggedAt) - new Date(a.lastLoggedAt))
     .slice(0, limit || 8)
     .map(c => ({ ...c.item, timesLogged: c.count }));
 }
@@ -11428,12 +11441,14 @@ function renderMealBuilder() {
   MEAL_TYPES.forEach(t => parts.push('<option value="'+t+'"'+(mb.mealType===t?' selected':'')+'>'+t[0].toUpperCase()+t.slice(1)+'</option>'));
   parts.push('</select></div>');
 
-  // "Your Usual" — foods logged 2+ times in the last 30 days, ranked by
-  // frequency. One tap adds it with its last-used macros already filled
-  // in: no search, no photo call, no barcode scan needed for a repeat
-  // meal, which covers most days for most people.
+  // "Recent Meals" — matches the button/tab that leads here; previously
+  // labeled "YOUR USUAL" and required 2+ exact-match logs, which almost
+  // never happened for photo-logged meals (see getFrequentFoods above).
+  // One tap adds a previously-logged item with its last-used macros
+  // already filled in: no search, no photo call, no barcode scan needed
+  // for a repeat meal, which covers most days for most people.
   if (mb.frequentFoods && mb.frequentFoods.length) {
-    parts.push('<div class="section-label" style="margin-top:12px">YOUR USUAL</div>');
+    parts.push('<div class="section-label" style="margin-top:12px">RECENT MEALS</div>');
     parts.push('<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">');
     mb.frequentFoods.forEach((food, i) => {
       const srv = food.servingDescription ? sanitizeUserText(food.servingDescription)+' · ' : '';

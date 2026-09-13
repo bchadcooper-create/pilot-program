@@ -1,5 +1,6 @@
 import UIKit
 import UserNotifications
+import AVFoundation
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -8,8 +9,26 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
+        configureAudioSession()
         registerForPushNotifications()
         return true
+    }
+
+    // MARK: - Audio Session
+    // BUG FIX (reported: rest-timer/workout chimes never audible). AVAudioSession
+    // was never configured anywhere in the app, so Web Audio content played
+    // inside the WKWebView used whatever the system default category is —
+    // which respects the phone's physical Ring/Silent switch. A workout timer
+    // going off is exactly the kind of alert that should play even in silent
+    // mode (the same reasoning Apple's own Clock app timer uses) — .playback
+    // is the category that ignores the switch.
+    private func configureAudioSession() {
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, options: [])
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("FCF: audio session configuration failed:", error)
+        }
     }
 
     // MARK: - Push Notifications

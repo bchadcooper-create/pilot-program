@@ -11448,7 +11448,7 @@ function renderMealBuilder() {
   // already filled in: no search, no photo call, no barcode scan needed
   // for a repeat meal, which covers most days for most people.
   if (mb.frequentFoods && mb.frequentFoods.length) {
-    parts.push('<div class="section-label" style="margin-top:12px">RECENT MEALS</div>');
+    parts.push('<div class="section-label" style="margin-top:12px" id="recentMealsSection">RECENT MEALS</div>');
     parts.push('<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">');
     mb.frequentFoods.forEach((food, i) => {
       const srv = food.servingDescription ? sanitizeUserText(food.servingDescription)+' · ' : '';
@@ -11886,7 +11886,24 @@ const FCFCamera = (() => {
     }
     renderMealBuilder();
     getFrequentFoodsForMealBuilder().then(foods => {
-      if (ST.mealBuilder) { ST.mealBuilder.frequentFoods = foods; renderMealBuilder(); }
+      if (!ST.mealBuilder) return;
+      ST.mealBuilder.frequentFoods = foods;
+      renderMealBuilder();
+      // BUG FIX (reported: tapping "Recent meals" "just takes me back to
+      // the nutrition page" — the underlying data was already fixed
+      // separately, but this never did anything to actually SURFACE it;
+      // it just closed the camera and left the page wherever it
+      // naturally renders, with Recent Meals sitting further down,
+      // out of view). Scroll straight to it now that it's rendered, or
+      // say plainly there's nothing yet rather than leaving a tap that
+      // visibly does nothing.
+      if (foods && foods.length) {
+        requestAnimationFrame(() => {
+          document.getElementById('recentMealsSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      } else {
+        showToast('No recent meals yet — log a few and they\'ll show up here.');
+      }
     });
   }
 

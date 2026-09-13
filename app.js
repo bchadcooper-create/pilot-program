@@ -851,14 +851,14 @@ WORKOUTS.band = {};
 WORKOUTS.band['Lower Body'] = {
   taxi: WORKOUTS.comm['Lower Body'].taxi,
   takeoff: [
-    ex('b_lb_to1','Banded Squat','4×15',4,'Stand on the band with feet shoulder-width, bring the ends up over your shoulders or hold at chest height. Full depth — bands add the most resistance at the top, so drive hard out of the bottom.'),
-    ex('b_lb_to2','Banded Deadlift','4×12',4,'Stand on the middle of the band, feet hip-width, hinge down to grip an end in each hand, drive your hips forward to stand tall. Keep the band taut the whole rep — no slack at the bottom.'),
+    ex('b_lb_to1','Banded Squat','4×15',4,'Stand on the band with feet shoulder-width, bring the ends up over your shoulders or hold at chest height. Full depth — bands add the most resistance at the top, so drive hard out of the bottom.',false,'reps_only'),
+    ex('b_lb_to2','Banded Deadlift','4×12',4,'Stand on the middle of the band, feet hip-width, hinge down to grip an end in each hand, drive your hips forward to stand tall. Keep the band taut the whole rep — no slack at the bottom.',false,'reps_only'),
   ],
   enroute: [
     ex('b_lb_er1','Lateral Band Walk','3×15 steps/side',3,'Loop a band above your knees, drop into a quarter-squat, step sideways keeping tension in the band the entire time. Targets glute medius — often neglected.',false,'reps_only'),
     ex('b_lb_er2','Banded Leg Curl','3×15/side',3,'Anchor the band low to something stable, loop the other end around one ankle, curl your heel toward your glute. Switch legs.',false,'reps_only'),
     ex('b_lb_er3','Banded Lateral Lunge','3×10/side',3,'Band looped around your ankles. Take a big step to the side, hinge at the hips and sit into the working leg, push back to center.',false,'reps_only'),
-    ex('b_lb_er4','Banded Hip Thrust','3×15',3,'Band across your hips, shoulders on a bench or the floor, feet flat and knees bent. Drive your hips up, squeeze your glutes at the top.'),
+    ex('b_lb_er4','Banded Hip Thrust','3×15',3,'Band across your hips, shoulders on a bench or the floor, feet flat and knees bent. Drive your hips up, squeeze your glutes at the top.',false,'reps_only'),
     ex('b_lb_er5','Standing Banded Glute Kickback','3×15/side',3,'Band looped around both ankles. Balance on one leg, kick the other straight back, squeezing the glute at the top.',false,'reps_only'),
   ],
   landing: WORKOUTS.comm['Lower Body'].landing,
@@ -867,40 +867,40 @@ WORKOUTS.band['Upper Push'] = {
   taxi: WORKOUTS.comm['Upper Push'].taxi,
   takeoff: [
     ex('b_up_to1','Banded Push-Up','4×15',4,'Loop the band across your upper back, holding one end under each hand. Adds resistance right where a bodyweight push-up gets easiest — the top of the rep.',false,'reps_only'),
-    ex('b_up_to2','Banded Overhead Press','4×15',4,'Stand on the middle of the band, press both ends straight overhead to full lockout. Core braced, don\'t arch your lower back.'),
+    ex('b_up_to2','Banded Overhead Press','4×15',4,'Stand on the middle of the band, press both ends straight overhead to full lockout. Core braced, don\'t arch your lower back.',false,'reps_only'),
   ],
   enroute: [
-    ex('b_up_er1','Banded Single-Arm Chest Press','3×12/side',3,'Anchor the band behind you at chest height, face away from the anchor, press forward and slightly across your body.'),
-    ex('b_up_er2','Banded Tricep Pushdown','3×15',3,'Anchor the band overhead, elbows pinned to your sides, extend your arms down until straight.'),
-    ex('b_up_er3','Banded Lateral Raise','3×15',3,'Stand on the band, raise both arms out to shoulder height. Light tension, strict form — no swinging.'),
+    ex('b_up_er1','Banded Single-Arm Chest Press','3×12/side',3,'Anchor the band behind you at chest height, face away from the anchor, press forward and slightly across your body.',false,'reps_only'),
+    ex('b_up_er2','Banded Tricep Pushdown','3×15',3,'Anchor the band overhead, elbows pinned to your sides, extend your arms down until straight.',false,'reps_only'),
+    ex('b_up_er3','Banded Lateral Raise','3×15',3,'Stand on the band, raise both arms out to shoulder height. Light tension, strict form — no swinging.',false,'reps_only'),
   ],
   landing: WORKOUTS.comm['Upper Push'].landing,
 };
 WORKOUTS.band['Upper Pull'] = {
   taxi: WORKOUTS.comm['Upper Pull'].taxi.slice(0,2),
   takeoff: [
-    ex('b_ul_to1','Banded Bent-Over Row','4×15',4,'Stand on the band, feet hip-width, hinge forward about 30°. Pull the band to your chest, keeping elbows close to your sides — they should skim your ribs.'),
-    ex('b_ul_to2','Banded Upright Row','4×12',4,'Stand on the band with it crossed into an X in front of you. Pull your hands up to shoulder height, elbows leading out to the sides.'),
+    ex('b_ul_to1','Banded Bent-Over Row','4×15',4,'Stand on the band, feet hip-width, hinge forward about 30°. Pull the band to your chest, keeping elbows close to your sides — they should skim your ribs.',false,'reps_only'),
+    ex('b_ul_to2','Banded Upright Row','4×12',4,'Stand on the band with it crossed into an X in front of you. Pull your hands up to shoulder height, elbows leading out to the sides.',false,'reps_only'),
   ],
   enroute: [
-    ex('b_ul_er1','Banded Bicep Curl','3×15',3,'Stand on the band, curl both hands up toward your shoulders, elbows tucked to your sides throughout.'),
-    ex('b_ul_er2','Banded Face Pull','3×15',3,'Anchor the band at chest height, pull toward your face with your elbows high, squeezing your shoulder blades together.'),
-    ex('b_ul_er3','Banded Single-Arm Row','3×12/side',3,'Anchor the band low, staggered stance, row toward your hip keeping the elbow close to your body.'),
+    ex('b_ul_er1','Banded Bicep Curl','3×15',3,'Stand on the band, curl both hands up toward your shoulders, elbows tucked to your sides throughout.',false,'reps_only'),
+    ex('b_ul_er2','Banded Face Pull','3×15',3,'Anchor the band at chest height, pull toward your face with your elbows high, squeezing your shoulder blades together.',false,'reps_only'),
+    ex('b_ul_er3','Banded Single-Arm Row','3×12/side',3,'Anchor the band low, staggered stance, row toward your hip keeping the elbow close to your body.',false,'reps_only'),
   ],
   landing: WORKOUTS.comm['Upper Pull'].landing,
 };
 WORKOUTS.band['Full Body'] = {
   taxi: [ex('b_fb_t1','Band Mobility Circuit','1 round',1,'10 band pull-aparts → 10 banded good mornings → 10 bodyweight squats with the band looped around your knees.',true,'timed')],
   takeoff: [
-    ex('b_fb_to1','Banded Squat','4×15',4,'Full depth, band over your shoulders or held at chest height.'),
-    ex('b_fb_to2','Banded Deadlift','4×12',4,'Hip hinge pattern, band taut throughout the entire rep.'),
+    ex('b_fb_to1','Banded Squat','4×15',4,'Full depth, band over your shoulders or held at chest height.',false,'reps_only'),
+    ex('b_fb_to2','Banded Deadlift','4×12',4,'Hip hinge pattern, band taut throughout the entire rep.',false,'reps_only'),
   ],
   enroute: [
     ex('b_fb_er1','Banded Push-Up','3×15',3,'Band looped across your upper back.',false,'reps_only'),
-    ex('b_fb_er2','Banded Bent-Over Row','3×15',3,'Elbows close to your sides the whole pull.'),
-    ex('b_fb_er3','Banded Woodchop','3×12/side',3,'Anchor the band low or high, rotate it diagonally across your body — the movement should come from your core, not your arms.'),
-    ex('b_fb_er4','Standing Banded Oblique Twist','3×12/side',3,'Band anchored at your side around waist height, twist your torso away from the anchor point and back.'),
-    ex('b_fb_er5','Banded Thruster','3×12',3,'Squat down keeping the band taut, then drive up through your legs and press the band straight overhead in one continuous motion as you stand.'),
+    ex('b_fb_er2','Banded Bent-Over Row','3×15',3,'Elbows close to your sides the whole pull.',false,'reps_only'),
+    ex('b_fb_er3','Banded Woodchop','3×12/side',3,'Anchor the band low or high, rotate it diagonally across your body — the movement should come from your core, not your arms.',false,'reps_only'),
+    ex('b_fb_er4','Standing Banded Oblique Twist','3×12/side',3,'Band anchored at your side around waist height, twist your torso away from the anchor point and back.',false,'reps_only'),
+    ex('b_fb_er5','Banded Thruster','3×12',3,'Squat down keeping the band taut, then drive up through your legs and press the band straight overhead in one continuous motion as you stand.',false,'reps_only'),
   ],
   landing: [
     ex('b_fb_l1','Full Body Stretch','5 min',1,'Child\'s pose → pigeon → lat hang → chest stretch.',true,'timed'),

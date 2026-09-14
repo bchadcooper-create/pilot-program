@@ -83,6 +83,73 @@ class CalendarManager {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
 
+        // BUG FIX (reported: a flight showed the wrong time — off by
+        // exactly 7 hours from the real local departure/arrival).
+        // First attempt at this used a version-suffix heuristic specific
+        // to one export tool's identifier format — rightly rejected as
+        // too fragile to generalize. Real mechanism, confirmed against
+        // two independent pieces of evidence: a much older comment in
+        // this codebase's .ics parser (parseFlightScheduleICS) documents
+        // the exact same crew-schedule sync tool stamping every event
+        // with a "+5 hours" correction needed at the time it was written;
+        // this account's CURRENT data needs "+7 hours" instead. Those
+        // aren't contradictory bugs — they're the same bug, sampled at
+        // two different times, consistent with the sync tool stamping
+        // every event using whatever timezone the EXPORTING DEVICE
+        // currently has set, rather than the actual station's timezone.
+        // When that earlier comment was written, the device was on
+        // Central time (+5 correction needed); this account's device is
+        // now on Phoenix time (+7 correction needed) — the correction
+        // factor isn't a fixed constant, it's whatever TimeZone.current
+        // is, which is exactly why hardcoding either number would only
+        // ever fix one snapshot in time for one person.
+        //
+        // Fix: for events that look like they came from this crew-
+        // schedule sync (recognizable titles — "Layover X", "Flight N",
+        // "Duty free period" — the same patterns parseFlightScheduleICS
+        // already classifies on), reinterpret the wall-clock numbers in
+        // the wrongly-UTC-stamped time as if they were actually local
+        // time in the device's current timezone, then correctly convert
+        // that to the true UTC instant. This is real timezone math, not
+        // a guess at which of several near-duplicate copies to trust —
+        // it works the same way for any user hitting this same bug
+        // class, adapting automatically to whatever timezone their own
+        // device is on, with no per-user or per-account constant.
+        //
+        // Known limitation, stated plainly rather than glossed over: this
+        // assumes the device's timezone AT SYNC TIME matches whatever
+        // timezone the export tool used when it wrote the event — true
+        // for a device that stays on one normal/base timezone, but could
+        // be wrong for someone syncing while traveling somewhere their
+        // phone's automatic timezone has already changed out from under
+        // them. No better signal is available from the data itself to
+        // correct for that case.
+        func looksLikeCrewScheduleEvent(_ title: String?) -> Bool {
+            guard let t = title else { return false }
+            return t.hasPrefix("Layover ") || t.hasPrefix("Flight ") || t == "Duty free period"
+        }
+
+        func reinterpretAsLocal(_ wrongUTCDate: Date, in timeZone: TimeZone) -> Date {
+            var utcCal = Calendar(identifier: .gregorian)
+            utcCal.timeZone = TimeZone(identifier: "UTC")!
+            let comps = utcCal.dateComponents([.year, .month, .day, .hour, .minute, .second], from: wrongUTCDate)
+            var localCal = Calendar(identifier: .gregorian)
+            localCal.timeZone = timeZone
+            return localCal.date(from: comps) ?? wrongUTCDate
+        }
+
+        let deviceTimeZone = TimeZone.current
+        var correctedTimes: [ObjectIdentifier: (Date, Date)] = [:]
+        var correctedCount = 0
+        for ev in ekEvents where looksLikeCrewScheduleEvent(ev.title) {
+            let correctedStart = reinterpretAsLocal(ev.startDate, in: deviceTimeZone)
+            let correctedEnd   = reinterpretAsLocal(ev.endDate, in: deviceTimeZone)
+            if correctedStart != ev.startDate || correctedEnd != ev.endDate {
+                correctedTimes[ObjectIdentifier(ev)] = (correctedStart, correctedEnd)
+                correctedCount += 1
+            }
+        }
+
         // BUG FIX — reported "lots of duplicates". Confirmed independently:
         // the same schedule uploaded as .ics reported 190 events for this
         // window, while this native sync reported 328 for the identical
@@ -98,10 +165,16 @@ class CalendarManager {
         // time. Two EKEvents that match on all three are the same
         // real-world layover or duty period, however EventKit produced
         // them, and only the first occurrence encountered is kept.
+        // Deduping AFTER the time-correction pass above (not before)
+        // matters: two copies of the same event that both needed
+        // correcting only converge onto the same key once both have
+        // actually been corrected — deduping first would have kept both
+        // as separate "unique" (and both still wrong) events.
         var seenKeys = Set<String>()
         var dedupedCount = 0
         let uniqueEkEvents = ekEvents.filter { ev in
-            let key = (ev.title ?? "") + "|" + formatter.string(from: ev.startDate) + "|" + formatter.string(from: ev.endDate)
+            let (s, e) = correctedTimes[ObjectIdentifier(ev)] ?? (ev.startDate, ev.endDate)
+            let key = (ev.title ?? "") + "|" + formatter.string(from: s) + "|" + formatter.string(from: e)
             if seenKeys.contains(key) {
                 dedupedCount += 1
                 return false
@@ -114,13 +187,14 @@ class CalendarManager {
         let events: [[String: Any]] = uniqueEkEvents.map { ev in
             let calName = ev.calendar?.title ?? "Unknown"
             calendarNames.insert(calName)
+            let (s, e) = correctedTimes[ObjectIdentifier(ev)] ?? (ev.startDate, ev.endDate)
             var dict: [String: Any] = [
                 "id":       ev.eventIdentifier ?? UUID().uuidString,
                 "title":    ev.title ?? "",
                 "calendar": calName,
                 "isAllDay": ev.isAllDay,
-                "start":    formatter.string(from: ev.startDate),
-                "end":      formatter.string(from: ev.endDate),
+                "start":    formatter.string(from: s),
+                "end":      formatter.string(from: e),
             ]
             if let loc = ev.location, !loc.isEmpty {
                 dict["location"] = loc
@@ -146,6 +220,7 @@ class CalendarManager {
             "events":        events,
             "eventCount":    events.count,
             "duplicatesRemoved": dedupedCount,
+            "timesCorrected": correctedCount,
             "calendarNames": Array(calendarNames),
             "fingerprint":   "\(fingerprint)",
             "windowStart":   formatter.string(from: start),

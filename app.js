@@ -102,6 +102,13 @@ const ST = {
   subscription: null,
   trackNutrition: true,   // meals, macros and the Fuel card
   trackHydration: true,   // water logging and the hydration gate
+  // Which schedule source wins when both Apple Calendar sync and an
+  // uploaded .ics are present — 'auto' | 'calendar' | 'ics'. Added after
+  // discovering a real timing bug upstream in a third-party crew-schedule-
+  // to-calendar sync tool (documented in getActiveSchedule() below) that
+  // an uploaded .ics export doesn't have, since it isn't run through that
+  // same sync path.
+  scheduleSource: 'auto',
   nutritionGoals: null, goalDraft: 'maintain', trainDaysDraft: '3-4',
   manualTargetsOpen: false, manualCal: '', manualProtein: '', manualCarbs: '', manualFat: '', manualTargetsWarning: null,
   sleepBaselineScore: null,
@@ -2675,6 +2682,7 @@ function applyProfileToState(profile) {
   // shouldn't lose the feature because a new preference defaulted to off.
   ST.trackNutrition = profile.trackNutrition !== false;
   ST.trackHydration = profile.trackHydration !== false;
+  ST.scheduleSource = profile.scheduleSource || 'auto';
 
   // BUG FIX (reported): the parser fix in v5.36.0 changed nothing on a
   // schedule already uploaded. Events are parsed once at upload and the
@@ -3404,6 +3412,47 @@ async function setTrackingPref(key, on) {
   } catch(e) { showBigToast('Saved on this device, but could not sync.', 'warn'); }
 }
 
+async function setScheduleSource(value) {
+  ST.scheduleSource = value;
+  renderPage();
+  try {
+    const profile = (await dbGetProfile()) || {};
+    profile.scheduleSource = value;
+    await dbSetProfile(profile);
+  } catch(e) { showBigToast('Saved on this device, but could not sync.', 'warn'); }
+}
+
+// ─── SCHEDULE SOURCE ──────────────────────────────────────────────────────
+// ST.calendarEvents (AI-classified, from Apple Calendar sync) and
+// ST.flightSchedule (parsed directly from an uploaded .ics) have different
+// shapes and, it turns out, don't always agree on the same real-world
+// flight's time. Traced one specific case to a bug in a third-party
+// crew-schedule-to-calendar sync tool ("MobileCCI", visible in the raw
+// event identifiers) that a user's own calendar showed multiple
+// conflicting copies of the same flight for — one stamped with the wrong
+// station's UTC offset, confirmed via a self-documenting note field on a
+// DIFFERENT event from the same source: "CCI export stamped departure
+// with the PHX offset instead of the station offset." An uploaded .ics
+// doesn't go through that same sync path, so it isn't affected the same
+// way — which is exactly why being able to pick a source explicitly,
+// rather than always trusting whichever the app picks automatically,
+// matters here.
+//
+// Centralizing the choice here so every place that displays or reasons
+// about "today's schedule" agrees on the same source — the two
+// independent priority checks that used to exist in different functions
+// (before being merged) are exactly how the app ended up showing two
+// different schedules on the same screen at once.
+function getActiveSchedule() {
+  if (ST.scheduleSource === 'ics') return { source: 'ics', events: ST.flightSchedule || [] };
+  if (ST.scheduleSource === 'calendar') return { source: 'calendar', events: ST.calendarEvents || [] };
+  // 'auto' (default): prefer Apple Calendar sync if it has any data at
+  // all, falling back to the uploaded .ics — matches the original
+  // behavior from before this preference existed.
+  if (ST.calendarEvents?.length) return { source: 'calendar', events: ST.calendarEvents };
+  return { source: 'ics', events: ST.flightSchedule || [] };
+}
+
 // The hydration line on Today. Extracted so it can appear inside the Fuel
 // card when nutrition is tracked, or stand alone when it isn't, without the
 // two copies drifting apart — which is exactly how the Today tab and the
@@ -3966,12 +4015,13 @@ async function scheduleNotifications(justTrainedNow) {
   // rest of the app already relies on for trip-aware recommendations,
   // rather than re-deriving layover/duty timing from scratch.
   let layoverReminder = null;
-  // Two separate, unmerged schedule sources exist in this app —
-  // ST.calendarEvents (native Apple Calendar permission, classified) and
-  // ST.flightSchedule (manual .ics upload). The adjacent preflightCheck
-  // code above only ever checks the former; checking both here so a
-  // user who only uses .ics upload doesn't silently miss this feature.
-  const schedule = (ST.calendarEvents?.length ? ST.calendarEvents : null) || ST.flightSchedule;
+  // Was checking ST.calendarEvents with a fallback to ST.flightSchedule
+  // ad-hoc, right here, independently of the same choice made elsewhere on
+  // the page — now goes through the same getActiveSchedule() every other
+  // schedule-dependent display uses, so this respects the explicit
+  // Schedule Source preference instead of its own separate priority check.
+  const activeSched = getActiveSchedule();
+  const schedule = activeSched.events;
   if (pro && schedule?.length) {
     const ctx = scheduleContextForToday(schedule, new Date());
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -10964,38 +11014,43 @@ function renderToday(p) {
   // Calendar sync, vs ctx.sched.todayEvents from the uploaded .ics) with
   // zero awareness of each other. Whenever BOTH sources happened to have
   // entries for today, both rendered — producing two identically-labeled
-  // sections with different data. This wasn't intermittent by accident;
-  // it depended entirely on whether Apple Calendar sync happened to have
-  // today's date populated at that exact moment, which is why it looked
-  // "fixed" after a restart and then came right back.
-  // Fixed by choosing exactly one source: ST.calendarEvents (AI-
-  // classified, richer type info) takes priority when it actually has
-  // today's events; the .ics-based schedule is the fallback, used only
-  // when the calendar source doesn't have anything for today.
+  // sections with different data.
+  //
+  // Now uses getActiveSchedule() so this respects the explicit Schedule
+  // Source preference (Settings) rather than an implicit "whichever
+  // happens to have data" check — the earlier implicit version is exactly
+  // how this bug surfaced intermittently in the first place, and a real
+  // upstream timing bug was later found in Apple Calendar sync data that
+  // an uploaded .ics doesn't share, which is why picking a source
+  // explicitly matters here, not just resolving which one merely wins.
   const todayStart = new Date(); todayStart.setHours(0,0,0,0);
   const todayEnd   = new Date(); todayEnd.setHours(23,59,59,999);
-  const calToday = (ST.calendarEvents || []).filter(e => {
-    const s = new Date(e.start), en = new Date(e.end);
-    return s <= todayEnd && en >= todayStart && e.type !== 'personal';
-  }).sort((a,b) => new Date(a.start) - new Date(b.start));
+  const activeSchedule = getActiveSchedule();
 
-  if (calToday.length) {
-    const typeIcon = { flight:'✈️', layover:'🏨', reserve:'📟', training:'🎓', duty:'📋', rest:'😴', unknown:'📅' };
-    parts.push('<div class="section-label">TODAY\'S SCHEDULE</div>');
-    parts.push('<div class="card mb12">');
-    calToday.slice(0, 6).forEach(e => {
+  if (activeSchedule.source === 'calendar') {
+    const calToday = activeSchedule.events.filter(e => {
       const s = new Date(e.start), en = new Date(e.end);
-      const icon = typeIcon[e.type] || '📅';
-      const timeStr = e.isAllDay ? 'All day' :
-        s.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false}) + '–' +
-        en.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
-      const label = e.origin && e.destination ? e.origin + ' → ' + e.destination : e.title;
-      parts.push('<div class="fb" style="padding:7px 0;border-bottom:1px solid var(--border)">');
-      parts.push('<span style="font-family:var(--mono);font-size:11px;color:var(--muted);min-width:90px">'+timeStr+'</span>');
-      parts.push('<span style="font-size:12px;flex:1;text-align:right">'+icon+' '+label+'</span>');
+      return s <= todayEnd && en >= todayStart && e.type !== 'personal';
+    }).sort((a,b) => new Date(a.start) - new Date(b.start));
+
+    if (calToday.length) {
+      const typeIcon = { flight:'✈️', layover:'🏨', reserve:'📟', training:'🎓', duty:'📋', rest:'😴', unknown:'📅' };
+      parts.push('<div class="section-label">TODAY\'S SCHEDULE</div>');
+      parts.push('<div class="card mb12">');
+      calToday.slice(0, 6).forEach(e => {
+        const s = new Date(e.start), en = new Date(e.end);
+        const icon = typeIcon[e.type] || '📅';
+        const timeStr = e.isAllDay ? 'All day' :
+          s.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false}) + '–' +
+          en.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
+        const label = e.origin && e.destination ? e.origin + ' → ' + e.destination : e.title;
+        parts.push('<div class="fb" style="padding:7px 0;border-bottom:1px solid var(--border)">');
+        parts.push('<span style="font-family:var(--mono);font-size:11px;color:var(--muted);min-width:90px">'+timeStr+'</span>');
+        parts.push('<span style="font-size:12px;flex:1;text-align:right">'+icon+' '+label+'</span>');
+        parts.push('</div>');
+      });
       parts.push('</div>');
-    });
-    parts.push('</div>');
+    }
   } else if (ctx.sched.todayEvents.length) {
     parts.push('<div class="section-label">TODAY\'S SCHEDULE</div>');
     parts.push('<div class="card mb12">');
@@ -12401,6 +12456,26 @@ function renderData(p) {
     parts.push('Most crew scheduling systems (Crew Web, PBS, Google Calendar) can export .ics. ');
     parts.push('If yours exports CSV, email it to yourself, open it in Google Calendar, and export from there as .ics.');
     parts.push('</div></div>');
+  }
+
+  // ── Schedule source ──────────────────────────────────────────────────────
+  // Only meaningful once there's actually more than one place schedule
+  // data could come from — hidden entirely otherwise so someone who's only
+  // ever used one method never sees a choice that wouldn't do anything.
+  if (isNative && (ST.calendarGranted || ST.flightSchedule?.length)) {
+    const sourceOpt = (val, label) => {
+      const on = ST.scheduleSource === val;
+      return '<button onclick="haptic(\'selection\');setScheduleSource(\''+val+'\')" style="flex:1;padding:9px 4px;border-radius:8px;border:none;font-size:11.5px;font-weight:'+(on?'700':'400')+';background:'+(on?'var(--gold)':'var(--bg3)')+';color:'+(on?'#1a1400':'var(--muted)')+';cursor:pointer;-webkit-tap-highlight-color:transparent">'+label+'</button>';
+    };
+    parts.push('<div class="card mb12">');
+    parts.push('<div class="section-label" style="margin-top:0">SCHEDULE SOURCE</div>');
+    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">Which schedule to use when both Apple Calendar and an uploaded file are available.</div>');
+    parts.push('<div style="display:flex;gap:6px">');
+    parts.push(sourceOpt('auto', 'Auto'));
+    parts.push(sourceOpt('calendar', 'Apple Calendar'));
+    parts.push(sourceOpt('ics', 'Uploaded File'));
+    parts.push('</div>');
+    parts.push('</div>');
   }
 
   // ── Apple Calendar (iOS native) ───────────────────────────────────────────

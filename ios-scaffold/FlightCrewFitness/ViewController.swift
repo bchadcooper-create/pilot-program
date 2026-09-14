@@ -157,7 +157,11 @@ class WeakScriptDelegate: NSObject, WKScriptMessageHandler {
 extension ViewController: WKScriptMessageHandler {
     func userContentController(_ userContentController: WKUserContentController,
                                didReceive message: WKScriptMessage) {
-        guard let body = message.body as? [String: Any] else { return }
+        guard let body = message.body as? [String: Any] else {
+            print("FCF DIAGNOSTIC: message '\(message.name)' body failed to cast to [String: Any] — raw body: \(message.body)")
+            return
+        }
+        print("FCF DIAGNOSTIC: bridge message received — name: \(message.name), body: \(body)")
         switch message.name {
         case "storeKit":
             handleStoreKitMessage(body)
@@ -474,7 +478,9 @@ extension ViewController {
 extension ViewController {
     private func handleHapticsMessage(_ body: [String: Any]) {
         let style = body["style"] as? String ?? "medium"
+        print("FCF DIAGNOSTIC: handleHapticsMessage reached, style=\(style)")
         DispatchQueue.main.async {
+            print("FCF DIAGNOSTIC: about to fire feedback generator for style=\(style)")
             switch style {
             case "light":
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()

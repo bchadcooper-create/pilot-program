@@ -1492,13 +1492,22 @@ function parseFlightScheduleICS(icsText) {
 
   return events.filter(e => e.start && e.end && e.summary).map(e => {
     let type = 'other', airport = null;
-    if (/^Layover /.test(e.summary)) {
+    // BUG FIX (reported: a real flight showed 0 flights today, triggering
+    // "No duty today" despite two flights and a layover genuinely being
+    // scheduled — traced to this account's own uploaded export using
+    // "FLT 3564" instead of "Flight 3564", which this regex didn't
+    // recognize at all, silently falling through to type:'other').
+    // Widened to accept common real-world variants rather than assuming
+    // one airline's export tool's exact wording — this needs to work
+    // for whatever format someone's actual crew-scheduling system
+    // happens to produce, not just the one format first seen.
+    if (/^Layover(\s+in)?\s+(\w+)/i.test(e.summary)) {
       type = 'layover';
-      const m = e.summary.match(/^Layover (\w+)/);
+      const m = e.summary.match(/^Layover(?:\s+in)?\s+(\w+)/i);
       airport = m ? m[1] : null;
-    } else if (/^Flight /.test(e.summary)) {
+    } else if (/^(Flight|FLT)\s/i.test(e.summary)) {
       type = 'flight';
-    } else if (/^Duty free period$/.test(e.summary)) {
+    } else if (/^Duty[\s-]?free\s+period$/i.test(e.summary)) {
       type = 'dutyfree';
     }
     return { uid: e.uid, start: e.start.toISOString(), end: e.end.toISOString(), summary: e.summary, type, airport,
@@ -10677,7 +10686,10 @@ function checkForNapRecovery(currentSleepScore) {
 
 function getTodayContext() {
   const now = new Date();
-  const sched = scheduleContextForToday(ST.flightSchedule, now);
+  // BUG FIX: was hardcoded to ST.flightSchedule regardless of the
+  // Schedule Source preference — meaning this banner ignored the toggle
+  // entirely while every other schedule-dependent display respected it.
+  const sched = scheduleContextForToday(getActiveSchedule().events, now);
   const meals = ST.todaysMeals || [];
   const consumed = sumMealNutrients(meals.flatMap(m => m.meal_data?.items || []));
   const g = ST.nutritionGoals && ST.nutritionGoals.mode !== 'none' ? ST.nutritionGoals : null;

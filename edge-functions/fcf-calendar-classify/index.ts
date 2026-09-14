@@ -104,7 +104,17 @@ serve(async (req) => {
         .select('tier, status')
         .eq('user_id', user.id)
         .maybeSingle();
-      const isPro = sub?.tier === 'pro' && (sub?.status === 'active' || sub?.status === 'grace');
+      // BUG FIX (reported: hit the free-tier "1 classification/month" limit
+      // despite the app treating this account as Pro everywhere else).
+      // The dev Pro override (intentional, permanent — see app.js isPro())
+      // only ever existed client-side; this server-side tier check had no
+      // knowledge of it at all, since there's no actual subscription row
+      // for this account (confirmed: zero rows in `subscriptions` for this
+      // user_id). fcf-ai-coach already has this exact same override
+      // (isDevTestAccount) — matching that naming here for consistency.
+      const isDevTestAccount = user.id === '7e41ca46-6e00-4c54-bc3f-2e45d923fe0b';
+      const isPro = isDevTestAccount ||
+        (sub?.tier === 'pro' && (sub?.status === 'active' || sub?.status === 'grace'));
 
       if (!isPro) {
         // Free users get 1 fresh AI classification per calendar month.

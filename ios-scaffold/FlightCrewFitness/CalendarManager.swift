@@ -83,8 +83,35 @@ class CalendarManager {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
 
+        // BUG FIX — reported "lots of duplicates". Confirmed independently:
+        // the same schedule uploaded as .ics reported 190 events for this
+        // window, while this native sync reported 328 for the identical
+        // window — a 1.73x ratio, not a clean 2x, so this isn't simply
+        // "every event is duplicated once". EventKit is documented to be
+        // able to surface the same underlying event more than once when
+        // searching across all calendars with calendars: nil — most
+        // commonly with shared, delegated, or subscribed calendars, where
+        // the same calendar can be internally represented more than once.
+        // Rather than guess at which exact mechanism is happening on this
+        // account, dedupe on what actually defines "the same event" from
+        // a user's perspective: identical title AND identical start/end
+        // time. Two EKEvents that match on all three are the same
+        // real-world layover or duty period, however EventKit produced
+        // them, and only the first occurrence encountered is kept.
+        var seenKeys = Set<String>()
+        var dedupedCount = 0
+        let uniqueEkEvents = ekEvents.filter { ev in
+            let key = (ev.title ?? "") + "|" + formatter.string(from: ev.startDate) + "|" + formatter.string(from: ev.endDate)
+            if seenKeys.contains(key) {
+                dedupedCount += 1
+                return false
+            }
+            seenKeys.insert(key)
+            return true
+        }
+
         var calendarNames = Set<String>()
-        let events: [[String: Any]] = ekEvents.map { ev in
+        let events: [[String: Any]] = uniqueEkEvents.map { ev in
             let calName = ev.calendar?.title ?? "Unknown"
             calendarNames.insert(calName)
             var dict: [String: Any] = [
@@ -118,6 +145,7 @@ class CalendarManager {
             "granted":       true,
             "events":        events,
             "eventCount":    events.count,
+            "duplicatesRemoved": dedupedCount,
             "calendarNames": Array(calendarNames),
             "fingerprint":   "\(fingerprint)",
             "windowStart":   formatter.string(from: start),

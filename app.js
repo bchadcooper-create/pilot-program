@@ -3876,6 +3876,7 @@ window.addEventListener('fcf:healthkit', (e) => {
 window.addEventListener('fcf:calendar', async (e) => {
   const payload = e.detail || {};
   ST.calendarGranted = !!payload.granted;
+  ST.calendarDuplicatesRemoved = payload.duplicatesRemoved || 0;
   if (!payload.granted || !payload.events?.length) { renderPage(); return; }
   await classifyCalendarEvents(payload.events, payload.fingerprint);
   // Reschedule preflight notifications now that we have flight data
@@ -12406,6 +12407,9 @@ function renderData(p) {
       const flights = ST.calendarEvents.filter(e => e.type === 'flight').length;
       const total   = ST.calendarEvents.length;
       parts.push('<div style="font-size:11px;color:var(--green);margin-bottom:8px">✅ Connected — '+total+' events classified ('+flights+' flights)</div>');
+      if (ST.calendarDuplicatesRemoved > 0) {
+        parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">ℹ️ '+ST.calendarDuplicatesRemoved+' duplicate calendar entries were automatically filtered out.</div>');
+      }
       if (ST.calendarSyncError) {
         parts.push('<div style="font-size:11px;color:var(--amber);margin-bottom:8px">⚠️ '+ST.calendarSyncError+'</div>');
       }

@@ -141,43 +141,67 @@ serve(async (req) => {
       isAllDay: e.isAllDay,
     }));
 
-    // Claude Haiku — cheap, fast, pure JSON output
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type':      'application/json',
-        'x-api-key':         ANTHROPIC_API_KEY!,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model:      ANTHROPIC_MODEL,
-        max_tokens: 4096,
-        system:     SYSTEM_PROMPT,
-        messages: [{
-          role:    'user',
-          content: `Classify these ${eventSummaries.length} calendar events:\n${JSON.stringify(eventSummaries, null, 2)}`
-        }]
-      })
-    });
-
-    if (!response.ok) {
-      const err = await response.text();
-      console.error('Anthropic error:', err);
-      return new Response(JSON.stringify({ error: 'AI classification failed', detail: err }), { status: 502, headers: CORS });
+    // BUG FIX (reported: calendar sync failed for a high-volume flyer with
+    // 328 events in the 60-day window — "no events found" / "Load failed"
+    // depending on exactly how the truncated response surfaced). Confirmed
+    // via direct reproduction against the real Anthropic call: classifying
+    // all events in ONE request with max_tokens:4096 hits that ceiling
+    // after only ~60-70 events, at which point the response is cut off
+    // mid-JSON and fails to parse — meaning classification could NEVER
+    // succeed for anyone with more events than that, regardless of
+    // network conditions. This wasn't a rare edge case; for a working
+    // pilot with duty/layover entries across 60 days, 328 events is
+    // completely ordinary.
+    //
+    // Fix: batch into chunks of 40 events (empirically safe — well under
+    // the ~60-70 event breaking point observed at max_tokens:4096, with
+    // real margin) and classify each batch with its own independent call,
+    // run in parallel. A single batch failing (a parse error, a transient
+    // API error) only degrades that batch to 'unknown' for its own events
+    // instead of failing the entire sync — so one bad batch out of nine
+    // doesn't wipe out the other eight.
+    const BATCH_SIZE = 40;
+    const batches: any[][] = [];
+    for (let i = 0; i < eventSummaries.length; i += BATCH_SIZE) {
+      batches.push(eventSummaries.slice(i, i + BATCH_SIZE));
     }
 
-    const aiResp  = await response.json();
-    const rawText = aiResp.content?.[0]?.text || '[]';
+    const batchResults = await Promise.all(batches.map(async (batch) => {
+      try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type':      'application/json',
+            'x-api-key':         ANTHROPIC_API_KEY!,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model:      ANTHROPIC_MODEL,
+            max_tokens: 4096,
+            system:     SYSTEM_PROMPT,
+            messages: [{
+              role:    'user',
+              content: `Classify these ${batch.length} calendar events:\n${JSON.stringify(batch, null, 2)}`
+            }]
+          })
+        });
 
-    // Parse the JSON — strip any accidental markdown fences
-    let classified: any[] = [];
-    try {
-      const clean = rawText.replace(/```json|```/g, '').trim();
-      classified  = JSON.parse(clean);
-    } catch (parseErr) {
-      console.error('JSON parse error:', parseErr, rawText);
-      return new Response(JSON.stringify({ error: 'Failed to parse AI response', raw: rawText }), { status: 502, headers: CORS });
-    }
+        if (!response.ok) {
+          console.error('Anthropic error for batch:', await response.text());
+          return batch.map((e: any) => ({ id: e.id, type: 'unknown', confidence: 0 }));
+        }
+
+        const aiResp  = await response.json();
+        const rawText = aiResp.content?.[0]?.text || '[]';
+        const clean   = rawText.replace(/```json|```/g, '').trim();
+        return JSON.parse(clean);
+      } catch (batchErr) {
+        console.error('Batch classification error:', batchErr);
+        return batch.map((e: any) => ({ id: e.id, type: 'unknown', confidence: 0 }));
+      }
+    }));
+
+    const classified: any[] = batchResults.flat();
 
     // Merge classification back with the original event data
     const classifiedMap = new Map(classified.map((c: any) => [c.id, c]));

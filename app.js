@@ -12473,27 +12473,32 @@ function renderData(p) {
   // ── Schedule source ──────────────────────────────────────────────────────
   // Only meaningful once there's actually more than one place schedule
   // data could come from — hidden entirely otherwise so someone who's only
-  // ever used one method never sees a choice that wouldn't do anything.
-  if (isNative && (ST.calendarGranted || ST.flightSchedule?.length)) {
+  // Consolidated into ONE card (was three separate boxes: Schedule Source,
+  // Apple Calendar, ICS Upload) — reported as "jumbled", and it was: three
+  // conceptually-related things about "where does your schedule come
+  // from" each rendered as its own full bordered box. Same information,
+  // organized as one topic with internal dividers instead of three
+  // visually-disconnected cards competing for attention.
+  const showSourceToggle = isNative && (ST.calendarGranted || ST.flightSchedule?.length);
+  parts.push('<div class="card mb12">');
+  parts.push('<div class="section-label" style="margin-top:0">SCHEDULE</div>');
+
+  if (showSourceToggle) {
     const sourceOpt = (val, label) => {
       const on = ST.scheduleSource === val;
       return '<button onclick="haptic(\'selection\');setScheduleSource(\''+val+'\')" style="flex:1;padding:9px 4px;border-radius:8px;border:none;font-size:11.5px;font-weight:'+(on?'700':'400')+';background:'+(on?'var(--gold)':'var(--bg3)')+';color:'+(on?'#1a1400':'var(--muted)')+';cursor:pointer;-webkit-tap-highlight-color:transparent">'+label+'</button>';
     };
-    parts.push('<div class="card mb12">');
-    parts.push('<div class="section-label" style="margin-top:0">SCHEDULE SOURCE</div>');
-    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">Which schedule to use when both Apple Calendar and an uploaded file are available.</div>');
-    parts.push('<div style="display:flex;gap:6px">');
+    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5">Which schedule to use when more than one source is available.</div>');
+    parts.push('<div style="display:flex;gap:6px;margin-bottom:16px">');
     parts.push(sourceOpt('auto', 'Auto'));
     parts.push(sourceOpt('calendar', 'Apple Calendar'));
     parts.push(sourceOpt('ics', 'Uploaded File'));
     parts.push('</div>');
-    parts.push('</div>');
   }
 
-  // ── Apple Calendar (iOS native) ───────────────────────────────────────────
+  // ── Apple Calendar sub-section ──────────────────────────────────────────
   if (isNative) {
-    parts.push('<div class="card mb12">');
-    parts.push('<div class="section-label" style="margin-top:0">APPLE CALENDAR</div>');
+    parts.push('<div style="font-size:11px;font-weight:700;color:var(--text);letter-spacing:0.04em;margin-bottom:8px">APPLE CALENDAR</div>');
     // BUG FIX: ST.calendarEvents now always reflects the true raw event
     // count (see classifyCalendarEvents in app.js) even when AI
     // classification specifically failed — so this length check alone is
@@ -12519,12 +12524,11 @@ function renderData(p) {
       parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Grant access to your Apple Calendar and FCF will automatically detect your flights, layovers, and personal commitments — no manual upload needed.</div>');
       parts.push('<button class="btn btn-outline" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.requestCalendar()">Connect Apple Calendar</button>');
     }
-    parts.push('</div>');
+    parts.push('<div style="height:1px;background:var(--border);margin:16px 0"></div>');
   }
 
-  // ── ICS Upload (fallback / web PWA) ──────────────────────────────────────
-  parts.push('<div class="card mb12">');
-  parts.push('<div class="section-label" style="margin-top:0">'+(isNative ? 'ICS UPLOAD — OPTIONAL FALLBACK' : 'FLIGHT SCHEDULE')+'</div>');
+  // ── Uploaded File sub-section ───────────────────────────────────────────
+  parts.push('<div style="font-size:11px;font-weight:700;color:var(--text);letter-spacing:0.04em;margin-bottom:8px">'+(isNative ? 'UPLOADED FILE (.ICS)' : 'FLIGHT SCHEDULE')+'</div>');
   parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">'+(isNative ? 'If your airline gives you a .ics export from their crew scheduling app, you can upload it here as an alternative or supplement to Apple Calendar.' : 'Upload your crew schedule as an .ics file — Preflight will automatically default your Mission Environment based on whether you\'re on a layover or at home today.')+'</div>');
   if (ST.flightSchedule && ST.flightSchedule.length) {
     const dates = ST.flightSchedule.map(e => new Date(e.start)).sort((a,b)=>a-b);

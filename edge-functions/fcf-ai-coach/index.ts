@@ -226,6 +226,50 @@ serve(async (req) => {
       }
     }
 
+    // BUG FIX (reported: this mode was firing a fresh Anthropic call on
+    // EVERY Today-tab render — no caching existed at all, unlike
+    // weekly_summary/trip_plan above. Confirmed directly in the calling
+    // code: loadFuelLogistics() runs unconditionally at the end of every
+    // single Today-page render pass, so anything that triggers a
+    // re-render while on Today (far more frequent than once per app
+    // open) was generating a brand new paid API call every time.
+    // Cached per-day, invalidated only when something the advice would
+    // actually need to react to changes: a new meal gets logged today.
+    // Re-rendering the same page with the same schedule and the same
+    // meals already logged has no reason to ask the model anything new.
+    let fuelCacheKey: string | null = null;
+    if (mode === 'fuel_logistics') {
+      const today = new Date().toISOString().slice(0, 10);
+      fuelCacheKey = `${today}_${context.mealsAlreadyLoggedToday?.length ?? 0}`;
+      const { data: cached } = await supabase
+        .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
+      const cachedKey = cached?.profile_data?.fuelLogisticsCacheKey;
+      if (cachedKey === fuelCacheKey && cached?.profile_data?.fuelLogisticsText) {
+        return new Response(JSON.stringify({
+          text: cached.profile_data.fuelLogisticsText,
+          cached: true
+        }), { headers: { ...CORS, 'Content-Type': 'application/json' } });
+      }
+    }
+
+    // Same issue as fuel_logistics above, same fix: cached once per day.
+    // A readiness/fatigue read genuinely doesn't need to regenerate every
+    // time the page happens to re-render — it's a once-a-day assessment,
+    // not a live value.
+    let fatigueCacheKey: string | null = null;
+    if (mode === 'fatigue_calibration') {
+      fatigueCacheKey = new Date().toISOString().slice(0, 10);
+      const { data: cached } = await supabase
+        .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
+      const cachedKey = cached?.profile_data?.fatigueCalibrationCacheKey;
+      if (cachedKey === fatigueCacheKey && cached?.profile_data?.fatigueCalibrationText) {
+        return new Response(JSON.stringify({
+          text: cached.profile_data.fatigueCalibrationText,
+          cached: true
+        }), { headers: { ...CORS, 'Content-Type': 'application/json' } });
+      }
+    }
+
     const MAX_TOKENS_BY_MODE = { weekly_summary: 150, fatigue_calibration: 100, fuel_logistics: 100, trip_plan: 180, exercise_substitute: 200 };
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -283,6 +327,36 @@ serve(async (req) => {
           user_id: user.id, profile_data: profile, updated_at: new Date().toISOString()
         }, { onConflict: 'user_id' });
       } catch (e) { console.error('Trip plan cache write error:', e); }
+    }
+
+    // Cache fuel logistics — see the read-side comment above for why.
+    if (mode === 'fuel_logistics' && text && fuelCacheKey) {
+      try {
+        const { data: profileData } = await supabase
+          .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
+        const profile = profileData?.profile_data || {};
+        profile.fuelLogisticsText = text;
+        profile.fuelLogisticsCacheKey = fuelCacheKey;
+        profile.fuelLogisticsGeneratedAt = new Date().toISOString();
+        await supabase.from('user_profiles').upsert({
+          user_id: user.id, profile_data: profile, updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' });
+      } catch (e) { console.error('Fuel logistics cache write error:', e); }
+    }
+
+    // Cache fatigue calibration — see the read-side comment above for why.
+    if (mode === 'fatigue_calibration' && text && fatigueCacheKey) {
+      try {
+        const { data: profileData } = await supabase
+          .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
+        const profile = profileData?.profile_data || {};
+        profile.fatigueCalibrationText = text;
+        profile.fatigueCalibrationCacheKey = fatigueCacheKey;
+        profile.fatigueCalibrationGeneratedAt = new Date().toISOString();
+        await supabase.from('user_profiles').upsert({
+          user_id: user.id, profile_data: profile, updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' });
+      } catch (e) { console.error('Fatigue calibration cache write error:', e); }
     }
 
     return new Response(JSON.stringify({ text, cached: false }), {

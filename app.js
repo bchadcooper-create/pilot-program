@@ -4351,32 +4351,65 @@ async function loadTripPlan() {
 }
 
 async function classifyCalendarEvents(events, fingerprint) {
+  // BUG FIX (reported: "Calendar access granted but no events found in the
+  // next 60 days" shown despite the user's real calendar having ~190
+  // events — confirmed via .ics upload of the same schedule). The native
+  // fetch was working correctly and finding all the raw events; the bug
+  // was here — on ANY classification failure (network hiccup, Anthropic
+  // API error, malformed JSON response), this just logged a console
+  // warning and returned WITHOUT ever setting ST.calendarEvents. The UI's
+  // "no events found" check only looks at whether ST.calendarEvents is
+  // empty — it can't distinguish "the native fetch genuinely found
+  // nothing" from "190 raw events arrived but classification failed",
+  // so both looked identical and equally wrong to the user.
+  //
+  // Fix: fall back to the RAW events (tagged type:'unknown') on failure
+  // instead of discarding them entirely. This means the count shown is
+  // always honest (matches what the native fetch actually found), even
+  // when AI-powered flight/layover detection specifically isn't
+  // available right now — and a later successful sync silently upgrades
+  // these to their real classified types.
+  const rawFallback = (events || []).map(e => ({ ...e, type: 'unknown', confidence: 0 }));
   try {
     const { data: { session } } = await SB.auth.getSession();
-    if (!session) return;
+    if (!session) { ST.calendarEvents = rawFallback; ST.calendarSyncError = 'Not signed in'; renderPage(); return; }
     const res = await fetch(CALENDAR_CLASSIFY_EDGE_FN, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
       body: JSON.stringify({ events, fingerprint })
     });
-    if (!res.ok) { console.warn('Calendar classify failed:', await res.text()); return; }
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn('Calendar classify failed:', errText);
+      ST.calendarEvents = rawFallback;
+      ST.calendarSyncError = 'Classification temporarily unavailable — showing ' + rawFallback.length + ' unclassified events. Try Sync Now again shortly.';
+      renderPage();
+      return;
+    }
     const data = await res.json();
     if (data.limitReached) {
       showBigToast('Calendar AI limit reached for this month. Upgrade to Pro for unlimited.', 'info');
-      if (data.classified?.length) {
-        ST.calendarEvents = data.classified;
-        ST.calendarFingerprint = fingerprint;
-        renderPage();
-      }
+      ST.calendarEvents = (data.classified?.length) ? data.classified : rawFallback;
+      ST.calendarFingerprint = fingerprint;
+      ST.calendarSyncError = null;
+      renderPage();
       return;
     }
-    if (data.classified?.length) {
-      ST.calendarEvents = data.classified;
-      ST.calendarFingerprint = fingerprint;
-      renderPage();
-    }
+    // classified.length should always equal events.length (the edge
+    // function merges classification onto every original event, even
+    // ones it couldn't confidently type) — but fall back defensively
+    // anyway rather than trust that invariant blindly.
+    ST.calendarEvents = (data.classified?.length) ? data.classified : rawFallback;
+    ST.calendarFingerprint = fingerprint;
+    ST.calendarSyncError = data.classified?.length ? null : 'Classification returned no results — showing ' + rawFallback.length + ' unclassified events.';
+    renderPage();
   } catch(e) {
     console.warn('classifyCalendarEvents error:', e);
+    ST.calendarEvents = rawFallback;
+    ST.calendarSyncError = rawFallback.length
+      ? 'Classification failed (' + (e.message || 'network error') + ') — showing ' + rawFallback.length + ' unclassified events.'
+      : 'Sync failed: ' + (e.message || 'network error');
+    renderPage();
   }
 }
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
@@ -4947,7 +4980,7 @@ function buildExerciseCatalog() {
         (mgW[ph]||[]).forEach(e => {
           if (seen[e.name]) return;
           seen[e.name] = true;
-          catalog.push({ id: e.id, name: e.name, target: e.target, sets: e.sets, note: e.note, timed: e.timed, inputType: e.inputType });
+          catalog.push({ id: e.id, name: e.name, target: e.target, sets: e.sets, note: e.note, timed: e.timed, inputType: e.inputType, phase: ph });
         });
       });
     });
@@ -7432,8 +7465,18 @@ function buildAddExerciseCard() {
     parts.push('<div class="field"><label>Target (sets×reps)</label><input type="text" id="custom_ex_target" placeholder="e.g. 3×12"></div>');
     parts.push('<div class="field"><label>Input Type</label><select id="custom_ex_type"><option value="reps_weight">Reps + Weight</option><option value="reps_only">Reps Only</option><option value="timed">Timed (seconds)</option></select></div>');
     parts.push('</div>');
+    // BUG FIX (reported): this always landed in En Route regardless of
+    // intent — a warmup exercise added mid-workout instead of at the
+    // start. There's no "natural" phase for a brand-new exercise the way
+    // there is for a catalog search result, so this needs an explicit
+    // choice rather than an automatic guess. Defaults to En Route, the
+    // previous fixed behavior, so anyone who doesn't touch this dropdown
+    // sees no change.
+    parts.push('<div class="field"><label>Add to which part of the workout?</label><select id="custom_ex_phase">');
+    PHASES_META.forEach(p => parts.push('<option value="'+p.key+'"'+(p.key==='enroute'?' selected':'')+'>'+p.label+' — '+p.sub.replace(/ ⓘ$/,'')+'</option>'));
+    parts.push('</select></div>');
     parts.push('<div class="field"><label>Notes (optional)</label><input type="text" id="custom_ex_note" placeholder="Form cue or reminder"></div>');
-    parts.push('<button class="btn btn-gold" onclick="saveCustomExercise()">Add to This Workout</button>');
+    parts.push('<button class="btn btn-gold" id="saveCustomExBtn" onclick="saveCustomExercise()">Add to This Workout</button>');
     parts.push('<button class="btn-ghost mt8" style="display:block;width:100%;text-align:center" onclick="ST.showAddExercise=false;renderFlight(document.getElementById(\'mainPage\'))">Cancel</button>');
   }
   parts.push('</div>');
@@ -7471,7 +7514,14 @@ function addExistingCatalogExercise(matchIdx, q) {
   if (!exDef || !ST.workout) return;
   const id = exDef.id || ('custom_' + Date.now());
   const newEx = ex(id, exDef.name, exDef.target, exDef.sets || 3, exDef.note || '', exDef.timed || false, exDef.inputType || 'reps_weight');
-  ST.workout.enroute.push(newEx);
+  // BUG FIX (reported): this always landed in En Route regardless of
+  // where the exercise actually belongs — a warmup movement added mid-
+  // workout instead of at the start. buildExerciseCatalog() now carries
+  // the phase each entry was found in, so an exercise found in the taxi
+  // (warmup) list goes back into taxi automatically — no extra UI
+  // needed here, since a catalog exercise already has a natural home.
+  const phase = ['taxi','takeoff','enroute','landing'].includes(exDef.phase) ? exDef.phase : 'enroute';
+  ST.workout[phase].push(newEx);
   const blankSet = newEx.inputType==='timed_distance' ? {seconds:'',miles:''} : newEx.inputType==='timed' ? {seconds:''} : newEx.inputType==='reps_only' ? {reps:''} : {reps:'',weight:''};
   const setsCount = newEx.sets || 3;
   ST.sets[id] = Array.from({ length: setsCount }, () => ({...blankSet}));
@@ -12346,14 +12396,24 @@ function renderData(p) {
   if (isNative) {
     parts.push('<div class="card mb12">');
     parts.push('<div class="section-label" style="margin-top:0">APPLE CALENDAR</div>');
+    // BUG FIX: ST.calendarEvents now always reflects the true raw event
+    // count (see classifyCalendarEvents in app.js) even when AI
+    // classification specifically failed — so this length check alone is
+    // now an honest signal of "did the native fetch find anything",
+    // decoupled from "did the AI successfully type them". A separate
+    // warning banner covers the classification-failed case specifically.
     if (ST.calendarGranted && ST.calendarEvents?.length) {
       const flights = ST.calendarEvents.filter(e => e.type === 'flight').length;
       const total   = ST.calendarEvents.length;
       parts.push('<div style="font-size:11px;color:var(--green);margin-bottom:8px">✅ Connected — '+total+' events classified ('+flights+' flights)</div>');
-      parts.push('<button class="btn btn-outline" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.syncCalendar()">↻ Sync Now</button>');
+      if (ST.calendarSyncError) {
+        parts.push('<div style="font-size:11px;color:var(--amber);margin-bottom:8px">⚠️ '+ST.calendarSyncError+'</div>');
+      }
+      parts.push('<button class="btn btn-outline" onclick="haptic(\'light\');showToast(\'Syncing calendar\u2026\');if(typeof FCFBridge!==\'undefined\')FCFBridge.syncCalendar()">↻ Sync Now</button>');
     } else if (ST.calendarGranted && !ST.calendarEvents?.length) {
-      parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Calendar access granted but no events found in the next 60 days.</div>');
-      parts.push('<button class="btn btn-outline" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.syncCalendar()">↻ Sync Now</button>');
+      const msg = ST.calendarSyncError || 'Calendar access granted but no events found in the next 60 days.';
+      parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">'+msg+'</div>');
+      parts.push('<button class="btn btn-outline" onclick="haptic(\'light\');showToast(\'Syncing calendar\u2026\');if(typeof FCFBridge!==\'undefined\')FCFBridge.syncCalendar()">↻ Sync Now</button>');
     } else {
       parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Grant access to your Apple Calendar and FCF will automatically detect your flights, layovers, and personal commitments — no manual upload needed.</div>');
       parts.push('<button class="btn btn-outline" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.requestCalendar()">Connect Apple Calendar</button>');

@@ -10957,36 +10957,46 @@ function renderToday(p) {
     }
   }
 
-  // Show today's classified calendar events if available
-  if (ST.calendarEvents?.length) {
-    const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-    const todayEnd   = new Date(); todayEnd.setHours(23,59,59,999);
-    const todayEvents = ST.calendarEvents.filter(e => {
+  // BUG FIX (reported: two separate "TODAY'S SCHEDULE" cards appearing at
+  // once, showing different — and in one case duplicated — data). Root
+  // cause: this used to be two completely independent blocks, each
+  // checking a different schedule source (ST.calendarEvents from Apple
+  // Calendar sync, vs ctx.sched.todayEvents from the uploaded .ics) with
+  // zero awareness of each other. Whenever BOTH sources happened to have
+  // entries for today, both rendered — producing two identically-labeled
+  // sections with different data. This wasn't intermittent by accident;
+  // it depended entirely on whether Apple Calendar sync happened to have
+  // today's date populated at that exact moment, which is why it looked
+  // "fixed" after a restart and then came right back.
+  // Fixed by choosing exactly one source: ST.calendarEvents (AI-
+  // classified, richer type info) takes priority when it actually has
+  // today's events; the .ics-based schedule is the fallback, used only
+  // when the calendar source doesn't have anything for today.
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+  const todayEnd   = new Date(); todayEnd.setHours(23,59,59,999);
+  const calToday = (ST.calendarEvents || []).filter(e => {
+    const s = new Date(e.start), en = new Date(e.end);
+    return s <= todayEnd && en >= todayStart && e.type !== 'personal';
+  }).sort((a,b) => new Date(a.start) - new Date(b.start));
+
+  if (calToday.length) {
+    const typeIcon = { flight:'✈️', layover:'🏨', reserve:'📟', training:'🎓', duty:'📋', rest:'😴', unknown:'📅' };
+    parts.push('<div class="section-label">TODAY\'S SCHEDULE</div>');
+    parts.push('<div class="card mb12">');
+    calToday.slice(0, 6).forEach(e => {
       const s = new Date(e.start), en = new Date(e.end);
-      return s <= todayEnd && en >= todayStart && e.type !== 'personal';
-    }).sort((a,b) => new Date(a.start) - new Date(b.start));
-
-    if (todayEvents.length) {
-      const typeIcon = { flight:'✈️', layover:'🏨', reserve:'📟', training:'🎓', duty:'📋', rest:'😴', unknown:'📅' };
-      parts.push('<div class="section-label">TODAY\'S SCHEDULE</div>');
-      parts.push('<div class="card mb12">');
-      todayEvents.slice(0, 6).forEach(e => {
-        const s = new Date(e.start), en = new Date(e.end);
-        const icon = typeIcon[e.type] || '📅';
-        const timeStr = e.isAllDay ? 'All day' :
-          s.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false}) + '–' +
-          en.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
-        const label = e.origin && e.destination ? e.origin + ' → ' + e.destination : e.title;
-        parts.push('<div class="fb" style="padding:7px 0;border-bottom:1px solid var(--border)">');
-        parts.push('<span style="font-family:var(--mono);font-size:11px;color:var(--muted);min-width:90px">'+timeStr+'</span>');
-        parts.push('<span style="font-size:12px;flex:1;text-align:right">'+icon+' '+label+'</span>');
-        parts.push('</div>');
-      });
+      const icon = typeIcon[e.type] || '📅';
+      const timeStr = e.isAllDay ? 'All day' :
+        s.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false}) + '–' +
+        en.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
+      const label = e.origin && e.destination ? e.origin + ' → ' + e.destination : e.title;
+      parts.push('<div class="fb" style="padding:7px 0;border-bottom:1px solid var(--border)">');
+      parts.push('<span style="font-family:var(--mono);font-size:11px;color:var(--muted);min-width:90px">'+timeStr+'</span>');
+      parts.push('<span style="font-size:12px;flex:1;text-align:right">'+icon+' '+label+'</span>');
       parts.push('</div>');
-    }
-  }
-
-  if (ctx.sched.todayEvents.length) {
+    });
+    parts.push('</div>');
+  } else if (ctx.sched.todayEvents.length) {
     parts.push('<div class="section-label">TODAY\'S SCHEDULE</div>');
     parts.push('<div class="card mb12">');
     mergeAdjacentEvents(ctx.sched.todayEvents).slice(0,6).forEach(e => {

@@ -42,6 +42,11 @@ const CORS = {
 // for up to a full day after the fix ships. Included in the cache check so
 // a prompt change auto-invalidates any stale cached response.
 const WEEKLY_SUMMARY_PROMPT_VERSION = 2; // v2: incidentalWalk awareness + recency check + sandwich structure
+// v2: added minutesActuallyFreeBeforeNeedingToLeave awareness, so the cache
+// (added the same day this constant was) doesn't keep serving a
+// pre-fix response — that field didn't exist in the context sent to
+// earlier cached responses, so their advice can't reflect it either.
+const FATIGUE_CALIBRATION_PROMPT_VERSION = 2;
 
 // ── Prompts per mode ──────────────────────────────────────────────────────────
 
@@ -96,6 +101,13 @@ You will receive today's readiness/recovery signal, their current trip day (whic
 today is — day 2 of a 4-day trip, for example), today's flights with LOCAL departure/arrival times already
 converted for you, and recent training load. All times given to you are already in the user's local timezone —
 never convert them yourself or assume a different zone.
+
+You will also receive minutesActuallyFreeBeforeNeedingToLeave — this already accounts for getting from a
+layover hotel back to the airport (transport, security, crew report time), which the raw gap to departure
+does NOT. Use this figure, not the raw time to departure, when deciding whether there's realistically time
+for a workout. If it's null, there's no known upcoming departure constraining the window. If it's under
+roughly 45, do not suggest "full send" or a real training session — say something else useful instead
+(a walk, mobility work, or just get ready and go), the same way you would if readiness itself ruled it out.
 
 Tell them straight, like a coach would in person, and give the one reason why — not generic "listen to your
 body" filler. If everything looks fine, say so with confidence, don't manufacture caution just to sound
@@ -258,7 +270,7 @@ serve(async (req) => {
     // not a live value.
     let fatigueCacheKey: string | null = null;
     if (mode === 'fatigue_calibration') {
-      fatigueCacheKey = new Date().toISOString().slice(0, 10);
+      fatigueCacheKey = new Date().toISOString().slice(0, 10) + '_v' + FATIGUE_CALIBRATION_PROMPT_VERSION;
       const { data: cached } = await supabase
         .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
       const cachedKey = cached?.profile_data?.fatigueCalibrationCacheKey;

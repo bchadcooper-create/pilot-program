@@ -4476,6 +4476,16 @@ async function loadFatigueCalibration(ctx) {
       currentlyAtLayoverAirport: sched.layoverAirport || null,
       tonightsLayoverAirport: sched.nextLayoverAirport || null,
       workoutLoggedToday: ctx.training?.workoutToday ?? false,
+      // BUG FIX (reported: told to "get a solid workout in" with 45
+      // minutes before needing to leave a hotel for a 9:05 departure).
+      // The model was only ever given raw departure times and had no way
+      // to know that reaching the airport from a layover hotel — transport,
+      // security, crew report time — eats into that window before a
+      // workout could even start. This is the same figure the rule-based
+      // card uses (usableMinutesBeforeDeparture), so both agree on what
+      // "enough time" actually means instead of the AI silently assuming
+      // the entire gap is free.
+      minutesActuallyFreeBeforeNeedingToLeave: usableMinutesBeforeDeparture(sched),
     };
     const result = await callAICoach('fatigue_calibration', context);
     const card = document.getElementById('aiFatigueCard');
@@ -10912,6 +10922,27 @@ function fmtDutyEnd(ts) {
 
 const POST_LANDING_BUFFER_MIN = 10;
 const PRE_DEPARTURE_BUFFER_MIN = 30;
+// Distinct from PRE_DEPARTURE_BUFFER_MIN above (which is gate-prep time for
+// a genuine short turn) — this covers getting from a hotel back to the
+// airport at the end of a layover: transport, security, crew report time.
+// A conservative fixed estimate, not measured per-airport/hotel, chosen
+// because the cost of underestimating (a recommendation that makes someone
+// late) is much higher than the cost of a slightly-too-cautious one.
+const PRE_DEPARTURE_TRAVEL_BUFFER_MIN = 90;
+
+// Shared between buildTodayBriefing() (the rule-based card) and
+// loadFatigueCalibration() (the AI-generated one) so both always agree on
+// how much time is genuinely available before the next departure — a raw
+// gap-to-departure isn't usable training time on its own, since some of
+// it goes to getting from wherever you are back to the airport.
+// See PRE_DEPARTURE_TRAVEL_BUFFER_MIN above for why the layover figure is
+// conservative rather than precise.
+function usableMinutesBeforeDeparture(sched) {
+  const gapMin = sched.freeMinutesUntilDuty;
+  if (gapMin === null || gapMin === undefined) return null;
+  const buffer = sched.layoverAirport ? PRE_DEPARTURE_TRAVEL_BUFFER_MIN : PRE_DEPARTURE_BUFFER_MIN;
+  return gapMin - buffer;
+}
 
 function buildTodayBriefing(ctx) {
   const { sched, oura, training, hour } = ctx;
@@ -10993,9 +11024,26 @@ function buildTodayBriefing(ctx) {
   // was reported as "8h 2m ... really about 442 min once deplaning duties
   // are accounted for", and the genuinely useful "you have 8h before your
   // next flight" branch below could never be reached.
-  const isTurn = gapMin !== null && gapMin <= TURN_MAX_MIN;
+  // BUG FIX (reported: told to "get a solid workout in" with 45 minutes
+  // before needing to leave the hotel for a 9:05 departure — confirmed via
+  // the real numbers: TURN_MAX_MIN is 6 hours, and isTurn only ever checked
+  // TIME REMAINING until the next departure, never how long the layover had
+  // ALREADY lasted. Early in an overnight layover (just landed, 10+ hours
+  // until the next departure) that correctly stays false. But check the
+  // app again the next morning, with the SAME overnight layover now only
+  // ~2 hours from ending, and gapMin alone drops under 360 — isTurn flips
+  // true for a situation that is not remotely "a genuine turn between
+  // legs" (the comment's own words), it's the tail end of a full night at
+  // a hotel. ctx.justLandedMinAgo (already computed, already used a few
+  // lines below for the deplaning buffer) is exactly the missing signal:
+  // it says how long ago the layover actually started, not just how much
+  // of it is left. Requiring it to ALSO be short is what actually
+  // captures "a genuine turn" rather than "any moment where the clock
+  // happens to read under 6 hours to departure."
+  const isTurn = gapMin !== null && gapMin <= TURN_MAX_MIN &&
+    sched.justLandedMinAgo !== null && sched.justLandedMinAgo <= TURN_MAX_MIN;
   if (isTurn && sched.legsRemaining > 0 && sched.legsCompleted > 0) {
-    const ord = ['','First','Second','Third','Fourth','Fifth'][sched.legsTodayCompleted] || (sched.legsTodayCompleted + 'th');
+    const ord = ['','First','Second','Third','Fourth','Fifth'][sched.legsTodayCompleted] ?? (sched.legsTodayCompleted + 'th');
     const legsLeftToday = sched.legsTodayRemaining;
     const legWord = legsLeftToday === 1 ? 'one more leg today' : legsLeftToday + ' more legs today';
 
@@ -11055,9 +11103,20 @@ function buildTodayBriefing(ctx) {
   }
 
   // 6. Duty is finished for the day (or hasn't started and there's real room).
-  if (gapMin !== null && gapMin >= 45) {
-    const hrs = Math.floor(gapMin/60), mins = gapMin%60;
-    const gapStr = hrs > 0 ? hrs+'h '+(mins?mins+'m':'') : gapMin+' min';
+  // BUG FIX: this used the raw gap to departure as if the ENTIRE window
+  // were free training time — reasonable if you're already home with
+  // nowhere else to be, but wrong for the tail end of a layover, where
+  // getting to the airport (transport, security, crew report time) eats
+  // into that window before a workout ever could. There's no actual
+  // commute-time data available, so this uses a conservative fixed
+  // estimate rather than pretending precision it doesn't have — the cost
+  // of underestimating (recommending a session that makes someone late)
+  // is much higher than the cost of overestimating (calling a window
+  // "tight" that technically had a little more room).
+  const usableBeforeDeparture = usableMinutesBeforeDeparture(sched);
+  if (usableBeforeDeparture !== null && usableBeforeDeparture >= 45) {
+    const hrs = Math.floor(usableBeforeDeparture/60), mins = usableBeforeDeparture%60;
+    const gapStr = hrs > 0 ? hrs+'h '+(mins?mins+'m':'') : usableBeforeDeparture+' min';
     const marginal = readiness !== null && readiness < 70;
     return { tone: marginal ? 'ease' : 'go',
       headline:'You have '+gapStr.trim()+' before your next flight',
@@ -11076,9 +11135,11 @@ function buildTodayBriefing(ctx) {
   }
 
   // 6. A short window — worth naming honestly rather than pretending it's enough.
-  if (gapMin !== null && gapMin > 0 && gapMin < 45) {
-    return { tone:'neutral', headline:'Tight window — '+gapMin+' min',
-      body:'Not enough for a full session without rushing it. A brisk walk through the terminal or some mobility work fits better.',
+  if (usableBeforeDeparture !== null && usableBeforeDeparture > 0 && usableBeforeDeparture < 45) {
+    return { tone:'neutral', headline:'Tight window — '+usableBeforeDeparture+' min',
+      body: sched.layoverAirport
+        ? 'Not enough time for a session once getting to the airport is factored in. Focus on getting ready and heading out.'
+        : 'Not enough for a full session without rushing it. A brisk walk through the terminal or some mobility work fits better.',
       action:null };
   }
 

@@ -11,6 +11,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     ) -> Bool {
         configureAudioSession()
         registerForPushNotifications()
+        // BUG FIX (independent review finding): previously started from
+        // ViewController's viewDidLoad, which fixed the earlier "defined
+        // but never called" bug but left the wrong lifecycle owner —
+        // transaction updates (a renewal, a purchase on another device,
+        // Ask to Buy approval) are an app-level concern, not tied to any
+        // particular screen being alive. Started once, here, at launch.
+        PurchaseManager.shared.listenForTransactions()
         return true
     }
 
@@ -48,7 +55,18 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let token = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
-        // Post token to web app so it can forward to Supabase with the user's JWT
+        // BUG FIX (independent review finding): the APNs token was only
+        // ever delivered via a one-time NotificationCenter post. If
+        // ViewController's observer registered even slightly after this
+        // fired — plausible on a cold launch, since the WebView still
+        // has to load before the web app's own listeners are ready — the
+        // token was gone, with no way to recover it short of the OS
+        // re-issuing one. Persisting it means it's always recoverable on
+        // demand (see ViewController.observeAPNsToken), not just
+        // deliverable at the exact moment this method happens to run.
+        UserDefaults.standard.set(token, forKey: "fcfAPNsToken")
+        // Still posted for the "token changed while the app is already
+        // running" case (rare, but real — e.g. after a token refresh).
         NotificationCenter.default.post(
             name: .fcfAPNsTokenReceived,
             object: nil,

@@ -143,6 +143,23 @@ class NotificationManager {
     // Fires at 8pm the evening before each detected flight.
 
     func schedulePreflightChecks(flights: [[String: String]]) {
+        // BUG FIX (independent review finding: "notification scheduling
+        // should validate web input"): this iterated every flight the web
+        // app sent with no upper bound. iOS caps an app at 64 pending
+        // local notifications total, shared across every notification
+        // type here (workout reminder, water, HRV, weekly summary,
+        // layover, preflight) — a large flights array (a busy month of
+        // schedule data, say) could silently exhaust that budget on its
+        // own, with the OS quietly dropping requests past the limit and
+        // no error surfaced anywhere. Sorting by date first and capping
+        // the count means the nearest, most relevant flights are the ones
+        // that actually get scheduled, and there's always room left for
+        // every other notification type.
+        let sortedFlights = flights.sorted {
+            ($0["start"] ?? "") < ($1["start"] ?? "")
+        }
+        let boundedFlights = Array(sortedFlights.prefix(20))
+
         // Remove any existing preflight notifications before rescheduling
         UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
             let ids = requests
@@ -153,7 +170,7 @@ class NotificationManager {
             let formatter = ISO8601DateFormatter()
             let now = Date()
 
-            for flight in flights {
+            for flight in boundedFlights {
                 guard let startStr = flight["start"],
                       let flightDate = formatter.date(from: startStr) else { continue }
 

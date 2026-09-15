@@ -5,11 +5,18 @@
  * and exposes a clean API for IAP, Sign In with Apple, push tokens,
  * HealthKit, and Calendar.
  *
+ * NOTE: this is a standalone reference copy. The version actually
+ * injected into the app is the bridgeJS string in ViewController.swift's
+ * setupWebView() — keep both in sync when either changes.
+ *
  * Usage:
  *   if (FCFBridge.isNative) { ... }
+ *   if (FCFBridge.capabilities.healthKit) { ... }  // check a specific feature
  *   FCFBridge.getProducts()
  *   FCFBridge.purchase('FCFProMonthly')
  *   FCFBridge.restore()
+ *   FCFBridge.reconcileEntitlements() // ask what's actually active right now,
+ *                                      // independent of any one purchase event
  *   FCFBridge.signInWithApple()
  *   FCFBridge.requestHealthKit()   // call once after login — shows iOS permission sheet
  *   FCFBridge.syncHealthKit()      // refresh data without re-prompting
@@ -19,6 +26,19 @@
 
 const FCFBridge = (() => {
   const isNative = !!(window.webkit?.messageHandlers?.storeKit);
+
+  // Explicit per-feature flags, rather than inferring the whole native
+  // environment from one handler's presence (isNative above is kept for
+  // backward compatibility, but prefer checking a specific capability
+  // when the code only actually needs that one feature).
+  const capabilities = {
+    storeKit:        !!(window.webkit?.messageHandlers?.storeKit),
+    signInWithApple: !!(window.webkit?.messageHandlers?.signInWithApple),
+    healthKit:       !!(window.webkit?.messageHandlers?.healthkit),
+    calendar:        !!(window.webkit?.messageHandlers?.calendar),
+    notifications:   !!(window.webkit?.messageHandlers?.notifications),
+    haptics:         !!(window.webkit?.messageHandlers?.haptics),
+  };
 
   // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -38,6 +58,10 @@ const FCFBridge = (() => {
 
   function restore() {
     send('storeKit', { action: 'restore' });
+  }
+
+  function reconcileEntitlements() {
+    send('storeKit', { action: 'reconcileEntitlements' });
   }
 
   // ── Sign In with Apple ───────────────────────────────────────────────────
@@ -74,10 +98,28 @@ const FCFBridge = (() => {
 
   // ── Event listeners (native → web) ───────────────────────────────────────
   // Listen like: window.addEventListener('fcf:purchase', e => console.log(e.detail))
+  //
+  // Every StoreKit event below now follows one consistent shape:
+  //   success case: { success: true, status: "purchased"|"restored"|"pending"|"no_change",
+  //                   productId?, transactionId? }
+  //   error case:   { success: false, code: "product_not_found"|"invalid_product"|
+  //                                         "verification_failed"|"purchase_failed"|
+  //                                         "purchase_cancelled"|"restore_failed"|
+  //                                         "unknown_result"|"unsupported_action"|
+  //                                         "invalid_payload"|"missing_product_id",
+  //                   message: <stable, native-controlled user-facing text —
+  //                             never Apple's raw localizedDescription, which
+  //                             isn't a stable API contract> }
+  // Any other bridge event (healthkit, calendar, notifications) that hits an
+  // unrecognized or malformed action follows the same { success: false, code,
+  // message } shape rather than silently doing nothing.
 
-  // fcf:products      → { products: [...] }
-  // fcf:purchase      → { success, productId, transactionId } | { cancelled } | { pending } | { error }
-  // fcf:restore       → { restored: [...] }
+  // fcf:products      → { products: [{ id, displayName, description, displayPrice }] } | error shape above
+  // fcf:purchase      → success/error shape above
+  // fcf:restore       → { success: true, status, restored: [...] } | error shape above
+  // fcf:entitlements  → { success: true, activeProductIds: [...], isPro: bool }
+  //                      (response to reconcileEntitlements(), and also sent
+  //                      automatically after a successful purchase)
   // fcf:siwa:success  → { userId, identityToken, email?, givenName?, familyName? }
   // fcf:siwa:error    → { error }
   // fcf:healthkit     → {
@@ -102,6 +144,6 @@ const FCFBridge = (() => {
   //   windowEnd: string      // ISO8601 — 60 days from now
   // }
 
-  return { isNative, getProducts, purchase, restore, signInWithApple,
-           requestHealthKit, syncHealthKit, requestCalendar, syncCalendar };
+  return { isNative, capabilities, getProducts, purchase, restore, reconcileEntitlements,
+           signInWithApple, requestHealthKit, syncHealthKit, requestCalendar, syncCalendar };
 })();

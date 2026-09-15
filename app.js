@@ -1548,7 +1548,17 @@ function getCurrentScheduleStatus(scheduleEvents) {
 async function dbGetProfile() {
   if (!ST.user) return JSON.parse(localStorage.getItem('fcf_profile')||'null');
   try {
-    const { data } = await withTimeout(SB.from('user_profiles').select('*').eq('user_id', ST.user.id).maybeSingle());
+    // BUG FIX (independent review finding, confirmed real and genuinely
+    // dangerous here specifically): only `data` was ever destructured —
+    // a resolved {error} result (not a rejection) would fall straight
+    // through as if the user simply had no profile row yet, silently
+    // blanking sex, height, age, injuries, and every other saved field
+    // on a real query failure, instead of reaching the catch block below
+    // whose entire purpose is to fall back to the cache for exactly this
+    // situation. Explicitly checking and throwing makes a real failure
+    // actually behave like a failure.
+    const { data, error } = await withTimeout(SB.from('user_profiles').select('*').eq('user_id', ST.user.id).maybeSingle());
+    if (error) throw error;
     const profile = data?.profile_data || null;
     if (profile) { try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile)); } catch(e) {/* local mirror only, DB copy just above is the real source of truth */} }
     ST.profileFromCache = false;
@@ -1580,7 +1590,15 @@ async function dbSetProfile(p) {
   if (!ST.user) { localStorage.setItem('fcf_profile', JSON.stringify(p)); return; }
   try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(p)); } catch(e) {/* local mirror only — the remote upsert right below is the real save and does surface its own failure */}
   try {
-    await withTimeout(SB.from('user_profiles').upsert({ user_id: ST.user.id, profile_data: p, updated_at: new Date().toISOString() }, { onConflict: 'user_id' }));
+    // BUG FIX (independent review finding): this awaited the upsert
+    // directly with no {error} check — Supabase resolves successfully
+    // even when the write itself failed (RLS violation, constraint
+    // error); it doesn't reject. The catch/throw restructure from
+    // earlier this session only helps for a genuine rejection (a real
+    // network failure) — it does nothing for this case, since nothing
+    // here ever threw for a resolved {error} result. Both matter.
+    const { error } = await withTimeout(SB.from('user_profiles').upsert({ user_id: ST.user.id, profile_data: p, updated_at: new Date().toISOString() }, { onConflict: 'user_id' }));
+    if (error) throw error;
   } catch(e) {
     console.warn('dbSetProfile: remote save failed:', e);
     throw e;
@@ -1611,15 +1629,32 @@ async function dbGetRecentSessions(days) {
 async function dbGetLastSession() {
   try {
     const filter = ST.user ? SB.from('workout_sessions').select('*').eq('user_id', ST.user.id) : SB.from('workout_sessions').select('*');
-    const { data } = await withTimeout(filter.order('started_at', { ascending: false }).limit(2));
+    // BUG FIX (independent review finding): only `data` was checked —
+    // a resolved {error} result would return null (as if there's simply
+    // no previous session) instead of ever reaching the localStorage
+    // fallback below, whose whole purpose is to cover exactly this kind
+    // of query failure.
+    const { data, error } = await withTimeout(filter.order('started_at', { ascending: false }).limit(2));
+    if (error) throw error;
     ST.prevSession = data?.[1]?.session_data || null;
     return data?.[0]?.session_data || null;
   } catch(e) {
     const keys = Object.keys(localStorage).filter(k => k.startsWith('fcf_session_'));
     if (!keys.length) return null;
     keys.sort();
-    ST.prevSession = keys.length > 1 ? JSON.parse(localStorage.getItem(keys[keys.length-2])) : null;
-    return JSON.parse(localStorage.getItem(keys[keys.length-1]));
+    // BUG FIX (independent code review finding, verified real): these two
+    // parses had no guard at all, unlike the identical pattern in
+    // dbGetRecentSessions right above, which already wraps each parse
+    // individually and treats a bad entry as a cache miss. Worse than a
+    // normal missing guard: this is INSIDE the fallback for when the real
+    // DB call already failed, so an uncaught parse error here would throw
+    // at exactly the moment — a DB failure during boot — when this
+    // fallback most needs to actually work instead of taking the whole
+    // boot down with it.
+    try { ST.prevSession = keys.length > 1 ? JSON.parse(localStorage.getItem(keys[keys.length-2])) : null; }
+    catch(e2) { console.warn('Parsing cached previous session failed:', e2); ST.prevSession = null; }
+    try { return JSON.parse(localStorage.getItem(keys[keys.length-1])); }
+    catch(e2) { console.warn('Parsing cached last session failed:', e2); return null; }
   }
 }
 
@@ -2207,7 +2242,14 @@ async function submitLeaderboardEntry(exId, name, best, achievedAt) {
     dots: dotsScore(best.weight, ST.lastWeight, ST.sex),
     achieved_at: achievedAt || new Date().toISOString(),
   };
-  await withTimeout(SB.from('leaderboard_entries').upsert(row, { onConflict: 'user_id,exercise_id' }));
+  // BUG FIX (independent review finding — called out this exact function
+  // by name as "especially important"): the upsert's result was never
+  // checked, so a database-level rejection (RLS, a constraint) would
+  // still let ST.lbBests get updated right after, as if the submission
+  // had actually succeeded — the in-memory PR record and the real
+  // leaderboard could silently disagree.
+  const { error } = await withTimeout(SB.from('leaderboard_entries').upsert(row, { onConflict: 'user_id,exercise_id' }));
+  if (error) throw error;
   ST.lbBests[exId] = best.weight;
 }
 
@@ -2253,10 +2295,15 @@ async function backfillLeaderboard() {
   });
   if (bestRun && bestRun.miles > (ST.runBest || 0)) {
     try {
-      await withTimeout(SB.from('running_pr_entries').upsert({
+      // BUG FIX (independent review finding): same class of gap as
+      // submitLeaderboardEntry/submitRunningPR above — checking .error
+      // now, not just relying on the catch (which alone can't see a
+      // resolved {error} result, only a genuine rejection).
+      const { error } = await withTimeout(SB.from('running_pr_entries').upsert({
         user_id: ST.user.id, username: ST.username, sex: ST.sex || null,
         distance_mi: bestRun.miles, duration_sec: bestRun.seconds || null, achieved_at: bestRun.date,
       }, { onConflict: 'user_id' }));
+      if (error) throw error;
       ST.runBest = bestRun.miles;
       any = true;
     } catch(e) { console.warn('Saving run PR entry failed:', e); }
@@ -2610,7 +2657,11 @@ async function submitRunningPR(session) {
     distance_mi: run.miles, duration_sec: run.seconds || null,
     achieved_at: session.date || new Date().toISOString(),
   };
-  await withTimeout(SB.from('running_pr_entries').upsert(row, { onConflict: 'user_id' }));
+  // BUG FIX (independent review finding, same class as
+  // submitLeaderboardEntry above): result was never checked before
+  // updating ST.runBest as if the write had succeeded.
+  const { error } = await withTimeout(SB.from('running_pr_entries').upsert(row, { onConflict: 'user_id' }));
+  if (error) throw error;
   ST.runBest = run.miles;
   const profile = (await dbGetProfile()) || {};
   profile.runBest = ST.runBest;
@@ -2892,6 +2943,10 @@ async function bootAppInner() {
     setTimeout(() => scheduleNotifications(), 5000);
   }
   scheduleEntitlementRefresh();
+  // Retry any biometric entries that couldn't reach the server last time
+  // (saveBio() falls back to a local pending queue when offline) — this
+  // is the case where the app boots already back online after that.
+  syncPendingBioEntries().catch(e => console.warn('syncPendingBioEntries failed at boot:', e));
   // Returning from Stripe Checkout. The webhook may land a moment after the
   // redirect, so this re-reads a few times rather than once and giving up.
   if (/[?&]checkout=success/.test(location.search)) {
@@ -3661,6 +3716,51 @@ function restoreTimerState() {
   } catch(e) { console.warn('Restoring saved timer state failed (treating as no active timer):', e); }
 }
 
+// Retries any biometric entries that were saved locally because the
+// remote save failed at the time (see saveBio's catch block). Called on
+// reconnect and at boot — a pending entry from an offline session should
+// get pushed the moment there's actually a connection again, not sit
+// local-only until the user happens to log another entry.
+async function syncPendingBioEntries() {
+  if (!ST.user) return;
+  let pending;
+  try { pending = JSON.parse(localStorage.getItem('fcf_bio_pending') || '[]'); }
+  catch(e) { console.warn('Reading pending bio entries failed:', e); return; }
+  if (!pending.length) return;
+
+  const stillPending = [];
+  for (const entry of pending) {
+    try {
+      const d = new Date(entry.logged_at);
+      const dayStart = new Date(d); dayStart.setHours(0,0,0,0);
+      const dayEnd   = new Date(d); dayEnd.setHours(23,59,59,999);
+      const { data: existing, error: selErr } = await SB.from('weight_log')
+        .select('id').eq('user_id', ST.user.id)
+        .gte('logged_at', dayStart.toISOString()).lte('logged_at', dayEnd.toISOString()).limit(1);
+      if (selErr) throw selErr;
+
+      if (existing && existing.length > 0) {
+        const { error } = await SB.from('weight_log').update({
+          weight_lb: entry.weight_lb, waist_in: entry.waist_in, systolic_bp: entry.systolic_bp,
+          diastolic_bp: entry.diastolic_bp, fasting_glucose: entry.fasting_glucose,
+        }).eq('id', existing[0].id);
+        if (error) throw error;
+      } else {
+        const { error } = await SB.from('weight_log').insert([{ user_id: ST.user.id, ...entry }]);
+        if (error) throw error;
+      }
+    } catch(e) {
+      console.warn('Syncing a pending bio entry failed, will retry later:', e);
+      stillPending.push(entry);
+    }
+  }
+  try { localStorage.setItem('fcf_bio_pending', JSON.stringify(stillPending)); } catch(e) {/* worst case, retries the same entries again next time — never loses data */}
+  if (stillPending.length < pending.length) {
+    showBigToast('✅ Synced ' + (pending.length - stillPending.length) + ' biometric ' + (pending.length - stillPending.length === 1 ? 'entry' : 'entries') + ' logged while offline.', 'ok');
+    setTimeout(() => loadAndDrawCharts(), 100);
+  }
+}
+
 // Refresh anything served from offline fallbacks the moment connectivity
 // returns — otherwise the calendar (and sync indicator) stay frozen on the
 // offline snapshot until the user fully restarts the app.
@@ -3674,6 +3774,7 @@ async function refreshOnReconnect() {
     applyProfileToState(profile);
   } catch(e) { console.warn('Refreshing profile/sessions on reconnect failed:', e); }
   checkDB();
+  syncPendingBioEntries().catch(e => console.warn('syncPendingBioEntries failed:', e));
   if (ST.ouraConnected && ST.ouraAccessToken) syncOuraData().catch(() => {});
   renderPage();
 }
@@ -8323,6 +8424,18 @@ async function saveBio() {
   const todayStart = new Date(); todayStart.setHours(0,0,0,0);
   const todayEnd   = new Date(); todayEnd.setHours(23,59,59,999);
 
+  // BUG FIX (independent code review finding, verified real): an
+  // authenticated user had NO local fallback at all — a failed network
+  // call here just showed "Could not save — check connection" and the
+  // entry was gone, while an unauthenticated user got a full localStorage
+  // save. That's backwards for what this app actually promises ("works
+  // with no signal") and for who's using it — a pilot logging biometrics
+  // is exactly who's likely to be offline (altitude, a dead-zone hotel).
+  // Workout sessions already have this exact kind of fallback; this
+  // brings biometric logging in line with that, using a separate
+  // fcf_bio_pending key (not the shared fcf_bio key genuinely-
+  // unauthenticated local users write to) so a signed-in user's pending
+  // entries can never collide with someone else's local-only history.
   try {
     if (ST.user) {
       const { data: existing } = await SB.from('weight_log')
@@ -8364,7 +8477,22 @@ async function saveBio() {
       localStorage.setItem('fcf_bio', JSON.stringify(local));
     }
     awardBadges();
-  } catch(e) { showBigToast('Could not save — check connection.','warn'); }
+  } catch(e) {
+    console.warn('saveBio remote save failed:', e);
+    if (ST.user) {
+      try {
+        const pending = JSON.parse(localStorage.getItem('fcf_bio_pending') || '[]');
+        pending.push({ weight_lb:wt, waist_in:waist, systolic_bp:sys, diastolic_bp:dia, fasting_glucose:gluc, logged_at: new Date().toISOString() });
+        localStorage.setItem('fcf_bio_pending', JSON.stringify(pending));
+        showBigToast('No connection — saved locally, will sync automatically.', 'warn');
+      } catch(e2) {
+        console.warn('saveBio local fallback also failed:', e2);
+        showBigToast('Could not save — check connection.','warn');
+      }
+    } else {
+      showBigToast('Could not save — check connection.','warn');
+    }
+  }
 
   if (wt) {
     const profile = (await dbGetProfile()) || {};

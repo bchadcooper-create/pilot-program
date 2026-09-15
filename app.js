@@ -4582,11 +4582,25 @@ async function classifyCalendarEvents(events, fingerprint) {
   try {
     const { data: { session } } = await SB.auth.getSession();
     if (!session) { ST.calendarEvents = rawFallback; ST.calendarSyncError = 'Not signed in'; renderPage(); return; }
+    // BUG FIX (reported: "Load failed" during sync at 291 events / 8
+    // parallel batches server-side — see the matching fix and comment in
+    // fcf-calendar-classify's per-batch fetch for the full root-cause
+    // investigation: Supabase's 150s request idle timeout, bound by
+    // whichever of the parallel batches is slowest). That server-side
+    // fix caps each batch at 45s now, but this had no timeout of its own
+    // at all before — meaning the client could sit waiting the full 150s
+    // for a gateway timeout to eventually happen, with no predictable
+    // failure in between. 90s gives real margin above the now-bounded
+    // server-side worst case while still failing predictably instead of
+    // however long an actual dropped connection takes to surface.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 90000);
     const res = await fetch(CALENDAR_CLASSIFY_EDGE_FN, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
-      body: JSON.stringify({ events, fingerprint })
-    });
+      body: JSON.stringify({ events, fingerprint }),
+      signal: controller.signal
+    }).finally(() => clearTimeout(timeoutId));
     if (!res.ok) {
       const errText = await res.text();
       console.warn('Calendar classify failed:', errText);
@@ -4614,10 +4628,18 @@ async function classifyCalendarEvents(events, fingerprint) {
     renderPage();
   } catch(e) {
     console.warn('classifyCalendarEvents error:', e);
+    // AbortError specifically means OUR OWN timeout fired above, not a
+    // generic network failure — worth saying so distinctly, since
+    // e.message for an abort ("The user aborted a request" or similar)
+    // reads like something the user did, when it was actually just this
+    // sync taking longer than expected.
+    const reason = e.name === 'AbortError'
+      ? 'timed out — this can happen with a very large calendar'
+      : (e.message || 'network error');
     ST.calendarEvents = rawFallback;
     ST.calendarSyncError = rawFallback.length
-      ? 'Classification failed (' + (e.message || 'network error') + ') — showing ' + rawFallback.length + ' unclassified events.'
-      : 'Sync failed: ' + (e.message || 'network error');
+      ? 'Classification failed (' + reason + ') — showing ' + rawFallback.length + ' unclassified events.'
+      : 'Sync failed: ' + reason;
     renderPage();
   }
 }

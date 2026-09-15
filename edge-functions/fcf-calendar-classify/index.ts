@@ -178,6 +178,23 @@ serve(async (req) => {
 
     const batchResults = await Promise.all(batches.map(async (batch) => {
       try {
+        // BUG FIX (reported: "Load failed" during calendar sync at 291
+        // events / 8 parallel batches — investigated against Supabase's
+        // own documented limits: Edge Functions have a 150s request idle
+        // timeout, and since all batches run in Promise.all, the total
+        // response time is bound by whichever single batch is slowest,
+        // not the sum. A latency spike on just one of eight concurrent
+        // Anthropic calls could push the whole request past 150s, and
+        // depending on how the gateway terminates that, the client can
+        // see a dropped connection rather than a clean HTTP error —
+        // exactly matching the reported "Load failed" (WebKit's generic
+        // network-layer failure message, not an HTTP status).
+        // A 45s per-batch timeout leaves real margin under the 150s
+        // limit for the rest of the function (merging, caching to DB)
+        // to run afterward, and degrades only the slow batch to
+        // 'unknown' rather than risking the whole request timing out.
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 45000);
         const response = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: {
@@ -193,8 +210,9 @@ serve(async (req) => {
               role:    'user',
               content: `Classify these ${batch.length} calendar events:\n${JSON.stringify(batch, null, 2)}`
             }]
-          })
-        });
+          }),
+          signal: controller.signal
+        }).finally(() => clearTimeout(timeoutId));
 
         if (!response.ok) {
           console.error('Anthropic error for batch:', await response.text());

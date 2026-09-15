@@ -1,6 +1,10 @@
 /**
  * Flight Crew Fitness — app.js
- * Version: 5.0 | Build: 20260617
+ * Version/build: see FCF_VERSION / FCF_BUILD constants below — not
+ * duplicated here anymore after this comment was found stale (independent
+ * review finding: said "5.0 | 20260617" while the actual constants were
+ * already at v5.42.0 / 20260909, confusing when grepping for the real
+ * current version).
  */
 
 const FCF_VERSION = 'v5.42.0';

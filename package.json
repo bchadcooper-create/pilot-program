@@ -1,9 +1,10 @@
 {
   "name": "flight-crew-fitness",
-  "version": "5.41.0",
+  "version": "5.42.0",
   "private": true,
   "description": "Training and nutrition built around a crew schedule.",
   "scripts": {
+    "test": "node tests/ics-parser.test.js",
     "cap:add": "npx cap add ios",
     "cap:sync": "npx cap sync ios",
     "cap:open": "npx cap open ios"

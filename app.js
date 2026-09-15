@@ -277,7 +277,7 @@ function persistDailyInputs() {
       waterIn: ST.waterIn, waterInRaw: ST.waterInRaw,
       timeAvailMin: ST.timeAvailMin, sleepHours: ST.sleepHours, readiness: ST.readiness,
     }));
-  } catch(e) {}
+  } catch(e) { console.warn('Saving daily inputs locally failed:', e); }
   // BUG FIX: water (and the other daily inputs) previously lived in
   // localStorage ONLY — logging water on the phone was invisible on the
   // PC and vice versa, two entirely separate local caches with no shared
@@ -299,7 +299,7 @@ function restoreDailyInputs() {
     ST.timeAvailMin = saved.timeAvailMin || null;
     ST.sleepHours = saved.sleepHours || null;
     ST.readiness = saved.readiness || null;
-  } catch(e) {}
+  } catch(e) { console.warn('Restoring daily inputs from cache failed (treating as no cached data):', e); }
 }
 
 // Fetched once at boot and applied AFTER restoreDailyInputs() — the DB
@@ -335,7 +335,16 @@ function saveDailyInputsToDBDebounced() {
   clearTimeout(_dailyInputsSaveTimer);
   _dailyInputsSaveTimer = setTimeout(async () => {
     try {
-      await SB.from('daily_inputs').upsert({
+      // BUG FIX (independent review finding, verified real): this was
+      // await-ing the upsert directly with no error check at all — the
+      // read function right above (dbGetDailyInputs) already correctly
+      // does `const {data,error}=...; if(error) throw error`, but this
+      // write never did. Supabase's query builder resolves successfully
+      // even when the write itself failed (an RLS violation, a
+      // constraint error) — it doesn't reject, it returns {error} inside
+      // a normal resolved result. try/catch alone can't see that; it has
+      // to be checked explicitly.
+      const { error } = await SB.from('daily_inputs').upsert({
         user_id: ST.user.id,
         date: localDateStr(new Date()),
         water_in: ST.waterIn,
@@ -345,7 +354,8 @@ function saveDailyInputsToDBDebounced() {
         readiness: ST.readiness,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id,date' });
-    } catch(e) {}
+      if (error) throw error;
+    } catch(e) { console.warn('Saving daily inputs to server failed (local copy still saved):', e); }
   }, 800);
 }
 
@@ -1404,11 +1414,18 @@ const BIO_INFO = {
 // no route; they just never respond. Every function below that touches the
 // network during boot uses this, since a single hung call there would leave
 // the entire app un-rendered.
+// BUG FIX (code review finding, verified accurate): the reject-timer was
+// never cleared when the real promise won the race — a dangling
+// setTimeout stuck around for up to `ms` after the operation had already
+// finished. Low practical severity (trivial callback, max 6s lifetime)
+// but a real, free fix: capture the timer id and always clear it once
+// either side of the race settles, regardless of which one wins.
 function withTimeout(promise, ms) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms || 6000)),
-  ]);
+  let timerId;
+  const timeout = new Promise((_, reject) => {
+    timerId = setTimeout(() => reject(new Error('timeout')), ms || 6000);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timerId));
 }
 
 const PROFILE_CACHE_KEY = 'fcf_profile_cache';
@@ -1533,7 +1550,7 @@ async function dbGetProfile() {
   try {
     const { data } = await withTimeout(SB.from('user_profiles').select('*').eq('user_id', ST.user.id).maybeSingle());
     const profile = data?.profile_data || null;
-    if (profile) { try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile)); } catch(e) {} }
+    if (profile) { try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile)); } catch(e) {/* local mirror only, DB copy just above is the real source of truth */} }
     ST.profileFromCache = false;
     return profile;
   } catch(e) {
@@ -1545,12 +1562,29 @@ async function dbGetProfile() {
     try { return JSON.parse(localStorage.getItem(PROFILE_CACHE_KEY)||'null'); } catch(e2) { return null; }
   }
 }
+// BUG FIX (code review finding, verified — and more consequential than it
+// first looked): the remote upsert's own catch swallowed every failure
+// silently, which meant EVERY caller's error handling was already dead
+// code regardless of how well the caller itself was written — including
+// setScheduleSource()/setTrackingPref()'s own catch blocks, added earlier
+// this session specifically to surface save failures, which could never
+// actually fire because this function never rejected in the first place.
+// Now re-throws after logging, so a failure is actually visible to
+// whichever caller is best positioned to decide what the user needs to
+// know — this function itself has no UI context to make that call.
+// The local cache write stays a best-effort no-op deliberately: it's a
+// fast local mirror of data whose real source of truth is the row this
+// function is trying to save to the server, not data that would be lost
+// if this specific write fails.
 async function dbSetProfile(p) {
   if (!ST.user) { localStorage.setItem('fcf_profile', JSON.stringify(p)); return; }
-  try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(p)); } catch(e) {}
+  try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(p)); } catch(e) {/* local mirror only — the remote upsert right below is the real save and does surface its own failure */}
   try {
     await withTimeout(SB.from('user_profiles').upsert({ user_id: ST.user.id, profile_data: p, updated_at: new Date().toISOString() }, { onConflict: 'user_id' }));
-  } catch(e) {}
+  } catch(e) {
+    console.warn('dbSetProfile: remote save failed:', e);
+    throw e;
+  }
 }
 
 async function dbGetCustomExercises() {
@@ -1607,7 +1641,7 @@ async function doSignIn(email, pass) {
   return data.user;
 }
 async function doSignOut() {
-  try { await SB.auth.signOut(); } catch(e) {}
+  try { await SB.auth.signOut(); } catch(e) {/* best-effort remote signout — local state is cleared unconditionally below regardless */}
   ST.user = null;
   ST.authed = false;
   ST.showLanding = true;
@@ -1702,8 +1736,8 @@ function renderAuth(root) {
   parts.push('<div class="auth-tab '+(!isSignup?'active':'')+'" onclick="ST.authMode=\'signin\';ST.authErr=\'\';ST.authInfo=\'\';renderRoot()">Sign In</div>');
   parts.push('<div class="auth-tab '+(isSignup?'active':'')+'" onclick="ST.authMode=\'signup\';ST.authErr=\'\';ST.authInfo=\'\';renderRoot()">Sign Up</div>');
   parts.push('</div>');
-  if (ST.authInfo) parts.push('<div class="alert alert-ok mt8"><div class="alert-icon">✅</div><div>'+ST.authInfo+'</div></div>');
-  if (ST.authErr)  parts.push('<div class="alert alert-danger mt8"><div class="alert-icon">⚠️</div><div>'+ST.authErr+'</div></div>');
+  if (ST.authInfo) parts.push('<div class="alert alert-ok mt8"><div class="alert-icon">✅</div><div>'+sanitizeUserTextLong(ST.authInfo)+'</div></div>');
+  if (ST.authErr)  parts.push('<div class="alert alert-danger mt8"><div class="alert-icon">⚠️</div><div>'+sanitizeUserTextLong(ST.authErr)+'</div></div>');
   parts.push('<div class="field"><label>Email</label><input type="email" id="auth_email" placeholder="you@example.com" autocomplete="email"></div>');
   parts.push('<div class="field"><label>Password</label><input type="password" id="auth_pass" placeholder="'+(isSignup?'Choose a password (min 6 chars)':'Your password')+'" autocomplete="'+(isSignup?'new-password':'current-password')+'"></div>');
   if (isSignup) parts.push('<div class="field"><label>Confirm Password</label><input type="password" id="auth_pass2" placeholder="Re-enter your password" autocomplete="new-password"></div>');
@@ -1721,8 +1755,8 @@ function renderForgotPassword(root) {
   parts.push('<div style="text-align:center;margin-bottom:24px"><div class="landing-logo">✈ FLIGHT CREW FITNESS</div></div>');
   parts.push('<div style="font-size:14px;font-weight:700;margin-bottom:4px">Reset your password</div>');
   parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Enter the email you signed up with — we\'ll send a link to set a new password.</div>');
-  if (ST.authInfo) parts.push('<div class="alert alert-ok mt8"><div class="alert-icon">✅</div><div>'+ST.authInfo+'</div></div>');
-  if (ST.authErr)  parts.push('<div class="alert alert-danger mt8"><div class="alert-icon">⚠️</div><div>'+ST.authErr+'</div></div>');
+  if (ST.authInfo) parts.push('<div class="alert alert-ok mt8"><div class="alert-icon">✅</div><div>'+sanitizeUserTextLong(ST.authInfo)+'</div></div>');
+  if (ST.authErr)  parts.push('<div class="alert alert-danger mt8"><div class="alert-icon">⚠️</div><div>'+sanitizeUserTextLong(ST.authErr)+'</div></div>');
   parts.push('<div class="field"><label>Email</label><input type="email" id="forgot_email" placeholder="you@example.com" autocomplete="email"></div>');
   parts.push('<button class="btn btn-gold mt8" onclick="handleForgotPassword()">Send Reset Link →</button>');
   parts.push('<button class="btn-ghost mt12" style="display:block;width:100%;text-align:center" onclick="ST.authView=\'default\';ST.authErr=\'\';ST.authInfo=\'\';renderRoot()">← Back to Sign In</button>');
@@ -1755,7 +1789,7 @@ function renderPasswordRecovery(root) {
   parts.push('<div class="auth-wrap">');
   parts.push('<div style="text-align:center;margin-bottom:24px"><div class="landing-logo">✈ FLIGHT CREW FITNESS</div></div>');
   parts.push('<div style="font-size:14px;font-weight:700;margin-bottom:14px">Set a new password</div>');
-  if (ST.authErr) parts.push('<div class="alert alert-danger mt8"><div class="alert-icon">⚠️</div><div>'+ST.authErr+'</div></div>');
+  if (ST.authErr) parts.push('<div class="alert alert-danger mt8"><div class="alert-icon">⚠️</div><div>'+sanitizeUserTextLong(ST.authErr)+'</div></div>');
   parts.push('<div class="field"><label>New Password</label><input type="password" id="recovery_pass" placeholder="Min 6 characters" autocomplete="new-password"></div>');
   parts.push('<div class="field"><label>Confirm New Password</label><input type="password" id="recovery_pass2" placeholder="Re-enter your new password" autocomplete="new-password"></div>');
   parts.push('<button class="btn btn-gold mt8" onclick="handlePasswordRecovery()">Set New Password →</button>');
@@ -2055,7 +2089,7 @@ async function awardLiveBadge(id) {
     const profile = (await dbGetProfile()) || {};
     profile.badges = ST.badges;
     await dbSetProfile(profile);
-  } catch(e) {}
+  } catch(e) { console.warn('Saving badge award failed:', e); }
   showBigToast(b.icon + ' Badge earned: ' + b.title + '!', 'ok');
 }
 
@@ -2070,7 +2104,7 @@ async function checkTopGunBadge() {
       const { data } = await withTimeout(SB.from('leaderboard_entries')
         .select('user_id').eq('exercise_id', exId).order('weight_lb', { ascending: false }).limit(1));
       if (data && data[0] && data[0].user_id === ST.user.id) { await awardLiveBadge('top_gun'); return; }
-    } catch(e) {}
+    } catch(e) { console.warn('Checking top_gun badge eligibility failed for one exercise:', e); }
   }
 }
 
@@ -2086,7 +2120,7 @@ async function awardBadges() {
       await dbSetProfile(profile);
       fresh.forEach(b => showBigToast(b.icon + ' Badge earned: ' + b.title + '!', 'ok'));
     }
-  } catch(e) {}
+  } catch(e) { console.warn('awardBadges failed:', e); }
   checkTopGunBadge().catch(() => {});
 }
 
@@ -2186,10 +2220,10 @@ async function submitLeaderboardPRs(session) {
     const best = sessionMaxWeight(session, ex.id);
     if (!best) continue;
     if ((ST.lbBests[ex.id] || 0) >= best.weight) continue;
-    try { await submitLeaderboardEntry(ex.id, ex.name, best, session.date); improved = true; } catch(e) {}
+    try { await submitLeaderboardEntry(ex.id, ex.name, best, session.date); improved = true; } catch(e) { console.warn('Leaderboard submission failed for', ex.id, ':', e); }
   }
   if (improved) {
-    try { const profile = (await dbGetProfile()) || {}; profile.lbBests = ST.lbBests; await dbSetProfile(profile); } catch(e) {}
+    try { const profile = (await dbGetProfile()) || {}; profile.lbBests = ST.lbBests; await dbSetProfile(profile); } catch(e) { console.warn('Saving leaderboard best failed:', e); }
   }
 }
 
@@ -2208,7 +2242,7 @@ async function backfillLeaderboard() {
   for (const ex of LEADERBOARD_EXERCISES) {
     if (!bests[ex.id]) continue;
     if ((ST.lbBests[ex.id] || 0) >= bests[ex.id].weight) continue;
-    try { await submitLeaderboardEntry(ex.id, ex.name, bests[ex.id], bests[ex.id].date); any = true; } catch(e) {}
+    try { await submitLeaderboardEntry(ex.id, ex.name, bests[ex.id], bests[ex.id].date); any = true; } catch(e) { console.warn('Leaderboard submission failed for', ex.id, ':', e); }
   }
   // Running: submit best-ever single run + log every historical run for volume
   let bestRun = null;
@@ -2225,10 +2259,10 @@ async function backfillLeaderboard() {
       }, { onConflict: 'user_id' }));
       ST.runBest = bestRun.miles;
       any = true;
-    } catch(e) {}
+    } catch(e) { console.warn('Saving run PR entry failed:', e); }
   }
   if (any) {
-    try { const profile = (await dbGetProfile()) || {}; profile.lbBests = ST.lbBests; profile.runBest = ST.runBest; await dbSetProfile(profile); } catch(e) {}
+    try { const profile = (await dbGetProfile()) || {}; profile.lbBests = ST.lbBests; profile.runBest = ST.runBest; await dbSetProfile(profile); } catch(e) { console.warn('Saving run best failed:', e); }
     showToast('🏆 Your history is on the boards.');
   }
 }
@@ -2597,7 +2631,7 @@ async function logRunningVolume(session) {
     distance_mi: run.miles, duration_sec: run.seconds || null,
     run_at: session.date || new Date().toISOString(),
   };
-  try { await withTimeout(SB.from('running_log').upsert(row, { onConflict: 'user_id,run_at' })); } catch(e) {}
+  try { await withTimeout(SB.from('running_log').upsert(row, { onConflict: 'user_id,run_at' })); } catch(e) { console.warn('Saving run log failed:', e); }
 }
 
 
@@ -3391,7 +3425,7 @@ async function performAccountDeletion() {
       }
     });
 
-    try { localStorage.clear(); } catch(e) {}
+    try { localStorage.clear(); } catch(e) { console.warn('localStorage.clear failed (likely private-mode storage restrictions):', e); }
     await SB.auth.signOut().catch(() => {});
     ST.user = null; ST.authed = false; ST.subscription = null;
     closeModal();
@@ -3561,7 +3595,7 @@ function persistWorkoutState() {
       workoutFirstLoggedAt: ST.workoutFirstLoggedAt,
       savedAt: Date.now(),
     }));
-  } catch(e) {}
+  } catch(e) { console.warn('Saving in-progress workout state locally failed:', e); }
 }
 
 function restoreWorkoutState() {
@@ -3601,7 +3635,7 @@ function persistTimerState() {
       stopwatch: { active: ST.stopwatch.active, exId: ST.stopwatch.exId, side: ST.stopwatch.side, startTs: ST.stopwatch.startTs, targetSec: ST.stopwatch.targetSec, chimed: ST.stopwatch.chimed },
       nsdrTimer: { active: ST.nsdrTimer.active, exId: ST.nsdrTimer.exId, startTs: ST.nsdrTimer.startTs, chimed: ST.nsdrTimer.chimed },
     }));
-  } catch(e) {}
+  } catch(e) { console.warn('Saving timer state locally failed:', e); }
 }
 
 function restoreTimerState() {
@@ -3624,7 +3658,7 @@ function restoreTimerState() {
       ST.nsdrTimer = { active: true, seconds: Math.round((Date.now()-saved.nsdrTimer.startTs)/1000), interval: null, chimed: saved.nsdrTimer.chimed, exId: saved.nsdrTimer.exId, startTs: saved.nsdrTimer.startTs };
       ST.nsdrTimer.interval = setInterval(() => tickNSDR(saved.nsdrTimer.exId), 1000);
     }
-  } catch(e) {}
+  } catch(e) { console.warn('Restoring saved timer state failed (treating as no active timer):', e); }
 }
 
 // Refresh anything served from offline fallbacks the moment connectivity
@@ -3638,7 +3672,7 @@ async function refreshOnReconnect() {
     // would otherwise stay stale until a full restart.
     const [profile] = await Promise.all([dbGetProfile(), loadSessionCache()]);
     applyProfileToState(profile);
-  } catch(e) {}
+  } catch(e) { console.warn('Refreshing profile/sessions on reconnect failed:', e); }
   checkDB();
   if (ST.ouraConnected && ST.ouraAccessToken) syncOuraData().catch(() => {});
   renderPage();
@@ -3713,7 +3747,7 @@ function dismissInstallPrompt() {
 async function triggerInstall() {
   if (!deferredInstallPrompt) return;
   deferredInstallPrompt.prompt();
-  try { await deferredInstallPrompt.userChoice; } catch(e) {}
+  try { await deferredInstallPrompt.userChoice; } catch(e) {/* PWA install prompt outcome — nothing to recover or report either way */}
   deferredInstallPrompt = null;
   dismissInstallPrompt();
 }
@@ -5499,7 +5533,7 @@ async function bpSaveCustomExercise(section) {
     const profile = (await dbGetProfile()) || {};
     profile.customExercises = ST.customExercises;
     await dbSetProfile(profile);
-  } catch(e) {}
+  } catch(e) { console.warn('Saving custom exercise failed:', e); showToast('⚠️ Saved locally, but could not sync to your account.'); }
 
   ST.buildProfile[section].push(JSON.parse(JSON.stringify(newEx)));
   showToast('\u2705 "'+name+'" created and added.');
@@ -7246,7 +7280,7 @@ function unlockChimeAudio() {
   try {
     if (!_chimeCtx) _chimeCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (_chimeCtx.state === 'suspended') _chimeCtx.resume();
-  } catch(e) {}
+  } catch(e) {/* no chime this time if unsupported/blocked — nothing else depends on this succeeding */}
 }
 
 function startRestTimer(exId, seconds) {
@@ -7499,7 +7533,7 @@ function playChime() {
       osc.start(ctx.currentTime + i*0.18);
       osc.stop(ctx.currentTime + i*0.18 + 0.5);
     });
-  } catch(e) {}
+  } catch(e) {/* just means no sound plays this time — no other state depends on it */}
 }
 
 // ─── CUSTOM EXERCISE CREATION ─────────────────────────────────────────────────
@@ -8119,7 +8153,7 @@ function loadFrequentFoodsCache() {
   } catch(e) { return null; }
 }
 function saveFrequentFoodsCache(foods) {
-  try { localStorage.setItem(FREQUENT_FOODS_CACHE_KEY, JSON.stringify({ userId: ST.user?.id, cachedAt: Date.now(), foods })); } catch(e) {}
+  try { localStorage.setItem(FREQUENT_FOODS_CACHE_KEY, JSON.stringify({ userId: ST.user?.id, cachedAt: Date.now(), foods })); } catch(e) { console.warn('Caching frequent foods failed:', e); }
 }
 
 async function getFrequentFoodsForMealBuilder() {
@@ -8428,7 +8462,7 @@ async function loadAndDrawCharts() {
     if (!canvas) return;
     const card = canvas.closest('.card');
     const key = 'c_'+id;
-    if (ST.chartInst[key]) { try { ST.chartInst[key].destroy(); } catch(e){} }
+    if (ST.chartInst[key]) { try { ST.chartInst[key].destroy(); } catch(e){/* already destroyed or never fully initialized — either way there's nothing left to clean up */} }
     if (!labels.length) { if (card) card.style.display = 'none'; return; }
     if (card) card.style.display = '';
     datasets = applyTrendSmoothing(labels, datasets);
@@ -8486,7 +8520,7 @@ async function loadAndDrawCharts() {
   const bpCanvas = document.getElementById('chartBP');
   if (bpCanvas) {
     const bpCard = bpCanvas.closest('.card');
-    if (ST.chartInst['c_chartBP']) { try { ST.chartInst['c_chartBP'].destroy(); } catch(e){} }
+    if (ST.chartInst['c_chartBP']) { try { ST.chartInst['c_chartBP'].destroy(); } catch(e){/* already destroyed or never fully initialized — either way there's nothing left to clean up */} }
     if (bp.rows.length) {
       if (bpCard) bpCard.style.display = '';
       ST.chartInst['c_chartBP'] = new Chart(bpCanvas.getContext('2d'), {
@@ -9233,7 +9267,7 @@ async function resolveOuraDuplicate(choice) {
       const profile = (await dbGetProfile()) || {};
       profile.ouraDismissedIds = ST.ouraDismissedIds;
       await dbSetProfile(profile);
-    } catch(e) {}
+    } catch(e) { console.warn('Saving dismissed Oura activity failed (may be asked about it again):', e); }
   }
   closeModal();
   if (ST.ouraImportQueue.length) showOuraDuplicateConfirm();
@@ -10275,7 +10309,7 @@ async function loadTodaysMeals() {
 }
 
 async function deleteMealLog(id) {
-  try { await SB.from('meal_logs').delete().eq('id', id); } catch(e) {}
+  try { await SB.from('meal_logs').delete().eq('id', id); } catch(e) { console.warn('Deleting meal log failed:', e); showToast('⚠️ Could not delete — try again.'); }
   ST.todaysMeals = (ST.todaysMeals || []).filter(m => m.id !== id);
   renderPage();
 }
@@ -10370,7 +10404,7 @@ async function saveNutritionGoals(targets) {
     const profile = (await dbGetProfile()) || {};
     profile.nutritionGoals = ST.nutritionGoals;
     await dbSetProfile(profile);
-  } catch(e) {}
+  } catch(e) { console.warn('Saving nutrition goals failed:', e); showToast('⚠️ Saved locally, but could not sync to your account.'); }
 }
 
 // ─── TODAY BRIEFING ─────────────────────────────────────────────────────

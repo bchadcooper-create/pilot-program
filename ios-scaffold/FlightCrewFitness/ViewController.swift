@@ -388,12 +388,24 @@ extension ViewController {
                                                    "message": "No product specified."])
                 return
             }
+            // BUG FIX (independent review finding): appAccountToken was
+            // being sent all the way from app.js through this bridge and
+            // silently dropped right here — never reaching StoreKit at
+            // all. See the matching fix and full explanation in
+            // PurchaseManager.purchase() for why this matters far more
+            // than a missing nice-to-have: fcf-appstore-notifications
+            // depends on it to attribute Apple's server notifications to
+            // the right Supabase user.
+            let appAccountToken = (body["appAccountToken"] as? String).flatMap { UUID(uuidString: $0) }
+            if body["appAccountToken"] != nil && appAccountToken == nil {
+                logNative("appAccountToken present in purchase request but failed to parse as UUID: \(body["appAccountToken"] ?? "nil")")
+            }
             // The separate follow-up reconcileEntitlements call that used
             // to live here has moved into PurchaseManager.purchase()
             // itself — its own success response now already includes the
             // reconciled activeProductIds/isPro, so this is back to a
             // single, simple forward.
-            PurchaseManager.shared.purchase(productId: productId) { [weak self] result in
+            PurchaseManager.shared.purchase(productId: productId, appAccountToken: appAccountToken) { [weak self] result in
                 self?.postToWeb("fcf:purchase", data: result)
             }
         case "restore":

@@ -141,7 +141,24 @@ class PurchaseManager {
 
     // MARK: - Purchase
 
-    func purchase(productId: String, completion: @escaping ([String: Any]) -> Void) {
+    // BUG FIX (independent review finding, confirmed and far more serious
+    // than it first looked): the web app was already generating and
+    // sending appAccountToken (its own Supabase user id) all the way
+    // through the JS bridge — bridgeJS forwards it, app.js sets it
+    // specifically for this purpose — but this method silently dropped
+    // it, never passing it to StoreKit at all. Traced the actual
+    // consequence: fcf-appstore-notifications (the ONLY thing that
+    // grants Pro server-side) reads appAccountToken as its primary way
+    // to attribute an Apple notification to a Supabase user, and its
+    // fallback only works by matching an EXISTING row by
+    // original_transaction_id — which doesn't exist yet for a brand-new
+    // subscriber's very first notification. Net effect: a real purchase
+    // made through the broken path could charge the customer via Apple
+    // while never actually granting Pro server-side, with nothing
+    // visibly wrong on the client to notice — especially easy to miss
+    // during testing, since the dev account bypasses the real
+    // subscriptions table entirely.
+    func purchase(productId: String, appAccountToken: UUID? = nil, completion: @escaping ([String: Any]) -> Void) {
         // BUG FIX (independent review finding, confirmed real): this used
         // to accept whatever string the web layer sent and hand it
         // straight to StoreKit. Apple's own servers would ultimately
@@ -170,7 +187,9 @@ class PurchaseManager {
                     product = fetched
                 }
 
-                let result = try await product.purchase()
+                var options: Set<Product.PurchaseOption> = []
+                if let token = appAccountToken { options.insert(.appAccountToken(token)) }
+                let result = try await product.purchase(options: options)
                 switch result {
                 case .success(let verification):
                     switch verification {

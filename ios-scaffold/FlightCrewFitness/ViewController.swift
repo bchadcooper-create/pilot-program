@@ -94,8 +94,8 @@ class ViewController: UIViewController {
             signInWithApple:  () => send('signInWithApple', {}),
             requestHealthKit: () => send('healthkit',     { action: 'requestPermission' }),
             syncHealthKit:    () => send('healthkit',     { action: 'sync' }),
-            requestCalendar:  () => send('calendar',      { action: 'requestPermission' }),
-            syncCalendar:     () => send('calendar',      { action: 'sync' }),
+            requestCalendar:  (tz) => send('calendar',      { action: 'requestPermission', baseTimezone: tz }),
+            syncCalendar:     (tz) => send('calendar',      { action: 'sync', baseTimezone: tz }),
           };
         })();
         """
@@ -580,13 +580,18 @@ extension ViewController {
             postToWeb("fcf:calendar", data: ["success": false, "code": "invalid_payload", "message": "Missing action."])
             return
         }
+        // "auto" (or missing/unset) means the user hasn't picked a home
+        // base timezone — CalendarManager falls back to TimeZone.current
+        // for that case, so pass whatever was sent through as-is rather
+        // than trying to interpret "auto" as an IANA identifier here.
+        let baseTimezone = body["baseTimezone"] as? String
         switch action {
         case "requestPermission":
-            CalendarManager.shared.requestPermissionAndSync { [weak self] payload in
+            CalendarManager.shared.requestPermissionAndSync(baseTimezoneIdentifier: baseTimezone) { [weak self] payload in
                 self?.postToWeb("fcf:calendar", data: payload)
             }
         case "sync":
-            CalendarManager.shared.syncEvents { [weak self] payload in
+            CalendarManager.shared.syncEvents(baseTimezoneIdentifier: baseTimezone) { [weak self] payload in
                 self?.postToWeb("fcf:calendar", data: payload)
             }
         default:

@@ -113,6 +113,13 @@ const ST = {
   // an uploaded .ics export doesn't have, since it isn't run through that
   // same sync path.
   scheduleSource: 'auto',
+  // The pilot's home domicile timezone, used to correctly reinterpret
+  // Apple Calendar sync's mis-stamped crew-schedule event times (see
+  // CalendarManager.swift's reinterpretAsLocal) — 'auto' (the device's
+  // current timezone, right at home but wrong on a layover elsewhere)
+  // or a fixed IANA identifier the user picked once and it stays
+  // correct regardless of where they are when they happen to sync.
+  baseTimezone: 'auto',
   nutritionGoals: null, goalDraft: 'maintain', trainDaysDraft: '3-4',
   manualTargetsOpen: false, manualCal: '', manualProtein: '', manualCarbs: '', manualFat: '', manualTargetsWarning: null,
   sleepBaselineScore: null,
@@ -2781,6 +2788,7 @@ function applyProfileToState(profile) {
   ST.trackNutrition = profile.trackNutrition !== false;
   ST.trackHydration = profile.trackHydration !== false;
   ST.scheduleSource = profile.scheduleSource || 'auto';
+  ST.baseTimezone = profile.baseTimezone || 'auto';
 
   // BUG FIX (reported): the parser fix in v5.36.0 changed nothing on a
   // schedule already uploaded. Events are parsed once at upload and the
@@ -2943,7 +2951,7 @@ async function bootAppInner() {
   // remembered by iOS — subsequent boots skip straight to data sync.
   if (typeof FCFBridge !== 'undefined' && FCFBridge.isNative) {
     setTimeout(() => FCFBridge.requestHealthKit(), 2000);
-    setTimeout(() => FCFBridge.requestCalendar(), 3500);
+    setTimeout(() => FCFBridge.requestCalendar(ST.baseTimezone), 3500);
     setTimeout(() => scheduleNotifications(), 5000);
   }
   scheduleEntitlementRefresh();
@@ -3522,6 +3530,24 @@ async function setScheduleSource(value) {
     profile.scheduleSource = value;
     await dbSetProfile(profile);
   } catch(e) { showBigToast('Saved on this device, but could not sync.', 'warn'); }
+}
+
+async function setBaseTimezone(value) {
+  ST.baseTimezone = value;
+  renderPage();
+  try {
+    const profile = (await dbGetProfile()) || {};
+    profile.baseTimezone = value;
+    await dbSetProfile(profile);
+  } catch(e) { showBigToast('Saved on this device, but could not sync.', 'warn'); }
+  // Re-sync immediately rather than waiting for the next natural sync —
+  // otherwise already-classified events computed under the OLD (possibly
+  // wrong) timezone assumption would keep showing stale times until
+  // something else happens to trigger a refresh.
+  if (typeof FCFBridge !== 'undefined' && FCFBridge.isNative && ST.calendarGranted) {
+    showToast('Re-syncing calendar with the new base timezone…');
+    FCFBridge.syncCalendar(value);
+  }
 }
 
 // ─── SCHEDULE SOURCE ──────────────────────────────────────────────────────
@@ -11262,7 +11288,7 @@ function renderToday(p) {
   if (!hasAnySchedule) {
     const isNative = typeof FCFBridge !== 'undefined' && FCFBridge.isNative;
     if (isNative && !ST.calendarGranted) {
-      parts.push('<div class="card mb12"><div class="fb" style="align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:600;margin-bottom:4px">📅 Connect your calendar</div><div style="font-size:11px;color:var(--muted);line-height:1.5">Grant calendar access and FCF will automatically detect your flights, layovers, and free time — no manual upload needed.</div></div></div><button class="btn-outline mt8" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.requestCalendar()">Connect Calendar</button></div>');
+      parts.push('<div class="card mb12"><div class="fb" style="align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:600;margin-bottom:4px">📅 Connect your calendar</div><div style="font-size:11px;color:var(--muted);line-height:1.5">Grant calendar access and FCF will automatically detect your flights, layovers, and free time — no manual upload needed.</div></div></div><button class="btn-outline mt8" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.requestCalendar(ST.baseTimezone)">Connect Calendar</button></div>');
     } else {
       parts.push('<div class="card mb12"><div class="fb" style="align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:600;margin-bottom:4px">📅 No flight schedule</div><div style="font-size:11px;color:var(--muted);line-height:1.5">Upload your crew schedule and this briefing gets a lot more specific — layovers, duty-day length, real windows to train.</div></div></div><button class="btn-outline mt8" onclick="switchTab(\'data\')">Upload Schedule</button></div>');
     }
@@ -12748,6 +12774,29 @@ function renderData(p) {
   // ── Apple Calendar sub-section ──────────────────────────────────────────
   if (isNative) {
     parts.push('<div style="font-size:11px;font-weight:700;color:var(--text);letter-spacing:0.04em;margin-bottom:8px">APPLE CALENDAR</div>');
+    // Home base timezone — corrects a real upstream bug in the crew-
+    // schedule sync tool (documented in CalendarManager.swift's
+    // reinterpretationZone) that stamps every event using the pilot's
+    // base timezone but mislabels it as UTC. Only matters for Apple
+    // Calendar sync specifically — the .ics upload path already has its
+    // own, separate correction. "Auto" preserves the old (device's
+    // current location) behavior for anyone who hasn't set this yet.
+    const TZ_OPTIONS = [
+      ['auto', 'Auto (device\u2019s current location)'],
+      ['America/New_York', 'Eastern'],
+      ['America/Chicago', 'Central'],
+      ['America/Denver', 'Mountain'],
+      ['America/Phoenix', 'Arizona (no DST)'],
+      ['America/Los_Angeles', 'Pacific'],
+      ['America/Anchorage', 'Alaska'],
+      ['Pacific/Honolulu', 'Hawaii'],
+    ];
+    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.5">Home base timezone — fixes flight times that come through wrong on Apple Calendar sync, especially while you\'re away from base.</div>');
+    parts.push('<select onchange="haptic(\'selection\');setBaseTimezone(this.value)" style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:13px;margin-bottom:12px">');
+    TZ_OPTIONS.forEach(([val, label]) => {
+      parts.push('<option value="'+val+'"'+(ST.baseTimezone===val?' selected':'')+'>'+label+'</option>');
+    });
+    parts.push('</select>');
     // BUG FIX: ST.calendarEvents now always reflects the true raw event
     // count (see classifyCalendarEvents in app.js) even when AI
     // classification specifically failed — so this length check alone is
@@ -12764,14 +12813,14 @@ function renderData(p) {
       if (ST.calendarSyncError) {
         parts.push('<div style="font-size:11px;color:var(--amber);margin-bottom:8px">⚠️ '+ST.calendarSyncError+'</div>');
       }
-      parts.push('<button class="btn btn-outline" onclick="haptic(\'light\');showToast(\'Syncing calendar\u2026\');if(typeof FCFBridge!==\'undefined\')FCFBridge.syncCalendar()">↻ Sync Now</button>');
+      parts.push('<button class="btn btn-outline" onclick="haptic(\'light\');showToast(\'Syncing calendar\u2026\');if(typeof FCFBridge!==\'undefined\')FCFBridge.syncCalendar(ST.baseTimezone)">↻ Sync Now</button>');
     } else if (ST.calendarGranted && !ST.calendarEvents?.length) {
       const msg = ST.calendarSyncError || 'Calendar access granted but no events found in the next 60 days.';
       parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">'+msg+'</div>');
-      parts.push('<button class="btn btn-outline" onclick="haptic(\'light\');showToast(\'Syncing calendar\u2026\');if(typeof FCFBridge!==\'undefined\')FCFBridge.syncCalendar()">↻ Sync Now</button>');
+      parts.push('<button class="btn btn-outline" onclick="haptic(\'light\');showToast(\'Syncing calendar\u2026\');if(typeof FCFBridge!==\'undefined\')FCFBridge.syncCalendar(ST.baseTimezone)">↻ Sync Now</button>');
     } else {
       parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Grant access to your Apple Calendar and FCF will automatically detect your flights, layovers, and personal commitments — no manual upload needed.</div>');
-      parts.push('<button class="btn btn-outline" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.requestCalendar()">Connect Apple Calendar</button>');
+      parts.push('<button class="btn btn-outline" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.requestCalendar(ST.baseTimezone)">Connect Apple Calendar</button>');
     }
     parts.push('<div style="height:1px;background:var(--border);margin:16px 0"></div>');
   }

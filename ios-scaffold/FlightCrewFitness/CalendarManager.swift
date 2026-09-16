@@ -26,16 +26,16 @@ class CalendarManager {
 
     // ── Permission + initial sync ─────────────────────────────────────────────
 
-    func requestPermissionAndSync(completion: @escaping ([String: Any]) -> Void) {
+    func requestPermissionAndSync(baseTimezoneIdentifier: String? = nil, completion: @escaping ([String: Any]) -> Void) {
         let status = EKEventStore.authorizationStatus(for: .event)
         switch status {
         case .authorized, .fullAccess:
-            syncEvents(completion: completion)
+            syncEvents(baseTimezoneIdentifier: baseTimezoneIdentifier, completion: completion)
         case .notDetermined:
             if #available(iOS 17.0, *) {
                 store.requestFullAccessToEvents { [weak self] granted, error in
                     if granted {
-                        self?.syncEvents(completion: completion)
+                        self?.syncEvents(baseTimezoneIdentifier: baseTimezoneIdentifier, completion: completion)
                     } else {
                         completion(["granted": false, "error": error?.localizedDescription ?? "Access denied"])
                     }
@@ -43,7 +43,7 @@ class CalendarManager {
             } else {
                 store.requestAccess(to: .event) { [weak self] granted, error in
                     if granted {
-                        self?.syncEvents(completion: completion)
+                        self?.syncEvents(baseTimezoneIdentifier: baseTimezoneIdentifier, completion: completion)
                     } else {
                         completion(["granted": false, "error": error?.localizedDescription ?? "Access denied"])
                     }
@@ -57,7 +57,7 @@ class CalendarManager {
             if #available(iOS 17.0, *) {
                 store.requestFullAccessToEvents { [weak self] granted, error in
                     if granted {
-                        self?.syncEvents(completion: completion)
+                        self?.syncEvents(baseTimezoneIdentifier: baseTimezoneIdentifier, completion: completion)
                     } else {
                         completion(["granted": false, "error": error?.localizedDescription ?? "Access denied"])
                     }
@@ -81,7 +81,7 @@ class CalendarManager {
 
     // ── Pull events ───────────────────────────────────────────────────────────
 
-    func syncEvents(completion: @escaping ([String: Any]) -> Void) {
+    func syncEvents(baseTimezoneIdentifier: String? = nil, completion: @escaping ([String: Any]) -> Void) {
         // BUG FIX (independent review findings, both confirmed real):
         // (1) events(matching:) is a synchronous, blocking EventKit call —
         // for the common "already authorized" path, this was being called
@@ -101,12 +101,12 @@ class CalendarManager {
         // thread triggered it.
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            let payload = self.buildSyncPayload()
+            let payload = self.buildSyncPayload(baseTimezoneIdentifier: baseTimezoneIdentifier)
             DispatchQueue.main.async { completion(payload) }
         }
     }
 
-    private func buildSyncPayload() -> [String: Any] {
+    private func buildSyncPayload(baseTimezoneIdentifier: String? = nil) -> [String: Any] {
         let now = Date()
         let calendar = Calendar.current
         // BUG FIX (independent review finding): Calendar.date(byAdding:)
@@ -155,14 +155,12 @@ class CalendarManager {
         // class, adapting automatically to whatever timezone their own
         // device is on, with no per-user or per-account constant.
         //
-        // Known limitation, stated plainly rather than glossed over: this
-        // assumes the device's timezone AT SYNC TIME matches whatever
-        // timezone the export tool used when it wrote the event — true
-        // for a device that stays on one normal/base timezone, but could
-        // be wrong for someone syncing while traveling somewhere their
-        // phone's automatic timezone has already changed out from under
-        // them. No better signal is available from the data itself to
-        // correct for that case.
+        // UPDATE: the limitation this comment used to describe (device's
+        // current physical-location timezone assumed to match the
+        // exporter's reference zone — wrong while traveling) is resolved
+        // below via a fixed, user-configured base timezone rather than
+        // TimeZone.current. See the comment at reinterpretationZone's
+        // definition for the concrete evidence behind that fix.
         func looksLikeCrewScheduleEvent(_ title: String?) -> Bool {
             guard let t = title else { return false }
             return t.hasPrefix("Layover ") || t.hasPrefix("Flight ") || t == "Duty free period"
@@ -177,12 +175,28 @@ class CalendarManager {
             return localCal.date(from: comps) ?? wrongUTCDate
         }
 
-        let deviceTimeZone = TimeZone.current
+        // REAL FIX (was a documented known limitation, now resolved):
+        // TimeZone.current tracks wherever the device physically is right
+        // now, which is wrong the moment a pilot syncs while away from
+        // home base — confirmed concretely against this account's own
+        // data: the crew-schedule sync tool's notes field for one event
+        // literally labels its own reference as "Base (PHX) time," and
+        // the raw wrong DTSTART/DTEND values matched that base-time
+        // figure exactly. The wrong reference zone is tied to a fixed
+        // home base, not to wherever the device happens to be sitting —
+        // so a fixed, user-set base timezone (baseTimezoneIdentifier,
+        // from Settings) is the mechanistically correct fix, not a
+        // location-dependent guess. Falls back to TimeZone.current only
+        // when the user hasn't set one yet (or sent "auto"), preserving
+        // today's behavior rather than breaking existing setups outright.
+        let reinterpretationZone = baseTimezoneIdentifier
+            .flatMap { $0 == "auto" ? nil : TimeZone(identifier: $0) }
+            ?? TimeZone.current
         var correctedTimes: [ObjectIdentifier: (Date, Date)] = [:]
         var correctedCount = 0
         for ev in ekEvents where looksLikeCrewScheduleEvent(ev.title) {
-            let correctedStart = reinterpretAsLocal(ev.startDate, in: deviceTimeZone)
-            let correctedEnd   = reinterpretAsLocal(ev.endDate, in: deviceTimeZone)
+            let correctedStart = reinterpretAsLocal(ev.startDate, in: reinterpretationZone)
+            let correctedEnd   = reinterpretAsLocal(ev.endDate, in: reinterpretationZone)
             if correctedStart != ev.startDate || correctedEnd != ev.endDate {
                 correctedTimes[ObjectIdentifier(ev)] = (correctedStart, correctedEnd)
                 correctedCount += 1

@@ -20,8 +20,8 @@
  *   FCFBridge.signInWithApple()
  *   FCFBridge.requestHealthKit()   // call once after login — shows iOS permission sheet
  *   FCFBridge.syncHealthKit()      // refresh data without re-prompting
- *   FCFBridge.requestCalendar()    // call once after login — shows calendar permission sheet
- *   FCFBridge.syncCalendar()       // refresh calendar events without re-prompting
+ *   FCFBridge.requestCalendar(ST.baseTimezone)  // call once after login — shows calendar permission sheet
+ *   FCFBridge.syncCalendar(ST.baseTimezone)     // refresh calendar events without re-prompting
  */
 
 const FCFBridge = (() => {
@@ -87,13 +87,20 @@ const FCFBridge = (() => {
   // Call requestCalendar() once after login. iOS shows the Calendar permission
   // sheet on first call. Results arrive as a fcf:calendar CustomEvent with
   // the raw event list — the web app then sends them to the AI classifier.
+  //
+  // baseTimezone: an IANA identifier (e.g. "America/Phoenix") or "auto" —
+  // the pilot's home base, used to correct a real upstream bug in the
+  // crew-schedule sync tool that stamps event times using the base
+  // timezone but mislabels them as UTC. "auto" (or omitting the argument)
+  // falls back to the device's current timezone, which is only correct
+  // while at home base — pass the user's actual saved preference here.
 
-  function requestCalendar() {
-    send('calendar', { action: 'requestPermission' });
+  function requestCalendar(baseTimezone) {
+    send('calendar', { action: 'requestPermission', baseTimezone });
   }
 
-  function syncCalendar() {
-    send('calendar', { action: 'sync' });
+  function syncCalendar(baseTimezone) {
+    send('calendar', { action: 'sync', baseTimezone });
   }
 
   // ── Event listeners (native → web) ───────────────────────────────────────

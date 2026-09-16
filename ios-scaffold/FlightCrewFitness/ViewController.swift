@@ -19,6 +19,26 @@ class ViewController: UIViewController {
     // lets Retry explicitly reload it natively instead.
     private var lastFailedURL: URL?
 
+    // BUG FIX (independent review finding): block-based NotificationCenter
+    // observers return an opaque token that has to be explicitly removed —
+    // unlike the selector-based observer below, `removeObserver(self)`
+    // alone doesn't remove these. This ViewController is only ever
+    // created once in this app's current architecture (SceneDelegate
+    // creates it exactly once), so in practice these observers already
+    // live for the whole process lifetime either way — but unlike
+    // PurchaseManager's permanent `static let shared` singleton, nothing
+    // architecturally guarantees a UIViewController can never be
+    // recreated, so this is worth doing properly rather than assuming
+    // deinit will never run.
+    private var transactionObserverToken: NSObjectProtocol?
+    private var apnsTokenObserverToken: NSObjectProtocol?
+
+    deinit {
+        NotificationCenter.default.removeObserver(self) // removes the selector-based .fcfPushNotificationTapped observer
+        if let token = transactionObserverToken { NotificationCenter.default.removeObserver(token) }
+        if let token = apnsTokenObserverToken { NotificationCenter.default.removeObserver(token) }
+    }
+
     // MARK: - Lifecycle
 
     override func viewDidLoad() {
@@ -145,7 +165,7 @@ class ViewController: UIViewController {
     // another device or a renewal can arrive at any time, not just while
     // this screen initiated one itself.
     private func observeTransactionUpdates() {
-        NotificationCenter.default.addObserver(
+        transactionObserverToken = NotificationCenter.default.addObserver(
             forName: .fcfTransactionUpdated,
             object: nil,
             queue: .main
@@ -193,7 +213,17 @@ class ViewController: UIViewController {
         let js = "window.dispatchEvent(new CustomEvent(\(eventJSON), { detail: \(payloadString) }));"
         // evaluateJavaScript must run on the main thread.
         DispatchQueue.main.async {
-            self.webView.evaluateJavaScript(js)
+            // BUG FIX (independent review finding): this was fire-and-
+            // forget — any script execution error (the page not fully
+            // loaded yet, an unexpected exception) was silently
+            // swallowed with nothing to show it happened. Consistent
+            // with the same fix already made for JSON serialization
+            // failures just above.
+            self.webView.evaluateJavaScript(js) { _, error in
+                if let error = error {
+                    self.logNative("postToWeb('\(event)') evaluateJavaScript failed: \(error)")
+                }
+            }
         }
     }
 }
@@ -459,9 +489,15 @@ extension ViewController: ASAuthorizationControllerDelegate,
            let codeString = String(data: authCode, encoding: .utf8) {
             data["authorizationCode"] = codeString
         }
+        // BUG FIX (independent review finding): setting "" for a nil name
+        // component meant the web app couldn't distinguish "Apple didn't
+        // return a name" from "Apple returned an empty name" — the key
+        // simply not being present is the correct way to represent
+        // "wasn't provided," matching how every other optional field
+        // here already behaves.
         if let fullName = credential.fullName {
-            data["givenName"] = fullName.givenName ?? ""
-            data["familyName"] = fullName.familyName ?? ""
+            if let given = fullName.givenName { data["givenName"] = given }
+            if let family = fullName.familyName { data["familyName"] = family }
         }
         if let email = credential.email {
             data["email"] = email
@@ -496,6 +532,15 @@ extension ViewController: ASAuthorizationControllerDelegate,
             return sceneWindow
         }
         logNative("presentationAnchor called with no attached window and no active scene window available")
+        // BUG FIX (independent review finding): the fallback below still
+        // has to return SOMETHING (this is a non-optional, synchronous
+        // protocol requirement), but presenting the Sign in with Apple
+        // sheet on a manufactured, unattached window will fail silently
+        // from the user's perspective — they tap the button and nothing
+        // visibly happens, with no way to know why. Telling the web app
+        // directly means it can at least show something rather than
+        // leaving the user waiting on a sheet that will never appear.
+        postToWeb("fcf:siwa:error", data: ["error": "Could not present Sign in with Apple — no window available. Please try again."])
         return UIWindow()
     }
 }
@@ -568,7 +613,7 @@ extension ViewController {
         if let existingToken = UserDefaults.standard.string(forKey: "fcfAPNsToken") {
             postToWeb("fcf:apnsToken", data: ["token": existingToken])
         }
-        NotificationCenter.default.addObserver(
+        apnsTokenObserverToken = NotificationCenter.default.addObserver(
             forName: .fcfAPNsTokenReceived,
             object: nil,
             queue: .main
@@ -583,15 +628,27 @@ extension ViewController {
             postToWeb("fcf:notifications", data: ["success": false, "code": "invalid_payload", "message": "Missing action."])
             return
         }
+        // BUG FIX (independent review finding): storeKit/healthkit/calendar
+        // all confirm receipt for every recognized action; these three
+        // never did, leaving the web app with no way to know its request
+        // was even received. NotificationManager's own methods here are
+        // synchronous, void-returning calls with no completion handler of
+        // their own to thread through (scheduling itself can still fail
+        // silently inside UNUserNotificationCenter, e.g. for permission
+        // reasons — that's a separate, deeper fix), so this confirms
+        // receipt rather than confirming eventual success.
         switch action {
         case "schedule":
             // Web app sends full prefs + upcoming flights for preflight scheduling
             NotificationManager.shared.scheduleAll(prefs: body)
+            postToWeb("fcf:notifications", data: ["success": true, "status": "scheduled"])
         case "cancelWorkoutReminder":
             // Called when user logs a workout — suppresses the 3-day nag
             NotificationManager.shared.cancelWorkoutReminder()
+            postToWeb("fcf:notifications", data: ["success": true, "status": "workout_reminder_cancelled"])
         case "cancelAll":
             NotificationManager.shared.cancelAll()
+            postToWeb("fcf:notifications", data: ["success": true, "status": "all_cancelled"])
         default:
             postToWeb("fcf:notifications", data: ["success": false, "code": "unsupported_action", "message": "Unrecognized notifications action: \(action)"])
         }

@@ -14,7 +14,8 @@ import Foundation
 // StoreKit-originated event (purchase, restore, entitlement change):
 //   { "success": true,  "status": "purchased"|"restored"|"pending"|"no_change",
 //     "productId": "...", "transactionId": "...",
-//     "activeProductIds": [...], "isPro": bool }   // see note on purchase() below
+//     "activeProductIds": [...], "isPro": bool,
+//     "expirationDate": <unix timestamp, seconds> }  // omitted when not applicable
 //   { "success": false, "code": "product_not_found"|"invalid_product"|"verification_failed"|
 //                                "purchase_failed"|"purchase_cancelled"|"restore_failed"|
 //                                "unknown_result",
@@ -40,6 +41,22 @@ import Foundation
 //     but ViewController's observer registers with `queue: .main`,
 //     which guarantees the observer's closure runs on main regardless
 //     of which thread posted it. No change needed there.
+//
+// A second follow-up review made the same two suggestions plus a
+// genuinely important catch this file's own previous fix had introduced
+// (see purchase()'s .verified case below) and confirmed the same
+// postToWeb-already-dispatches-to-main point for its own "missing main
+// thread dispatch" concern. Its suggested fix for both the concurrency
+// and threading points was the same: mark this whole class @MainActor.
+// Deliberately not doing that — it's a real option in principle, but
+// none of this file's public methods are currently async, and marking
+// the type actor-isolated would change call-site requirements for
+// every caller (ViewController is not itself @MainActor) in ways I
+// can't verify compile cleanly without an actual Xcode build. The
+// NSLock already in place solves the specific data race that was
+// identified, and postToWeb's own dispatch already covers the WebKit-
+// threading requirement — a narrower fix for the same underlying
+// concerns, chosen over a broader one I couldn't compile-check.
 class PurchaseManager {
 
     static let shared = PurchaseManager()
@@ -73,6 +90,29 @@ class PurchaseManager {
     private func setCachedProduct(_ product: Product, for id: String) {
         cacheLock.lock(); defer { cacheLock.unlock() }
         cachedProducts[id] = product
+    }
+
+    // Shared by purchase()'s success path, reconcileEntitlements(), and
+    // listenForTransactions() — extracted so these three copies of the
+    // same "what's actually entitled right now" walk can't drift out of
+    // sync with each other, and so the expirationDate addition below only
+    // needed to be made in one place.
+    private func currentActiveEntitlements() async -> (ids: [String], expirationDate: Double?) {
+        var active: [String] = []
+        var expirationDate: Double? = nil
+        for await result in Transaction.currentEntitlements {
+            if case .verified(let t) = result,
+               validProductIDs.contains(t.productID),
+               t.revocationDate == nil {
+                active.append(t.productID)
+                // Unix timestamp (seconds) — a plain number is the
+                // simplest thing for the web layer to consume directly.
+                if let exp = t.expirationDate {
+                    expirationDate = exp.timeIntervalSince1970
+                }
+            }
+        }
+        return (active, expirationDate)
     }
 
     // MARK: - Fetch
@@ -135,21 +175,26 @@ class PurchaseManager {
                 case .success(let verification):
                     switch verification {
                     case .verified(let transaction):
-                        // BUG FIX (independent review finding, several
-                        // reviews called this "especially important"):
-                        // a verified transaction means StoreKit
+                        // BUG FIX (independent review finding, confirmed
+                        // real, and worse than it first looked): a
+                        // verified transaction means StoreKit
                         // cryptographically confirmed the receipt — it
                         // does not by itself mean "this app's Pro
-                        // entitlement should now be active." Verify the
-                        // productID matches what we expect (defensive;
-                        // StoreKit's own verification is the real
-                        // security boundary here, this just catches
-                        // integration bugs), and check revocationDate
-                        // too — same defensive check reconcileEntitlements
-                        // already does below, added here for consistency
-                        // even though a transaction being simultaneously
-                        // revoked the instant it verifies is vanishingly
-                        // unlikely in practice.
+                        // entitlement should now be active," so this
+                        // checks productID and revocationDate before
+                        // deciding whether to grant it. The bug: this
+                        // used to `return` on a failed check WITHOUT
+                        // ever calling transaction.finish() — meaning an
+                        // unexpected-product-ID or already-revoked
+                        // transaction would never be acknowledged to
+                        // StoreKit, so it gets redelivered on every
+                        // future launch, fails the same check, and
+                        // leaks again indefinitely. finish() has nothing
+                        // to do with whether entitlement gets granted —
+                        // it just means "I've handled this, stop
+                        // redelivering it" — so it needs to happen
+                        // regardless of which way these checks go.
+                        await transaction.finish()
                         guard validProductIDs.contains(transaction.productID),
                               transaction.revocationDate == nil else {
                             logNative("Verified transaction failed post-checks for \(transaction.productID)")
@@ -157,7 +202,6 @@ class PurchaseManager {
                                         "message": "Something went wrong with that purchase."])
                             return
                         }
-                        await transaction.finish()
                         // BUG FIX (independent review suggestion, "option
                         // a" — safer than the alternative): rather than
                         // the caller having to separately call
@@ -166,20 +210,21 @@ class PurchaseManager {
                         // this), fold the reconciled state into this same
                         // response so it's one atomic answer instead of
                         // two events the web app has to sequence itself.
-                        var active: [String] = []
-                        for await entResult in Transaction.currentEntitlements {
-                            if case .verified(let t) = entResult,
-                               validProductIDs.contains(t.productID),
-                               t.revocationDate == nil {
-                                active.append(t.productID)
-                            }
-                        }
-                        completion([
+                        let entitlements = await self.currentActiveEntitlements()
+                        var response: [String: Any] = [
                             "success": true, "status": "purchased",
                             "productId": transaction.productID,
                             "transactionId": "\(transaction.id)",
-                            "activeProductIds": active, "isPro": !active.isEmpty
-                        ])
+                            "activeProductIds": entitlements.ids, "isPro": !entitlements.ids.isEmpty
+                        ]
+                        // Only set when non-nil — an Optional cast directly
+                        // to Any and inserted into a dictionary destined
+                        // for JSONSerialization is a known footgun (it
+                        // doesn't serialize the way a plain missing key
+                        // does), so the key is simply omitted instead of
+                        // trying to represent "no expiration" as a value.
+                        if let exp = entitlements.expirationDate { response["expirationDate"] = exp }
+                        completion(response)
                     case .unverified(let transaction, let error):
                         // BUG FIX (independent review finding, confirmed
                         // real): StoreKit expects every transaction it
@@ -261,8 +306,19 @@ class PurchaseManager {
                 completion(["success": false, "code": "restore_failed",
                             "message": "Restore failed. Please check your connection and try again."])
             } else {
-                completion(["success": true, "status": restored.isEmpty ? "no_change" : "restored",
-                            "restored": restored])
+                // Same consistency addition as purchase()/reconcileEntitlements —
+                // activeProductIds/isPro/expirationDate alongside the
+                // existing per-transaction `restored` detail list, so
+                // every entitlement-related event carries the same shape
+                // for "what's active now" regardless of which one it is.
+                let entitlements = await self.currentActiveEntitlements()
+                var response: [String: Any] = [
+                    "success": true, "status": restored.isEmpty ? "no_change" : "restored",
+                    "restored": restored,
+                    "activeProductIds": entitlements.ids, "isPro": !entitlements.ids.isEmpty
+                ]
+                if let exp = entitlements.expirationDate { response["expirationDate"] = exp }
+                completion(response)
             }
         }
     }
@@ -279,15 +335,10 @@ class PurchaseManager {
     // of whatever single event triggered the check.
     func reconcileEntitlements(completion: @escaping ([String: Any]) -> Void) {
         Task {
-            var active: [String] = []
-            for await result in Transaction.currentEntitlements {
-                if case .verified(let transaction) = result,
-                   validProductIDs.contains(transaction.productID),
-                   transaction.revocationDate == nil {
-                    active.append(transaction.productID)
-                }
-            }
-            completion(["success": true, "activeProductIds": active, "isPro": !active.isEmpty])
+            let entitlements = await self.currentActiveEntitlements()
+            var response: [String: Any] = ["success": true, "activeProductIds": entitlements.ids, "isPro": !entitlements.ids.isEmpty]
+            if let exp = entitlements.expirationDate { response["expirationDate"] = exp }
+            completion(response)
         }
     }
 
@@ -308,14 +359,25 @@ class PurchaseManager {
     // from AppDelegate, but nothing previously stopped a future mistaken
     // second call from spawning a duplicate listener that would double-
     // post every transaction update to the web app.
-    private var isListening = false
+    // BUG FIX (independent review suggestion): upgraded from a plain
+    // Bool guard to holding the actual Task handle — still prevents a
+    // second call from spawning a duplicate listener (the original bug
+    // this was guarding against), but also makes the task inspectable/
+    // cancellable if that's ever needed. Deliberately not adding a
+    // deinit-based cancellation alongside it, despite that being the
+    // usual pairing: PurchaseManager is a permanent `static let shared`
+    // singleton that lives for the process's entire lifetime, so its
+    // deinit would only run at process termination — at which point
+    // every resource is being torn down by the OS regardless, making an
+    // explicit cancel() there dead code that implies a lifecycle this
+    // object doesn't actually have.
+    private var listeningTask: Task<Void, Never>?
     func listenForTransactions() {
-        guard !isListening else {
+        guard listeningTask == nil else {
             logNative("listenForTransactions() called again — already listening, ignoring")
             return
         }
-        isListening = true
-        Task {
+        listeningTask = Task {
             for await result in Transaction.updates {
                 // BUG FIX: unverified transactions were previously
                 // handled implicitly by the enclosing `if case .verified`
@@ -338,23 +400,14 @@ class PurchaseManager {
                 // arrive here, so include the full reconciled entitlement
                 // state in the same notification rather than making the
                 // observer do a separate round trip to find out.
-                var active: [String] = []
-                for await entResult in Transaction.currentEntitlements {
-                    if case .verified(let t) = entResult,
-                       self.validProductIDs.contains(t.productID),
-                       t.revocationDate == nil {
-                        active.append(t.productID)
-                    }
-                }
-                NotificationCenter.default.post(
-                    name: .fcfTransactionUpdated,
-                    object: nil,
-                    userInfo: [
-                        "success": true, "productId": transaction.productID,
-                        "transactionId": "\(transaction.id)",
-                        "activeProductIds": active, "isPro": !active.isEmpty
-                    ]
-                )
+                let entitlements = await self.currentActiveEntitlements()
+                var userInfo: [String: Any] = [
+                    "success": true, "productId": transaction.productID,
+                    "transactionId": "\(transaction.id)",
+                    "activeProductIds": entitlements.ids, "isPro": !entitlements.ids.isEmpty
+                ]
+                if let exp = entitlements.expirationDate { userInfo["expirationDate"] = exp }
+                NotificationCenter.default.post(name: .fcfTransactionUpdated, object: nil, userInfo: userInfo)
             }
         }
     }

@@ -116,15 +116,18 @@ const FCFBridge = (() => {
 
   // fcf:products      → { products: [{ id, displayName, description, displayPrice }] } | error shape above
   // fcf:purchase      → success/error shape above (success case now also includes
-  //                      activeProductIds/isPro — the reconciled entitlement state,
-  //                      folded in atomically rather than requiring a separate
-  //                      reconcileEntitlements() round trip after a purchase).
-  //                      Can also arrive UNPROMPTED — not just as a direct response
-  //                      to calling purchase() — when a renewal, expiration, or
-  //                      revocation is picked up by the app-level transaction
-  //                      listener while the app happens to be open.
-  // fcf:restore       → { success: true, status, restored: [...] } | error shape above
-  // fcf:entitlements  → { success: true, activeProductIds: [...], isPro: bool }
+  //                      activeProductIds/isPro/expirationDate — the reconciled
+  //                      entitlement state, folded in atomically rather than
+  //                      requiring a separate reconcileEntitlements() round trip
+  //                      after a purchase). Can also arrive UNPROMPTED — not just
+  //                      as a direct response to calling purchase() — when a
+  //                      renewal, expiration, or revocation is picked up by the
+  //                      app-level transaction listener while the app happens to
+  //                      be open.
+  // fcf:restore       → { success: true, status, restored: [...],
+  //                        activeProductIds, isPro, expirationDate? } | error shape above
+  // fcf:entitlements  → { success: true, activeProductIds: [...], isPro: bool,
+  //                        expirationDate?: <unix timestamp, seconds> }
   //                      (response to reconcileEntitlements() specifically)
   // fcf:siwa:success  → { userId, identityToken, email?, givenName?, familyName? }
   // fcf:siwa:error    → { error }

@@ -388,17 +388,13 @@ extension ViewController {
                                                    "message": "No product specified."])
                 return
             }
+            // The separate follow-up reconcileEntitlements call that used
+            // to live here has moved into PurchaseManager.purchase()
+            // itself — its own success response now already includes the
+            // reconciled activeProductIds/isPro, so this is back to a
+            // single, simple forward.
             PurchaseManager.shared.purchase(productId: productId) { [weak self] result in
                 self?.postToWeb("fcf:purchase", data: result)
-                // Whatever the immediate purchase result was, follow up
-                // with the authoritative reconciled entitlement state —
-                // see PurchaseManager.reconcileEntitlements for why the
-                // purchase event alone isn't treated as sufficient.
-                if result["success"] as? Bool == true {
-                    PurchaseManager.shared.reconcileEntitlements { entitlements in
-                        self?.postToWeb("fcf:entitlements", data: entitlements)
-                    }
-                }
             }
         case "restore":
             PurchaseManager.shared.restorePurchases { [weak self] result in

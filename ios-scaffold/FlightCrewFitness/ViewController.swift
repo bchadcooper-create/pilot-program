@@ -300,6 +300,36 @@ extension ViewController: WKScriptMessageHandler {
 // MARK: - WKNavigationDelegate
 
 extension ViewController: WKNavigationDelegate {
+    // BUG FIX (independent review finding, confirmed real): nothing here
+    // previously distinguished flightcrew.fit navigations from anything
+    // else, so a link to an external domain (an OAuth provider's consent
+    // screen, a support/help link, anything web-app-supplied) would just
+    // load inside this WebView instead of opening in Safari — trapping the
+    // user in an embedded browser with no way back to the real app, and
+    // handing an external page access to the same WKUserContentController
+    // origin checks this app relies on elsewhere. Exact-match (or a real
+    // subdomain) only — matching the same fix already applied to
+    // requestMediaCapturePermissionFor below for the identical reason: a
+    // substring/`.contains()` check here would itself be a hole, since it
+    // would also match something like "flightcrew.fit.evil.com".
+    func webView(_ webView: WKWebView,
+                 decidePolicyFor navigationAction: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = navigationAction.request.url, let host = url.host else {
+            // No host (about:blank, data: URLs, etc.) — nothing external to
+            // redirect to, so let WebKit handle it as it normally would.
+            decisionHandler(.allow)
+            return
+        }
+        let isOwnDomain = host == "flightcrew.fit" || host.hasSuffix(".flightcrew.fit")
+        if isOwnDomain {
+            decisionHandler(.allow)
+        } else {
+            UIApplication.shared.open(url)
+            decisionHandler(.cancel)
+        }
+    }
+
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         // BUG FIX: Don't show offline page for cancelled loads (e.g. redirect mid-load)
         let nsError = error as NSError

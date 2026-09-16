@@ -107,8 +107,16 @@ class PurchaseManager {
                 active.append(t.productID)
                 // Unix timestamp (seconds) — a plain number is the
                 // simplest thing for the web layer to consume directly.
+                // BUG FIX (found reviewing this file independently): this
+                // used to just overwrite expirationDate on every iteration,
+                // so with more than one simultaneously-active entitlement
+                // (e.g. briefly during a Monthly→Annual upgrade) the
+                // reported date was whichever one the loop happened to
+                // visit last, not necessarily the one that matters. Keep
+                // the furthest-out one instead.
                 if let exp = t.expirationDate {
-                    expirationDate = exp.timeIntervalSince1970
+                    let expValue = exp.timeIntervalSince1970
+                    expirationDate = max(expirationDate ?? expValue, expValue)
                 }
             }
         }

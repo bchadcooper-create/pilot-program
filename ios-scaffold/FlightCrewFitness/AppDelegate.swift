@@ -31,7 +31,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // is the category that ignores the switch.
     private func configureAudioSession() {
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, options: [])
+            // BUG FIX (independent review finding, confirmed real): plain
+            // .playback with no options forces this app's audio session to
+            // interrupt and stop whatever else is already playing in the
+            // background (Spotify, a podcast, Apple Music) the moment the
+            // WebView's Web Audio content (workout timer chimes) makes any
+            // sound. .mixWithOthers lets the chime play without silencing
+            // whatever the user already had going. (Deliberately not
+            // deferring setActive(true) to some later "right before
+            // playback" call site, despite that being the usual advice —
+            // there isn't one here: the chime itself is played from JS
+            // inside the WebView, not from a discrete native call this app
+            // controls, so a single process-level activation at launch is
+            // the only hook actually available in this architecture.)
+            try AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers])
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             print("FCF: audio session configuration failed:", error)

@@ -395,7 +395,14 @@ class HealthKitManager {
             store.execute(query)
         }
 
-        group.notify(queue: .global()) {
+        // BUG FIX (independent review finding): this used to notify on
+        // .global(). detectDevices's only current caller (syncAll) is
+        // unaffected either way, since syncAll's own outer group.notify
+        // already redispatches to .main regardless of which thread
+        // setPayload("detectedDevices", ...) was called from — but a
+        // future caller invoking this directly to update UI would get a
+        // background-thread completion with no reason to expect one.
+        group.notify(queue: .main) {
             var devices: [[String: String]] = []
             for name in sourceNames {
                 let lower = name.lowercased()
@@ -436,7 +443,12 @@ extension HKWorkoutActivityType {
         case .highIntensityIntervalTraining: return "HIIT"
         case .yoga: return "Yoga"
         case .crossTraining: return "Cross Training"
-        default: return "Workout"
+        // BUG FIX (independent review finding): plain `default:` compiles
+        // silently today but gives no warning when Apple adds a new
+        // HKWorkoutActivityType case in a future SDK — @unknown default
+        // makes that a compiler warning instead of something only noticed
+        // by a user reporting "my workout just says Workout."
+        @unknown default: return "Workout"
         }
     }
 }

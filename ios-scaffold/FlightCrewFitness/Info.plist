@@ -104,8 +104,13 @@
   <key>NSHealthShareUsageDescription</key>
   <string>Flight Crew Fitness reads your activity, sleep, and health data from Apple Health to power your daily briefing and fitness trends.</string>
 
-  <key>NSHealthUpdateUsageDescription</key>
-  <string>Flight Crew Fitness does not write to Apple Health.</string>
+  <!-- BUG FIX (independent review finding, confirmed real): NSHealthUpdateUsageDescription
+       was declared with a "does not write to Apple Health" string. HealthKitManager calls
+       requestAuthorization(toShare: nil, read: readTypes) — write access is never requested,
+       so this key is both dead (iOS will never show the prompt it's paired with) and a
+       purpose-string anti-pattern Apple review flags: the string has to say why the app
+       needs the permission, not disclaim needing it. Removed; only the read description
+       above is required for read-only HealthKit access. -->
 
   <!-- Calendar — flight schedule and workout window detection
        BUG FIX: only the iOS 17+ full-access key existed. CalendarManager.swift

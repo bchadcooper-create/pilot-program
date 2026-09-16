@@ -23,7 +23,6 @@
 // Deploy: supabase functions deploy fcf-ai-coach
 // Reuses the Anthropic secret already set for fcf-food-recognition.
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const ANTHROPIC_API_KEY = Deno.env.get('fcf-food-recognition');
@@ -168,7 +167,11 @@ or "reps_only" for pure bodyweight. If you cannot find a reasonable substitute g
 with {"error": "no_good_substitute"} instead — do not force a bad pick.`,
 };
 
-serve(async (req) => {
+// BUG FIX (independent review finding, confirmed real): std/http/server.ts's
+// serve() is a deprecated Deno API — Deno.serve() is the native replacement
+// Supabase Edge Runtime now expects. No behavior change, just drops the
+// external import.
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
 
   try {
@@ -282,7 +285,13 @@ serve(async (req) => {
       }
     }
 
-    const MAX_TOKENS_BY_MODE = { weekly_summary: 150, fatigue_calibration: 100, fuel_logistics: 100, trip_plan: 180, exercise_substitute: 200 };
+    // BUG FIX (independent review finding, confirmed real): weekly_summary's
+    // prompt asks for four full sentences of conversational coaching text —
+    // 150 tokens is tight enough that slightly wordier phrasing gets cut off
+    // mid-sentence (stop_reason: max_tokens). trip_plan is one line per trip
+    // day, so a longer trip (5-6 days) can also run past 180. Padded for
+    // headroom; cost only scales with tokens actually generated, not the cap.
+    const MAX_TOKENS_BY_MODE = { weekly_summary: 300, fatigue_calibration: 150, fuel_logistics: 150, trip_plan: 300, exercise_substitute: 250 };
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -309,7 +318,17 @@ serve(async (req) => {
     }
 
     const aiResp = await response.json();
-    const text   = aiResp.content?.[0]?.text?.trim() || '';
+    let text = aiResp.content?.[0]?.text?.trim() || '';
+
+    // BUG FIX (independent review finding, confirmed real): exercise_substitute
+    // is the one mode the client JSON.parse()s directly. The prompt tells the
+    // model to respond with raw JSON and no markdown fences, but models
+    // frequently wrap it in ```json ... ``` anyway — JSON.parse() on that
+    // throws. Strip a leading/trailing fence if present; every other mode
+    // returns plain text and is untouched by this.
+    if (mode === 'exercise_substitute' && text) {
+      text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+    }
 
     // Cache weekly summary
     if (mode === 'weekly_summary' && text) {

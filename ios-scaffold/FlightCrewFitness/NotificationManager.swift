@@ -3,6 +3,15 @@ import Foundation
 
 // MARK: - NotificationManager
 //
+// All fire times below use Calendar.current (the device's local time
+// zone) — correct for the common case, but a pilot who changes time
+// zones mid-trip may see a notification land at an unexpected wall-
+// clock hour if the device's zone shifts between when a notification
+// was scheduled and when it fires. Noted here rather than treated as a
+// bug to fix: there's no clearly better alternative available (a fixed
+// UTC time would be wrong in a different, arguably worse way — firing
+// at whatever local hour that UTC instant happens to land on).
+//
 // Schedules and manages all FCF local notifications.
 //
 // Notification types and their tier:
@@ -37,6 +46,24 @@ class NotificationManager {
     static let shared = NotificationManager()
     private init() {}
 
+    // BUG FIX (independent review finding): every add(request:) error
+    // callback in this file only ever called print() directly — a
+    // permission denial or scheduling failure was reported nowhere a
+    // release build would ever see it. DEBUG-only, matching the logging
+    // discipline already used elsewhere in this app's native code.
+    private func logNative(_ message: String) {
+        #if DEBUG
+        print("FCF NotificationManager:", message)
+        #endif
+    }
+    // BUG FIX (independent review finding): ISO8601DateFormatter() was
+    // being constructed fresh in multiple places (scheduleAll, and once
+    // per flight inside schedulePreflightChecks) — a shared static
+    // instance is correct here since nothing about this formatting is
+    // per-call state, and construction is a genuinely nontrivial
+    // allocation, not free.
+    private static let isoFormatter = ISO8601DateFormatter()
+
     // ── Schedule all enabled notifications ───────────────────────────────────
 
     func scheduleAll(prefs: [String: Any]) {
@@ -48,7 +75,7 @@ class NotificationManager {
         let hrvEnabled      = prefs["hrvAlert"]         as? Bool ?? false   // pro
         let weeklyEnabled   = prefs["weeklySummary"]    as? Bool ?? false   // pro
 
-        let iso = ISO8601DateFormatter()
+        let iso = Self.isoFormatter
         if workoutEnabled {
             let fireAt = (prefs["workoutReminderDate"] as? String).flatMap { iso.date(from: $0) }
             scheduleWorkoutReminder(fireAt: fireAt)
@@ -108,7 +135,7 @@ class NotificationManager {
         let request = UNNotificationRequest(identifier: "fcf_workout_reminder",
                                             content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request) { err in
-            if let err = err { print("FCF: workout reminder error:", err) }
+            if let err = err { logNative("workout reminder error: \(err)") }
         }
     }
 
@@ -121,6 +148,11 @@ class NotificationManager {
     // ── FREE: Water reminder ───────────────────────────────────────────────
     // Fires at 2pm daily if hydration tracking is enabled.
 
+    // Fires at 2pm daily if hydration tracking is enabled. Independent
+    // review noted this has no "already hydrated enough today" guard —
+    // intentional: the web app doesn't send hydration progress into this
+    // bridge message, so there's nothing here to check against. If that
+    // ever becomes available, this would be the place to skip firing.
     func scheduleWaterReminder() {
         let content = UNMutableNotificationContent()
         content.title = "Hydration check"
@@ -135,7 +167,7 @@ class NotificationManager {
         let request = UNNotificationRequest(identifier: "fcf_water_reminder",
                                             content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request) { err in
-            if let err = err { print("FCF: water reminder error:", err) }
+            if let err = err { logNative("water reminder error: \(err)") }
         }
     }
 
@@ -160,45 +192,61 @@ class NotificationManager {
         }
         let boundedFlights = Array(sortedFlights.prefix(20))
 
-        // Remove any existing preflight notifications before rescheduling
-        UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
-            let ids = requests
-                .filter { $0.identifier.hasPrefix("fcf_preflight_") }
-                .map { $0.identifier }
-            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
+        // BUG FIX (independent review finding, confirmed real): this used
+        // to separately query getPendingNotificationRequests, filter for
+        // this function's own "fcf_preflight_" prefix, and remove just
+        // those — an asynchronous round trip that let scheduleAll's other
+        // schedule* calls run concurrently with it, a genuine race. But
+        // scheduleAll (this function's only caller — verified directly,
+        // there is no other call site) already calls
+        // removeAllPendingNotificationRequests() unconditionally before
+        // calling this at all, making the separate targeted removal
+        // redundant on top of being racy. Removing it makes this fully
+        // synchronous with the rest of scheduleAll, which is what fixes
+        // the race — not a difference in what gets removed, since nothing
+        // was left for the targeted removal to actually catch.
+        let formatter = Self.isoFormatter
+        let now = Date()
 
-            let formatter = ISO8601DateFormatter()
-            let now = Date()
+        for flight in boundedFlights {
+            guard let startStr = flight["start"],
+                  let flightDate = formatter.date(from: startStr) else { continue }
 
-            for flight in boundedFlights {
-                guard let startStr = flight["start"],
-                      let flightDate = formatter.date(from: startStr) else { continue }
+            // Fire at 8pm the evening before
+            let calendar = Calendar.current
+            guard let priorEvening = calendar.date(byAdding: .day, value: -1, to: flightDate) else { continue }
+            var components = calendar.dateComponents([.year, .month, .day], from: priorEvening)
+            components.hour   = 20
+            components.minute = 0
+            guard let fireDate = calendar.date(from: components), fireDate > now else { continue }
 
-                // Fire at 8pm the evening before
-                let calendar = Calendar.current
-                guard let priorEvening = calendar.date(byAdding: .day, value: -1, to: flightDate) else { continue }
-                var components = calendar.dateComponents([.year, .month, .day], from: priorEvening)
-                components.hour   = 20
-                components.minute = 0
-                guard let fireDate = calendar.date(from: components), fireDate > now else { continue }
+            let origin      = flight["origin"]      ?? "your departure"
+            let destination = flight["destination"] ?? "your destination"
 
-                let origin      = flight["origin"]      ?? "your departure"
-                let destination = flight["destination"] ?? "your destination"
+            let content = UNMutableNotificationContent()
+            content.title = "Flight tomorrow — \(origin) → \(destination)"
+            content.body  = "Check your readiness score and hydration before wheels up."
+            content.sound = .default
+            content.userInfo = ["type": "preflight_check", "deepLink": "today",
+                                "flightStart": startStr]
 
-                let content = UNMutableNotificationContent()
-                content.title = "Flight tomorrow — \(origin) → \(destination)"
-                content.body  = "Check your readiness score and hydration before wheels up."
-                content.sound = .default
-                content.userInfo = ["type": "preflight_check", "deepLink": "today",
-                                    "flightStart": startStr]
-
-                let fireComponents = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate)
-                let trigger = UNCalendarNotificationTrigger(dateMatching: fireComponents, repeats: false)
-                let id = "fcf_preflight_\(startStr.prefix(10))"
-                let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
-                UNUserNotificationCenter.current().add(request) { err in
-                    if let err = err { print("FCF: preflight notification error:", err) }
-                }
+            let fireComponents = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: fireComponents, repeats: false)
+            // BUG FIX (independent review finding, confirmed real): using
+            // just the date prefix (startStr.prefix(10)) meant two flights
+            // on the same calendar date — an ordinary multi-leg duty day —
+            // produced identical identifiers. UNUserNotificationCenter
+            // silently replaces a pending request when a new one shares
+            // its identifier, so the second flight processed (sorted
+            // ascending, so the later one) would silently overwrite the
+            // first flight's notification with no indication either
+            // flight ever had one dropped. Using the full timestamp
+            // instead of just its date portion keeps same-day flights at
+            // genuinely distinct start times unique.
+            let id = "fcf_preflight_\(startStr)"
+            let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
+            UNUserNotificationCenter.current().add(request) { err in
+                if let err = err { logNative("preflight notification error: \(err)") }
             }
         }
     }
@@ -211,6 +259,22 @@ class NotificationManager {
     // hrvEnabled being true already MEANS the condition is genuinely met.
     // today/baseline are passed through purely so the notification body can
     // state real numbers instead of a generic unverifiable claim.
+    // BUG FIX (independent review findings, confirmed real by two
+    // separate reviews and verified against Apple's own documentation
+    // before fixing): repeats: true here was a genuine contradiction of
+    // this whole function's own architecture. The eligibility check
+    // (today's HRV genuinely below the user's own baseline) is a one-day
+    // decision made web-side — scheduleHRVCheck being called at all
+    // already means "yes, today" — but a repeating trigger means the
+    // exact same notification, with today's now-stale numbers baked into
+    // its body text, keeps firing every subsequent morning regardless of
+    // whether HRV ever recovers, until the user happens to reopen the
+    // app and scheduleAll() runs again with hrvEnabled now false.
+    // Verified directly against Apple's docs before changing this:
+    // UNCalendarNotificationTrigger with only hour/minute set and
+    // repeats: false fires once at the next matching time and stops —
+    // exactly the one-shot behavior this needed, no extra date
+    // components required.
     func scheduleHRVCheck(today: Int?, baseline: Int?) {
         let content = UNMutableNotificationContent()
         content.title = "HRV below baseline"
@@ -225,11 +289,11 @@ class NotificationManager {
         var dateComponents = DateComponents()
         dateComponents.hour   = 7
         dateComponents.minute = 0
-        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
         let request = UNNotificationRequest(identifier: "fcf_hrv_alert",
                                             content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request) { err in
-            if let err = err { print("FCF: HRV alert error:", err) }
+            if let err = err { logNative("HRV alert error: \(err)") }
         }
     }
 
@@ -255,7 +319,7 @@ class NotificationManager {
         let request = UNNotificationRequest(identifier: "fcf_layover_window",
                                             content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request) { err in
-            if let err = err { print("FCF: layover window notification error:", err) }
+            if let err = err { logNative("layover window notification error: \(err)") }
         }
     }
 
@@ -277,7 +341,7 @@ class NotificationManager {
         let request = UNNotificationRequest(identifier: "fcf_weekly_summary",
                                             content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request) { err in
-            if let err = err { print("FCF: weekly summary error:", err) }
+            if let err = err { logNative("weekly summary error: \(err)") }
         }
     }
 

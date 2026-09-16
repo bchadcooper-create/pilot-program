@@ -1,5 +1,6 @@
 import EventKit
 import Foundation
+import CryptoKit
 
 // MARK: - CalendarManager
 //
@@ -62,6 +63,15 @@ class CalendarManager {
                     }
                 }
             } else {
+                // Reviewed and left as-is rather than "fixed": .writeOnly
+                // is itself an iOS 17+ EKAuthorizationStatus case — a
+                // device actually running iOS 16 or earlier can never
+                // return this value from authorizationStatus(for:) in
+                // the first place (calendar access there is the older
+                // binary granted/denied model), so this branch can't
+                // actually execute on a real device. Left in rather than
+                // removed as a defensive no-op in case that understanding
+                // is ever wrong.
                 completion(["granted": false, "error": "Calendar read access not granted."])
             }
         @unknown default:
@@ -72,10 +82,39 @@ class CalendarManager {
     // ── Pull events ───────────────────────────────────────────────────────────
 
     func syncEvents(completion: @escaping ([String: Any]) -> Void) {
+        // BUG FIX (independent review findings, both confirmed real):
+        // (1) events(matching:) is a synchronous, blocking EventKit call —
+        // for the common "already authorized" path, this was being called
+        // straight from whatever thread requestPermissionAndSync's caller
+        // used, which for the returning-user case is the main thread
+        // (userContentController(didReceive:) runs on main), meaning
+        // every routine sync could hitch the UI while querying a 67-day
+        // window across every calendar on the device. (2) EventKit's own
+        // permission-request completions aren't guaranteed to run on
+        // main either, so this manager's own completion contract was
+        // whatever thread happened to call it, not a predictable one —
+        // the caller (postToWeb) already tolerates that today, but a
+        // manager shouldn't rely on every future caller getting that
+        // right on its own. Doing the real work on a background queue
+        // and always finishing on main gives this a single, predictable
+        // threading contract regardless of what OS-level completion
+        // thread triggered it.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let payload = self.buildSyncPayload()
+            DispatchQueue.main.async { completion(payload) }
+        }
+    }
+
+    private func buildSyncPayload() -> [String: Any] {
         let now = Date()
         let calendar = Calendar.current
-        let start = calendar.date(byAdding: .day, value: -7, to: now)!
-        let end   = calendar.date(byAdding: .day, value: 60, to: now)!
+        // BUG FIX (independent review finding): Calendar.date(byAdding:)
+        // can theoretically return nil (extreme date overflow) — force-
+        // unwrapping here would crash the whole sync over an edge case
+        // with a trivial, always-safe fallback available.
+        let start = calendar.date(byAdding: .day, value: -7, to: now) ?? now
+        let end   = calendar.date(byAdding: .day, value: 60, to: now) ?? now
 
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
         let ekEvents = store.events(matching: predicate)
@@ -205,15 +244,27 @@ class CalendarManager {
             return dict
         }
 
-        // Build a lightweight fingerprint so the web app can detect
-        // whether events have changed since the last classification.
-        // Just a sorted, joined string of id+start — good enough to
-        // catch additions, deletions, and time changes.
-        let fingerprint = events
+        // BUG FIX (independent review finding, verified against Swift's
+        // own core team announcement — confirmed real and severe): .hash
+        // (backed by hashValue/hash(into:)) uses a per-process randomized
+        // seed since Swift 4.2, specifically so hash values are NOT
+        // guaranteed stable across executions — that's documented,
+        // intentional behavior, not an edge case. Every single app
+        // launch was therefore producing a completely different
+        // fingerprint for the exact same, unchanged calendar, which
+        // means fcf-calendar-classify's cachedFingerprint === fingerprint
+        // check could never match across launches — defeating the entire
+        // point of that cache and triggering a fresh, paid AI
+        // classification of the whole calendar on every single app open,
+        // regardless of whether anything had actually changed.
+        // SHA256 via CryptoKit is genuinely stable for identical input,
+        // any process, any launch — which a cache key actually needs.
+        let fingerprintSource = events
             .compactMap { ($0["id"] as? String ?? "") + ($0["start"] as? String ?? "") }
             .sorted()
             .joined()
-            .hash
+        let fingerprintDigest = SHA256.hash(data: Data(fingerprintSource.utf8))
+        let fingerprint = fingerprintDigest.map { String(format: "%02x", $0) }.joined()
 
         let payload: [String: Any] = [
             "granted":       true,
@@ -226,6 +277,6 @@ class CalendarManager {
             "windowStart":   formatter.string(from: start),
             "windowEnd":     formatter.string(from: end)
         ]
-        completion(payload)
+        return payload
     }
 }

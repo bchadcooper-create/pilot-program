@@ -146,7 +146,7 @@ const FCFBridge = (() => {
   //   restingHR?: number,        restingHRSource?: string,
   //   hrv?: number,              hrvSource?: string,
   //   sleepMinutes?: number,     sleepSource?: string,
-  //   lastWorkout?: { activityType, durationMinutes, calories, date },
+  //   lastWorkout?: { activityType, activityTypeRaw, durationMinutes, calories, date },
   //   lastWorkoutSource?: string,
   //   detectedDevices?: [{ name: string, kind: 'appleWatch'|'oura'|'whoop'|'garmin'|'iphone'|'other' }]
   // }

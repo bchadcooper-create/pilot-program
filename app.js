@@ -82,7 +82,7 @@ async function loadSubscription() {
   } catch(e) { ST.subscription = null; }
 }
 
-const DAILY_PHOTO_LIMIT = 5; // legacy constant, retained only for older call sites
+
 const FEEDBACK_EDGE_FN  = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/feedback-submit';
 const OURA_SCOPES       = 'daily personal workout tag'; // readiness, sleep, activity, personal info, workouts, tags
 // Supabase anon key sent as auth header — required when Edge Function JWT verification is enabled

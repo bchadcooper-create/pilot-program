@@ -1971,6 +1971,7 @@ function renderRoot() {
   if (subEl) subEl.textContent = FCF_VERSION + ' · MISSION CONTROL';
   
   renderPage();
+}
 // ─── NAVIGATION & TAB SWITCHING ─────────────────────────────────────────────
 function switchTab(t) {
   if (!t) return;

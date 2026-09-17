@@ -41,26 +41,6 @@ const PRO_MONTHLY_PRICE = '$7.99';
 const PRO_PRODUCT_ANNUAL = 'FCFProAnnual';
 const PRO_PRODUCT_MONTHLY = 'FCFProMonthly';
 
-function isPro() {
-  if (ST.user?.id === '7e41ca46-6e00-4c54-bc3f-2e45d923fe0b') return true;
-  const s = ST.subscription;
-  if (!s) return false;
-  if (s.tier !== 'pro') return false;
-  if (s.status !== 'active' && s.status !== 'grace') return false;
-  if (s.current_period_end && new Date(s.current_period_end) < new Date()) return false;
-  return true;
-}
-
-async function loadSubscription() {
-  if (!ST.user) { ST.subscription = null; return; }
-  try {
-    const { data, error } = await SB.from('subscriptions')
-      .select('*').eq('user_id', ST.user.id).maybeSingle();
-    if (error) throw error;
-    ST.subscription = data || null;
-  } catch(e) { ST.subscription = null; }
-}
-
 // Entitlement is only ever READ here. The server decides it after receipt
 // validation — the subscriptions table grants the client SELECT and nothing
 // else, so Pro can't be switched on from the console. This function is a
@@ -90,6 +70,7 @@ async function loadSubscription() {
     ST.subscription = data || null;
   } catch(e) { ST.subscription = null; }
 }
+
 
 
 // ─── APP STATE ────────────────────────────────────────────────────────────────
@@ -309,21 +290,6 @@ function persistDailyInputs() {
   // response cache / offline fallback.
   saveDailyInputsToDBDebounced();
 }
-function restoreDailyInputs() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(DAILY_INPUTS_KEY)||'null');
-    if (!saved) return;
-    if (saved.day !== new Date().toDateString()) { localStorage.removeItem(DAILY_INPUTS_KEY); return; }
-    ST.flightHrs = saved.flightHrs || 0;
-    ST.flightHrsRaw = saved.flightHrsRaw || '';
-    ST.flightHrsTouched = !!saved.flightHrsTouched;
-    ST.waterIn = saved.waterIn || 0;
-    ST.waterInRaw = saved.waterInRaw || '';
-    ST.timeAvailMin = saved.timeAvailMin || null;
-    ST.sleepHours = saved.sleepHours || null;
-    ST.readiness = saved.readiness || null;
-  } catch(e) { console.warn('Restoring daily inputs from cache failed (treating as no cached data):', e); }
-}
 
 // Fetched once at boot and applied AFTER restoreDailyInputs() — the DB
 // row (if one exists for today) wins over whatever's in localStorage,
@@ -338,15 +304,6 @@ async function dbGetDailyInputs() {
     if (error) throw error;
     return data;
   } catch(e) { return null; }
-}
-
-function applyDailyInputsRow(row) {
-  if (!row) return;
-  if (row.water_in != null) { ST.waterIn = row.water_in; ST.waterInRaw = String(row.water_in); }
-  if (row.flight_hrs != null) { ST.flightHrs = row.flight_hrs; ST.flightHrsRaw = String(row.flight_hrs); }
-  if (row.flight_hrs_touched != null) ST.flightHrsTouched = !!row.flight_hrs_touched;
-  if (row.sleep_hours != null) ST.sleepHours = row.sleep_hours;
-  if (row.readiness != null) ST.readiness = row.readiness;
 }
 
 let _dailyInputsSaveTimer = null;
@@ -1972,24 +1929,70 @@ function renderRoot() {
   
   renderPage();
 }
-// ─── NAVIGATION & TAB SWITCHING ─────────────────────────────────────────────
-function switchTab(t) {
-  if (!t) return;
-  ST.tab = t;
-  
-  // Update active tabbar styling
-  const navBtns = document.querySelectorAll('.tabbar-btn');
-  navBtns.forEach(btn => {
-    const onclickAttr = btn.getAttribute('onclick') || '';
-    if (onclickAttr.includes(`'${t}'`)) {
-      btn.classList.add('active');
-    } else {
-      btn.classList.remove('active');
-    }
-  });
-
-  renderPage();
+// Restarts a CSS entry animation. Re-adding a class that's already
+// present does nothing on its own — the reflow between removing and
+// re-adding is what makes it replay.
+function playPageTransition(el, className) {
+  if (!el) return;
+  el.classList.remove(className);
+  void el.offsetWidth;
+  el.classList.add(className);
+  el.addEventListener('animationend', () => el.classList.remove(className), { once: true });
 }
+
+// ─── NAVIGATION & TAB SWITCHING ─────────────────────────────────────────────
+// BUG FIX (regression from a prior edit pass, confirmed real): this had
+// been rewritten down to just ST.tab = t + renderPage(), which silently
+// dropped several things — haptic feedback on every tab tap, the page-
+// enter/content-enter transition animations, resetting the fuel-plan
+// draft state when leaving that tab (so a stale, half-edited draft
+// wouldn't reappear next time), and the Flight tab's auto-scroll-to-
+// current-exercise behavior. It also switched the active-tab-highlight
+// selector to '.tabbar-btn', a class that doesn't exist anywhere in
+// index.html — the actual buttons use class="tab" with a data-tab
+// attribute — so the highlight silently never updated at all. Restored
+// the original, fuller logic wholesale rather than patching the
+// rewrite, since the rewrite didn't preserve any of this on purpose.
+function switchTab(tab) {
+  haptic('light');
+  const prevTab = ST.tab;
+  if (ST.tab === 'fuelplan' && tab !== 'fuelplan') { ST.fuelPlanDraftSynced = false; ST.manualTargetsOpen = false; ST.manualTargetsWarning = null; }
+  ST.tab = tab;
+  const MORE_SUBVIEWS = ['profile','wisdom','devices','data','badges','superuser'];
+  const hl = MORE_SUBVIEWS.includes(tab) ? 'more' : tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === hl));
+  const tabbar = document.getElementById('tabbar');
+  if (tabbar) tabbar.style.display = (tab === 'debrief') ? 'none' : 'flex';
+  const renderPromise = renderPage();
+
+  const page = document.getElementById('mainPage');
+  if (page) {
+    // Only on a genuine tab CHANGE. Firing on every render would replay
+    // the slide every time something on the menu page saved or refreshed.
+    if (tab === 'more' && prevTab !== 'more') playPageTransition(page, 'page-enter-left');
+    // Same guard, extended to the three primary tab-bar destinations —
+    // this app rebuilds innerHTML on nearly every state change, so this
+    // animation must ONLY fire on an actual tab switch, never on a
+    // same-tab re-render (which happens constantly), or every save/toggle
+    // would replay it and the app would feel jittery instead of polished.
+    if (['today','trends','leaderboard'].includes(tab) && tab !== prevTab) playPageTransition(page, 'content-enter');
+    if (tab === 'flight') {
+      const curId = getCurrentExerciseId();
+      const el = curId ? document.getElementById('excard_'+curId) : null;
+      if (el) {
+        ST.expanded[curId] = true;
+        renderPage();
+        requestAnimationFrame(() => {
+          document.getElementById('excard_'+curId)?.scrollIntoView({ block: 'start' });
+        });
+        return renderPromise;
+      }
+    }
+    page.scrollTop = 0;
+  }
+  return renderPromise;
+}
+window.switchTab = switchTab;
 
 // Bind to window so HTML inline onclick handlers can always find it
 window.switchTab = switchTab;
@@ -2846,26 +2849,27 @@ function applyScheduleFlightHours() {
 
 function restoreDailyInputs() {
   try {
-    const saved = localStorage.getItem('fcf_daily_inputs');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed && parsed.date === getTodayKey()) {
-        ST.dailyInputs = parsed;
-      }
-    }
-  } catch (e) {
-    console.warn('restoreDailyInputs failed:', e);
-  }
+    const saved = JSON.parse(localStorage.getItem(DAILY_INPUTS_KEY)||'null');
+    if (!saved) return;
+    if (saved.day !== new Date().toDateString()) { localStorage.removeItem(DAILY_INPUTS_KEY); return; }
+    ST.flightHrs = saved.flightHrs || 0;
+    ST.flightHrsRaw = saved.flightHrsRaw || '';
+    ST.flightHrsTouched = !!saved.flightHrsTouched;
+    ST.waterIn = saved.waterIn || 0;
+    ST.waterInRaw = saved.waterInRaw || '';
+    ST.timeAvailMin = saved.timeAvailMin || null;
+    ST.sleepHours = saved.sleepHours || null;
+    ST.readiness = saved.readiness || null;
+  } catch(e) { console.warn('Restoring daily inputs from cache failed (treating as no cached data):', e); }
 }
 
 function applyDailyInputsRow(row) {
   if (!row) return;
-  ST.dailyInputs = {
-    date: row.date,
-    sleepHours: row.sleep_hours || '',
-    energyLevel: row.energy_level || '',
-    notes: row.notes || ''
-  };
+  if (row.water_in != null) { ST.waterIn = row.water_in; ST.waterInRaw = String(row.water_in); }
+  if (row.flight_hrs != null) { ST.flightHrs = row.flight_hrs; ST.flightHrsRaw = String(row.flight_hrs); }
+  if (row.flight_hrs_touched != null) ST.flightHrsTouched = !!row.flight_hrs_touched;
+  if (row.sleep_hours != null) ST.sleepHours = row.sleep_hours;
+  if (row.readiness != null) ST.readiness = row.readiness;
 }
 
 function setDbStatus(mode) {
@@ -2992,11 +2996,23 @@ async function bootAppInner() {
 
   scheduleEntitlementRefresh();
   syncPendingBioEntries().catch(e => console.warn('syncPendingBioEntries failed at boot:', e));
-
- 
-  maybeShowInstallPrompt();
-  if (ST.showInstallPrompt && ST.disclaimerAccepted) renderPage();
+  // BUG FIX (regression from a prior edit pass — this whole block was
+  // silently deleted, not intentionally removed): returning from Stripe
+  // Checkout. The webhook may land a moment after the redirect, so this
+  // re-reads a few times rather than once and giving up.
+  if (/[?&]checkout=success/.test(location.search)) {
+    history.replaceState({}, '', location.pathname);
+    (async () => {
+      for (let i = 0; i < 6 && !isPro(); i++) {
+        await new Promise(r => setTimeout(r, i === 0 ? 1200 : 2500));
+        await loadSubscription();
+      }
+      renderPage();
+      showBigToast(isPro() ? '✓ Pro active — thanks.' : 'Payment received. Access will appear shortly.', 'ok');
+    })();
+  }
 }
+
 
 // ─── TOAST ────────────────────────────────────────────────────────────────────
 // ── Haptic feedback ───────────────────────────────────────────────────────────

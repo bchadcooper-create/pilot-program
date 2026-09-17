@@ -2803,9 +2803,7 @@ function applyProfileToState(profile) {
   if (profile.equipment_access)             ST.equipmentAccess = profile.equipment_access;
   if (profile.oura_connected !== undefined) ST.ouraConnected = profile.oura_connected;
   if (profile.oura_access_token)            ST.ouraAccessToken = profile.oura_access_token;
-}
-// ─── STATE INITIALIZATION HELPERS ──────────────────────────────────────────────
-function applyProfileToState(profile) {
+  if (profile.badges && typeof profile.badges === 'object') ST.badges = profile.badges;
   if (!profile) return;
   if (profile.sex)                          ST.sex = profile.sex;
   if (profile.weight_lbs)                   ST.weightLbs = profile.weight_lbs;
@@ -2995,7 +2993,7 @@ async function bootAppInner() {
   scheduleEntitlementRefresh();
   syncPendingBioEntries().catch(e => console.warn('syncPendingBioEntries failed at boot:', e));
 
-  awardBadges();
+ 
   maybeShowInstallPrompt();
   if (ST.showInstallPrompt && ST.disclaimerAccepted) renderPage();
 }

@@ -12815,17 +12815,20 @@ async function handleICSUpload(file) {
   try {
     const text = await file.text();
     const events = parseFlightScheduleICS(text);
-    if (!events.length) { showBigToast('Couldn\'t find any events in that file — check it\'s the right export.', 'warn'); return; }
+    if (!events.length) {
+      showBigToast("Couldn't find any events in that file — check it's the right format.", 'warn');
+      return;
+    }
     ST.flightSchedule = events;
     ST.flightScheduleRaw = text;
     const profile = (await dbGetProfile()) || {};
     profile.flightSchedule = events;
     profile.flightScheduleRaw = text;
     await dbSetProfile(profile);
-    showBigToast('✅ Schedule loaded — '+events.length+' events.', 'ok');
+    showBigToast('✓ Schedule loaded — ' + events.length + ' events.', 'ok');
     renderPage();
-  } catch(e) {
-    showBigToast('Couldn\'t read that file — make sure it\'s a valid .ics export.', 'warn');
+  } catch (e) {
+    showBigToast("Couldn't read that file — make sure it's a valid .ics export.", 'warn');
   }
 }
 

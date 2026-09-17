@@ -2857,6 +2857,18 @@ function applyDailyInputsRow(row) {
   };
 }
 
+async function checkDB() {
+  try {
+    if (!ST.user?.id) return;
+    const { error } = await SB.from('user_profiles')
+      .select('id')
+      .eq('user_id', ST.user.id)
+      .maybeSingle();
+    if (error) console.warn('checkDB query issue:', error.message);
+  } catch (e) {
+    console.warn('checkDB exception:', e);
+  }
+}
 
 // ─── BOOT SEQUENCE ────────────────────────────────────────────────────────────
 async function bootApp() {

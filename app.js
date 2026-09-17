@@ -1,6 +1,6 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.42.3 / 20260916_6
+ * Version/build: fcf-v5.42.4 / 20260916_4
  */
 
 const FCF_VERSION = 'fcf-v5.42.4';
@@ -1983,10 +1983,12 @@ function renderPage() {
     return;
   }
 
-  p.innerHTML = '';
-  if (ST.tab === 'preflight') {
-    renderPreflight(p).catch(e => { ... });
-  }
+p.innerHTML = '';
+if (ST.tab === 'preflight') {
+  renderPreflight(p).catch(e => {
+    console.warn('Preflight load failed:', e);
+  });
+}
   else if (ST.tab === 'flight')      renderFlight(p);
   else if (ST.tab === 'trends')      return renderTrends(p);
   else if (ST.tab === 'wisdom')      renderWisdom(p);

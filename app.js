@@ -6302,9 +6302,10 @@ function buildMovementIndex() {
 // that history should actually be read across.
 function equivalentExerciseIds(exId, exName) {
   const { idToKey, keyToIds } = buildMovementIndex();
-  const key = idToKey[exId] || normalizeMovementName(exName);
-  const matched = keyToIds[key] || [];
-  return Array.from(new Set([exId, ...matched]));
+  const key = (exName ? normalizeMovementName(exName) : null) || idToKey[exId];
+  if (!key) return [exId];
+  const ids = keyToIds[key] || [];
+  return ids.includes(exId) ? ids : [...ids, exId];
 }
 
 function lastLoggedMaxField(exId, field, exName) {

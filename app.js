@@ -2793,9 +2793,16 @@ function renderPage() {
 function applyProfileToState(profile) {
   if (!profile) return;
   if (profile.sex)                          ST.sex = profile.sex;
-  if (profile.weight_lbs)                   ST.weightLbs = profile.weight_lbs;
-  if (profile.height_in)                   ST.heightIn = profile.height_in;
-  if (profile.base_timezone)                ST.baseTimezone = profile.base_timezone;
+  // BUG FIX (reported: weight/height "not remembering" — confirmed real,
+  // but not the field the report assumed. weight_lbs/height_in are dead
+  // snake_case keys nothing ever actually saves under — the save side
+  // uses lastWeight/heightIn (camelCase), confirmed directly against
+  // where each is written. profile.weight_lbs was never populated by
+  // anything, so this line never did anything; replaced with the field
+  // that's actually saved.
+  if (profile.lastWeight)                   ST.lastWeight = profile.lastWeight;
+  if (profile.heightIn)                     ST.heightIn = profile.heightIn;
+  if (profile.baseTimezone)                 ST.baseTimezone = profile.baseTimezone;
   if (profile.home_airport)                 ST.homeAirport = profile.home_airport;
   if (profile.airline)                      ST.airline = profile.airline;
   if (profile.seat_position)                ST.seatPosition = profile.seat_position;
@@ -2804,24 +2811,30 @@ function applyProfileToState(profile) {
   if (profile.fitness_goal)                 ST.fitnessGoal = profile.fitness_goal;
   if (profile.experience_level)             ST.experienceLevel = profile.experience_level;
   if (profile.equipment_access)             ST.equipmentAccess = profile.equipment_access;
-  if (profile.oura_connected !== undefined) ST.ouraConnected = profile.oura_connected;
-  if (profile.oura_access_token)            ST.ouraAccessToken = profile.oura_access_token;
+  // BUG FIX (reported: Oura shows connected on web right after connecting,
+  // but the app reports it as not connected — confirmed real, same root
+  // cause as weight/height above. The save side uses ouraConnected/
+  // ouraAccessToken (camelCase) — confirmed directly against the actual
+  // OAuth callback and disconnect handlers — so these snake_case checks
+  // never matched anything, and the connection state never survived a
+  // reload on any device, correctly saved or not.
+  if (profile.ouraConnected !== undefined)  ST.ouraConnected = profile.ouraConnected;
+  if (profile.ouraAccessToken)              ST.ouraAccessToken = profile.ouraAccessToken;
   if (profile.badges && typeof profile.badges === 'object') ST.badges = profile.badges;
-  if (!profile) return;
-  if (profile.sex)                          ST.sex = profile.sex;
-  if (profile.weight_lbs)                   ST.weightLbs = profile.weight_lbs;
-  if (profile.height_in)                   ST.heightIn = profile.height_in;
-  if (profile.base_timezone)                ST.baseTimezone = profile.base_timezone;
-  if (profile.home_airport)                 ST.homeAirport = profile.home_airport;
-  if (profile.airline)                      ST.airline = profile.airline;
-  if (profile.seat_position)                ST.seatPosition = profile.seat_position;
-  if (profile.aircraft_type)                ST.aircraftType = profile.aircraft_type;
-  if (profile.schedule_type)                ST.scheduleType = profile.schedule_type;
-  if (profile.fitness_goal)                 ST.fitnessGoal = profile.fitness_goal;
-  if (profile.experience_level)             ST.experienceLevel = profile.experience_level;
-  if (profile.equipment_access)             ST.equipmentAccess = profile.equipment_access;
-  if (profile.oura_connected !== undefined) ST.ouraConnected = profile.oura_connected;
-  if (profile.oura_access_token)            ST.ouraAccessToken = profile.oura_access_token;
+  // BUG FIX (reported: call sign / age kept getting re-prompted for, or
+  // acted like they were never saved, despite being entered correctly).
+  // Confirmed directly: both are actually saved fine — profile.age and
+  // profile.username are set on save — this function simply never read
+  // either one back into ST on boot, so every reload reverted both to
+  // their defaults regardless of what was in the database.
+  if (profile.age)                          ST.age = profile.age;
+  if (profile.username)                     ST.username = profile.username;
+  // BUG FIX (reported: fuel plan / tracking toggles reset after a
+  // refresh, the same way badges used to before that fix was added).
+  // Same root cause, same fix — these were never hydrated here either.
+  if (typeof profile.trackNutrition === 'boolean') ST.trackNutrition = profile.trackNutrition;
+  if (typeof profile.trackHydration === 'boolean') ST.trackHydration = profile.trackHydration;
+  if (profile.nutritionGoals)               ST.nutritionGoals = profile.nutritionGoals;
 }
 
 function applyScheduleEnvironmentSuggestion() {
@@ -9920,6 +9933,41 @@ function renderProfile(p) {
   parts.push('<div class="divider"></div>');
   parts.push('<div style="font-size:11px;color:var(--muted);line-height:1.6"><strong style="color:var(--text)">'+freq.days+' days/week</strong> recommended — '+freq.split+'. '+freq.note+'</div>');
   parts.push('</div>');
+
+  // ── Fuel plan ────────────────────────────────────────────────────────────
+  // Was missing from this screen entirely — the underlying data
+  // (ST.nutritionGoals) and the toggle controls (renderTrackingToggles)
+  // already existed, just never surfaced here alongside the rest of the
+  // profile. Reused rather than duplicated.
+  parts.push('<div class="card mb12">');
+  parts.push('<div class="section-label" style="margin-top:0">FUEL PLAN</div>');
+  const g = ST.nutritionGoals;
+  if (!g || g.mode === 'none') {
+    parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px">' +
+      (g && g.mode === 'none'
+        ? 'Tracking without calorie or macro targets.'
+        : 'No fuel plan set yet. Targets are built from your body metrics so the numbers actually mean something.') +
+      '</div>');
+    parts.push('<button class="btn btn-outline" onclick="switchTab(\'fuelplan\')">' +
+      (g && g.mode === 'none' ? 'Set Up Targets' : 'Set Up Fuel Plan') +
+      '</button>');
+  } else {
+    const modeLabel = { maintain: 'Maintain & fuel training', muscle: 'Build muscle', fatloss: 'Lose fat gradually' }[g.mode] || g.mode;
+    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px">'+modeLabel+(g.trainingDays ? ' · '+g.trainingDays+' training days/week' : '')+'</div>');
+    parts.push('<div class="fb" style="align-items:baseline;margin-bottom:8px">');
+    parts.push('<span style="font-family:var(--mono);font-size:28px;color:var(--gold)">'+(g.calories||0).toLocaleString()+'</span>');
+    parts.push('<span style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.12em">CAL / DAY</span>');
+    parts.push('</div>');
+    [['P', g.protein, 'var(--gold)'], ['C', g.carbs, 'var(--blue)'], ['F', g.fat, 'var(--teal)']].forEach(([l,v,c]) => {
+      parts.push('<div class="fb" style="margin-bottom:4px"><span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+l+'</span><span style="font-family:var(--mono);font-size:12px;color:'+c+'">'+(v||0)+'g</span></div>');
+    });
+    parts.push('<button class="btn-ghost" style="margin-top:8px" onclick="switchTab(\'fuelplan\')">Adjust Fuel Plan →</button>');
+  }
+  parts.push('</div>');
+
+  // ── Tracking toggles (nutrition + hydration) ─────────────────────────────
+  // Same control used on More — single source of truth via setTrackingPref.
+  parts.push(renderTrackingToggles());
 
   p.innerHTML = parts.join('');
 

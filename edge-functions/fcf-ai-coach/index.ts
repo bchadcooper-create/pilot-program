@@ -46,8 +46,40 @@ const WEEKLY_SUMMARY_PROMPT_VERSION = 2; // v2: incidentalWalk awareness + recen
 // pre-fix response — that field didn't exist in the context sent to
 // earlier cached responses, so their advice can't reflect it either.
 const FATIGUE_CALIBRATION_PROMPT_VERSION = 2;
+// BUG FIX (found while updating this prompt): fuel_logistics' cache key
+// (below) never had a prompt-version component at all, unlike the other
+// two cached modes — so a stale response from before this exact prompt
+// change could keep getting served back all day, for anyone who already
+// had a cached entry with the same meal count logged.
+const FUEL_LOGISTICS_PROMPT_VERSION = 2;
 
 // ── Prompts per mode ──────────────────────────────────────────────────────────
+
+// BUG FIX (reported: "Already got your workout in today — enjoy the
+// rest of your evening" showing at 6:31am, with nothing actually logged
+// that day). Traced to fatigueCacheKey/fuelCacheKey below both using
+// new Date().toISOString().slice(0,10) — this function runs on Supabase's
+// server, so that's the SERVER's UTC date, not the user's. For anyone
+// west of UTC (Arizona is UTC-7), the UTC date rolls over at 5pm local,
+// hours before their own local midnight — so a fatigue_calibration
+// message generated after 5pm local yesterday got cached under what was
+// already, in UTC, TODAY's date key. This morning, still genuinely
+// today in both UTC and local time, that same cache key matched again
+// and served back yesterday evening's stale message and its now-wrong
+// "already worked out" premise, without ever calling the model fresh.
+// The client already sends its own real timezone as context.timezone
+// (see localTimezoneName() in app.js) - using that to compute "today"
+// here instead of the server's own clock is the actual fix; falls back
+// to server UTC only if the timezone is missing or invalid.
+function localDateKeyFor(timezone) {
+  if (timezone) {
+    try {
+      return new Intl.DateTimeFormat('en-CA', { timeZone: timezone,
+        year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    } catch (e) { /* invalid/unknown zone — fall through to UTC below */ }
+  }
+  return new Date().toISOString().slice(0, 10);
+}
 
 const PROMPTS = {
   weekly_summary: `You're a strength coach talking to a pilot or flight crew member for about 15 seconds — this
@@ -124,10 +156,21 @@ You will receive their flight schedule for today with LOCAL times already conver
 already logged eating today, also in local time. Trust the times given exactly as local — never convert them or
 assume a different timezone.
 
+CRITICAL — LOGGING VS EATING. mealLogging.status tells you whether anything is logged, and
+mealLogging.interpretation tells you exactly how to read that — follow it literally. An empty or sparse log
+does NOT mean the pilot skipped eating, is fasting, or is in a deficit — pilots on duty eat plenty they never
+get around to logging. Never say or imply "you haven't eaten," "you're running on empty," or state a calorie
+total as if it's everything they've had today. If nothing is logged, open with a brief nudge to log what they
+already ate (or plan to), then give schedule-aware advice that doesn't assume empty intake. If some meals are
+logged, treat loggedTotalsSoFar as a floor, not the full picture — "based on what's logged..." beats any
+absolute claim. If nutritionTargets is provided, you can reference it lightly once real logging exists for the
+day — never frame incomplete logging itself as "behind" or something to feel bad about.
+
 TWO SENTENCES MAXIMUM. One naming the window (or saying there isn't a good one left), one on why / what to do
-about it. If your draft runs longer, you're including detail nobody asked for — cut it down before responding.
-Talk like you're texting a friend, not writing a logistics report. No jargon, no listing out every leg and gap
-in the schedule — just the one window that matters right now.`,
+about it — the logging nudge above, when it applies, IS one of your two sentences, not an addition to them. If
+your draft runs longer, you're including detail nobody asked for — cut it down before responding. Talk like
+you're texting a friend, not writing a logistics report. No jargon, no listing out every leg and gap in the
+schedule — just the one window that matters right now.`,
 
   trip_plan: `You're a strength coach mapping out training for a pilot or flight crew member's upcoming or
 current multi-day trip. You will receive the trip's day-by-day structure — each day's flight count, duty hours,
@@ -254,8 +297,8 @@ Deno.serve(async (req) => {
     // meals already logged has no reason to ask the model anything new.
     let fuelCacheKey: string | null = null;
     if (mode === 'fuel_logistics') {
-      const today = new Date().toISOString().slice(0, 10);
-      fuelCacheKey = `${today}_${context.mealsAlreadyLoggedToday?.length ?? 0}`;
+      const today = localDateKeyFor(context.timezone);
+      fuelCacheKey = `${today}_${context.mealsAlreadyLoggedToday?.length ?? 0}_v${FUEL_LOGISTICS_PROMPT_VERSION}`;
       const { data: cached } = await supabase
         .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
       const cachedKey = cached?.profile_data?.fuelLogisticsCacheKey;
@@ -273,7 +316,7 @@ Deno.serve(async (req) => {
     // not a live value.
     let fatigueCacheKey: string | null = null;
     if (mode === 'fatigue_calibration') {
-      fatigueCacheKey = new Date().toISOString().slice(0, 10) + '_v' + FATIGUE_CALIBRATION_PROMPT_VERSION;
+      fatigueCacheKey = localDateKeyFor(context.timezone) + '_v' + FATIGUE_CALIBRATION_PROMPT_VERSION;
       const { data: cached } = await supabase
         .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
       const cachedKey = cached?.profile_data?.fatigueCalibrationCacheKey;

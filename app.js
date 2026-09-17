@@ -4567,15 +4567,55 @@ async function loadFuelLogistics() {
 
     if (!events.length) return;
 
+    // BUG FIX (reported issue with a proposed fix reviewed and verified
+    // against the real data model before applying): the context sent
+    // here was thin enough that the model had no way to distinguish
+    // "the pilot ate nothing today" from "the pilot ate something but
+    // hasn't logged it yet" — an empty mealsAlreadyLoggedToday array
+    // reads identically to both. Verified every field below against
+    // where meals actually get saved (meal_data.items/.totals,
+    // item.nutrients.calories/protein/carbs/fat, ST.nutritionGoals'
+    // real shape) rather than assuming the proposed shape was correct.
     const meals = ST.todaysMeals || [];
+    const loggedTotals = meals.reduce((acc, m) => {
+      const t = m.meal_data?.totals || {};
+      acc.calories += t.calories || 0;
+      acc.protein  += t.protein  || 0;
+      acc.carbs    += t.carbs    || 0;
+      acc.fat      += t.fat      || 0;
+      return acc;
+    }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
+    const g = ST.nutritionGoals && ST.nutritionGoals.mode !== 'none' ? ST.nutritionGoals : null;
+
     const context = {
       currentLocalTime: fmtLocalForAI(now),
       timezone: localTimezoneName(),
       todaysSchedule: events,
+      // Explicit semantics so the model can't quietly treat "no rows" as
+      // "no food" — logging gaps are the normal case for a pilot on duty,
+      // not a signal they're fasting.
+      mealLogging: {
+        status: meals.length ? 'partial_or_complete' : 'nothing_logged',
+        interpretation: meals.length
+          ? 'Items below were logged by the pilot. They may have eaten more that was not logged.'
+          : 'No meals logged yet today. This almost certainly means incomplete logging, NOT that the pilot skipped eating. Do not assume a deficit, a fast, or missed meals. Prefer a short nudge to log what they already ate over any advice that assumes empty intake.',
+      },
       mealsAlreadyLoggedToday: meals.map(m => ({
         type: m.meal_type,
         loggedAtLocal: fmtLocalForAI(m.logged_at),
+        items: (m.meal_data?.items || []).map(i => ({
+          description: i.description,
+          calories: i.nutrients?.calories,
+          protein: i.nutrients?.protein,
+        })),
+        totals: m.meal_data?.totals || null,
       })),
+      loggedTotalsSoFar: loggedTotals,
+      nutritionTargets: g ? {
+        mode: g.mode, calories: g.calories, protein: g.protein, carbs: g.carbs, fat: g.fat,
+      } : null,
+      hydrationLoggedL: ST.trackHydration ? ST.waterIn : null,
+      hydrationTargetL: ST.trackHydration ? hydroTarget() : null,
     };
 
     const result = await callAICoach('fuel_logistics', context);

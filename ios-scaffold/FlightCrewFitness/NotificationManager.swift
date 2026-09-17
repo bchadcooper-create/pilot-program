@@ -135,7 +135,7 @@ class NotificationManager {
         let request = UNNotificationRequest(identifier: "fcf_workout_reminder",
                                             content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request) { err in
-            if let err = err { logNative("workout reminder error: \(err)") }
+            if let err = err { self.logNative("workout reminder error: \(err)") }
         }
     }
 
@@ -167,7 +167,7 @@ class NotificationManager {
         let request = UNNotificationRequest(identifier: "fcf_water_reminder",
                                             content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request) { err in
-            if let err = err { logNative("water reminder error: \(err)") }
+            if let err = err { self.logNative("water reminder error: \(err)") }
         }
     }
 
@@ -246,7 +246,7 @@ class NotificationManager {
             let id = "fcf_preflight_\(startStr)"
             let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
             UNUserNotificationCenter.current().add(request) { err in
-                if let err = err { logNative("preflight notification error: \(err)") }
+                if let err = err { self.logNative("preflight notification error: \(err)") }
             }
         }
     }
@@ -293,7 +293,7 @@ class NotificationManager {
         let request = UNNotificationRequest(identifier: "fcf_hrv_alert",
                                             content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request) { err in
-            if let err = err { logNative("HRV alert error: \(err)") }
+            if let err = err { self.logNative("HRV alert error: \(err)") }
         }
     }
 
@@ -319,7 +319,7 @@ class NotificationManager {
         let request = UNNotificationRequest(identifier: "fcf_layover_window",
                                             content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request) { err in
-            if let err = err { logNative("layover window notification error: \(err)") }
+            if let err = err { self.logNative("layover window notification error: \(err)") }
         }
     }
 
@@ -341,7 +341,7 @@ class NotificationManager {
         let request = UNNotificationRequest(identifier: "fcf_weekly_summary",
                                             content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request) { err in
-            if let err = err { logNative("weekly summary error: \(err)") }
+            if let err = err { self.logNative("weekly summary error: \(err)") }
         }
     }
 

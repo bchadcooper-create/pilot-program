@@ -12863,5 +12863,3 @@ function downloadFlightScheduleICS() {
   a.click();
   URL.revokeObjectURL(url);
 }
-
-

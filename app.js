@@ -2744,6 +2744,30 @@ WORKOUTS.band['Run'] = WORKOUTS.room['Run'];
 function renderPage() {
   const p = document.getElementById('mainPage');
   if (!p) return;
+  // BUG FIX (reported: after a fresh install + full onboarding flow —
+  // notifications, sign-in, calendar, HealthKit permissions all in a
+  // row — the topbar (with the menu button) and tabbar were sometimes
+  // invisible despite the actual page content underneath rendering
+  // correctly, and persisted across a force-quit and relaunch. Root
+  // cause not fully pinned down without a live device console (the
+  // most likely mechanism is a native permission sheet interrupting
+  // WebKit's rendering pipeline right as renderRoot()'s topbar/tabbar
+  // display change was taking effect on the very first authenticated
+  // render), but the asymmetry in how it partially self-corrected was
+  // findable directly: switchTab() explicitly restores tabbar's
+  // display on every tab change but never touches topbar at all,
+  // which is exactly why tapping a tab brought the tab bar back but
+  // never the menu button. Rather than patch that one call site,
+  // enforcing this here means every single call to renderPage() —
+  // switchTab(), bootAppInner(), or anything else — self-heals both
+  // bars whenever they should be visible, regardless of what state
+  // they were wrongly left in before this ran.
+  if (ST.authed && ST.disclaimerAccepted) {
+    const topbar = document.getElementById('topbar');
+    const tabbar = document.getElementById('tabbar');
+    if (topbar) topbar.style.display = '';
+    if (tabbar) tabbar.style.display = (ST.tab === 'debrief') ? 'none' : 'flex';
+  }
   p.innerHTML = '';
   if (ST.tab === 'preflight') {
     renderPreflight(p).catch(e => {

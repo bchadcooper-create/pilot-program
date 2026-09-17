@@ -2964,7 +2964,7 @@ async function bootAppInner() {
 
   awardBadges();
   maybeShowInstallPrompt();
-  if (ST.showInstallPrompt) renderPage();
+  if (ST.showInstallPrompt && ST.disclaimerAccepted) renderPage();
 }
 
 // ─── TOAST ────────────────────────────────────────────────────────────────────

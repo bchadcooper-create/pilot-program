@@ -1971,7 +1971,29 @@ function renderRoot() {
   if (subEl) subEl.textContent = FCF_VERSION + ' · MISSION CONTROL';
   
   renderPage();
+// ─── NAVIGATION & TAB SWITCHING ─────────────────────────────────────────────
+function switchTab(t) {
+  if (!t) return;
+  ST.tab = t;
+  
+  // Update active tabbar styling
+  const navBtns = document.querySelectorAll('.tabbar-btn');
+  navBtns.forEach(btn => {
+    const onclickAttr = btn.getAttribute('onclick') || '';
+    if (onclickAttr.includes(`'${t}'`)) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
 
+  renderPage();
+}
+
+// Bind to window so HTML inline onclick handlers can always find it
+window.switchTab = switchTab;
+
+ 
   // ─── PAGE DISPATCH & STATE GATING ─────────────────────────────────────────────
 function renderPage() {
   const p = document.getElementById('mainPage');

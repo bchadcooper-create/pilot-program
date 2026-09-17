@@ -1,4 +1,3 @@
-**
  * Flight Crew Fitness — app.js
  * Version/build: v5.42.0 / 20260909
  */

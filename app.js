@@ -2863,7 +2863,7 @@ async function checkDB() {
   try {
     if (!ST.user?.id) return;
     const { error } = await SB.from('user_profiles')
-      .select('id')
+      .select('user_id')
       .eq('user_id', ST.user.id)
       .maybeSingle();
     if (error) console.warn('checkDB query issue:', error.message);

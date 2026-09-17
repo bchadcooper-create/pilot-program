@@ -1428,17 +1428,69 @@ function parseICSDateTime(raw) {
 // which uses a different, non-Z-suffixed time reference that doesn't match
 // the authoritative UTC start/end and would silently misclassify events if
 // relied on.
+// Converts wall-clock components in a specific IANA zone to the true UTC
+// instant, with no timezone library: format an initial UTC guess back
+// through the target zone, then correct by however far that guess drifted.
+// Re-reads the offset AT that instant (via Intl), so it's DST-correct
+// automatically rather than needing a fixed offset table.
+function zonedTimeToUtc(y, mo, d, h, mi, s, timeZone) {
+  const utcGuess = Date.UTC(y, mo - 1, d, h, mi, s);
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone, hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+  const parts = dtf.formatToParts(new Date(utcGuess));
+  const get = (t) => parseInt(parts.find(p => p.type === t).value, 10);
+  const asIfUTC = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
+  return new Date(utcGuess + (utcGuess - asIfUTC));
+}
+
 // Reads the true station-local times out of a MobileCCI DESCRIPTION line.
-// Built with local date components (not Date.parse of a bare string, which
-// varies by engine), so the value formats back to exactly the digits the
-// airline shows.
+//
+// BUG FIX (reported: "the AI thinks it's several hours behind [the actual
+// time]", traced to the user's own words — "something going on with the
+// calendar/ics upload/auto function where you set your time zone").
+// Confirmed real, and confirmed to be THIS function specifically, not the
+// DTSTART/DTEND correction above it in parseFlightScheduleICS. That other
+// correction only ever ran for the native Apple Calendar sync path (see
+// CalendarManager.swift's reinterpretAsLocal) — this is the exact same
+// underlying MobileCCI export, consumed a different way (manual .ics
+// upload instead of Apple Calendar), carrying the exact same "every event
+// stamped using the pilot's home-base wall-clock numbers" quirk, but this
+// path had NO base-timezone correction at all: it built the Date with
+// new Date(y,m,d,h,mi,s), which JS interprets using whatever timezone the
+// DEVICE currently happens to be in. That's only correct when the device's
+// current offset matches the pilot's home base at the moment of parsing —
+// off by exactly the offset difference the rest of the time, including
+// right at upload if parsing on a machine set to a different zone than
+// home base (e.g. the web app on a computer not on Arizona time).
+// Now shares the same user-configured baseTimezone (Settings → Schedule)
+// the native path already uses, via zonedTimeToUtc above. Falls back to
+// the previous device-local behavior when baseTimezone is still 'auto'
+// (unset), so nothing changes for anyone who hasn't set it yet — matching
+// how the native path's own baseTimezone fallback already works.
 function descriptionLocalTimes(desc) {
   if (!desc) return null;
   const m = String(desc).match(/Time:\s*(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\s*-\s*(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
   if (!m) return null;
   const n = m.map(Number);
-  const start = new Date(n[1], n[2]-1, n[3], n[4], n[5], n[6]);
-  const end   = new Date(n[7], n[8]-1, n[9], n[10], n[11], n[12]);
+  const tz = (typeof ST !== 'undefined' && ST.baseTimezone && ST.baseTimezone !== 'auto') ? ST.baseTimezone : null;
+  let start, end;
+  if (tz) {
+    try {
+      start = zonedTimeToUtc(n[1], n[2], n[3], n[4], n[5], n[6], tz);
+      end   = zonedTimeToUtc(n[7], n[8], n[9], n[10], n[11], n[12], tz);
+    } catch (e) {
+      // Invalid/unsupported IANA id somehow got stored — fall back rather
+      // than losing the event entirely.
+      start = new Date(n[1], n[2]-1, n[3], n[4], n[5], n[6]);
+      end   = new Date(n[7], n[8]-1, n[9], n[10], n[11], n[12]);
+    }
+  } else {
+    start = new Date(n[1], n[2]-1, n[3], n[4], n[5], n[6]);
+    end   = new Date(n[7], n[8]-1, n[9], n[10], n[11], n[12]);
+  }
   if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
   return { start, end };
 }
@@ -2835,6 +2887,27 @@ function applyProfileToState(profile) {
   if (typeof profile.trackNutrition === 'boolean') ST.trackNutrition = profile.trackNutrition;
   if (typeof profile.trackHydration === 'boolean') ST.trackHydration = profile.trackHydration;
   if (profile.nutritionGoals)               ST.nutritionGoals = profile.nutritionGoals;
+  // BUG FIX (reported: "uploaded my calendar on my phone, but it doesn't
+  // reflect on the webapp"). Confirmed real and confirmed where: the phone
+  // syncs Apple Calendar through native EventKit, sends the raw events to
+  // fcf-calendar-classify, and that edge function DOES save the classified
+  // result server-side — profile.calendarClassified / .calendarFingerprint
+  // are written into this same profile_data row on every successful
+  // classification (see edge-functions/fcf-calendar-classify/index.ts).
+  // The data was never actually stuck on the phone. The bug was here: this
+  // function never read those two fields back into ST on boot, on ANY
+  // device — so even the phone itself would lose ST.calendarEvents on a
+  // fresh launch until its own next native sync completed, and the web
+  // client, which has no EventKit and can never generate calendarEvents
+  // any other way, had no path to ever see them at all. Every feature that
+  // reads ST.calendarEvents (trip plan, fuel logistics, fatigue
+  // calibration, progression analytics) now picks this up automatically
+  // via getActiveSchedule() once hydrated here — no other call site needed
+  // to change.
+  if (profile.calendarClassified && profile.calendarClassified.length) {
+    ST.calendarEvents = profile.calendarClassified;
+    ST.calendarFingerprint = profile.calendarFingerprint || null;
+  }
 }
 
 function applyScheduleEnvironmentSuggestion() {
@@ -3568,6 +3641,19 @@ async function setBaseTimezone(value) {
   try {
     const profile = (await dbGetProfile()) || {};
     profile.baseTimezone = value;
+    // BUG FIX (see descriptionLocalTimes): an uploaded .ics schedule is
+    // only ever parsed once, at upload time, under whatever baseTimezone
+    // was set at that moment — changing the setting afterward silently
+    // left the already-parsed events on the old (possibly wrong)
+    // interpretation until the user thought to re-upload the same file
+    // again. Re-parsing the stored raw text here keeps it in sync with
+    // the setting immediately, the same way the native path below already
+    // re-syncs Apple Calendar on a timezone change.
+    if (ST.flightScheduleRaw) {
+      const reparsed = parseFlightScheduleICS(ST.flightScheduleRaw);
+      ST.flightSchedule = reparsed;
+      profile.flightSchedule = reparsed;
+    }
     await dbSetProfile(profile);
   } catch(e) { showBigToast('Saved on this device, but could not sync.', 'warn'); }
   // Re-sync immediately rather than waiting for the next natural sync —
@@ -3577,6 +3663,9 @@ async function setBaseTimezone(value) {
   if (typeof FCFBridge !== 'undefined' && FCFBridge.isNative && ST.calendarGranted) {
     showToast('Re-syncing calendar with the new base timezone…');
     FCFBridge.syncCalendar(value);
+  } else if (ST.flightScheduleRaw) {
+    showToast('Re-parsed your uploaded schedule with the new base timezone…');
+    renderPage();
   }
 }
 
@@ -12837,32 +12926,41 @@ function renderData(p) {
     parts.push('</div>');
   }
 
+  // ── Home base timezone ───────────────────────────────────────────────────
+  // BUG FIX (reported: "the AI thinks it's several hours behind... something
+  // going on with the calendar/ics upload/auto function where you set your
+  // time zone"). This used to live only inside the Apple-Calendar-only
+  // (isNative) block below, described as fixing "Apple Calendar sync
+  // specifically — the .ics upload path already has its own, separate
+  // correction." That claim was wrong: the .ics path (descriptionLocalTimes)
+  // had NO base-timezone correction at all — it just used the device's
+  // current local time unconditionally, with no way to override it, which
+  // is exactly the same class of bug this setting exists to fix. Moved out
+  // here so it always renders — it now also drives descriptionLocalTimes'
+  // correction for the .ics/Uploaded File path below, on every platform,
+  // not just Apple Calendar sync on iOS. "Auto" preserves the old (device's
+  // current location) behavior for anyone who hasn't set this yet.
+  const TZ_OPTIONS = [
+    ['auto', 'Auto (device\u2019s current location)'],
+    ['America/New_York', 'Eastern'],
+    ['America/Chicago', 'Central'],
+    ['America/Denver', 'Mountain'],
+    ['America/Phoenix', 'Arizona (no DST)'],
+    ['America/Los_Angeles', 'Pacific'],
+    ['America/Anchorage', 'Alaska'],
+    ['Pacific/Honolulu', 'Hawaii'],
+  ];
+  parts.push('<div style="font-size:11px;font-weight:700;color:var(--text);letter-spacing:0.04em;margin-bottom:8px">HOME BASE TIMEZONE</div>');
+  parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.5">Your crew-scheduling export (Apple Calendar sync or an uploaded .ics) stamps every flight/layover time using this timezone, whatever timezone your device currently thinks it\'s in. Set it once to your actual home base \u2014 most pilots should pick this over &quot;Auto,&quot; since &quot;Auto&quot; silently switches to wherever your device physically is, which is wrong the moment you\'re away from base. If AI-reported times ever look off by a few hours, this is almost always why.</div>');
+  parts.push('<select onchange="haptic(\'selection\');setBaseTimezone(this.value)" style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:13px;margin-bottom:16px">');
+  TZ_OPTIONS.forEach(([val, label]) => {
+    parts.push('<option value="'+val+'"'+(ST.baseTimezone===val?' selected':'')+'>'+label+'</option>');
+  });
+  parts.push('</select>');
+
   // ── Apple Calendar sub-section ──────────────────────────────────────────
   if (isNative) {
     parts.push('<div style="font-size:11px;font-weight:700;color:var(--text);letter-spacing:0.04em;margin-bottom:8px">APPLE CALENDAR</div>');
-    // Home base timezone — corrects a real upstream bug in the crew-
-    // schedule sync tool (documented in CalendarManager.swift's
-    // reinterpretationZone) that stamps every event using the pilot's
-    // base timezone but mislabels it as UTC. Only matters for Apple
-    // Calendar sync specifically — the .ics upload path already has its
-    // own, separate correction. "Auto" preserves the old (device's
-    // current location) behavior for anyone who hasn't set this yet.
-    const TZ_OPTIONS = [
-      ['auto', 'Auto (device\u2019s current location)'],
-      ['America/New_York', 'Eastern'],
-      ['America/Chicago', 'Central'],
-      ['America/Denver', 'Mountain'],
-      ['America/Phoenix', 'Arizona (no DST)'],
-      ['America/Los_Angeles', 'Pacific'],
-      ['America/Anchorage', 'Alaska'],
-      ['Pacific/Honolulu', 'Hawaii'],
-    ];
-    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.5">Home base timezone — fixes flight times that come through wrong on Apple Calendar sync, especially while you\'re away from base.</div>');
-    parts.push('<select onchange="haptic(\'selection\');setBaseTimezone(this.value)" style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:13px;margin-bottom:12px">');
-    TZ_OPTIONS.forEach(([val, label]) => {
-      parts.push('<option value="'+val+'"'+(ST.baseTimezone===val?' selected':'')+'>'+label+'</option>');
-    });
-    parts.push('</select>');
     // BUG FIX: ST.calendarEvents now always reflects the true raw event
     // count (see classifyCalendarEvents in app.js) even when AI
     // classification specifically failed — so this length check alone is

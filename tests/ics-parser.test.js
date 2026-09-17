@@ -75,6 +75,14 @@ function loadAppJS() {
   const appJsPath = path.join(__dirname, '..', 'app.js');
   const code = fs.readFileSync(appJsPath, 'utf-8');
   vm.runInContext(code, context, { filename: 'app.js' });
+  // app.js declares ST with `const`, which (unlike a function declaration
+  // or `var`) does NOT become a property of the vm context's global object
+  // — it only lives in the script's internal lexical scope. Function
+  // declarations like parseFlightScheduleICS/applyProfileToState already
+  // attach themselves automatically and are reachable as context.<name>;
+  // this one extra statement is only needed to reach the `const ST` state
+  // object itself from outside the sandbox for test setup/assertions.
+  vm.runInContext('this.ST = ST;', context);
   return context;
 }
 
@@ -210,6 +218,79 @@ test('Event missing SUMMARY is filtered out entirely rather than producing a bro
 test('Empty/null input returns an empty array rather than throwing', () => {
   assertEqual(parseFlightScheduleICS('').length, 0, 'empty string');
   assertEqual(parseFlightScheduleICS(null).length, 0, 'null');
+});
+
+console.log('\nHome base timezone correction (descriptionLocalTimes):');
+test('ST.baseTimezone unset ("auto") keeps the old device-local interpretation', () => {
+  // Regression guard: this must keep matching the existing tests above,
+  // which all run with ctx.ST.baseTimezone left at its default ('auto').
+  assertEqual(ctx.ST.baseTimezone, 'auto', 'baseTimezone default');
+  const ics = wrapEvent({
+    uid: 'tz-1', summary: 'Flight 5001',
+    description: 'Time: 2026-07-31T13:39:00 - 2026-07-31T16:16:00',
+    dtstart: '20260731T183900Z', dtend: '20260731T211600Z',
+  });
+  const events = parseFlightScheduleICS(ics);
+  // new Date(2026,6,31,13,39,0) parsed by THIS process's own local timezone —
+  // exactly the same construction the parser itself falls back to, so this
+  // is self-consistent regardless of what timezone the test runner is in.
+  assertEqual(events[0].start, new Date(2026,6,31,13,39,0).toISOString(), 'device-local start, unset baseTimezone');
+});
+test('ST.baseTimezone set to a fixed zone converts the station-local wall clock correctly', () => {
+  ctx.ST.baseTimezone = 'America/New_York';
+  try {
+    const ics = wrapEvent({
+      uid: 'tz-2', summary: 'Flight 5002',
+      description: 'Time: 2026-07-31T13:39:00 - 2026-07-31T16:16:00',
+      dtstart: '20260731T183900Z', dtend: '20260731T211600Z',
+    });
+    const events = parseFlightScheduleICS(ics);
+    // 2026-07-31 is EDT (UTC-4) — 13:39 Eastern is 17:39 UTC, not whatever
+    // the test runner's own local timezone would have produced.
+    assertEqual(events[0].start, '2026-07-31T17:39:00.000Z', 'Eastern (EDT) start converted to true UTC');
+    assertEqual(events[0].end,   '2026-07-31T20:16:00.000Z', 'Eastern (EDT) end converted to true UTC');
+  } finally {
+    ctx.ST.baseTimezone = 'auto'; // restore default for later tests
+  }
+});
+test('ST.baseTimezone set to a no-DST zone (Arizona) converts correctly year-round', () => {
+  ctx.ST.baseTimezone = 'America/Phoenix';
+  try {
+    const ics = wrapEvent({
+      uid: 'tz-3', summary: 'Flight 5003',
+      description: 'Time: 2026-01-15T09:00:00 - 2026-01-15T11:00:00',
+      dtstart: '20260115T140000Z', dtend: '20260115T160000Z',
+    });
+    const events = parseFlightScheduleICS(ics);
+    // Phoenix is UTC-7 year-round — 09:00 local is always 16:00 UTC.
+    assertEqual(events[0].start, '2026-01-15T16:00:00.000Z', 'Arizona start (winter, no DST)');
+  } finally {
+    ctx.ST.baseTimezone = 'auto';
+  }
+});
+
+console.log('\nCross-device calendar sync (applyProfileToState hydration):');
+test('applyProfileToState hydrates ST.calendarEvents from profile.calendarClassified', () => {
+  // BUG FIX regression guard: fcf-calendar-classify saves classified
+  // Apple-Calendar events server-side as profile.calendarClassified /
+  // profile.calendarFingerprint (see edge-functions/fcf-calendar-classify),
+  // but nothing read them back into ST on boot — so a device with no
+  // native EventKit access (the web app) could never see a phone's synced
+  // calendar at all, however successfully it had synced.
+  ctx.ST.calendarEvents = null;
+  ctx.ST.calendarFingerprint = null;
+  ctx.applyProfileToState({
+    calendarClassified: [{ id: 'e1', type: 'flight', start: '2026-07-31T17:39:00.000Z', end: '2026-07-31T20:16:00.000Z' }],
+    calendarFingerprint: 'abc123',
+  });
+  assertEqual(ctx.ST.calendarEvents.length, 1, 'calendarEvents hydrated');
+  assertEqual(ctx.ST.calendarEvents[0].id, 'e1', 'hydrated event id');
+  assertEqual(ctx.ST.calendarFingerprint, 'abc123', 'calendarFingerprint hydrated');
+});
+test('applyProfileToState leaves ST.calendarEvents alone when profile has none yet', () => {
+  ctx.ST.calendarEvents = null;
+  ctx.applyProfileToState({ sex: 'male' }); // profile with no calendar data at all
+  assertEqual(ctx.ST.calendarEvents, null, 'calendarEvents stays null, not overwritten with garbage');
 });
 
 console.log('\n' + '─'.repeat(50));

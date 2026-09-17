@@ -2870,16 +2870,49 @@ function applyDailyInputsRow(row) {
   };
 }
 
+function setDbStatus(mode) {
+  // mode: 'online' | 'local' | 'error'
+  const dot = document.getElementById('dbDot');
+  const lbl = document.getElementById('dbStatus');
+  if (!dot || !lbl) return;
+  if (mode === 'online') {
+    dot.classList.remove('off');
+    lbl.textContent = 'ONLINE';
+    lbl.style.color = 'var(--green)';
+  } else if (mode === 'error') {
+    dot.classList.add('off');
+    lbl.textContent = 'ERROR';
+    lbl.style.color = 'var(--amber)';
+  } else {
+    dot.classList.add('off');
+    lbl.textContent = 'LOCAL';
+    lbl.style.color = 'var(--muted)';
+  }
+}
+
 async function checkDB() {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    setDbStatus('local');
+    return;
+  }
+  if (!ST.user?.id) {
+    setDbStatus('local');
+    return;
+  }
   try {
-    if (!ST.user?.id) return;
     const { error } = await SB.from('user_profiles')
       .select('user_id')
       .eq('user_id', ST.user.id)
       .maybeSingle();
-    if (error) console.warn('checkDB query issue:', error.message);
+    if (error) {
+      console.warn('checkDB query issue:', error.message);
+      setDbStatus('error');
+      return;
+    }
+    setDbStatus('online');
   } catch (e) {
     console.warn('checkDB exception:', e);
+    setDbStatus('error');
   }
 }
 
@@ -3779,6 +3812,7 @@ async function refreshOnReconnect() {
   renderPage();
 }
 window.addEventListener('online', () => { refreshOnReconnect(); });
+window.addEventListener('offline', () => setDbStatus('local'));
 
 // Resync all active timers the instant the app returns to the foreground.
 // iOS throttles/suspends setInterval while backgrounded, so on resume we

@@ -92,13 +92,6 @@ async function loadSubscription() {
 }
 
 
-
-// ─── SUPABASE ─────────────────────────────────────────────────────────────────
-const SB = supabase.createClient(
-  'https://dnxkydxbyihgsictbzjz.supabase.co',
-  SB_ANON_KEY
-);
-
 // ─── APP STATE ────────────────────────────────────────────────────────────────
 const ST = {
   authed: false,

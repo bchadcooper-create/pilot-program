@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: v5.42.0 / 20260909
+ * Version/build: fcf-v5.42.3 / 20260916_5
  */
 
-const FCF_VERSION = 'v5.42.0';
-const FCF_BUILD   = '20260909';
+const FCF_VERSION = 'fcf-v5.42.3';
+const FCF_BUILD   = '20260916_5';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
 const OURA_CLIENT_ID   = 'deb737ed-9343-407a-b993-9907bc101800';

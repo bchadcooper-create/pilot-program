@@ -99,6 +99,17 @@ const ST = {
   subscription: null,
   trackNutrition: true,   // meals, macros and the Fuel card
   trackHydration: true,   // water logging and the hydration gate
+  // Disengagement / re-engagement nudges for the two toggles above — see
+  // computeTrackingNudges(). *DisabledAt is set whenever tracking gets
+  // turned off (by any means), cleared when turned back on; *NudgeDismissedAt
+  // suppresses re-showing a dismissed nudge for a while rather than
+  // re-nagging every single day.
+  nutritionTrackingDisabledAt: null,
+  hydrationTrackingDisabledAt: null,
+  nutritionNudgeDismissedAt: null,
+  hydrationNudgeDismissedAt: null,
+  nutritionNudge: null,   // 'disable' | 'reengage' | null, computed once at boot
+  hydrationNudge: null,
   // Which schedule source wins when both Apple Calendar sync and an
   // uploaded .ics are present — 'auto' | 'calendar' | 'ics'. Added after
   // discovering a real timing bug upstream in a third-party crew-schedule-
@@ -2887,6 +2898,12 @@ function applyProfileToState(profile) {
   if (typeof profile.trackNutrition === 'boolean') ST.trackNutrition = profile.trackNutrition;
   if (typeof profile.trackHydration === 'boolean') ST.trackHydration = profile.trackHydration;
   if (profile.nutritionGoals)               ST.nutritionGoals = profile.nutritionGoals;
+  // Re-engagement / disengagement nudges for nutrition + hydration
+  // tracking — see computeTrackingNudges().
+  if (profile.nutritionTrackingDisabledAt)   ST.nutritionTrackingDisabledAt = profile.nutritionTrackingDisabledAt;
+  if (profile.hydrationTrackingDisabledAt)   ST.hydrationTrackingDisabledAt = profile.hydrationTrackingDisabledAt;
+  if (profile.nutritionNudgeDismissedAt)     ST.nutritionNudgeDismissedAt = profile.nutritionNudgeDismissedAt;
+  if (profile.hydrationNudgeDismissedAt)     ST.hydrationNudgeDismissedAt = profile.hydrationNudgeDismissedAt;
   // BUG FIX (reported: "uploaded my calendar on my phone, but it doesn't
   // reflect on the webapp"). Confirmed real and confirmed where: the phone
   // syncs Apple Calendar through native EventKit, sends the raw events to
@@ -3051,6 +3068,11 @@ async function bootAppInner() {
   }
   awardBadges();
   maybeShowInstallPrompt();
+  // Non-blocking — a couple of DB queries that shouldn't delay boot, and
+  // the nudge (if any) just needs to be in place by the time the Today
+  // page actually renders, which a re-render call here covers.
+  computeTrackingNudges().then(() => { if (ST.disclaimerAccepted) renderPage(); })
+    .catch(e => console.warn('computeTrackingNudges failed:', e));
   // Only paint install prompt / tab content after explicit disclaimer accept
   if (ST.showInstallPrompt && ST.disclaimerAccepted) renderPage();
   restoreDailyInputs();
@@ -3617,12 +3639,86 @@ async function performAccountDeletion() {
 // Logged data is never deleted by toggling; switching back restores it.
 async function setTrackingPref(key, on) {
   ST[key] = !!on;
+  // BUG FIX / feature: record when tracking gets turned off (any way —
+  // this toggle, the nudge card below, wherever) so a 30-day re-engagement
+  // nudge can fire later, and clear it if turned back on so an old
+  // disable timestamp doesn't linger and immediately re-trigger reengage.
+  const disabledAtKey = key === 'trackNutrition' ? 'nutritionTrackingDisabledAt' : 'hydrationTrackingDisabledAt';
+  const nudgeKey = key === 'trackNutrition' ? 'nutritionNudge' : 'hydrationNudge';
+  ST[disabledAtKey] = on ? null : new Date().toISOString();
+  ST[nudgeKey] = null; // whichever nudge was showing no longer applies either way
   renderPage(); // optimistic update — toggle appears instant
   try {
     const profile = (await dbGetProfile()) || {};
     profile[key] = !!on;
+    profile[disabledAtKey] = ST[disabledAtKey];
     await dbSetProfile(profile);
   } catch(e) { showBigToast('Saved on this device, but could not sync.', 'warn'); }
+}
+
+// Checks whether nutrition/hydration tracking has gone quiet enough to
+// offer turning it off, or has been off long enough to offer trying it
+// again. Run once at boot (see bootAppInner) rather than on every
+// render — this needs a couple of DB queries, and the answer doesn't
+// change meaningfully within a single session.
+//
+// "Fewer than 2 of the last 7 days" rather than "3-4 CONSECUTIVE days"
+// deliberately — a pilot on an ordinary multi-day trip might reasonably
+// skip logging for exactly that stretch without having disengaged from
+// the feature at all; a trailing 7-day window is much more forgiving of
+// that and a better signal of genuine disuse.
+async function computeTrackingNudges() {
+  if (!ST.user) return;
+  const now = Date.now();
+  const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+  const suppressMs = 7 * 24 * 60 * 60 * 1000; // don't re-show a dismissed nudge for a week
+
+  const dismissedRecently = (iso) => iso && (now - new Date(iso).getTime()) < suppressMs;
+
+  // Nutrition
+  try {
+    if (ST.trackNutrition) {
+      if (!dismissedRecently(ST.nutritionNudgeDismissedAt)) {
+        const { data } = await SB.from('meal_logs').select('logged_at')
+          .eq('user_id', ST.user.id).gte('logged_at', sevenDaysAgo);
+        const distinctDays = new Set((data || []).map(r => localDateStr(new Date(r.logged_at)))).size;
+        if (distinctDays < 2) ST.nutritionNudge = 'disable';
+      }
+    } else if (ST.nutritionTrackingDisabledAt &&
+               (now - new Date(ST.nutritionTrackingDisabledAt).getTime()) > thirtyDaysMs &&
+               !dismissedRecently(ST.nutritionNudgeDismissedAt)) {
+      ST.nutritionNudge = 'reengage';
+    }
+  } catch(e) { /* non-fatal — just skip the nudge this session */ }
+
+  // Hydration — same logic, keyed off daily_inputs.water_in instead of meal_logs.
+  try {
+    if (ST.trackHydration) {
+      if (!dismissedRecently(ST.hydrationNudgeDismissedAt)) {
+        const { data } = await SB.from('daily_inputs').select('date, water_in')
+          .eq('user_id', ST.user.id).gte('date', sevenDaysAgo.slice(0, 10)).gt('water_in', 0);
+        if ((data || []).length < 2) ST.hydrationNudge = 'disable';
+      }
+    } else if (ST.hydrationTrackingDisabledAt &&
+               (now - new Date(ST.hydrationTrackingDisabledAt).getTime()) > thirtyDaysMs &&
+               !dismissedRecently(ST.hydrationNudgeDismissedAt)) {
+      ST.hydrationNudge = 'reengage';
+    }
+  } catch(e) { /* non-fatal */ }
+}
+
+async function dismissTrackingNudge(type) {
+  const nudgeKey = type === 'nutrition' ? 'nutritionNudge' : 'hydrationNudge';
+  const dismissedKey = type === 'nutrition' ? 'nutritionNudgeDismissedAt' : 'hydrationNudgeDismissedAt';
+  ST[nudgeKey] = null;
+  ST[dismissedKey] = new Date().toISOString();
+  renderPage();
+  try {
+    const profile = (await dbGetProfile()) || {};
+    profile[dismissedKey] = ST[dismissedKey];
+    await dbSetProfile(profile);
+  } catch(e) { /* best-effort — worst case it re-shows once more than intended */ }
 }
 
 async function setScheduleSource(value) {
@@ -11488,6 +11584,31 @@ function renderToday(p) {
       parts.push('<div class="card mb12"><div class="fb" style="align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:600;margin-bottom:4px">📅 No flight schedule</div><div style="font-size:11px;color:var(--muted);line-height:1.5">Upload your crew schedule and this briefing gets a lot more specific — layovers, duty-day length, real windows to train.</div></div></div><button class="btn-outline mt8" onclick="switchTab(\'data\')">Upload Schedule</button></div>');
     }
   }
+
+  // Tracking disengagement / re-engagement nudges — see
+  // computeTrackingNudges() for the trigger logic. Same card style as
+  // the schedule ones above; a "Not now" ghost button dismisses without
+  // changing the toggle, matching this app's existing secondary-action
+  // convention rather than introducing a new "X" close-icon pattern.
+  [['nutrition', '🍽️', 'food'], ['hydration', '💧', 'water']].forEach(([type, icon, noun]) => {
+    const nudge = type === 'nutrition' ? ST.nutritionNudge : ST.hydrationNudge;
+    if (!nudge) return;
+    const trackKey = type === 'nutrition' ? 'trackNutrition' : 'trackHydration';
+    const title = nudge === 'disable'
+      ? `${icon} Still want to track ${noun}?`
+      : `${icon} Give ${noun} logging another shot?`;
+    const body = nudge === 'disable'
+      ? `Looks like ${noun} logging has gone quiet the last week. No pressure — you can turn it off if it's not useful right now.`
+      : `It's been a while since you turned off ${noun} tracking. Worth trying again, or happy to leave it off.`;
+    const actionLabel = nudge === 'disable' ? 'Turn off tracking' : 'Try it again';
+    const actionOnClick = `haptic('light');setTrackingPref('${trackKey}',${nudge === 'disable' ? 'false' : 'true'})`;
+    parts.push('<div class="card mb12"><div style="font-size:13px;font-weight:600;margin-bottom:4px">'+title+'</div>' +
+      '<div style="font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:10px">'+body+'</div>' +
+      '<div class="fb" style="gap:8px">' +
+      '<button class="btn-outline" style="flex:1" onclick="'+actionOnClick+'">'+actionLabel+'</button>' +
+      '<button class="btn-ghost" onclick="haptic(\'light\');dismissTrackingNudge(\''+type+'\')">Not now</button>' +
+      '</div></div>');
+  });
 
   // BUG FIX (reported: two separate "TODAY'S SCHEDULE" cards appearing at
   // once, showing different — and in one case duplicated — data). Root

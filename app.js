@@ -2928,11 +2928,10 @@ async function bootAppInner() {
     if (!ST.sessionCache) ST.sessionCache = [];
     ST.sessionCache.push(ST.lastSession);
   }
-awardBadges();
+  awardBadges();
   maybeShowInstallPrompt();
   // Only paint install prompt / tab content after explicit disclaimer accept
   if (ST.showInstallPrompt && ST.disclaimerAccepted) renderPage();
-  }
   restoreDailyInputs();
   applyDailyInputsRow(await dbGetDailyInputs().catch(() => null));
   applyScheduleEnvironmentSuggestion();

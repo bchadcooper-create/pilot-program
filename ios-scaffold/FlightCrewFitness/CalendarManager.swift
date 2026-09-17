@@ -193,6 +193,23 @@ class CalendarManager {
             .flatMap { $0 == "auto" ? nil : TimeZone(identifier: $0) }
             ?? TimeZone.current
         var correctedTimes: [ObjectIdentifier: (Date, Date)] = [:]
+        // BUG FIX (real Xcode build failure, confirmed via an actual
+        // compile — not something static review would have caught):
+        // EKEvent.startDate/endDate are declared as Date! (implicitly
+        // unwrapped optional) in EventKit's Swift bridging. Placed
+        // directly into a tuple literal on the right side of ??, Swift's
+        // type inference doesn't reliably resolve that to the same
+        // non-optional (Date, Date) that correctedTimes' dictionary
+        // value type declares — the whole ?? expression ends up typed
+        // as (Date?, Date?) instead, which formatter.string(from:)
+        // below can't accept without unwrapping. Coalescing each field
+        // individually (ev.startDate ?? Date()) forces an unambiguous,
+        // genuinely non-optional Date before the tuple is even built,
+        // rather than leaving Swift to infer the tuple's optionality
+        // from its unwrapped-optional source values. The Date()
+        // fallback should never actually be reached in practice — a
+        // real EKEvent from the store always has both dates — this
+        // exists purely to satisfy the type system's worst case.
         var correctedCount = 0
         for ev in ekEvents where looksLikeCrewScheduleEvent(ev.title) {
             let correctedStart = reinterpretAsLocal(ev.startDate, in: reinterpretationZone)
@@ -226,7 +243,7 @@ class CalendarManager {
         var seenKeys = Set<String>()
         var dedupedCount = 0
         let uniqueEkEvents = ekEvents.filter { ev in
-            let (s, e) = correctedTimes[ObjectIdentifier(ev)] ?? (ev.startDate, ev.endDate)
+            let (s, e) = correctedTimes[ObjectIdentifier(ev)] ?? (ev.startDate ?? Date(), ev.endDate ?? Date())
             let key = (ev.title ?? "") + "|" + formatter.string(from: s) + "|" + formatter.string(from: e)
             if seenKeys.contains(key) {
                 dedupedCount += 1
@@ -240,7 +257,7 @@ class CalendarManager {
         let events: [[String: Any]] = uniqueEkEvents.map { ev in
             let calName = ev.calendar?.title ?? "Unknown"
             calendarNames.insert(calName)
-            let (s, e) = correctedTimes[ObjectIdentifier(ev)] ?? (ev.startDate, ev.endDate)
+            let (s, e) = correctedTimes[ObjectIdentifier(ev)] ?? (ev.startDate ?? Date(), ev.endDate ?? Date())
             var dict: [String: Any] = [
                 "id":       ev.eventIdentifier ?? UUID().uuidString,
                 "title":    ev.title ?? "",

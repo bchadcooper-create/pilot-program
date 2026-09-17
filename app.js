@@ -12859,7 +12859,8 @@ function downloadFlightScheduleICS() {
   const blob = new Blob([ST.flightScheduleRaw], { type: 'text/calendar' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'my_flight_schedule.ics';
+  a.href = url;
+  a.download = 'my_flight_schedule.ics';
   a.click();
   URL.revokeObjectURL(url);
 }

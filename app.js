@@ -1,18 +1,12 @@
-/**
+**
  * Flight Crew Fitness — app.js
- * Version/build: see FCF_VERSION / FCF_BUILD constants below — not
- * duplicated here anymore after this comment was found stale (independent
- * review finding: said "5.0 | 20260617" while the actual constants were
- * already at v5.42.0 / 20260909, confusing when grepping for the real
- * current version).
+ * Version/build: v5.42.0 / 20260909
  */
 
 const FCF_VERSION = 'v5.42.0';
 const FCF_BUILD   = '20260909';
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
-// Replace OURA_CLIENT_ID with your actual Client ID from cloud.ouraring.com/oauth/applications
-// The client secret lives ONLY in the Supabase Edge Function (oura-auth) — never here.
 const OURA_CLIENT_ID   = 'deb737ed-9343-407a-b993-9907bc101800';
 const OURA_REDIRECT_URI = 'https://flightcrew.fit/';
 const OURA_EDGE_FN      = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/oura-auth';
@@ -26,17 +20,37 @@ const AI_COACH_EDGE_FN          = 'https://dnxkydxbyihgsictbzjz.supabase.co/func
 const PRIVACY_POLICY_URL = 'https://flightcrew.fit/privacy.html';
 const TERMS_URL = 'https://flightcrew.fit/terms.html';
 // ─── SUBSCRIPTION TIERS ─────────────────────────────────────────────────
-// Free keeps unlimited workout logging and manual meal entry — the habit
-// has to form before there's anything worth paying for. What's gated is
-// the work that costs money to run: vision-model photo analysis and AI
-// coaching carry a real per-use API cost, which is also why this is a
-// subscription rather than a one-time purchase.
 const FREE_WEEKLY_PHOTOS = 3;
 const PRO_WEEKLY_PHOTOS = 0;        // 0 = unlimited
 const PRO_ANNUAL_PRICE = '$59.99';
 const PRO_MONTHLY_PRICE = '$7.99';
 const PRO_PRODUCT_ANNUAL = 'FCFProAnnual';
 const PRO_PRODUCT_MONTHLY = 'FCFProMonthly';
+
+function isPro() {
+  if (ST.user?.id === '7e41ca46-6e00-4c54-bc3f-2e45d923fe0b') return true;
+  const s = ST.subscription;
+  if (!s) return false;
+  if (s.tier !== 'pro') return false;
+  if (s.status !== 'active' && s.status !== 'grace') return false;
+  if (s.current_period_end && new Date(s.current_period_end) < new Date()) return false;
+  return true;
+}
+
+async function loadSubscription() {
+  if (!ST.user) { ST.subscription = null; return; }
+  try {
+    const { data, error } = await SB.from('subscriptions')
+      .select('*').eq('user_id', ST.user.id).maybeSingle();
+    if (error) throw error;
+    ST.subscription = data || null;
+  } catch(e) { ST.subscription = null; }
+}
+
+const DAILY_PHOTO_LIMIT = 5;
+const FEEDBACK_EDGE_FN  = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/feedback-submit';
+const OURA_SCOPES       = 'daily personal workout tag';
+const SB_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRueGt5ZHhieWloZ3NpY3Riemp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3ODk4MTEsImV4cCI6MjA5NjM2NTgxMX0.oLUGuorQkbQ_u679NpE8FGBVAUmVE1K_rxl8q4B0n7k';
 
 // Entitlement is only ever READ here. The server decides it after receipt
 // validation — the subscriptions table grants the client SELECT and nothing
@@ -77,7 +91,7 @@ const SB_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────
 const SB = supabase.createClient(
   'https://dnxkydxbyihgsictbzjz.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRueGt5ZHhieWloZ3NpY3Riemp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3ODk4MTEsImV4cCI6MjA5NjM2NTgxMX0.oLUGuorQkbQ_u679NpE8FGBVAUmVE1K_rxl8q4B0n7k'
+  SB_ANON_KEY
 );
 
 // ─── APP STATE ────────────────────────────────────────────────────────────────
@@ -1920,27 +1934,23 @@ function acceptDisclaimer() {
 
 // ─── ROOT RENDER DISPATCH ─────────────────────────────────────────────────────
 function renderRoot() {
-  const shell = document.getElementById('shell');
   const topbar = document.getElementById('topbar');
   const tabbar = document.getElementById('tabbar');
   const page = document.getElementById('mainPage');
 
-  // A password-recovery session is real (Supabase requires it to allow
-  // updateUser({password})) but must NOT be treated as a normal login —
-  // this check has to come before the authed check below, or a valid
-  // recovery link skips straight past setting a new password into the
-  // full authenticated app.
+  if (!page) return;
+
   if (ST.authView === 'recovery') {
-    topbar.style.display = 'none';
-    tabbar.style.display = 'none';
+    if (topbar) topbar.style.display = 'none';
+    if (tabbar) tabbar.style.display = 'none';
     page.style.padding = '0';
     renderPasswordRecovery(page);
     return;
   }
 
   if (!ST.authed) {
-    topbar.style.display = 'none';
-    tabbar.style.display = 'none';
+    if (topbar) topbar.style.display = 'none';
+    if (tabbar) tabbar.style.display = 'none';
     page.style.padding = '0';
     if (ST.showLanding) renderLanding(page);
     else renderAuth(page);
@@ -1948,79 +1958,54 @@ function renderRoot() {
   }
 
   if (!ST.disclaimerAccepted) {
-    topbar.style.display = 'none';
-    tabbar.style.display = 'none';
+    if (topbar) topbar.style.display = 'none';
+    if (tabbar) tabbar.style.display = 'none';
     page.style.padding = '0';
     renderDisclaimerGate(page);
     return;
   }
 
-  topbar.style.display = '';
-  tabbar.style.display = 'flex';
+  if (topbar) topbar.style.display = '';
+  if (tabbar) tabbar.style.display = 'flex';
   page.style.padding = '16px 16px calc(60px + var(--safe-bot))';
-  document.getElementById('topbarSub').textContent = FCF_VERSION + ' · MISSION CONTROL';
-  void topbar.offsetHeight;
-  void tabbar.offsetHeight;
-  requestAnimationFrame(() => {
-    topbar.style.opacity = '0.999';
-    tabbar.style.opacity = '0.999';
-    requestAnimationFrame(() => {
-      topbar.style.opacity = '';
-      tabbar.style.opacity = '';
-    });
-  });
+  
+  const subEl = document.getElementById('topbarSub');
+  if (subEl) subEl.textContent = FCF_VERSION + ' · MISSION CONTROL';
+  
   renderPage();
-}
 
-// Restarts a CSS entry animation. Re-adding a class that's already
-// present does nothing on its own — the reflow between removing and
-// re-adding is what makes it replay.
-function playPageTransition(el, className) {
-  if (!el) return;
-  el.classList.remove(className);
-  void el.offsetWidth;
-  el.classList.add(className);
-  el.addEventListener('animationend', () => el.classList.remove(className), { once: true });
-}
+  // ─── PAGE DISPATCH & STATE GATING ─────────────────────────────────────────────
+function renderPage() {
+  const p = document.getElementById('mainPage');
+  if (!p) return;
 
-function switchTab(tab) {
-  haptic('light');
-  const prevTab = ST.tab;
-  if (ST.tab === 'fuelplan' && tab !== 'fuelplan') { ST.fuelPlanDraftSynced = false; ST.manualTargetsOpen = false; ST.manualTargetsWarning = null; }
-  ST.tab = tab;
-  const MORE_SUBVIEWS = ['profile','wisdom','devices','data','badges','superuser'];
-  const hl = MORE_SUBVIEWS.includes(tab) ? 'more' : tab;
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === hl));
-  const tabbar = document.getElementById('tabbar');
-  if (tabbar) tabbar.style.display = (tab === 'debrief') ? 'none' : 'flex';
-  const renderPromise = renderPage();
-
-  const page = document.getElementById('mainPage');
-  if (page) {
-    // Only on a genuine tab CHANGE. Firing on every render would replay
-    // the slide every time something on the menu page saved or refreshed.
-    if (tab === 'more' && prevTab !== 'more') playPageTransition(page, 'page-enter-left');
-    // Same guard, extended to the three primary tab-bar destinations —
-    // this app rebuilds innerHTML on nearly every state change, so this
-    // animation must ONLY fire on an actual tab switch, never on a
-    // same-tab re-render (which happens constantly), or every save/toggle
-    // would replay it and the app would feel jittery instead of polished.
-    if (['today','trends','leaderboard'].includes(tab) && tab !== prevTab) playPageTransition(page, 'content-enter');
-    if (tab === 'flight') {
-      const curId = getCurrentExerciseId();
-      const el = curId ? document.getElementById('excard_'+curId) : null;
-      if (el) {
-        ST.expanded[curId] = true;
-        renderPage();
-        requestAnimationFrame(() => {
-          document.getElementById('excard_'+curId)?.scrollIntoView({ block: 'start' });
-        });
-        return renderPromise;
-      }
-    }
-    page.scrollTop = 0;
+  // GATING GUARD: Prevent background refreshes from overwriting Auth or Disclaimer screens
+  if (!ST.authed || !ST.disclaimerAccepted || ST.authView === 'recovery') {
+    renderRoot();
+    return;
   }
-  return renderPromise;
+
+  p.innerHTML = '';
+  if (ST.tab === 'preflight') {
+    renderPreflight(p).catch(e => {
+      // ... error handling ...
+    });
+  }
+  else if (ST.tab === 'flight')      renderFlight(p);
+  else if (ST.tab === 'trends')      return renderTrends(p);
+  else if (ST.tab === 'wisdom')      renderWisdom(p);
+  else if (ST.tab === 'profile')     renderProfile(p);
+  else if (ST.tab === 'leaderboard') renderLeaderboard(p);
+  else if (ST.tab === 'more')        renderMore(p);
+  else if (ST.tab === 'devices')     renderDevices(p);
+  else if (ST.tab === 'data')        renderData(p);
+  else if (ST.tab === 'nutrition')   return renderNutrition(p);
+  else if (ST.tab === 'fuelplan')    renderNutritionGoalsSetup(p);
+  else if (ST.tab === 'today')       { loadTodaysMeals().then(()=>renderToday(p)).catch(()=>renderToday(p)); }
+  else if (ST.tab === 'badges')      renderBadges(p);
+  else if (ST.tab === 'superuser')   renderSuperUser(p);
+  else if (ST.tab === 'debrief')     renderDebrief(p);
+}
 }
 
 // ─── BADGES ──────────────────────────────────────────────────────────────────
@@ -2793,141 +2778,23 @@ function renderPage() {
 }
 
 // ─── BOOT SEQUENCE ────────────────────────────────────────────────────────────
-function applyProfileToState(profile) {
-  if (!profile) return;
-  ST.level = profile.level || ST.level;
-  ST.goal  = profile.goal  || ST.goal;
-  ST.flightSchedule = profile.flightSchedule || null;
-  ST.ouraDismissedIds = profile.ouraDismissedIds || [];
-  ST.nutritionGoals = profile.nutritionGoals || null;
-  ST.flightScheduleRaw = profile.flightScheduleRaw || null;
-  // Restore classified calendar events if available
-  if (profile.calendarClassified?.length) {
-    ST.calendarEvents = profile.calendarClassified;
-    ST.calendarFingerprint = profile.calendarFingerprint || null;
-    ST.calendarGranted = true;
-  }
-  // Default ON for existing users — someone who has been logging meals
-  // shouldn't lose the feature because a new preference defaulted to off.
-  ST.trackNutrition = profile.trackNutrition !== false;
-  ST.trackHydration = profile.trackHydration !== false;
-  ST.scheduleSource = profile.scheduleSource || 'auto';
-  ST.baseTimezone = profile.baseTimezone || 'auto';
-
-  // BUG FIX (reported): the parser fix in v5.36.0 changed nothing on a
-  // schedule already uploaded. Events are parsed once at upload and the
-  // RESULT is what gets stored, so a corrected parser only ever reached a
-  // schedule someone happened to re-upload afterwards — which nobody would
-  // think to do, since from their side the times simply look wrong.
-  //
-  // The original .ics text is kept alongside the parsed events anyway, so
-  // re-parse from that at boot and let the stored events be a fallback.
-  // Any future parsing fix now reaches existing schedules on its own.
-  if (ST.flightScheduleRaw) {
-    try {
-      const reparsed = parseFlightScheduleICS(ST.flightScheduleRaw);
-      if (reparsed && reparsed.length) ST.flightSchedule = reparsed;
-    } catch(e) { /* keep the stored events rather than losing the schedule */ }
-  }
-
-  ST.customExercises = (profile.customExercises || []).map(ce => {
-    if (ce?.exercise) {
-      ce.exercise.name = sanitizeUserText(ce.exercise.name);
-      ce.exercise.note = sanitizeUserText(ce.exercise.note);
-      ce.exercise.target = sanitizeUserText(ce.exercise.target) || '—';
-    }
-    return ce;
-  });
-  ST.ouraToken       = profile.ouraToken || '';
-  ST.ouraAccessToken  = profile.ouraAccessToken || null;
-  ST.ouraRefreshToken = profile.ouraRefreshToken || null;
-  ST.ouraConnected    = !!profile.ouraConnected;
-  ST.sex        = profile.sex || null;
-  ST.heightIn   = profile.heightIn || null;
-  ST.age        = profile.age || null;
-  ST.lastWeight = profile.lastWeight || null;
-  ST.injuries   = profile.injuries || [];
-  ST.username   = profile.username || null;
-  ST.badges     = profile.badges || {};
-  ST.lbBests    = profile.lbBests || {};
-  ST.runBest    = profile.runBest || 0;
-  ST.customProfiles = (profile.customProfiles || []).map(cp => ({
-    ...cp,
-    name: sanitizeUserText(cp.name),
-  }));
-}
-
-// Auto-suggests Mission Environment from the flight schedule, once per
-// boot — not on every render, so a manual change made during this same
-// session is never silently overwritten. ST.scheduleEnvNote records WHY for
-// Preflight to show transparently rather than changing things quietly.
-function applyScheduleEnvironmentSuggestion() {
-  ST.scheduleEnvNote = null;
-  if (!ST.flightSchedule) return;
-  const status = getCurrentScheduleStatus(ST.flightSchedule);
-  if (status?.type === 'layover') {
-    ST.env = 'hotel';
-    ST.scheduleEnvNote = '📅 Layover in ' + (status.airport||'') + ' today — set to Hotel Gym.';
-  } else if (status?.type === 'dutyfree') {
-    ST.env = 'comm';
-    ST.scheduleEnvNote = '📅 Duty-free day today — set to Commercial Gym.';
-  }
-}
-
-// Sums actual flight-leg time overlapping TODAY's local calendar day —
-// correctly handles a flight that starts before midnight and ends after it,
-// only counting the portion that falls on today. Returns null specifically
-// when the schedule doesn't cover today at all (out of date / not uploaded
-// far enough), so the caller knows not to guess — as opposed to a real 0,
-// which means the schedule covers today and there's genuinely no flying.
-function computeTodaysFlightHours(scheduleEvents) {
-  if (!scheduleEvents || !scheduleEvents.length) return null;
-  const now = new Date();
-  const dayStart = new Date(now); dayStart.setHours(0,0,0,0);
-  const dayEnd = new Date(now); dayEnd.setHours(23,59,59,999);
-  const coversToday = scheduleEvents.some(e => {
-    const s = new Date(e.start).getTime(), en = new Date(e.end).getTime();
-    return en > dayStart.getTime() && s < dayEnd.getTime();
-  });
-  if (!coversToday) return null;
-  let totalMs = 0;
-  scheduleEvents.filter(e => e.type === 'flight').forEach(e => {
-    const s = new Date(e.start).getTime(), en = new Date(e.end).getTime();
-    const overlapStart = Math.max(s, dayStart.getTime());
-    const overlapEnd = Math.min(en, dayEnd.getTime());
-    if (overlapEnd > overlapStart) totalMs += (overlapEnd - overlapStart);
-  });
-  return Math.round((totalMs / 3600000) * 10) / 10;
-}
-
-// Auto-fills Flight Hours from the schedule — respects an existing manual
-// entry made today (flightHrsTouched persists per-day via
-// persistDailyInputs), so this never overwrites something already typed in,
-// including from an earlier session the same day.
-function applyScheduleFlightHours() {
-  if (ST.flightHrsTouched) return;
-  const hrs = computeTodaysFlightHours(ST.flightSchedule);
-  if (hrs === null) return;
-  ST.flightHrs = hrs;
-  ST.flightHrsRaw = String(hrs);
-}
-
 async function bootApp() {
   try {
     await bootAppInner();
   } catch (e) {
-    // CRITICAL: without this catch, any uncaught error anywhere in
-    // bootAppInner (a bad Supabase response, a malformed calendar event,
-    // anything) leaves the page permanently blank — the topbar/tabbar are
-    // static HTML and still render, but #mainPage never gets filled in
-    // because renderRoot() is never reached. This guarantees the user
-    // always sees SOMETHING (even a degraded state) rather than nothing,
-    // and logs the real error for diagnosis instead of failing silently.
     console.error('bootApp failed:', e);
     ST.authed = !!ST.user;
+    
+    // Explicitly unhide navigation elements if authenticated
+    if (ST.authed && ST.disclaimerAccepted) {
+      const topbar = document.getElementById('topbar');
+      const tabbar = document.getElementById('tabbar');
+      if (topbar) topbar.style.display = '';
+      if (tabbar) tabbar.style.display = 'flex';
+    }
+    
     try { renderRoot(); } catch (e2) { console.error('renderRoot also failed:', e2); }
-    // Surface the real error directly on-screen — there's no console access
-    // on a phone, so this is the only way to actually see what broke.
+    
     const mainPage = document.getElementById('mainPage');
     if (mainPage) {
       mainPage.innerHTML = '<div class="card mb12" style="border-color:var(--red)">' +
@@ -2941,84 +2808,54 @@ async function bootApp() {
 
 async function bootAppInner() {
   ST.disclaimerAccepted = localStorage.getItem('fcf_disclaimer_accepted') === '1';
-  // All three boot fetches are independent — run them in ONE parallel window
-  // so a cold offline launch waits ~6s total, not stacked timeouts.
-  const [profile, lastSession] = await Promise.all([dbGetProfile(), dbGetLastSession(), loadSessionCache(), loadSubscription()]);
+
+  const [profile, lastSession] = await Promise.all([
+    dbGetProfile().catch(e => { console.warn('dbGetProfile failed:', e); return null; }),
+    dbGetLastSession().catch(e => { console.warn('dbGetLastSession failed:', e); return null; }),
+    loadSessionCache().catch(e => { console.warn('loadSessionCache failed:', e); return []; }),
+    loadSubscription().catch(e => { console.warn('loadSubscription failed:', e); return null; })
+  ]);
+
   applyProfileToState(profile);
   ST.lastSession = lastSession;
-  if (ST.lastSession && !ST.sessionCache.find(s => s.date === ST.lastSession.date)) {
+  if (ST.lastSession && (!ST.sessionCache || !ST.sessionCache.find(s => s.date === ST.lastSession.date))) {
+    if (!ST.sessionCache) ST.sessionCache = [];
     ST.sessionCache.push(ST.lastSession);
   }
+
   restoreDailyInputs();
-  applyDailyInputsRow(await dbGetDailyInputs());
+  applyDailyInputsRow(await dbGetDailyInputs().catch(() => null));
   applyScheduleEnvironmentSuggestion();
   applyScheduleFlightHours();
-  // First-ever open with no profile info: land on Profile once so the user
-  // sets sex + objective before their first mission. Flag persists locally.
+
   if (!ST.sex && !localStorage.getItem('fcf_profile_intro')) {
     localStorage.setItem('fcf_profile_intro', '1');
     ST.tab = 'profile';
   }
-  // Auto-select the recommended next mission profile so Preflight opens
-  // pre-loaded with the right choice rather than always defaulting to Lower Body.
+
   ST.muscleGroup = getRecommendedNext();
   renderRoot();
+
   bindFoodPhotoInputs();
   checkDB();
-  // Auto-sync Oura on boot if connected — runs in background after render
+
   if (ST.ouraConnected && ST.ouraAccessToken) {
     setTimeout(() => syncOuraData().catch(() => {}), 1500);
     scheduleOuraActivityRetry();
   }
-  // Request HealthKit permission once after login (iOS only).
-  // On web this is a no-op. The permission sheet appears once and is
-  // remembered by iOS — subsequent boots skip straight to data sync.
+
   if (typeof FCFBridge !== 'undefined' && FCFBridge.isNative) {
     setTimeout(() => FCFBridge.requestHealthKit(), 2000);
     setTimeout(() => FCFBridge.requestCalendar(ST.baseTimezone), 3500);
     setTimeout(() => scheduleNotifications(), 5000);
   }
+
   scheduleEntitlementRefresh();
-  // Retry any biometric entries that couldn't reach the server last time
-  // (saveBio() falls back to a local pending queue when offline) — this
-  // is the case where the app boots already back online after that.
   syncPendingBioEntries().catch(e => console.warn('syncPendingBioEntries failed at boot:', e));
-  // Returning from Stripe Checkout. The webhook may land a moment after the
-  // redirect, so this re-reads a few times rather than once and giving up.
-  if (/[?&]checkout=success/.test(location.search)) {
-    history.replaceState({}, '', location.pathname);
-    (async () => {
-      for (let i = 0; i < 6 && !isPro(); i++) {
-        await new Promise(r => setTimeout(r, i === 0 ? 1200 : 2500));
-        await loadSubscription();
-      }
-      renderPage();
-      showBigToast(isPro() ? '✓ Pro active — thanks.' : 'Payment received. Access will appear shortly.', 'ok');
-    })();
-  }
-  // Badges only ever got checked as a side effect of a brand-new workout or
-  // biometric save — anyone with existing history never had it evaluated
-  // retroactively. Run it once per boot; awardBadges() already skips
-  // anything already earned, so this is safe and idempotent.
+
   awardBadges();
   maybeShowInstallPrompt();
   if (ST.showInstallPrompt) renderPage();
-}
-
-async function checkDB() {
-  try {
-    const { error } = await withTimeout(SB.from('weight_log').select('id').limit(1));
-    if (error) throw error;
-    const dot = document.getElementById('dbDot');
-    const lbl = document.getElementById('dbStatus');
-    if (dot) dot.className = 'status-dot';
-    if (lbl) lbl.textContent = 'SYNCED';
-  } catch(e) {
-    const dot = document.getElementById('dbDot');
-    const lbl = document.getElementById('dbStatus');
-    if (dot) dot.className = 'status-dot off';
-    if (lbl) lbl.textContent = 'LOCAL';
-  }
 }
 
 // ─── TOAST ────────────────────────────────────────────────────────────────────

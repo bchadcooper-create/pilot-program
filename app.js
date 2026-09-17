@@ -2930,10 +2930,8 @@ async function bootAppInner() {
   }
 awardBadges();
   maybeShowInstallPrompt();
-  
-  // Guard the boot-end re-render
-  if (ST.showInstallPrompt && ST.disclaimerAccepted) {
-    renderPage();
+  // Only paint install prompt / tab content after explicit disclaimer accept
+  if (ST.showInstallPrompt && ST.disclaimerAccepted) renderPage();
   }
   restoreDailyInputs();
   applyDailyInputsRow(await dbGetDailyInputs().catch(() => null));

@@ -1716,8 +1716,8 @@ function renderLanding(root) {
 
   const features = [
     ['🌍','Environment-aware workouts','Every session adapts automatically to Commercial Gym, Hotel Gym, Hotel Room, or just resistance bands — no equipment excuses.'],
-    ['🚦','Fatigue-gated intensity','A pilot condition toggle (Go / Marginal / No-Go) reduces or removes heavy lifting when you\'re running on insufficient rest — auto-set from your Oura Ring if you wear one, or a 15-second self-check if you don\'t.'],
-    ['⌚','Oura Ring auto-sync','Connect once and your daily readiness, sleep, and HRV drive your workout intensity automatically — no manual logging required.'],
+    ['🚦','Fatigue-gated intensity','A pilot condition toggle (Go / Marginal / No-Go) reduces or removes heavy lifting when you\'re running on insufficient rest — auto-set from Apple Health if you sync a wearable, or a 15-second self-check if you don\'t.'],
+    ['⌚','Wearable auto-sync','Connect once via Apple Health and your daily readiness, sleep, HRV, resting heart rate, steps, and workouts drive your training automatically — works with Apple Watch, Oura, Whoop, Garmin, or anything else that writes to Health. Connect Oura directly for its own full readiness score.'],
     ['🏆','Leaderboards, scored fairly','Compete on bench, squat, deadlift, and more against fellow pilots — ranked by DOTS score, which adjusts for bodyweight and sex, so a 160 lb first officer and a 220 lb captain are compared on equal footing, not just raw weight. Opt-in only — no call sign, nothing is shared.'],
     ['🎖️','Badges for reaching goals','Hit a personal record, a training streak, or a milestone and it gets recognized automatically — pulled from your real logged history, not just a login count.'],
     ['🩹','Injury-aware programming','Flag a sore shoulder or knee and the app automatically swaps in a safer alternative where one exists, or flags the exercise so you can decide — instead of just handing you the same plan regardless.'],
@@ -1736,7 +1736,7 @@ function renderLanding(root) {
   parts.push('<div class="landing-section" style="background:var(--bg2)">');
   parts.push('<div class="landing-quote">"The biggest mistake I see in shift-work athletes is treating every day the same. Your training should respond to how you actually feel — not an arbitrary schedule." — Sports medicine consensus on fatigue-informed training</div>');
   parts.push('<div class="landing-stat-row">');
-  parts.push('<div class="landing-stat"><div class="num">8</div><div class="lbl">Mission Profiles</div></div>');
+  parts.push('<div class="landing-stat"><div class="num">9</div><div class="lbl">Mission Profiles</div></div>');
   parts.push('<div class="landing-stat"><div class="num">7</div><div class="lbl">Goal Tracks</div></div>');
   parts.push('<div class="landing-stat"><div class="num">102</div><div class="lbl">Wisdom Briefings</div></div>');
   parts.push('</div>');

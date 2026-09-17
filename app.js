@@ -1977,18 +1977,18 @@ function renderPage() {
   const p = document.getElementById('mainPage');
   if (!p) return;
 
-  // GATING GUARD: Ensure background updates cannot bypass Auth or Disclaimer gates
+  // Enforce gating check
   if (!ST.authed || !ST.disclaimerAccepted || ST.authView === 'recovery') {
     renderRoot();
     return;
   }
 
-p.innerHTML = '';
-if (ST.tab === 'preflight') {
-  renderPreflight(p).catch(e => {
-    console.warn('Preflight load failed:', e);
-  });
-}
+  p.innerHTML = '';
+  if (ST.tab === 'preflight') {
+    renderPreflight(p).catch(e => {
+      console.warn('Preflight load error:', e);
+    });
+  }
   else if (ST.tab === 'flight')      renderFlight(p);
   else if (ST.tab === 'trends')      return renderTrends(p);
   else if (ST.tab === 'wisdom')      renderWisdom(p);
@@ -12842,4 +12842,4 @@ function downloadFlightScheduleICS() {
   URL.revokeObjectURL(url);
 }
 
-}
+

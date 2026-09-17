@@ -2791,6 +2791,71 @@ function applyProfileToState(profile) {
   if (profile.oura_connected !== undefined) ST.ouraConnected = profile.oura_connected;
   if (profile.oura_access_token)            ST.ouraAccessToken = profile.oura_access_token;
 }
+// ─── STATE INITIALIZATION HELPERS ──────────────────────────────────────────────
+function applyProfileToState(profile) {
+  if (!profile) return;
+  if (profile.sex)                          ST.sex = profile.sex;
+  if (profile.weight_lbs)                   ST.weightLbs = profile.weight_lbs;
+  if (profile.height_in)                   ST.heightIn = profile.height_in;
+  if (profile.base_timezone)                ST.baseTimezone = profile.base_timezone;
+  if (profile.home_airport)                 ST.homeAirport = profile.home_airport;
+  if (profile.airline)                      ST.airline = profile.airline;
+  if (profile.seat_position)                ST.seatPosition = profile.seat_position;
+  if (profile.aircraft_type)                ST.aircraftType = profile.aircraft_type;
+  if (profile.schedule_type)                ST.scheduleType = profile.schedule_type;
+  if (profile.fitness_goal)                 ST.fitnessGoal = profile.fitness_goal;
+  if (profile.experience_level)             ST.experienceLevel = profile.experience_level;
+  if (profile.equipment_access)             ST.equipmentAccess = profile.equipment_access;
+  if (profile.oura_connected !== undefined) ST.ouraConnected = profile.oura_connected;
+  if (profile.oura_access_token)            ST.ouraAccessToken = profile.oura_access_token;
+}
+
+function applyScheduleEnvironmentSuggestion() {
+  try {
+    if (!ST.scheduleType) return;
+    if (ST.scheduleType === 'reserve') {
+      ST.suggestedEnv = 'hotel';
+    } else if (ST.scheduleType === 'line') {
+      ST.suggestedEnv = 'commercial';
+    }
+  } catch (e) {
+    console.warn('applyScheduleEnvironmentSuggestion failed:', e);
+  }
+}
+
+function applyScheduleFlightHours() {
+  try {
+    if (ST.lastSession && ST.lastSession.flight_hours) {
+      ST.flightHours = ST.lastSession.flight_hours;
+    }
+  } catch (e) {
+    console.warn('applyScheduleFlightHours failed:', e);
+  }
+}
+
+function restoreDailyInputs() {
+  try {
+    const saved = localStorage.getItem('fcf_daily_inputs');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed && parsed.date === getTodayKey()) {
+        ST.dailyInputs = parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('restoreDailyInputs failed:', e);
+  }
+}
+
+function applyDailyInputsRow(row) {
+  if (!row) return;
+  ST.dailyInputs = {
+    date: row.date,
+    sleepHours: row.sleep_hours || '',
+    energyLevel: row.energy_level || '',
+    notes: row.notes || ''
+  };
+}
 
 
 // ─── BOOT SEQUENCE ────────────────────────────────────────────────────────────

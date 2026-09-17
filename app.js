@@ -83,10 +83,6 @@ async function loadSubscription() {
 }
 
 
-const FEEDBACK_EDGE_FN  = 'https://dnxkydxbyihgsictbzjz.supabase.co/functions/v1/feedback-submit';
-const OURA_SCOPES       = 'daily personal workout tag'; // readiness, sleep, activity, personal info, workouts, tags
-// Supabase anon key sent as auth header — required when Edge Function JWT verification is enabled
-const SB_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRueGt5ZHhieWloZ3NpY3Riemp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3ODk4MTEsImV4cCI6MjA5NjM2NTgxMX0.oLUGuorQkbQ_u679NpE8FGBVAUmVE1K_rxl8q4B0n7k';
 
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────
 const SB = supabase.createClient(

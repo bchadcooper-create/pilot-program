@@ -1977,7 +1977,7 @@ function renderPage() {
   const p = document.getElementById('mainPage');
   if (!p) return;
 
-  // GATING GUARD: Prevent background refreshes from overwriting Auth or Disclaimer screens
+  // GATING GUARD: Ensure background updates cannot bypass Auth or Disclaimer gates
   if (!ST.authed || !ST.disclaimerAccepted || ST.authView === 'recovery') {
     renderRoot();
     return;
@@ -1985,9 +1985,7 @@ function renderPage() {
 
   p.innerHTML = '';
   if (ST.tab === 'preflight') {
-    renderPreflight(p).catch(e => {
-      // ... error handling ...
-    });
+    renderPreflight(p).catch(e => { ... });
   }
   else if (ST.tab === 'flight')      renderFlight(p);
   else if (ST.tab === 'trends')      return renderTrends(p);
@@ -2004,8 +2002,6 @@ function renderPage() {
   else if (ST.tab === 'superuser')   renderSuperUser(p);
   else if (ST.tab === 'debrief')     renderDebrief(p);
 }
-}
-
 // ─── BADGES ──────────────────────────────────────────────────────────────────
 const BADGES = [
   { id:'first_flight', icon:'🛫', title:'First Flight',     desc:'Complete your first workout',            check:s => s.totalSessions >= 1 },
@@ -2917,7 +2913,13 @@ async function bootAppInner() {
     if (!ST.sessionCache) ST.sessionCache = [];
     ST.sessionCache.push(ST.lastSession);
   }
-
+awardBadges();
+  maybeShowInstallPrompt();
+  
+  // Guard the boot-end re-render
+  if (ST.showInstallPrompt && ST.disclaimerAccepted) {
+    renderPage();
+  }
   restoreDailyInputs();
   applyDailyInputsRow(await dbGetDailyInputs().catch(() => null));
   applyScheduleEnvironmentSuggestion();

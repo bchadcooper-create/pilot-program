@@ -10387,7 +10387,21 @@ function renderMore(p) {
       const label = isPromo ? 'Pro (promo) — expires ' : (ST.subscription?.status==='grace'?'Renewal pending — ':'Renews ');
       parts.push('<div style="font-size:11px;color:var(--muted);margin-top:4px">'+label+until+'</div>');
     }
-    parts.push('<div style="font-size:11px;color:var(--muted);margin-top:8px">'+(ST.subscription?.platform === 'promo' ? 'Comp/promo access — no billing, nothing to manage.' : 'Manage or cancel in your Apple ID subscription settings.')+'</div>');
+    // BUG FIX (reported: a web/Stripe subscriber saw "Manage or cancel in
+    // your Apple ID subscription settings" — wrong instructions for a
+    // platform that has no Apple ID subscription at all). This only ever
+    // distinguished promo vs. "everything else must be Apple/iOS", which
+    // was true before web subscriptions existed but not anymore — the
+    // webhook writes platform:'web' for a Stripe purchase (confirmed by
+    // reading that code directly), a third case this never accounted for.
+    // No self-service billing portal exists yet for web subscribers, so
+    // pointing at "your Apple ID settings" (false) or inventing a portal
+    // link that doesn't exist (also false) are both wrong — support is the
+    // only honest option today.
+    const manageCopy = ST.subscription?.platform === 'promo' ? 'Comp/promo access — no billing, nothing to manage.'
+      : ST.subscription?.platform === 'web' ? 'Manage or cancel by contacting support.'
+      : 'Manage or cancel in your Apple ID subscription settings.';
+    parts.push('<div style="font-size:11px;color:var(--muted);margin-top:8px">'+manageCopy+'</div>');
   } else {
     const rows = [
       ['Workout logging',             '✓',       '✓'],

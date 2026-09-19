@@ -4304,7 +4304,31 @@ async function initAppInner() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', initApp);
+// BUG FIX (structural cleanup, suggested independently by two separate
+// reviews of the root-cause fix above and adopted here since they
+// converged on the same recommendation): this used to register the
+// DOMContentLoaded listener AND unconditionally schedule a setTimeout
+// fallback separately — the actual bug this session's investigation
+// found. Now mutually exclusive: if the DOM is still loading, wait for
+// the real event; otherwise (already interactive/complete, the case
+// for this app's <script defer> load) go straight to a same-tick-plus-
+// one macrotask call instead of registering a listener for an event
+// that has already passed and will never fire again. The _appInitStarted
+// guard inside initApp() itself stays regardless, as a defensive backstop
+// against any future third caller, not because this specific structure
+// still needs it to avoid a double-call.
+function scheduleInit() {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp, { once: true });
+  } else if (document.readyState === 'interactive' || document.readyState === 'complete') {
+    setTimeout(initApp, 0);
+  }
+  // Any other/unexpected readyState value (shouldn't happen in a real
+  // browser, but can in a test sandbox with a mocked document) is
+  // deliberately a no-op here rather than triggering initApp() against
+  // an environment that isn't actually ready for it.
+}
+scheduleInit();
 
 // ── Native → Web event listeners ─────────────────────────────────────────────
 // These handle all async responses from the iOS native shell.
@@ -4998,9 +5022,6 @@ async function classifyCalendarEvents(events, fingerprint) {
       : 'Sync failed: ' + reason;
     renderPage();
   }
-}
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-  setTimeout(initApp, 0);
 }
 
 // ─── COMPACT ROLLING CALENDAR (smooth continuous scroll, not week-paged) ─────

@@ -4260,6 +4260,12 @@ async function initApp() {
   } catch (e) {
     console.error('initApp failed:', e);
     try { renderRoot(); } catch (e2) { console.error('renderRoot also failed:', e2); }
+  } finally {
+    // Hide the boot loader regardless of success or failure above — it
+    // exists purely to cover this window, not to gate on any specific
+    // outcome, so it should never stay stuck showing.
+    const loader = document.getElementById('bootLoader');
+    if (loader) loader.classList.add('hidden');
   }
 }
 
@@ -9957,7 +9963,17 @@ async function syncOuraData(force) {
         localStorage.setItem(OURA_TOAST_KEY, today);
       }
     }
-    renderPage();
+    // BUG FIX (reported: the whole page visibly rebuilds/flickers each
+    // time a fresh Oura sync lands, even though only the readiness/
+    // sleep/activity numbers and the briefing card actually change).
+    // Targeted update instead of a full renderPage() when the user is
+    // actually looking at Today — see buildOuraTopSectionHTML /
+    // updateOuraTopSection. If they're on a different tab, there's
+    // nothing to visually update right now at all: ST above is already
+    // current, so whichever tab they navigate to next renders correctly
+    // on its own, without this needing to force a rebuild of a tab
+    // they aren't even looking at.
+    if (ST.tab === 'today') updateOuraTopSection();
 
   } catch(e) {
     if (force) showBigToast('Oura sync failed: '+e.message,'warn');
@@ -11655,10 +11671,17 @@ function buildTodayGaps(ctx) {
   return gaps;
 }
 
-function renderToday(p) {
-  const ctx = getTodayContext();
+// Builds just the part of the Today page that's actually derived from
+// Oura data (steps line, readiness/sleep/activity grid, and the rule-
+// based briefing card — its headline/tone/border color all come from
+// the same ctx.oura values, so they'd look inconsistent updated
+// separately). Extracted so a fresh Oura sync mid-session can update
+// exactly this, in place, instead of rebuilding the entire Today tab —
+// see updateOuraTopSection() below. The "still open" gaps section
+// deliberately stays out of this: it's schedule/logging-state driven,
+// not something a fresh Oura reading changes.
+function buildOuraTopSectionHTML(ctx) {
   const brief = buildTodayBriefing(ctx);
-  const gaps = buildTodayGaps(ctx);
   const toneColor = { go:'var(--green)', ease:'var(--amber)', rest:'var(--blue)', neutral:'var(--muted)' }[brief.tone];
   const parts = [];
 
@@ -11681,6 +11704,46 @@ function renderToday(p) {
   parts.push('<div style="font-size:13px;color:var(--muted);line-height:1.65">'+brief.body+'</div>');
   if (brief.action) parts.push('<button class="btn btn-gold" style="margin-top:14px" onclick="'+brief.action.fn+'">'+brief.action.label+'</button>');
   parts.push('</div>');
+
+  return parts.join('');
+}
+
+// Called after a fresh Oura sync completes. Only touches the DOM
+// directly (no full renderPage()) — if the user isn't currently on
+// Today, #ouraTopSection won't exist, and there's nothing to update
+// visually anyway (ST is already current; the next time they do
+// navigate to Today, the normal render picks it up).
+function updateOuraTopSection() {
+  const el = document.getElementById('ouraTopSection');
+  if (!el) return;
+  el.innerHTML = buildOuraTopSectionHTML(getTodayContext());
+}
+
+// Collapses multiple "Duty free period" entries (or any label containing
+// that phrase) down to a single all-day entry. Per Chad: a duty-free
+// period is definitionally an all-day thing in the pilot's home base —
+// any variation in the imported times/date-range formatting across
+// several same-day entries is import noise, not meaningfully different
+// data worth preserving. Keeps the first matching entry (arbitrary,
+// since the display is forced to "All day" regardless of which one's
+// kept) and drops the rest; everything else passes through untouched.
+function dedupeDutyFreeEvents(events, getLabel) {
+  let keptOne = false;
+  return events.filter(e => {
+    if (!/duty\s*free/i.test(getLabel(e))) return true;
+    if (keptOne) return false;
+    keptOne = true;
+    e.isAllDay = true;
+    return true;
+  });
+}
+
+function renderToday(p) {
+  const ctx = getTodayContext();
+  const gaps = buildTodayGaps(ctx);
+  const parts = [];
+
+  parts.push('<div id="ouraTopSection">'+buildOuraTopSectionHTML(ctx)+'</div>');
 
   // AI Preflight Schedule Mapping — Pro only, shown before Fatigue
   // Calibration since a multi-day trip overview is more useful context to
@@ -11757,13 +11820,14 @@ function renderToday(p) {
   const activeSchedule = getActiveSchedule();
 
   if (activeSchedule.source === 'calendar') {
-    const calToday = mergeAdjacentEvents(
+    const calLabel = e => e.origin && e.destination ? e.origin + '→' + e.destination : e.title;
+    const calToday = dedupeDutyFreeEvents(mergeAdjacentEvents(
       activeSchedule.events.filter(e => {
         const s = new Date(e.start), en = new Date(e.end);
         return s <= todayEnd && en >= todayStart && e.type !== 'personal';
       }),
-      e => e.origin && e.destination ? e.origin + '→' + e.destination : e.title
-    ).sort((a,b) => new Date(a.start) - new Date(b.start));
+      calLabel
+    ), calLabel).sort((a,b) => new Date(a.start) - new Date(b.start));
 
     if (calToday.length) {
       const typeIcon = { flight:'✈️', layover:'🏨', reserve:'📟', training:'🎓', duty:'📋', rest:'😴', unknown:'📅' };

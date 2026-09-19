@@ -11475,18 +11475,35 @@ function buildTodayBriefing(ctx) {
     // Four tiers by how far off pace, each with its own language — a
     // 3-gram miss and a 100-gram miss are different situations and
     // shouldn't read the same. See proteinPaceTier() for the exact bands.
-    const proteinPacedTarget = ctx.nutrition.goals ? ctx.nutrition.goals.protein * dayElapsedPct(ctx.now) : null;
+    //
+    // BUG FIX (reported: still told "you're well short on protein" with
+    // Nutrition tracking explicitly switched off in Settings, which
+    // promises turning it off "stops the reminders"). This was gated on
+    // whether a fuel plan exists (ctx.nutrition.goals), not on whether
+    // the person has actually opted into nutrition tracking — a goal set
+    // before toggling tracking off stays on the account (turning tracking
+    // off never deletes anything, per that same Settings copy), so the
+    // protein-pacing logic kept firing regardless of the toggle. Also
+    // fixed the same gap for hydration: the generic "on_track" message
+    // below unconditionally said "keep water up," which would be an
+    // equally broken reminder with Hydration tracking off. Both tracking
+    // toggles now gate whether their respective topic gets mentioned at
+    // all, with a fully generic fallback when neither applies.
+    const showProtein = ST.trackNutrition && !!ctx.nutrition.goals;
+    const proteinPacedTarget = showProtein ? ctx.nutrition.goals.protein * dayElapsedPct(ctx.now) : null;
     const proteinPaceRatio = proteinPacedTarget ? ctx.nutrition.consumed.protein / Math.max(proteinPacedTarget, 1) : 1;
-    const tier = proteinPacedTarget !== null ? proteinPaceTier(proteinPaceRatio) : 'on_track';
+    const tier = showProtein ? proteinPaceTier(proteinPaceRatio) : 'tracking_off';
+    const hydrationTip = ST.trackHydration ? 'Keep water up through the rest of the day and protect your sleep window tonight.' : 'Protect your sleep window tonight.';
     const tierCopy = {
       well_short: 'Work\'s done. You\'re still well short on protein, and that\'s the piece that turns the session into progress.',
       behind: 'Work\'s done. You\'re falling behind on protein for this point in the day — make it a priority at your next meal.',
       slightly_behind: 'Work\'s done. You\'re a bit behind on protein for this point in the day — not urgent, but worth catching up at your next meal.',
-      on_track: 'Work\'s done. Keep water up through the rest of the day and protect your sleep window tonight.',
+      on_track: 'Work\'s done. '+hydrationTip,
+      tracking_off: 'Work\'s done. '+hydrationTip,
     };
     return { tone:'go', headline:'Session logged',
       body: tierCopy[tier],
-      action: tier !== 'on_track' ? { label:'Log a meal', fn:"switchTab('nutrition')" } : null };
+      action: (showProtein && tier !== 'on_track') ? { label:'Log a meal', fn:"switchTab('nutrition')" } : null };
   }
 
   // 5. A gap while there's STILL FLYING LEFT today is not a training window,
@@ -11537,7 +11554,18 @@ function buildTodayBriefing(ctx) {
     const gapStr = (hrs > 0 ? hrs+'h '+(mins?mins+'m':'') : gapMin+' min').trim();
     const where = sched.layoverAirport ? ' in '+sched.layoverAirport : '';
     const dutyEnd = fmtDutyEnd(sched.dutyEndsToday);
-    const ate = ctx.nutrition.mealCount > 0;
+    // BUG FIX (same class as the protein-pacing fix above, found while
+    // fixing that one): with Nutrition tracking off, no meals ever get
+    // logged, so ctx.nutrition.mealCount is always 0 — this unconditionally
+    // read that as "hasn't eaten yet" and suggested logging a meal
+    // regardless of the toggle. Tracking off means the app genuinely
+    // doesn't know whether they've eaten, not that they haven't — treating
+    // it as "assume eaten" here suppresses the "go eat/log a meal" advice
+    // (appropriately, since that reminder is exactly what the toggle
+    // promises to stop) while still allowing the other, meal-status-
+    // agnostic branches below (sleep priority, water, keep moving) to
+    // apply normally.
+    const ate = ST.trackNutrition ? (ctx.nutrition.mealCount > 0) : true;
 
     // Late landing: duty ends after 10pm — no session, restaurants closing
     const dutyEndMs = sched.dutyEndsToday;
@@ -11565,7 +11593,11 @@ function buildTodayBriefing(ctx) {
            + (stillDeplaning ? 'deplaning duties and the '+PRE_DEPARTURE_BUFFER_MIN+'-minute report requirement are' : 'the '+PRE_DEPARTURE_BUFFER_MIN+'-minute report requirement is')
            + ' accounted for — worth eating now.';
     } else if (usableMin >= 20 && ate) {
-      body += 'Top up water and keep moving while you can; sitting is the real cost of a day like this.';
+      // BUG FIX: unconditionally said "keep water up" — same gap as the
+      // protein-pacing fix above, just for hydration this time.
+      body += ST.trackHydration
+        ? 'Top up water and keep moving while you can; sitting is the real cost of a day like this.'
+        : 'Keep moving while you can; sitting is the real cost of a day like this.';
     } else if (usableMin >= 5) {
       body += gapStr+' on the ground is really only about '+usableMin+' min after '
            + (stillDeplaning ? 'duty requirements on both ends' : 'the report requirement')
@@ -11577,7 +11609,11 @@ function buildTodayBriefing(ctx) {
     }
     if (dutyEnd) body += ' The window after '+dutyEnd+' is where a real session and dinner fit.';
 
-    const action = usableMin >= 5
+    // BUG FIX: this action button was gated only on usableMin, not on ate
+    // (let alone ST.trackNutrition) at all — it kept offering "log a
+    // meal" regardless of the toggle, unlike every other action button
+    // in this function.
+    const action = (usableMin >= 5 && ST.trackNutrition)
       ? { label: (usableMin >= 20 && !ate) ? 'Fuel up — log a meal' : 'Log a meal', fn:"switchTab('nutrition')" }
       : null;
     return { tone:'neutral', headline:ord+' leg done — '+gapStr+where, body, action };

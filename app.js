@@ -3057,12 +3057,6 @@ async function bootApp() {
 // their own — see the fuller explanation at its one usage site below.
 let _bootSideEffectsScheduled = false;
 async function bootAppInner() {
-  // TEMPORARY DIAGNOSTIC — not a fix, remove once the double-invocation
-  // source is confirmed. Traces every entry into this function so the
-  // next test shows definitively whether it's genuinely called twice
-  // per page load and, if so, the two full, distinct call paths that
-  // led here — rather than continuing to guess at candidates.
-  console.trace('[bootAppInner] entered at +'+Math.round(performance.now())+'ms');
   ST.disclaimerAccepted = localStorage.getItem('fcf_disclaimer_accepted') === '1';
 
   const [profile, lastSession] = await Promise.all([
@@ -4242,7 +4236,25 @@ async function checkForAppUpdate() {
   }
 }
 
+// BUG FIX (root cause of the boot-render-count investigation, confirmed
+// with a direct stack trace showing the two exact, distinct call paths
+// side by side): this fallback exists to guard against DOMContentLoaded
+// having already fired before the listener above registers - a real
+// concern in general, but app.js loads via <script defer>, which by
+// spec always executes after DOM parsing completes, exactly when
+// readyState becomes 'interactive'. That means this condition was true
+// on essentially every single page load, so this fallback wasn't an
+// occasional safety net - it was firing unconditionally, in addition to
+// the normal listener, giving initApp() (and therefore the entire boot
+// sequence underneath it, including every fresh Oura sync and AI-coach
+// call it kicks off) two completely independent invocations every time.
+// Guarded at the one shared entry point both paths lead through, so
+// whichever one fires first wins and the other becomes a no-op,
+// regardless of the readyState timing that got them both scheduled.
+let _appInitStarted = false;
 async function initApp() {
+  if (_appInitStarted) return;
+  _appInitStarted = true;
   try {
     await initAppInner();
   } catch (e) {

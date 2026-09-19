@@ -56,7 +56,7 @@ serve(async (req) => {
     // (stripe@17) is already newer than what 2024-06-20 corresponds to
     // (stripe-node major version 16), so this is purely the explicitly
     // pinned apiVersion string being stale, not a package version problem.
-    const stripe = new Stripe(STRIPE_KEY, { apiVersion: '2025-03-31.basil' });
+    const stripe = new Stripe(STRIPE_KEY, { apiVersion: '2026-08-26.dahlia' });
 
     // Reuse the Stripe customer if this account already has one, so a
     // resubscribe doesn't create a duplicate customer with a split history.

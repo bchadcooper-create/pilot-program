@@ -58,9 +58,18 @@ serve(async (req) => {
     const sig = req.headers.get('stripe-signature');
     if (!sig) return json({ error: 'missing stripe-signature' }, 400);
 
-    // Kept in sync with fcf-stripe-checkout's apiVersion — see that
-    // function's comment for why this moved off 2024-06-20.
-    const stripe = new Stripe(STRIPE_KEY, { apiVersion: '2025-03-31.basil' });
+    // BUG FIX: bumped from 2025-03-31.basil to 2026-08-26.dahlia — the
+    // Stripe Dashboard's "Add destination" flow no longer offers creating
+    // a new webhook endpoint pinned to basil (dahlia is Stripe's current
+    // release, basil is one release behind), so the webhook endpoint
+    // itself is now locked to dahlia regardless of what this SDK client
+    // claims. Checked the basil-to-dahlia breaking changes directly before
+    // making this change: the one breaking change affecting Checkout
+    // (a ui_mode enum rename) doesn't touch subscription status, period
+    // end, or customer/subscription linkage — the fields this function
+    // actually reads — so this is a like-for-like version match, not a
+    // behavior change. Kept in sync with fcf-stripe-checkout's apiVersion.
+    const stripe = new Stripe(STRIPE_KEY, { apiVersion: '2026-08-26.dahlia' });
     const raw = await req.text();   // RAW body — parsing first breaks the signature
 
     let event: Stripe.Event;

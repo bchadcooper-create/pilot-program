@@ -3050,6 +3050,12 @@ async function bootApp() {
   }
 }
 
+// Guards the one-time setTimeout-scheduled side effects inside
+// bootAppInner (Oura sync, native HealthKit/Calendar/notifications
+// requests) against firing more than once per page load, the same way
+// scheduleOuraActivityRetry/scheduleEntitlementRefresh already guard
+// their own — see the fuller explanation at its one usage site below.
+let _bootSideEffectsScheduled = false;
 async function bootAppInner() {
   ST.disclaimerAccepted = localStorage.getItem('fcf_disclaimer_accepted') === '1';
 
@@ -3100,15 +3106,39 @@ async function bootAppInner() {
   bindFoodPhotoInputs();
   checkDB();
 
-  if (ST.ouraConnected && ST.ouraAccessToken) {
-    setTimeout(() => syncOuraData().catch(() => {}), 1500);
-    scheduleOuraActivityRetry();
-  }
+  // BUG FIX (reported: app re-renders several times within a few seconds
+  // of loading — confirmed with a full stack trace this time, not
+  // inferred). Two separate [tripPlan] log occurrences, 72ms apart,
+  // showed byte-for-byte identical call stacks all the way down through
+  // setTimeout @ this exact line, bootAppInner, bootApp, initAppInner,
+  // initApp. A single setTimeout callback cannot fire twice on its own —
+  // the only way to get two firings of the same line is for
+  // bootAppInner()'s own function body to have run twice in this one
+  // page load. That matches a comment already sitting a short distance
+  // below this (scheduleOuraActivityRetry's own guard) documenting that
+  // bootApp() is known to be able to run more than once per page load —
+  // sign-in, password recovery, and Sign In with Apple success can all
+  // call it independently. Rather than continue tracking down exactly
+  // which of those paths doubled up this specific time, applying the
+  // same guard pattern already used for scheduleOuraActivityRetry and
+  // scheduleEntitlementRefresh directly here closes the actual
+  // observed gap regardless of which caller triggers it: these
+  // setTimeout-scheduled boot side effects should only ever be
+  // scheduled once per page load, full stop, matching what every other
+  // boot-time one-time side effect in this file already enforces for
+  // itself.
+  if (!_bootSideEffectsScheduled) {
+    _bootSideEffectsScheduled = true;
+    if (ST.ouraConnected && ST.ouraAccessToken) {
+      setTimeout(() => syncOuraData().catch(() => {}), 1500);
+      scheduleOuraActivityRetry();
+    }
 
-  if (typeof FCFBridge !== 'undefined' && FCFBridge.isNative) {
-    setTimeout(() => FCFBridge.requestHealthKit(), 2000);
-    setTimeout(() => FCFBridge.requestCalendar(ST.baseTimezone), 3500);
-    setTimeout(() => scheduleNotifications(), 5000);
+    if (typeof FCFBridge !== 'undefined' && FCFBridge.isNative) {
+      setTimeout(() => FCFBridge.requestHealthKit(), 2000);
+      setTimeout(() => FCFBridge.requestCalendar(ST.baseTimezone), 3500);
+      setTimeout(() => scheduleNotifications(), 5000);
+    }
   }
 
   scheduleEntitlementRefresh();
@@ -4826,7 +4856,7 @@ async function loadTripPlan() {
     // exit path (no calendar, short trip, API error) can hide it.
     if (!ST.calendarEvents?.length) { if (card) card.style.display = 'none'; console.log('[tripPlan] no calendar events synced'); return; }
     const bounds = getTripBounds(ST.calendarEvents, new Date());
-    if (!bounds || bounds.totalDays < 2) { if (card) card.style.display = 'none'; console.trace('[tripPlan] no multi-day trip found at +'+Math.round(performance.now())+'ms', {bounds}); return; }
+    if (!bounds || bounds.totalDays < 2) { if (card) card.style.display = 'none'; console.log('[tripPlan] no multi-day trip found', {bounds}); return; }
 
     // How many sessions have already been logged since this trip started —
     // feeds the cache key so the plan can react to training that happened

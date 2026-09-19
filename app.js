@@ -3068,13 +3068,22 @@ async function bootAppInner() {
   }
   awardBadges();
   maybeShowInstallPrompt();
-  // Non-blocking — a couple of DB queries that shouldn't delay boot, and
-  // the nudge (if any) just needs to be in place by the time the Today
-  // page actually renders, which a re-render call here covers.
-  computeTrackingNudges().then(() => { if (ST.disclaimerAccepted) renderPage(); })
-    .catch(e => console.warn('computeTrackingNudges failed:', e));
-  // Only paint install prompt / tab content after explicit disclaimer accept
-  if (ST.showInstallPrompt && ST.disclaimerAccepted) renderPage();
+  // BUG FIX (reported: app flickers 5-6 times on a hard close + reopen).
+  // Traced through the actual boot sequence rather than guessing: each
+  // renderPage() call clears #mainPage's entire innerHTML before
+  // rebuilding it, so multiple render passes in quick succession are
+  // exactly what a visible flicker looks like. This function was
+  // contributing to that — it fired its own re-render asynchronously,
+  // AFTER the synchronous renderRoot() call below (and the renderPage()
+  // that call makes internally) had already painted the page once.
+  // Awaiting it here instead, before that single render happens, means
+  // the nudge state is already correct by the time the page paints —
+  // no separate re-render needed for this at all. The queries here are
+  // small, filtered selects, so this adds only a little sequential
+  // latency before the very first paint, where nothing is visible yet
+  // to flicker, rather than a jarring extra rebuild after the user is
+  // already looking at the page.
+  await computeTrackingNudges().catch(e => console.warn('computeTrackingNudges failed:', e));
   restoreDailyInputs();
   applyDailyInputsRow(await dbGetDailyInputs().catch(() => null));
   applyScheduleEnvironmentSuggestion();
@@ -7474,7 +7483,7 @@ function buildExCard(exItem, phaseKey) {
         parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="Height" value="'+(s.height||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].height=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
         parts.push('<div class="set-hint">reps / height (in)</div></div>');
       });
-      parts.push('</div></div>'+(sets.length>2?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<button class="btn-ghost" style="font-size:11px;margin-top:6px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button>');
+      parts.push('</div></div>'+(sets.length>2?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<div class="fb" style="margin-top:6px;justify-content:space-between"><button class="btn-ghost" style="font-size:11px" onclick="removeLiveSet(\''+exItem.id+'\')">− Remove Set</button><button class="btn-ghost" style="font-size:11px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button></div>');
       if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
         parts.push(buildRestTimerWidget(exItem.id, phaseKey, exItem.target));
       }
@@ -7486,7 +7495,7 @@ function buildExCard(exItem, phaseKey) {
         parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="Distance" value="'+(s.distance||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].distance=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
         parts.push('<div class="set-hint">reps / distance (in)</div></div>');
       });
-      parts.push('</div></div>'+(sets.length>2?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<button class="btn-ghost" style="font-size:11px;margin-top:6px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button>');
+      parts.push('</div></div>'+(sets.length>2?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<div class="fb" style="margin-top:6px;justify-content:space-between"><button class="btn-ghost" style="font-size:11px" onclick="removeLiveSet(\''+exItem.id+'\')">− Remove Set</button><button class="btn-ghost" style="font-size:11px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button></div>');
       if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
         parts.push(buildRestTimerWidget(exItem.id, phaseKey, exItem.target));
       }
@@ -7497,7 +7506,7 @@ function buildExCard(exItem, phaseKey) {
         parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
         parts.push('<div class="set-hint">reps only</div></div>');
       });
-      parts.push('</div></div>'+(sets.length>3?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<button class="btn-ghost" style="font-size:11px;margin-top:6px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button>');
+      parts.push('</div></div>'+(sets.length>3?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<div class="fb" style="margin-top:6px;justify-content:space-between"><button class="btn-ghost" style="font-size:11px" onclick="removeLiveSet(\''+exItem.id+'\')">− Remove Set</button><button class="btn-ghost" style="font-size:11px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button></div>');
     } else {
       parts.push('<div class="sets-wrap"><div class="sets-scroll">');
       sets.forEach((s,i) => {
@@ -7506,7 +7515,7 @@ function buildExCard(exItem, phaseKey) {
         parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="lb" value="'+(s.weight||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].weight=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
         parts.push('<div class="set-hint">reps / lb</div></div>');
       });
-      parts.push('</div></div>'+(sets.length>2?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<button class="btn-ghost" style="font-size:11px;margin-top:6px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button>');
+      parts.push('</div></div>'+(sets.length>2?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<div class="fb" style="margin-top:6px;justify-content:space-between"><button class="btn-ghost" style="font-size:11px" onclick="removeLiveSet(\''+exItem.id+'\')">− Remove Set</button><button class="btn-ghost" style="font-size:11px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button></div>');
       const autoreg = autoregSuggestion(exItem, sets);
       if (autoreg) {
         const boxColor = autoreg.tone === 'positive' ? 'var(--green)' : autoreg.tone === 'major' ? 'var(--amber)' : 'var(--blue)';
@@ -7738,6 +7747,20 @@ function addLiveSet(exId) {
   const blank = {};
   Object.keys(sets[sets.length-1]).forEach(k => { blank[k] = ''; });
   sets.push(blank);
+  persistWorkoutState();
+  renderFlight(document.getElementById('mainPage'));
+}
+
+// Symmetric with addLiveSet above. Never removes the last remaining set —
+// an exercise with zero sets isn't a state anything else here expects,
+// and "swap to a different exercise" or "✕ Remove" already cover that
+// case properly. No confirmation dialog, unlike removing a whole
+// exercise: this is small, low-stakes, and trivially undone with one
+// tap of "+ Add Set" if it's a mis-tap.
+function removeLiveSet(exId) {
+  const sets = ST.sets[exId];
+  if (!sets || sets.length <= 1) return;
+  sets.pop();
   persistWorkoutState();
   renderFlight(document.getElementById('mainPage'));
 }

@@ -4826,7 +4826,7 @@ async function loadTripPlan() {
     // exit path (no calendar, short trip, API error) can hide it.
     if (!ST.calendarEvents?.length) { if (card) card.style.display = 'none'; console.log('[tripPlan] no calendar events synced'); return; }
     const bounds = getTripBounds(ST.calendarEvents, new Date());
-    if (!bounds || bounds.totalDays < 2) { if (card) card.style.display = 'none'; console.log('[tripPlan] no multi-day trip found', {bounds}); return; }
+    if (!bounds || bounds.totalDays < 2) { if (card) card.style.display = 'none'; console.trace('[tripPlan] no multi-day trip found at +'+Math.round(performance.now())+'ms', {bounds}); return; }
 
     // How many sessions have already been logged since this trip started —
     // feeds the cache key so the plan can react to training that happened

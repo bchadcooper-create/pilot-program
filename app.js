@@ -4018,7 +4018,24 @@ async function syncPendingBioEntries() {
 // Refresh anything served from offline fallbacks the moment connectivity
 // returns — otherwise the calendar (and sync indicator) stay frozen on the
 // offline snapshot until the user fully restarts the app.
+// BUG FIX (reported: app re-renders/flickers several times within a few
+// seconds of loading, traced with hard evidence — two console captures
+// showing the count growing over that exact window). Confirmed this
+// "online" listener is the only other place besides normal boot that
+// independently calls syncOuraData() (every other call site is either a
+// manual button tap or the 30-minute retry interval), and this function
+// also does its own separate, immediate renderPage() on top of that.
+// Whether Chrome's "online" event can fire shortly after a fresh page
+// load even when the connection was never actually lost is a genuine,
+// documented browser inconsistency I can't fully verify without direct
+// instrumentation - but guarding this against a spurious fire is correct
+// regardless of the exact mechanism: refreshing "offline fallback" data
+// makes no sense to do at all if the app was never actually offline this
+// session, so there's no real downside to adding this check either way.
+let _wasEverOffline = false;
 async function refreshOnReconnect() {
+  if (!_wasEverOffline) return;
+  _wasEverOffline = false;
   ST.calendarSessions = {};
   try {
     // Re-fetch the profile too — if the app booted offline it hydrated from
@@ -4033,7 +4050,7 @@ async function refreshOnReconnect() {
   renderPage();
 }
 window.addEventListener('online', () => { refreshOnReconnect(); });
-window.addEventListener('offline', () => setDbStatus('local'));
+window.addEventListener('offline', () => { _wasEverOffline = true; setDbStatus('local'); });
 
 // Resync all active timers the instant the app returns to the foreground.
 // iOS throttles/suspends setInterval while backgrounded, so on resume we

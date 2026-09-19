@@ -47,7 +47,16 @@ serve(async (req) => {
     const price = plan === 'monthly' ? PRICE_MONTHLY : PRICE_ANNUAL;
     if (!price) return json({ error: 'price id not configured for plan: ' + plan }, 500);
 
-    const stripe = new Stripe(STRIPE_KEY, { apiVersion: '2024-06-20' });
+    // BUG FIX (reported: "Managed Payments is not supported on API version
+    // 2024-06-20" when creating a checkout session). This account has
+    // Managed Payments enabled, which requires the newer Basil API release
+    // — confirmed 2025-03-31.basil is a real, current Stripe API version
+    // (Stripe's own new named-release versioning scheme, not a typo or a
+    // beta-only string) before making this change. The imported package
+    // (stripe@17) is already newer than what 2024-06-20 corresponds to
+    // (stripe-node major version 16), so this is purely the explicitly
+    // pinned apiVersion string being stale, not a package version problem.
+    const stripe = new Stripe(STRIPE_KEY, { apiVersion: '2025-03-31.basil' });
 
     // Reuse the Stripe customer if this account already has one, so a
     // resubscribe doesn't create a duplicate customer with a split history.

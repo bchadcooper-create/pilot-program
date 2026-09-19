@@ -58,7 +58,9 @@ serve(async (req) => {
     const sig = req.headers.get('stripe-signature');
     if (!sig) return json({ error: 'missing stripe-signature' }, 400);
 
-    const stripe = new Stripe(STRIPE_KEY, { apiVersion: '2024-06-20' });
+    // Kept in sync with fcf-stripe-checkout's apiVersion — see that
+    // function's comment for why this moved off 2024-06-20.
+    const stripe = new Stripe(STRIPE_KEY, { apiVersion: '2025-03-31.basil' });
     const raw = await req.text();   // RAW body — parsing first breaks the signature
 
     let event: Stripe.Event;

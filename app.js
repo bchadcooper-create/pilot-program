@@ -3057,6 +3057,12 @@ async function bootApp() {
 // their own — see the fuller explanation at its one usage site below.
 let _bootSideEffectsScheduled = false;
 async function bootAppInner() {
+  // TEMPORARY DIAGNOSTIC — not a fix, remove once the double-invocation
+  // source is confirmed. Traces every entry into this function so the
+  // next test shows definitively whether it's genuinely called twice
+  // per page load and, if so, the two full, distinct call paths that
+  // led here — rather than continuing to guess at candidates.
+  console.trace('[bootAppInner] entered at +'+Math.round(performance.now())+'ms');
   ST.disclaimerAccepted = localStorage.getItem('fcf_disclaimer_accepted') === '1';
 
   const [profile, lastSession] = await Promise.all([

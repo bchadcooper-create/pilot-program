@@ -11183,15 +11183,19 @@ function getTripBounds(schedule, now) {
 // one block ending the exact instant the next begins — merge into a single
 // continuous entry for display. Otherwise the same label can show up two
 // or three times in a row with confusingly-overlapping boundary times.
-function mergeAdjacentEvents(events) {
+// getLabel defaults to the .ics-path shape (event.summary); the Apple
+// Calendar path's events don't have that field, so it's passed explicitly
+// there to match how that branch already computes what it displays.
+function mergeAdjacentEvents(events, getLabel) {
+  getLabel = getLabel || (e => e.summary);
   const sorted = [...events].sort((a,b) => new Date(a.start) - new Date(b.start));
   const merged = [];
   const TOLERANCE_MS = 5 * 60000; // small gap tolerance for near-exact boundaries
   sorted.forEach(e => {
     const last = merged[merged.length - 1];
-    if (last && last.summary === e.summary && (new Date(e.start).getTime() - new Date(last.end).getTime()) <= TOLERANCE_MS) {
+    if (last && getLabel(last) === getLabel(e) && (new Date(e.start).getTime() - new Date(last.end).getTime()) <= TOLERANCE_MS) {
       if (new Date(e.end).getTime() > new Date(last.end).getTime()) last.end = e.end;
-      last.uids.push(e.uid);
+      if (last.uids) last.uids.push(e.uid);
     } else {
       merged.push({ ...e, uids: [e.uid] });
     }
@@ -11654,10 +11658,13 @@ function renderToday(p) {
   const activeSchedule = getActiveSchedule();
 
   if (activeSchedule.source === 'calendar') {
-    const calToday = activeSchedule.events.filter(e => {
-      const s = new Date(e.start), en = new Date(e.end);
-      return s <= todayEnd && en >= todayStart && e.type !== 'personal';
-    }).sort((a,b) => new Date(a.start) - new Date(b.start));
+    const calToday = mergeAdjacentEvents(
+      activeSchedule.events.filter(e => {
+        const s = new Date(e.start), en = new Date(e.end);
+        return s <= todayEnd && en >= todayStart && e.type !== 'personal';
+      }),
+      e => e.origin && e.destination ? e.origin + '→' + e.destination : e.title
+    ).sort((a,b) => new Date(a.start) - new Date(b.start));
 
     if (calToday.length) {
       const typeIcon = { flight:'✈️', layover:'🏨', reserve:'📟', training:'🎓', duty:'📋', rest:'😴', unknown:'📅' };

@@ -9691,7 +9691,16 @@ async function syncOuraWorkouts() {
     }
   }
   if (ST.ouraImportQueue.length) showOuraDuplicateConfirm();
-  else renderPage();
+  // No renderPage() here on the "nothing to import" path — this function
+  // is only ever called from inside syncOuraData(), which now awaits it
+  // properly and does its own single render right after both finish.
+  // BUG FIX (reported: app re-renders/flickers several times within a
+  // few seconds of loading): this used to be fire-and-forget from
+  // syncOuraData() with its own separate renderPage() call here — two
+  // independent async operations from one logical Oura sync, each
+  // triggering a full page rebuild at slightly different times as they
+  // completed. Confirmed this was the only caller before removing the
+  // separate render, so nothing else depended on it firing here.
 }
 
 function showOuraDuplicateConfirm() {
@@ -9768,7 +9777,11 @@ async function syncOuraData(force) {
       ouraFetch('daily_sleep?start_date='+yesterday+'&end_date='+fetchEnd).catch(()=>null),
       ouraFetch('daily_activity?start_date='+yesterday+'&end_date='+fetchEnd).catch(()=>null),
     ]);
-    syncOuraWorkouts().catch(()=>{});
+    // Awaited now rather than fire-and-forget (see the removed renderPage()
+    // call inside this function for why) — this does mean syncOuraData
+    // takes a little longer to finish, but it was already fetching and
+    // processing this data regardless, just without waiting for it.
+    await syncOuraWorkouts().catch(()=>{});
 
     // BUG FIX: previously just took the LAST item in each response array
     // and assumed it was today's — but Oura's daily_activity endpoint

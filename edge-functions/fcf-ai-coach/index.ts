@@ -314,8 +314,22 @@ Deno.serve(async (req) => {
     // A readiness/fatigue read genuinely doesn't need to regenerate every
     // time the page happens to re-render — it's a once-a-day assessment,
     // not a live value.
+    //
+    // BUG FIX (reported: homepage correctly showed readiness (82), but the
+    // AI note said readiness wasn't available — because the very first
+    // call of the day can genuinely arrive with readiness:null, before the
+    // frontend's delayed Oura sync has completed, and this cache key had
+    // no dependency on that at all). Left null (no cache read, and — since
+    // this same variable also gates the write further down — no cache
+    // save either) specifically when Oura is connected but hasn't synced
+    // yet today: that's a "try again shortly" situation, not a stable,
+    // once-a-day answer worth locking in for the rest of the day. When
+    // Oura isn't connected at all, readiness is null too, but that's a
+    // normal, legitimately stable state (self-reported fatigue takes
+    // over) — ouraConnected is what actually distinguishes the two, not
+    // readiness alone.
     let fatigueCacheKey: string | null = null;
-    if (mode === 'fatigue_calibration') {
+    if (mode === 'fatigue_calibration' && !(context.ouraConnected && context.readiness === null)) {
       fatigueCacheKey = localDateKeyFor(context.timezone) + '_v' + FATIGUE_CALIBRATION_PROMPT_VERSION;
       const { data: cached } = await supabase
         .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();

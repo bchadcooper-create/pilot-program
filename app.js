@@ -4872,6 +4872,22 @@ async function loadFatigueCalibration(ctx) {
       // "enough time" actually means instead of the AI silently assuming
       // the entire gap is free.
       minutesActuallyFreeBeforeNeedingToLeave: usableMinutesBeforeDeparture(sched),
+      // BUG FIX (reported: homepage correctly showed readiness (82), but
+      // the AI coach note said readiness wasn't available). Root cause:
+      // this context's own readiness value can genuinely be null on the
+      // very first render of the day, before the delayed Oura sync
+      // (fires ~1.5s+ into boot) has completed — but the edge function's
+      // cache key for this mode is date-only, with no dependency on
+      // whether readiness actually had a value, so that first, null-
+      // readiness response was getting cached and served back for the
+      // rest of the day even after the homepage numbers updated
+      // correctly. Passing this flag lets the edge function tell "Oura
+      // connected but hasn't synced yet today" (skip caching, try again
+      // once real data shows up) apart from "no Oura connected at all"
+      // (a normal, legitimately cacheable state using self-reported
+      // fatigue instead) — readiness being null alone doesn't
+      // distinguish those two cases on its own.
+      ouraConnected: !!ST.ouraConnected,
     };
     const result = await callAICoach('fatigue_calibration', context);
     const card = document.getElementById('aiFatigueCard');
@@ -9973,7 +9989,17 @@ async function syncOuraData(force) {
     // current, so whichever tab they navigate to next renders correctly
     // on its own, without this needing to force a rebuild of a tab
     // they aren't even looking at.
-    if (ST.tab === 'today') updateOuraTopSection();
+    // BUG FIX (reported: AI coach note said readiness wasn't available
+    // even after the homepage numbers updated correctly — see the fuller
+    // explanation at loadFatigueCalibration's context object and the
+    // edge function's cache-key comment). This targeted update covers
+    // the numbers and the rule-based briefing card, but a fresh Oura sync
+    // landing is exactly the moment the fatigue-calibration AI note can
+    // finally generate a correct, readiness-aware response instead of
+    // whatever it got called with at initial boot — so re-run it here too
+    // rather than leaving it stuck on its first, possibly-null-readiness
+    // answer for the rest of the session.
+    if (ST.tab === 'today') { updateOuraTopSection(); if (isPro()) loadFatigueCalibration(getTodayContext()); }
 
   } catch(e) {
     if (force) showBigToast('Oura sync failed: '+e.message,'warn');

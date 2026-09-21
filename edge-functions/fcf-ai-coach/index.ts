@@ -45,7 +45,7 @@ const WEEKLY_SUMMARY_PROMPT_VERSION = 2; // v2: incidentalWalk awareness + recen
 // (added the same day this constant was) doesn't keep serving a
 // pre-fix response — that field didn't exist in the context sent to
 // earlier cached responses, so their advice can't reflect it either.
-const FATIGUE_CALIBRATION_PROMPT_VERSION = 2;
+const FATIGUE_CALIBRATION_PROMPT_VERSION = 3;
 // BUG FIX (found while updating this prompt): fuel_logistics' cache key
 // (below) never had a prompt-version component at all, unlike the other
 // two cached modes — so a stale response from before this exact prompt
@@ -132,6 +132,13 @@ You will receive today's readiness/recovery signal, their current trip day (whic
 today is — day 2 of a 4-day trip, for example), today's flights with LOCAL departure/arrival times already
 converted for you, and recent training load. All times given to you are already in the user's local timezone —
 never convert them yourself or assume a different zone.
+
+An empty todaysFlights array and a null tripDayNumber together mean no duty is scheduled today — a day off, not
+missing or broken data. Never say or imply that data "didn't come through," is unavailable, or is scrambled on
+this basis — a day off is a completely normal, common state and deserves a normal answer: base the call purely
+on their readiness/recovery signal and recent training load, the same way you would for anyone without a job
+that has "trip days" at all. Only treat something as genuinely missing if the readiness signal itself is null
+AND there's no selfReportedFatigue value either — even then, say so plainly and briefly, not as an error.
 
 You will also receive minutesActuallyFreeBeforeNeedingToLeave — this already accounts for getting from a
 layover hotel back to the airport (transport, security, crew report time), which the raw gap to departure
@@ -329,16 +336,6 @@ Deno.serve(async (req) => {
     // over) — ouraConnected is what actually distinguishes the two, not
     // readiness alone.
     let fatigueCacheKey: string | null = null;
-    if (mode === 'fatigue_calibration') {
-      // TEMPORARY DIAGNOSTIC — not a fix, remove once the cause of a
-      // reported stale/wrong fatigue note is confirmed.
-      console.log('[fatigue_calibration diagnostic]', JSON.stringify({
-        readiness: context.readiness, ouraConnected: context.ouraConnected,
-        willSkipCache: !!(context.ouraConnected && context.readiness === null),
-        todaysFlightsCount: context.todaysFlights?.length ?? null,
-        tripDayNumber: context.tripDayNumber ?? null,
-      }));
-    }
     if (mode === 'fatigue_calibration' && !(context.ouraConnected && context.readiness === null)) {
       fatigueCacheKey = localDateKeyFor(context.timezone) + '_v' + FATIGUE_CALIBRATION_PROMPT_VERSION;
       const { data: cached } = await supabase

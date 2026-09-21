@@ -2855,16 +2855,19 @@ function renderPage() {
 // ─── STATE HELPERS ────────────────────────────────────────────────────────────
 function applyProfileToState(profile) {
   if (!profile) return;
-  // BUG FIX (reported: explicitly set the Schedule Source toggle to
-  // "Uploaded file" after re-uploading a corrected ICS, but it had
-  // reverted to "Auto" on a later load, silently falling back to Apple
-  // Calendar's stale, flight-less data instead). Confirmed directly:
-  // setScheduleSource() saves profile.scheduleSource correctly, but
-  // nothing here ever read it back - ST.scheduleSource always fell
-  // through to its 'auto' default on every single load, regardless of
-  // what was actually saved. Same class of bug as the weight_lbs/
-  // height_in gaps found earlier - a field saved correctly with no
-  // hydration line at all.
+  // BUG FIX (reported: uploaded an ICS successfully — worked in the
+  // moment — but Today's Schedule showed nothing on a later load, even
+  // with Schedule Source correctly staying on "Uploaded file" after the
+  // fix just above this one). Same exact bug class as that one and the
+  // weight_lbs/height_in gaps before it: handleICSUpload() saves
+  // profile.flightSchedule/flightScheduleRaw correctly, but nothing
+  // here ever read them back. ST.flightSchedule only ever got set
+  // in-memory, directly by the upload handler itself (or by the
+  // timezone-change re-parse, which only operates on whatever's already
+  // in memory) — never from the saved profile, so it was empty on every
+  // single fresh load regardless of what had been uploaded.
+  if (profile.flightSchedule)               ST.flightSchedule = profile.flightSchedule;
+  if (profile.flightScheduleRaw)            ST.flightScheduleRaw = profile.flightScheduleRaw;
   if (profile.scheduleSource)               ST.scheduleSource = profile.scheduleSource;
   if (profile.sex)                          ST.sex = profile.sex;
   // BUG FIX (reported: weight/height "not remembering" — confirmed real,

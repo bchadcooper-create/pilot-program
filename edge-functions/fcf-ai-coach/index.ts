@@ -329,6 +329,16 @@ Deno.serve(async (req) => {
     // over) — ouraConnected is what actually distinguishes the two, not
     // readiness alone.
     let fatigueCacheKey: string | null = null;
+    if (mode === 'fatigue_calibration') {
+      // TEMPORARY DIAGNOSTIC — not a fix, remove once the cause of a
+      // reported stale/wrong fatigue note is confirmed.
+      console.log('[fatigue_calibration diagnostic]', JSON.stringify({
+        readiness: context.readiness, ouraConnected: context.ouraConnected,
+        willSkipCache: !!(context.ouraConnected && context.readiness === null),
+        todaysFlightsCount: context.todaysFlights?.length ?? null,
+        tripDayNumber: context.tripDayNumber ?? null,
+      }));
+    }
     if (mode === 'fatigue_calibration' && !(context.ouraConnected && context.readiness === null)) {
       fatigueCacheKey = localDateKeyFor(context.timezone) + '_v' + FATIGUE_CALIBRATION_PROMPT_VERSION;
       const { data: cached } = await supabase

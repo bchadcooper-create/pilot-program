@@ -3103,6 +3103,15 @@ async function bootAppInner() {
   ST.muscleGroup = getRecommendedNext();
   renderRoot();
 
+  // Apply a notification-tap tab request that arrived before boot/auth was
+  // ready (see the fcf:pushTap listener's comment for why this can happen
+  // on a cold launch) — now that ST.authed is set and the page has its
+  // first real render, it's safe to switch tabs without losing state.
+  if (_pendingPushTapTab.current) {
+    switchTab(_pendingPushTapTab.current);
+    _pendingPushTapTab.current = null;
+  }
+
   bindFoodPhotoInputs();
   checkDB();
 
@@ -4405,9 +4414,22 @@ window.addEventListener('fcf:siwa:error', (e) => {
 });
 
 // Push notification tap — navigate to the right tab without reloading
+// BUG FIX (reported: tapping a weekly-summary notification just landed on
+// the default Today tab instead of Trends). Confirmed by reading the full
+// chain: the native side correctly schedules deepLink:"trends" and posts
+// fcf:pushTap on tap — but on a cold launch (app not already running when
+// the notification is tapped), this event can arrive before ST.authed is
+// true, since the web app's own async auth check takes real time even
+// after the page itself has loaded. The old handler silently dropped the
+// tab switch in that case with no way to recover it. Now buffers the
+// requested tab if auth isn't ready yet, and applies it once boot
+// actually completes, instead of losing it.
+let _pendingPushTapTab = { current: null };
 window.addEventListener('fcf:pushTap', (e) => {
   const tab = e.detail?.tab;
-  if (tab && ST.authed) switchTab(tab);
+  if (!tab) return;
+  if (ST.authed) switchTab(tab);
+  else _pendingPushTapTab.current = tab;
 });
 window.addEventListener('fcf:healthkit', (e) => {
   ST.healthkit = e.detail || {};

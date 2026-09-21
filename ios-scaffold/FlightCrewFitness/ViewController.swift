@@ -33,6 +33,20 @@ class ViewController: UIViewController {
     private var transactionObserverToken: NSObjectProtocol?
     private var apnsTokenObserverToken: NSObjectProtocol?
 
+    // BUG FIX (reported: tapping a weekly-summary notification landed on
+    // the default Today tab instead of Trends). Root cause: on a cold
+    // launch (app not already running when the notification is tapped),
+    // SceneDelegate posts .fcfPushNotificationTapped synchronously during
+    // scene connection — before this WebView has loaded the page at all,
+    // let alone run app.js far enough to register a listener for it.
+    // postToWeb's evaluateJavaScript call in that state has nothing on
+    // the page to receive it, so the deep link was silently lost. Now
+    // buffers the tap here if the page hasn't finished its initial load
+    // yet, and delivers it from webView(_:didFinish:) below once it has,
+    // instead of only from handlePushTap directly.
+    private var webViewFinishedInitialLoad = false
+    private var pendingPushTapData: [String: Any]?
+
     deinit {
         NotificationCenter.default.removeObserver(self) // removes the selector-based .fcfPushNotificationTapped observer
         if let token = transactionObserverToken { NotificationCenter.default.removeObserver(token) }
@@ -182,7 +196,13 @@ class ViewController: UIViewController {
         // A full URL load would re-initialize the entire app and lose all state.
         var data: [String: Any] = ["tab": deepLink]
         if let type = userInfo["type"] as? String { data["type"] = type }
-        postToWeb("fcf:pushTap", data: data)
+        if webViewFinishedInitialLoad {
+            postToWeb("fcf:pushTap", data: data)
+        } else {
+            // Page isn't ready yet (cold launch) — hold onto it and deliver
+            // once webView(_:didFinish:) fires instead of losing it here.
+            pendingPushTapData = data
+        }
     }
 
     // MARK: - JS → Native Bridge
@@ -335,6 +355,20 @@ extension ViewController: WKNavigationDelegate {
         let nsError = error as NSError
         if nsError.code == NSURLErrorCancelled { return }
         showOfflinePage(failedURL: (nsError.userInfo[NSURLErrorFailingURLErrorKey] as? URL) ?? targetURL, error: nsError)
+    }
+
+    // See the pendingPushTapData / webViewFinishedInitialLoad comment above
+    // handlePushTap for why this exists. Fires on every successful
+    // navigation, not just the first, but pendingPushTapData is only ever
+    // non-nil right after a cold-launch tap that arrived too early to
+    // deliver directly — it's nil (a harmless no-op) on every subsequent
+    // navigation once that one delivery has happened.
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        webViewFinishedInitialLoad = true
+        if let pending = pendingPushTapData {
+            pendingPushTapData = nil
+            postToWeb("fcf:pushTap", data: pending)
+        }
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {

@@ -337,7 +337,21 @@ Deno.serve(async (req) => {
     // readiness alone.
     let fatigueCacheKey: string | null = null;
     if (mode === 'fatigue_calibration' && !(context.ouraConnected && context.readiness === null)) {
-      fatigueCacheKey = localDateKeyFor(context.timezone) + '_v' + FATIGUE_CALIBRATION_PROMPT_VERSION;
+      // BUG FIX (reported: re-uploaded a corrected ICS after Apple Calendar
+      // reverted to showing no flights — Today's Schedule updated
+      // correctly, but this note kept saying "enjoy your day off" from
+      // before the correction). Same root issue as the timing fix above,
+      // different trigger: this key had zero dependency on the actual
+      // schedule content, only the date. A response generated when the
+      // schedule looked empty stayed cached and "valid" for the rest of
+      // the day even after the schedule itself changed. Added flight
+      // count and trip day number, the same way fuel_logistics already
+      // keys on meals-logged-count for the identical reason — so a
+      // schedule correction (or a genuinely updated schedule generally)
+      // invalidates the old answer instead of the date alone deciding
+      // whether it's still good.
+      fatigueCacheKey = localDateKeyFor(context.timezone) + '_v' + FATIGUE_CALIBRATION_PROMPT_VERSION
+        + '_f' + (context.todaysFlights?.length ?? 0) + '_t' + (context.tripDayNumber ?? 'null');
       const { data: cached } = await supabase
         .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
       const cachedKey = cached?.profile_data?.fatigueCalibrationCacheKey;

@@ -2855,6 +2855,17 @@ function renderPage() {
 // ─── STATE HELPERS ────────────────────────────────────────────────────────────
 function applyProfileToState(profile) {
   if (!profile) return;
+  // BUG FIX (reported: explicitly set the Schedule Source toggle to
+  // "Uploaded file" after re-uploading a corrected ICS, but it had
+  // reverted to "Auto" on a later load, silently falling back to Apple
+  // Calendar's stale, flight-less data instead). Confirmed directly:
+  // setScheduleSource() saves profile.scheduleSource correctly, but
+  // nothing here ever read it back - ST.scheduleSource always fell
+  // through to its 'auto' default on every single load, regardless of
+  // what was actually saved. Same class of bug as the weight_lbs/
+  // height_in gaps found earlier - a field saved correctly with no
+  // hydration line at all.
+  if (profile.scheduleSource)               ST.scheduleSource = profile.scheduleSource;
   if (profile.sex)                          ST.sex = profile.sex;
   // BUG FIX (reported: weight/height "not remembering" — confirmed real,
   // but not the field the report assumed. weight_lbs/height_in are dead

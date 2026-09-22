@@ -350,8 +350,27 @@ Deno.serve(async (req) => {
       // schedule correction (or a genuinely updated schedule generally)
       // invalidates the old answer instead of the date alone deciding
       // whether it's still good.
+      // BUG FIX (reported: demo/QA account showed "No readiness data at
+      // all — connect your Oura" even after Oura was marked connected
+      // and real oura_daily history existed for the account). Confirmed
+      // directly: the cached response was generated earlier the same
+      // day, before ouraConnected had been set true on that account -
+      // at that moment ouraConnected was false, so the skip-cache
+      // condition above (which only fires when ouraConnected is true)
+      // didn't apply, and this "no Oura connected" answer got cached
+      // completely normally, as intended for a genuine no-Oura user.
+      // The gap: ouraConnected itself wasn't part of the key, so
+      // nothing invalidated that cached answer once the account's real
+      // state changed later the same day. This isn't just a seeded-data
+      // quirk - any real user connecting Oura for the first time
+      // partway through a day would hit the identical stale "no Oura"
+      // cache from earlier that same day. Added ouraConnected to the
+      // key itself so that transition invalidates the old answer,
+      // matching how the schedule and readiness-timing fixes above
+      // handle their own respective triggers.
       fatigueCacheKey = localDateKeyFor(context.timezone) + '_v' + FATIGUE_CALIBRATION_PROMPT_VERSION
-        + '_f' + (context.todaysFlights?.length ?? 0) + '_t' + (context.tripDayNumber ?? 'null');
+        + '_f' + (context.todaysFlights?.length ?? 0) + '_t' + (context.tripDayNumber ?? 'null')
+        + '_o' + (context.ouraConnected ? 1 : 0);
       const { data: cached } = await supabase
         .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
       const cachedKey = cached?.profile_data?.fatigueCalibrationCacheKey;

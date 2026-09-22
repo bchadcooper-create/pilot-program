@@ -3070,17 +3070,47 @@ async function bootApp() {
 // scheduleOuraActivityRetry/scheduleEntitlementRefresh already guard
 // their own — see the fuller explanation at its one usage site below.
 let _bootSideEffectsScheduled = false;
+// BUG FIX (found while investigating why demo/seeded oura_daily rows
+// weren't showing on the Today tiles at all — traced further and
+// confirmed this affects real users too, not just seeded data):
+// ST.ouraScore/ST.ouraData (what the Today readiness/sleep/activity
+// tiles actually read) were ONLY ever set by a live, successful sync to
+// Oura's API — there was no path that hydrated them from oura_daily
+// on a normal boot at all. That means the tiles go blank on every
+// single reload until that session's own sync happens to complete
+// again, with nothing to fall back on if it's slow, offline, or fails.
+// This loads the most recent available row unconditionally at boot, so
+// there's always something to show immediately; the existing delayed
+// live sync still runs afterward and overwrites this with same-day
+// data once it succeeds, same as before.
+async function hydrateOuraFromRecent() {
+  if (!ST.user) return null;
+  try {
+    const { data } = await SB.from('oura_daily').select('*')
+      .eq('user_id', ST.user.id).order('date', { ascending: false }).limit(1);
+    return data?.[0] || null;
+  } catch (e) { return null; }
+}
+
 async function bootAppInner() {
   ST.disclaimerAccepted = localStorage.getItem('fcf_disclaimer_accepted') === '1';
 
-  const [profile, lastSession] = await Promise.all([
+  const [profile, lastSession, , , mostRecentOura] = await Promise.all([
     dbGetProfile().catch(e => { console.warn('dbGetProfile failed:', e); return null; }),
     dbGetLastSession().catch(e => { console.warn('dbGetLastSession failed:', e); return null; }),
     loadSessionCache().catch(e => { console.warn('loadSessionCache failed:', e); return []; }),
-    loadSubscription().catch(e => { console.warn('loadSubscription failed:', e); return null; })
+    loadSubscription().catch(e => { console.warn('loadSubscription failed:', e); return null; }),
+    hydrateOuraFromRecent()
   ]);
 
   applyProfileToState(profile);
+  if (mostRecentOura) {
+    ST.ouraScore = mostRecentOura.readiness_score ?? null;
+    ST.ouraData  = mostRecentOura;
+    if (ST.ouraScore !== null) {
+      ST.fatigue = ST.ouraScore >= 70 ? 'go' : ST.ouraScore >= 60 ? 'marginal' : 'nogo';
+    }
+  }
   ST.lastSession = lastSession;
   if (ST.lastSession && (!ST.sessionCache || !ST.sessionCache.find(s => s.date === ST.lastSession.date))) {
     if (!ST.sessionCache) ST.sessionCache = [];

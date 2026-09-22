@@ -8514,14 +8514,38 @@ function buildDebriefMessages(summary) {
 // a session with exercises still unlogged, with zero warning beforehand.
 // This interrupts only when the workout is genuinely incomplete; a fully
 // finished session still ends in one tap, unchanged.
+//
+// BUG FIX (reported: started a workout purely to take screenshots, logged
+// nothing, tapped Set Chocks, confirmed "Finish Anyway" on this modal —
+// and got stuck. setTheChocks() has its own, separate hard block against
+// saving a zero-exercise session (line ~8554) — a good rule on its own
+// (an empty "session" saved to training history is meaningless data), but
+// this modal didn't know about it, so "Finish Anyway" led straight into
+// that wall with no way out of the in-progress workout at all. Detecting
+// the zero-logged case specifically here, before ever reaching that save
+// path, and offering a real exit for it: discard the in-progress workout
+// entirely (no database write, same as never having started one) rather
+// than a "finish" that was never going to be allowed to succeed.
 function confirmSetChocks() {
   const wk = ST.workout;
   if (!wk) return;
   const allEx = [...wk.taxi,...wk.takeoff,...wk.enroute,...wk.landing];
   const done = allEx.filter(exItem => ST.sets[exItem.id]?.some(s => s.reps||s.weight||s.seconds||s.height||s.distance||s.seconds_left||s.seconds_right)).length;
   if (done >= allEx.length) { setTheChocks(); return; }
-  const remaining = allEx.length - done;
   const root = document.getElementById('modalRoot');
+  if (done === 0) {
+    root.innerHTML =
+      '<div class="modal-bg" onclick="if(event.target===this)closeModal()">' +
+      '<div class="modal-sheet">' +
+      '<div class="modal-handle"></div>' +
+      '<div class="modal-title">Nothing logged yet</div>' +
+      '<div class="modal-body" style="margin-bottom:14px">There\'s nothing to save — no exercise has any reps, weight, or time logged. You can discard this workout and head back, or keep going if you\'re not done.</div>' +
+      '<button class="btn btn-outline" onclick="closeModal();discardWorkout()">Discard Workout</button>' +
+      '<button class="btn btn-green mt8" onclick="closeModal()">Keep Training</button>' +
+      '</div></div>';
+    return;
+  }
+  const remaining = allEx.length - done;
   root.innerHTML =
     '<div class="modal-bg" onclick="if(event.target===this)closeModal()">' +
     '<div class="modal-sheet">' +
@@ -8531,6 +8555,25 @@ function confirmSetChocks() {
     '<button class="btn btn-green" '+(ST.chocksSaving?'disabled':'')+' onclick="closeModal();setTheChocks()">'+(ST.chocksSaving?'⏳ Saving…':'🔒 Finish Anyway')+'</button>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">Keep Training</button>' +
     '</div></div>';
+}
+
+// Companion to setTheChocks() for the zero-logged case above: abandons the
+// in-progress workout with no database write at all, rather than a "finish"
+// that saves an empty session. Mirrors setTheChocks()'s own state reset
+// (ST.workout/ST.sets/timestamps, clearWorkoutState() for the persisted
+// resume-on-reload copy) but skips everything specific to a real completed
+// session — no insert, no debrief summary, no PR/badge/leaderboard checks,
+// and lands back on Today rather than the debrief screen, since there's no
+// session to debrief.
+function discardWorkout() {
+  ST.workout = null;
+  ST.sets = {};
+  ST.workoutStartedAt = null;
+  ST.workoutFirstLoggedAt = null;
+  clearWorkoutState();
+  ST.tab = 'today';
+  renderPage();
+  showToast('Workout discarded.');
 }
 
 // ─── SET THE CHOCKS (formerly "Secure Flight") ───────────────────────────────

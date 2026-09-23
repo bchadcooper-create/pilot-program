@@ -2062,37 +2062,6 @@ window.switchTab = switchTab;
 
  
   // ─── PAGE DISPATCH & STATE GATING ─────────────────────────────────────────────
-function renderPage() {
-  const p = document.getElementById('mainPage');
-  if (!p) return;
-
-  // Enforce gating check
-  if (!ST.authed || !ST.disclaimerAccepted || ST.authView === 'recovery') {
-    renderRoot();
-    return;
-  }
-
-  p.innerHTML = '';
-  if (ST.tab === 'preflight') {
-    renderPreflight(p).catch(e => {
-      console.warn('Preflight load error:', e);
-    });
-  }
-  else if (ST.tab === 'flight')      renderFlight(p);
-  else if (ST.tab === 'trends')      return renderTrends(p);
-  else if (ST.tab === 'wisdom')      renderWisdom(p);
-  else if (ST.tab === 'profile')     renderProfile(p);
-  else if (ST.tab === 'leaderboard') renderLeaderboard(p);
-  else if (ST.tab === 'more')        renderMore(p);
-  else if (ST.tab === 'devices')     renderDevices(p);
-  else if (ST.tab === 'data')        renderData(p);
-  else if (ST.tab === 'nutrition')   return renderNutrition(p);
-  else if (ST.tab === 'fuelplan')    renderNutritionGoalsSetup(p);
-  else if (ST.tab === 'today')       { loadTodaysMeals().then(()=>renderToday(p)).catch(()=>renderToday(p)); }
-  else if (ST.tab === 'badges')      renderBadges(p);
-  else if (ST.tab === 'superuser')   renderSuperUser(p);
-  else if (ST.tab === 'debrief')     renderDebrief(p);
-}
 // ─── BADGES ──────────────────────────────────────────────────────────────────
 const BADGES = [
   { id:'first_flight', icon:'🛫', title:'First Flight',     desc:'Complete your first workout',            check:s => s.totalSessions >= 1 },
@@ -2941,27 +2910,50 @@ function applyProfileToState(profile) {
   }
 }
 
+// RESTORED: commit fe3dd70 (GitHub web-editor edit) replaced these with stubs that
+// read/wrote fields nothing else uses (ST.scheduleType, ST.suggestedEnv,
+// ST.flightHours) and deleted computeTodaysFlightHours outright, which the
+// Preflight hydration card still calls - a ReferenceError crash whenever an
+// uploaded schedule exists. Originals restored verbatim from fe3dd70^.
 function applyScheduleEnvironmentSuggestion() {
-  try {
-    if (!ST.scheduleType) return;
-    if (ST.scheduleType === 'reserve') {
-      ST.suggestedEnv = 'hotel';
-    } else if (ST.scheduleType === 'line') {
-      ST.suggestedEnv = 'commercial';
-    }
-  } catch (e) {
-    console.warn('applyScheduleEnvironmentSuggestion failed:', e);
+  ST.scheduleEnvNote = null;
+  if (!ST.flightSchedule) return;
+  const status = getCurrentScheduleStatus(ST.flightSchedule);
+  if (status?.type === 'layover') {
+    ST.env = 'hotel';
+    ST.scheduleEnvNote = '📅 Layover in ' + (status.airport||'') + ' today — set to Hotel Gym.';
+  } else if (status?.type === 'dutyfree') {
+    ST.env = 'comm';
+    ST.scheduleEnvNote = '📅 Duty-free day today — set to Commercial Gym.';
   }
 }
 
+function computeTodaysFlightHours(scheduleEvents) {
+  if (!scheduleEvents || !scheduleEvents.length) return null;
+  const now = new Date();
+  const dayStart = new Date(now); dayStart.setHours(0,0,0,0);
+  const dayEnd = new Date(now); dayEnd.setHours(23,59,59,999);
+  const coversToday = scheduleEvents.some(e => {
+    const s = new Date(e.start).getTime(), en = new Date(e.end).getTime();
+    return en > dayStart.getTime() && s < dayEnd.getTime();
+  });
+  if (!coversToday) return null;
+  let totalMs = 0;
+  scheduleEvents.filter(e => e.type === 'flight').forEach(e => {
+    const s = new Date(e.start).getTime(), en = new Date(e.end).getTime();
+    const overlapStart = Math.max(s, dayStart.getTime());
+    const overlapEnd = Math.min(en, dayEnd.getTime());
+    if (overlapEnd > overlapStart) totalMs += (overlapEnd - overlapStart);
+  });
+  return Math.round((totalMs / 3600000) * 10) / 10;
+}
+
 function applyScheduleFlightHours() {
-  try {
-    if (ST.lastSession && ST.lastSession.flight_hours) {
-      ST.flightHours = ST.lastSession.flight_hours;
-    }
-  } catch (e) {
-    console.warn('applyScheduleFlightHours failed:', e);
-  }
+  if (ST.flightHrsTouched) return;
+  const hrs = computeTodaysFlightHours(ST.flightSchedule);
+  if (hrs === null) return;
+  ST.flightHrs = hrs;
+  ST.flightHrsRaw = String(hrs);
 }
 
 function restoreDailyInputs() {
@@ -5553,7 +5545,6 @@ const EXERCISE_SYNONYMS = {
   'hack squat': 'Hack Squat (Machine)',
   'lat pull': 'Lat Pulldown',
   'lat pulldown machine': 'Lat Pulldown',
-  'pulldown': 'Lat Pulldown',
   'cable row': 'Seated Cable Row',
   'seated row': 'Seated Cable Row',
   'seated row machine': 'Seated Cable Row',

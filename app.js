@@ -2943,17 +2943,68 @@ function applyProfileToState(profile) {
 // ST.flightHours) and deleted computeTodaysFlightHours outright, which the
 // Preflight hydration card still calls - a ReferenceError crash whenever an
 // uploaded schedule exists. Originals restored verbatim from fe3dd70^.
+// Layover detection for environment auto-selection. Explicit layover/rest
+// events win. With only flight legs on the calendar (common with Apple
+// Calendar sync), infer it: right now sits in a 4h-40h gap between two
+// flights, and the last arrival airport isn't where this trip started
+// (an overnight gap that ends back at base is home rest, not a hotel).
+function inferCurrentLayover(events) {
+  const status = getCurrentScheduleStatus(events);
+  if (status && (status.type === 'layover' || status.type === 'rest')) {
+    return { airport: status.airport || status.location || '' };
+  }
+  if (status && status.type === 'flight') return null;
+  const now = Date.now();
+  const flights = (events || []).filter(e => e.type === 'flight')
+    .map(e => ({ ...e, s: new Date(e.start).getTime(), en: new Date(e.end).getTime() }))
+    .filter(e => !isNaN(e.s) && !isNaN(e.en)).sort((a, b) => a.s - b.s);
+  const prevIdx = flights.map(f => f.en <= now).lastIndexOf(true);
+  const prev = flights[prevIdx];
+  const next = flights.find(f => f.s > now);
+  if (!prev || !next) return null;
+  const gapH = (next.s - prev.en) / 3600000;
+  if (gapH < 4 || gapH > 40) return null;
+  // Walk back to the first leg of this trip (gaps under 30h keep it one trip).
+  let firstIdx = prevIdx;
+  while (firstIdx > 0 && (flights[firstIdx].s - flights[firstIdx - 1].en) / 3600000 < 30) firstIdx--;
+  const tripOrigin = (flights[firstIdx].origin || '').toUpperCase();
+  const here = (prev.destination || prev.airport || '').toUpperCase();
+  if (here && tripOrigin && here === tripOrigin) return null;
+  return { airport: here };
+}
+
+// BUG FIX (reported: at a layover hotel with today's flight showing on Today,
+// but Preflight had selected Commercial Gym). Two causes: this read only the
+// uploaded .ics, ignoring Apple Calendar even when that was the live source,
+// and it ran once at boot before calendar events had arrived. Now uses
+// getActiveSchedule() like everything else, infers a layover from flight
+// gaps when there's no explicit layover event, and is re-run whenever the
+// schedule updates. A manual environment pick made today is never overridden.
+const ENV_PIN_KEY = 'fcf_env_pinned_day';
 function applyScheduleEnvironmentSuggestion() {
   ST.scheduleEnvNote = null;
-  if (!ST.flightSchedule) return;
-  const status = getCurrentScheduleStatus(ST.flightSchedule);
-  if (status?.type === 'layover') {
-    ST.env = 'hotel';
-    ST.scheduleEnvNote = '📅 Layover in ' + (status.airport||'') + ' today — set to Hotel Gym.';
-  } else if (status?.type === 'dutyfree') {
+  if (localStorage.getItem(ENV_PIN_KEY) === new Date().toDateString()) return;
+  const events = getActiveSchedule().events;
+  if (!events || !events.length) return;
+  const layover = inferCurrentLayover(events);
+  if (layover) {
+    if (ST.env !== 'hotel' && ST.env !== 'room') ST.env = 'hotel';
+    ST.scheduleEnvNote = '📅 Layover' + (layover.airport ? ' in ' + layover.airport : '') + ' today — set to Hotel Gym.';
+    return;
+  }
+  const status = getCurrentScheduleStatus(events);
+  if (status?.type === 'dutyfree') {
     ST.env = 'comm';
     ST.scheduleEnvNote = '📅 Duty-free day today — set to Commercial Gym.';
   }
+}
+
+// Manual pick: honored for the rest of today, regardless of schedule syncs.
+function setEnvManually(env) {
+  ST.env = env;
+  ST.scheduleEnvNote = null;
+  localStorage.setItem(ENV_PIN_KEY, new Date().toDateString());
+  renderPage();
 }
 
 function computeTodaysFlightHours(scheduleEvents) {
@@ -4552,6 +4603,10 @@ window.addEventListener('fcf:calendar', async (e) => {
   ST.calendarDuplicatesRemoved = payload.duplicatesRemoved || 0;
   if (!payload.granted || !payload.events?.length) { renderPage(); return; }
   await classifyCalendarEvents(payload.events, payload.fingerprint);
+  // Calendar data arrives after boot; the environment suggestion at boot
+  // couldn't see it. Re-run now that the live schedule is known.
+  applyScheduleEnvironmentSuggestion();
+  renderPage();
   // Reschedule preflight notifications now that we have flight data
   scheduleNotifications();
 });
@@ -6391,9 +6446,9 @@ async function renderPreflight(p) {
     parts.push('</div>');
     parts.push('<div class="section-label">MISSION ENVIRONMENT</div>');
     parts.push('<div class="env-toggle">');
-    parts.push('<div class="env-btn '+(ST.env==='room'?'sel':'')+'" onclick="ST.env=\'room\';renderPage()"><div class="ei">🛏️</div><div class="el">HOTEL ROOM</div></div>');
-    parts.push('<div class="env-btn '+(ST.env==='hotel'?'sel':'')+'" onclick="ST.env=\'hotel\';renderPage()"><div class="ei">🏨</div><div class="el">HOTEL GYM</div></div>');
-    parts.push('<div class="env-btn '+(ST.env==='comm'?'sel':'')+'" onclick="ST.env=\'comm\';renderPage()"><div class="ei">🏋️</div><div class="el">COMM GYM</div></div>');
+    parts.push('<div class="env-btn '+(ST.env==='room'?'sel':'')+'" onclick="setEnvManually(\'room\')"><div class="ei">🛏️</div><div class="el">HOTEL ROOM</div></div>');
+    parts.push('<div class="env-btn '+(ST.env==='hotel'?'sel':'')+'" onclick="setEnvManually(\'hotel\')"><div class="ei">🏨</div><div class="el">HOTEL GYM</div></div>');
+    parts.push('<div class="env-btn '+(ST.env==='comm'?'sel':'')+'" onclick="setEnvManually(\'comm\')"><div class="ei">🏋️</div><div class="el">COMM GYM</div></div>');
     parts.push('<div class="env-btn '+(ST.env==='band'?'sel':'')+'" onclick="ST.env=\'band\';renderPage()"><div class="ei">➰</div><div class="el">BAND WORK</div></div>');
     parts.push('</div>');
 
@@ -13683,6 +13738,7 @@ async function handleICSUpload(file) {
     profile.flightScheduleRaw = text;
     await dbSetProfile(profile);
     showBigToast('✓ Schedule loaded — ' + events.length + ' events.', 'ok');
+    applyScheduleEnvironmentSuggestion();
     renderPage();
   } catch (e) {
     showBigToast("Couldn't read that file — make sure it's a valid .ics export.", 'warn');

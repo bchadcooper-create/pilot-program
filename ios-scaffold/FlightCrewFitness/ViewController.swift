@@ -126,6 +126,8 @@ class ViewController: UIViewController {
         contentController.add(weakDelegate, name: "calendar")
         contentController.add(weakDelegate, name: "notifications")
         contentController.add(weakDelegate, name: "haptics")
+        // "Share with Crew": native share sheet (AirDrop works with no internet).
+        contentController.add(weakDelegate, name: "share")
         // Used only by the native offline page's Retry button (see
         // showOfflinePage) — not part of the FCFBridge surface the real
         // web app uses, so it's intentionally left out of bridgeJS above.
@@ -289,6 +291,8 @@ extension ViewController: WKScriptMessageHandler {
             handleNotificationsMessage(body)
         case "haptics":
             handleHapticsMessage(body)
+        case "share":
+            handleShareMessage(body)
         case "pushToken":
             // BUG FIX (independent review finding): this handler was
             // registered but did nothing, and separately, the token was
@@ -727,6 +731,33 @@ extension ViewController {
 // MARK: - Haptics
 
 extension ViewController {
+    // Presents the standard iOS share sheet for a URL. Includes AirDrop, which
+    // is phone to phone over Bluetooth and peer-to-peer Wi-Fi, so it works in
+    // the cockpit with no internet. URL only (no text item): sending text plus
+    // a URL over AirDrop arrives as two separate items, which is messier for
+    // the recipient than a single link that opens in Safari.
+    private func handleShareMessage(_ body: [String: Any]) {
+        guard let urlString = body["url"] as? String,
+              let url = URL(string: urlString),
+              url.scheme == "https" else {
+            logNative("share: missing or non-https url in body \(body)")
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+            // Required on iPad: presenting a share sheet without a popover
+            // anchor crashes the app there. The app now ships on iPad, so
+            // anchor it to the center of the screen with no arrow.
+            if let popover = sheet.popoverPresentationController {
+                popover.sourceView = self.view
+                popover.sourceRect = CGRect(x: self.view.bounds.midX, y: self.view.bounds.midY, width: 0, height: 0)
+                popover.permittedArrowDirections = []
+            }
+            self.present(sheet, animated: true)
+        }
+    }
+
     private func handleHapticsMessage(_ body: [String: Any]) {
         let style = body["style"] as? String ?? "medium"
         logNative("handleHapticsMessage reached, style=\(style)")

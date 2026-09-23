@@ -3432,22 +3432,66 @@ async function submitFeedback() {
   }
 }
 
-function shareApp() {
+// ─── SHARE WITH CREW ─────────────────────────────────────────────────────────
+// Built for the cockpit, where there's usually no internet. Three layers, so
+// sharing always works:
+//   1. AirDrop / iOS share sheet: phone-to-phone over Bluetooth + peer-to-peer
+//      Wi-Fi, no internet needed. Native handler (build 6+) is preferred since
+//      it's guaranteed; the Web Share API is used where the web view exposes it.
+//   2. Offline QR code, pre-generated at build time and embedded here as a tiny
+//      vector image (verified to decode to SHARE_URL). A camera reads it with no
+//      signal; the link opens once the other pilot is back on the ground.
+//   3. The address itself, big enough to read across a flight deck.
+// SHARE_URL is the site root, not window.location, so no in-app path or query
+// string ever leaks into a shared link. Update the QR if this ever changes.
+const SHARE_URL = 'https://flightcrew.fit';
+const SHARE_QR_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29" width="100%" height="100%" shape-rendering="crispEdges"><path fill="#fff" d="M0 0h29v29h-29z"/><path class="qrline" stroke="#000" d="M2 2.5h7m1 0h2m1 0h1m1 0h1m1 0h2m1 0h7m-25 1h1m5 0h1m2 0h2m5 0h1m1 0h1m5 0h1m-25 1h1m1 0h3m1 0h1m3 0h3m1 0h2m2 0h1m1 0h3m1 0h1m-25 1h1m1 0h3m1 0h1m1 0h1m3 0h2m1 0h2m1 0h1m1 0h3m1 0h1m-25 1h1m1 0h3m1 0h1m1 0h5m1 0h3m1 0h1m1 0h3m1 0h1m-25 1h1m5 0h1m1 0h1m1 0h2m6 0h1m5 0h1m-25 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-17 1h1m1 0h2m4 0h1m-17 1h1m3 0h1m1 0h5m1 0h1m3 0h6m2 0h1m-25 1h1m1 0h4m2 0h4m1 0h4m3 0h2m1 0h1m-24 1h1m1 0h1m1 0h1m1 0h1m1 0h4m1 0h3m2 0h1m1 0h3m-23 1h1m2 0h1m1 0h1m1 0h1m1 0h3m4 0h2m1 0h1m2 0h2m-23 1h1m1 0h8m1 0h1m4 0h3m1 0h4m-25 1h4m1 0h1m1 0h1m2 0h1m3 0h3m3 0h1m2 0h1m-18 1h4m5 0h8m-20 1h1m3 0h3m2 0h1m1 0h2m3 0h2m1 0h2m-24 1h4m1 0h2m1 0h2m1 0h1m4 0h7m-15 1h2m2 0h2m1 0h2m3 0h1m-21 1h7m1 0h5m1 0h1m1 0h1m1 0h1m1 0h1m-21 1h1m5 0h1m2 0h3m4 0h1m3 0h5m-25 1h1m1 0h3m1 0h1m1 0h3m1 0h3m1 0h9m-25 1h1m1 0h3m1 0h1m2 0h1m3 0h2m2 0h3m2 0h3m-25 1h1m1 0h3m1 0h1m3 0h1m4 0h1m1 0h2m2 0h1m1 0h1m-24 1h1m5 0h1m2 0h2m1 0h1m2 0h1m3 0h5m-24 1h7m1 0h8m1 0h1m4 0h3"/></svg>';
+
+function openNativeShare() {
   awardLiveBadge('recruiter').catch(() => {});
-  const url = window.location.origin + window.location.pathname;
-  const shareData = {
-    title: 'Flight Crew Fitness',
-    text: 'Flight Crew Fitness — an aviation-phased workout tracker built for pilots and flight crew.',
-    url: url,
-  };
+  if (window.webkit?.messageHandlers?.share) {
+    window.webkit.messageHandlers.share.postMessage({ url: SHARE_URL });
+    return true;
+  }
   if (navigator.share) {
-    navigator.share(shareData).catch(() => {}); // user cancelling the share sheet isn't an error
-  } else if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(url)
-      .then(() => showToast('Link copied — share it with anyone.'))
-      .catch(() => showToast('Copy failed — copy the URL from your browser address bar.'));
+    // URL only (no text field): with text present, iOS's "Copy" action copies
+    // the text instead of the link.
+    navigator.share({ title: 'Flight Crew Fitness', url: SHARE_URL }).catch(() => {});
+    return true;
+  }
+  return false;
+}
+
+function shareApp() {
+  const canShareSheet = !!(window.webkit?.messageHandlers?.share || navigator.share);
+  const root = document.getElementById('modalRoot');
+  if (!root) { openNativeShare(); return; }
+  root.innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()">' +
+    '<div class="modal-sheet" style="text-align:center">' +
+    '<div class="modal-handle"></div>' +
+    '<div class="modal-title">Share with your crew</div>' +
+    '<div class="modal-body" style="margin-bottom:14px">No signal needed. AirDrop goes phone to phone, and the code scans offline.</div>' +
+    (canShareSheet
+      ? '<button class="btn btn-gold" onclick="haptic(\'light\');openNativeShare()">📡 AirDrop or Share</button>'
+      : '') +
+    '<div style="background:#fff;border-radius:12px;padding:12px;width:220px;height:220px;margin:16px auto 10px" ' +
+      'role="img" aria-label="QR code for flightcrew.fit">' + SHARE_QR_SVG + '</div>' +
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">Or point their camera here. Opens when they\'re back online.</div>' +
+    '<div style="font-family:var(--mono);font-size:22px;letter-spacing:.06em;color:var(--gold);margin:10px 0 14px">flightcrew.fit</div>' +
+    '<button class="btn btn-outline" onclick="copyShareLink()">Copy link</button>' +
+    '<button class="btn btn-outline mt8" onclick="closeModal()">Done</button>' +
+    '</div></div>';
+}
+
+function copyShareLink() {
+  awardLiveBadge('recruiter').catch(() => {});
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(SHARE_URL)
+      .then(() => showToast('Link copied.'))
+      .catch(() => showToast('Copy failed. The address is flightcrew.fit'));
   } else {
-    showToast('Sharing not supported here — copy the URL from your browser address bar.');
+    showToast('The address is flightcrew.fit');
   }
 }
 
@@ -10491,7 +10535,7 @@ function renderMore(p) {
   }
 
   parts.push('<div class="card mb12">');
-  parts.push('<button class="btn btn-outline" onclick="shareApp()">📤 Share Flight Crew Fitness</button>');
+  parts.push('<button class="btn btn-outline" onclick="shareApp()">📡 Share with Crew</button>');
   parts.push('<button class="btn btn-outline mt8" onclick="showFeedbackModal()">💬 Send Feedback</button>');
   parts.push('</div>');
 

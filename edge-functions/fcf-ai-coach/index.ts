@@ -26,7 +26,20 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const ANTHROPIC_API_KEY = Deno.env.get('fcf-food-recognition');
-const ANTHROPIC_MODEL   = 'claude-sonnet-4-6'; // reasoning over structured history — worth the upgrade from Haiku
+// Upgraded 2026-09-22 from claude-sonnet-4-6 (documented drop-in successor).
+// Sonnet 5 API differences handled below, per Anthropic's migration guide:
+// adaptive thinking is ON by default, thinking blocks can precede the text
+// block, and thinking counts against max_tokens. The old 150-token caps and
+// content[0].text parsing would have returned empty text on every call.
+// LEGACY_MODEL is an automatic fallback if the primary call errors, so a bad
+// parameter can never take the AI features down for users.
+const ANTHROPIC_MODEL   = 'claude-sonnet-5';
+const LEGACY_MODEL      = 'claude-sonnet-4-6';
+// Effort = how much the model thinks before answering. The quick one-liners
+// don't benefit from deep reasoning and are latency-sensitive (they render on
+// app open); the weekly review and trip plan reason over real history.
+const EFFORT_BY_MODE = { weekly_summary: 'medium', trip_plan: 'medium',
+  fatigue_calibration: 'low', fuel_logistics: 'low', exercise_substitute: 'low' };
 const SUPABASE_URL      = Deno.env.get('SUPABASE_URL');
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
 
@@ -40,18 +53,18 @@ const CORS = {
 // OLD prompt (e.g. one that doesn't know about incidentalWalk or recency)
 // for up to a full day after the fix ships. Included in the cache check so
 // a prompt change auto-invalidates any stale cached response.
-const WEEKLY_SUMMARY_PROMPT_VERSION = 2; // v2: incidentalWalk awareness + recency check + sandwich structure
+const WEEKLY_SUMMARY_PROMPT_VERSION = 3; // v3: model upgrade to Sonnet 5 // v2: incidentalWalk awareness + recency check + sandwich structure
 // v2: added minutesActuallyFreeBeforeNeedingToLeave awareness, so the cache
 // (added the same day this constant was) doesn't keep serving a
 // pre-fix response — that field didn't exist in the context sent to
 // earlier cached responses, so their advice can't reflect it either.
-const FATIGUE_CALIBRATION_PROMPT_VERSION = 3;
+const FATIGUE_CALIBRATION_PROMPT_VERSION = 4; // v4: model upgrade to Sonnet 5
 // BUG FIX (found while updating this prompt): fuel_logistics' cache key
 // (below) never had a prompt-version component at all, unlike the other
 // two cached modes — so a stale response from before this exact prompt
 // change could keep getting served back all day, for anyone who already
 // had a cached entry with the same meal count logged.
-const FUEL_LOGISTICS_PROMPT_VERSION = 2;
+const FUEL_LOGISTICS_PROMPT_VERSION = 3; // v3: model upgrade to Sonnet 5
 
 // ── Prompts per mode ──────────────────────────────────────────────────────────
 
@@ -279,7 +292,7 @@ Deno.serve(async (req) => {
     // already been trained), not every time the user opens Today.
     let tripPlanCacheKey = null;
     if (mode === 'trip_plan') {
-      tripPlanCacheKey = `${context.tripStart}_${context.tripEnd}_${context.sessionsLoggedThisTrip ?? 0}`;
+      tripPlanCacheKey = `${context.tripStart}_${context.tripEnd}_${context.sessionsLoggedThisTrip ?? 0}_s5`;
       const { data: cached } = await supabase
         .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
       const cachedKey = cached?.profile_data?.tripPlanCacheKey;
@@ -388,34 +401,66 @@ Deno.serve(async (req) => {
     // mid-sentence (stop_reason: max_tokens). trip_plan is one line per trip
     // day, so a longer trip (5-6 days) can also run past 180. Padded for
     // headroom; cost only scales with tokens actually generated, not the cap.
-    const MAX_TOKENS_BY_MODE = { weekly_summary: 300, fatigue_calibration: 150, fuel_logistics: 150, trip_plan: 300, exercise_substitute: 250 };
+    // Visible-text caps (what the prompts target). With thinking enabled the
+    // model also needs headroom for reasoning inside max_tokens, so the real
+    // cap sent is text cap + a thinking allowance. Cost is only charged on
+    // tokens actually generated, not the cap itself.
+    const TEXT_TOKENS_BY_MODE = { weekly_summary: 300, fatigue_calibration: 150, fuel_logistics: 150, trip_plan: 300, exercise_substitute: 250 };
+    const THINKING_HEADROOM = { low: 1500, medium: 4000 };
+    const effort = EFFORT_BY_MODE[mode] || 'low';
+    const textCap = TEXT_TOKENS_BY_MODE[mode] || 200;
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const callModel = (useLegacy: boolean) => fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type':      'application/json',
         'x-api-key':         ANTHROPIC_API_KEY!,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify({
-        model:      ANTHROPIC_MODEL,
-        max_tokens: MAX_TOKENS_BY_MODE[mode] || 200,
-        system:     PROMPTS[mode],
-        messages: [{
-          role:    'user',
-          content: JSON.stringify(context, null, 2)
-        }]
+      body: JSON.stringify(useLegacy ? {
+        model: LEGACY_MODEL, max_tokens: textCap, system: PROMPTS[mode],
+        messages: [{ role: 'user', content: JSON.stringify(context, null, 2) }]
+      } : {
+        model: ANTHROPIC_MODEL,
+        max_tokens: textCap + (THINKING_HEADROOM[effort] || 1500),
+        output_config: { effort },
+        system: PROMPTS[mode],
+        messages: [{ role: 'user', content: JSON.stringify(context, null, 2) }]
       })
     });
 
-    if (!response.ok) {
-      const err = await response.text();
-      console.error('Anthropic error:', err);
-      return new Response(JSON.stringify({ error: 'ai_failed', detail: err }), { status: 502, headers: CORS });
-    }
+    // Parse text by block type, never position: with thinking on, the first
+    // block can be a thinking block with no .text at all.
+    const extractText = (r: any) => (r.content || [])
+      .filter((b: any) => b.type === 'text').map((b: any) => b.text || '').join('').trim();
 
-    const aiResp = await response.json();
-    let text = aiResp.content?.[0]?.text?.trim() || '';
+    // Primary model first. ANY failure (HTTP error, or a success that came
+    // back with no text, e.g. all output spent thinking) retries once on the
+    // legacy model, so the new model can never make things worse than before.
+    let text = '';
+    let response = await callModel(false);
+    if (response.ok) {
+      const r = await response.json();
+      text = extractText(r);
+      if (r.stop_reason === 'max_tokens') console.warn('Primary hit max_tokens', { mode, textLength: text.length });
+      if (!text) console.warn('Primary returned no text, falling back to legacy', { mode });
+    } else {
+      console.warn('Primary model failed, falling back to legacy:', response.status, await response.text());
+    }
+    if (!text) {
+      response = await callModel(true);
+      if (!response.ok) {
+        const err = await response.text();
+        console.error('Anthropic error (legacy too):', err);
+        return new Response(JSON.stringify({ error: 'ai_failed', detail: err }), { status: 502, headers: CORS });
+      }
+      text = extractText(await response.json());
+    }
+    // Never cache or show an empty response - the cache logic below would
+    // otherwise lock an empty string in for the rest of the day.
+    if (!text) {
+      return new Response(JSON.stringify({ error: 'ai_empty' }), { status: 502, headers: CORS });
+    }
 
     // BUG FIX (independent review finding, confirmed real): exercise_substitute
     // is the one mode the client JSON.parse()s directly. The prompt tells the

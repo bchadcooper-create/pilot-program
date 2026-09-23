@@ -4668,7 +4668,10 @@ async function callAICoach(mode, context) {
     // past that, treat it as failed so the card can hide instead of
     // showing "Thinking..." indefinitely.
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    // 35s (was 20s): the AI coach now reasons before answering on the weekly
+    // review and trip plan (Sonnet 5, medium effort). Those load async into
+    // their own cards, so a longer ceiling never blocks the UI.
+    const timeoutId = setTimeout(() => controller.abort(), 35000);
     let res;
     try {
       res = await fetch(AI_COACH_EDGE_FN, {

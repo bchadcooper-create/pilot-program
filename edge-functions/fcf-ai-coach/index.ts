@@ -58,7 +58,7 @@ const WEEKLY_SUMMARY_PROMPT_VERSION = 3; // v3: model upgrade to Sonnet 5 // v2:
 // (added the same day this constant was) doesn't keep serving a
 // pre-fix response — that field didn't exist in the context sent to
 // earlier cached responses, so their advice can't reflect it either.
-const FATIGUE_CALIBRATION_PROMPT_VERSION = 4; // v4: model upgrade to Sonnet 5
+const FATIGUE_CALIBRATION_PROMPT_VERSION = 5; // v5: bodyClock awareness (v4: Sonnet 5)
 // BUG FIX (found while updating this prompt): fuel_logistics' cache key
 // (below) never had a prompt-version component at all, unlike the other
 // two cached modes — so a stale response from before this exact prompt
@@ -159,6 +159,12 @@ does NOT. Use this figure, not the raw time to departure, when deciding whether 
 for a workout. If it's null, there's no known upcoming departure constraining the window. If it's under
 roughly 45, do not suggest "full send" or a real training session — say something else useful instead
 (a walk, mobility work, or just get ready and go), the same way you would if readiness itself ruled it out.
+
+You may receive bodyClock (null when they're home or less than an hour off local time): hoursOffLocal, a
+direction, and a strategy. short_trip_stay_on_home_time means they're heading home within 3 days and should hold
+home-base time, so a local-morning session is effectively earlier on their body clock than the clock on the wall
+says. adapting_to_local means a longer stay. Only mention it when it actually changes the call (for example, an
+early local session that lands in their body's early morning); never lecture about jet lag in general.
 
 Tell them straight, like a coach would in person, and give the one reason why — not generic "listen to your
 body" filler. If everything looks fine, say so with confidence, don't manufacture caution just to sound
@@ -383,7 +389,8 @@ Deno.serve(async (req) => {
       // handle their own respective triggers.
       fatigueCacheKey = localDateKeyFor(context.timezone) + '_v' + FATIGUE_CALIBRATION_PROMPT_VERSION
         + '_f' + (context.todaysFlights?.length ?? 0) + '_t' + (context.tripDayNumber ?? 'null')
-        + '_o' + (context.ouraConnected ? 1 : 0);
+        + '_o' + (context.ouraConnected ? 1 : 0)
+        + '_b' + (context.bodyClock ? (context.bodyClock.hoursOffLocal + context.bodyClock.strategy.charAt(0)) : 0);
       const { data: cached } = await supabase
         .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
       const cachedKey = cached?.profile_data?.fatigueCalibrationCacheKey;

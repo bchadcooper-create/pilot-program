@@ -2967,8 +2967,8 @@ function inferCurrentLayover(events) {
   // Walk back to the first leg of this trip (gaps under 30h keep it one trip).
   let firstIdx = prevIdx;
   while (firstIdx > 0 && (flights[firstIdx].s - flights[firstIdx - 1].en) / 3600000 < 30) firstIdx--;
-  const tripOrigin = (flights[firstIdx].origin || '').toUpperCase();
-  const here = (prev.destination || prev.airport || '').toUpperCase();
+  const tripOrigin = flightRoute(flights[firstIdx]).origin;
+  const here = flightRoute(prev).destination || String(prev.airport || '').toUpperCase();
   if (here && tripOrigin && here === tripOrigin) return null;
   return { airport: here };
 }
@@ -5076,6 +5076,8 @@ async function loadFatigueCalibration(ctx) {
       // fatigue instead) — readiness being null alone doesn't
       // distinguish those two cases on its own.
       ouraConnected: !!ST.ouraConnected,
+      // Null when home or under 1 hr off local; see buildBodyClockHTML.
+      bodyClock: bodyClockForAI(),
     };
     const result = await callAICoach('fatigue_calibration', context);
     const card = document.getElementById('aiFatigueCard');
@@ -12044,6 +12046,170 @@ function dedupeDutyFreeEvents(events, getLabel) {
   });
 }
 
+// ─── BODY CLOCK (jet lag / circadian guidance) ───────────────────────────────
+// Airport IATA code -> IANA time zone for the Americas, Hawaii and Bermuda
+// (2,283 airports), packed as "zone|codes" with codes concatenated in 3-char
+// chunks. Built from the OpenFlights airports dataset (ODbL). Offline by design.
+const AIRPORT_TZ_PACKED = 'America/Adak|ADKAKBSYA;America/Anchorage|ABLADQAETAGNAINAKIAKKAKNAKPANCANIANNANVARCATKAUKBETBIGBKCBMXBRWBTIBTTCDBCDVCEMCHUCIKCYFCYTCZFDLGDRGDUTEAAEDFEEKEGXEHMEILELIELVEMKENAFAIFBKFNRFRNFYUGALGAMGKNGLVGSTHCRHNHHNSHOMHPBHSLHUSHYGIANIGGIKOILIIRCJNUKALKFPKGKKKAKKHKLGKLNKLWKMOKNWKOTKPCKPNKPVKQAKSMKTNKTSKUKKVCKVLKWKKWNKWTKYKKYULMALURMCGMCLMLLMLYMOUMRIMTMMYUNCNNIBNLGNMENNLNUINULOBUOMEOOKORTORVOTZPAQPIPPIZPKAPMLPPCPSGPTAPTHPTURBYRSHSCCSCMSDPSGYSHGSHHSHXSITSKKSLQSMKSNPSTGSVASVWSWDSXQTKATKJTLATLJTNCTOGUNKUTOUUKVAKVDZVEEWAAWBQWKKWLKWMOWNAWRGWSNWTKYAK;America/Anguilla|AXA;America/Antigua|ANUBBQ;America/Argentina/La_Rioja|IRJ;America/Argentina/Rio_Gallegos|FTEGGSINGLHSPMQPUDRGLRZAULA;America/Argentina/Salta|APZBRCCPCCUTEHLGNRGPOHOSIGBNQNOESORARDSRSASGVSLATTGVDM;America/Argentina/San_Juan|UAQ;America/Argentina/San_Luis|LUQVME;America/Argentina/Tucuman|TUC;America/Argentina/Ushuaia|RGAUSH;America/Aruba|AUA;America/Asuncion|AGTASUAYOCIOESGPILPJC;America/Barbados|BGI;America/Belem|ATMBELBVSCDJCKSCMPITBJCRMABMEUOIAORXRDCSFKSTMSXXTMTTUR;America/Belize|BZESPR;America/Blanc-Sablon|YBXYHRYIFZGSZKGZLTZTB;America/Boa_Vista|BAZBVBBVHCAFCIZERNFBAGJMHUWIRZITAJPRLBRMAOMBZMNXNVPOALOLCPINPLLPVHRBBSJLTBTTFF;America/Bogota|ACDACRADZAPOAUCAXMBAQBGABOGBSCBUNCAQCLOCOGCPBCRCCTGCUCCZUEBGEJAELBEOHEYPFLAGIRGPIIBEIPILETLPDLQMMCJMDEMGNMQUMTRMVPMZLNQUNVAOCVOTUPCRPDAPEIPPNPSOPTXPUUPVARCHRVESJESMRSVITCOTLUTMEUIBULQVGZVUPVVC;America/Buenos_Aires|AEPBHICSZEPAEZEFDOJNILPGMDQNECOVROYOPEHSSTTDLVLG;America/Campo_Grande|AFLBPGBYOCFOCGBCGRCMGDMTDOUOPSPMGROOSTZSXOTJL;America/Cancun|CTMCUNCZMISJ;America/Caracas|AAOAGVBLABNSBRMCAJCBLCCSCLZCUMCUPCXACZEEOREOZGDOGUIGUQHGEICCLFRLRVLSPMARMRDMUNMYCPBLPMVPTMPYHPZOSBBSCISFDSNFSNVSOMSTBSTDSVZTMOTUVVCRVDPVIGVLNVLV;America/Catamarca|ARRCRDCTCEQSJSMPMYREL;America/Cayenne|CAYGSILDXMPYOYPXAU;America/Cayman|CYBGCMLYB;America/Chicago|AAPABIABRACTADMADSADTAEXAFWAIZALIALOAMAANBARAARVATWATYAUOAUSAUWBADBDEBECBFMBHMBISBIXBJIBKDBKGBLVBMIBMTBNABPTBRDBRLBROBTRBWGBYHCBMCDSCEWCFDCGICGXCIDCKVCLLCMICNWCOTCOUCRPCSMCUHCWACWICXODALDBQDDCDECDFWDHNDHTDLFDLHDNVDPADRIDRTDSIDSMDTNDUCDVLDWHDYSEAUECPEFDEGVELDEMPENDENWEOKERVESFEUFEVVEWKFARFCMFLDFLVFODFOEFRIFSDFSIFSMFSTFTWFWHFYVGADGBDGCKGFKGGGGLHGLSGPTGPZGRBGRIGRKGRMGTRGUFGVTGWOGYYHBGHBRHIBHLRHONHOPHOTHOUHRLHROHSVHUAHUTHYSIABIAHICTIKKIMTINKINLIOWIRBIRKISNISWIWSJANJBRJCIJEFJLNJMSJOTJVLLAWLBBLBFLBLLCHLFKLFTLITLJNLNKLNRLOTLRDLRFLSELTSLWCLYUMAFMCIMCKMCWMDWMEIMEMMFEMFIMGCMGMMHKMIBMKCMKEMKLMLCMLIMLUMNMMOBMOTMQYMSLMSNMSPMSYMWAMWCMWLMXFNBGNEWNPANQANQINSEOFFOJCOKCOKMOLVOMAORDOSHOWBOZAPAHPAMPBFPEQPFNPIAPIBPIRPMBPNCPNSPOEPOFPSXPWAPWKRACRBDRDRRFDRHIRKPRNDRSTRVSSATSBMSEMSEPSGFSGRSHVSIKSJTSKFSLNSPISPSSPWSTCSTESTJSTLSTPSUSSUXSWOSZLTBNTCLTIKTOPTPLTULTUPTVFTXKTYRUGNUINUOSUTMUVAVCTVOKVPSVYSWLDXNAYKN;America/Coral_Harbour|YIBYPLYZS;America/Cordoba|AOLCNQCOCCORELOFMAGHUIGRMCSOYAPRAPRQPSSRCQRCURESRHDROSSDESFNUZUVDR;America/Costa_Rica|BAIBCLDRKFONGLFGPLJAPLIOLIRLSLNOBOTRPBPPJMPLDPMZSJOSYQTMUTOOTTQXQP;America/Curacao|BONCUREUXSABSXM;America/Dawson_Creek|YDQYXJ;America/Denver|ABQAIAAKOALMALSAPAASEBCEBFFBFKBIFBILBJCBMCBOIBTMBZNCDCCDRCEZCNMCNYCODCOSCPRCTBCVNCVSCYSDENDIKDRODTAEGEELPENVEVWFBRFCAFCSFMNFNLGCCGDVGGWGJTGLDGMVGNTGTFGUCGUPHDNHIFHLNHMNHOBHVRIDAJACLAALAMLARLGULNDLRULVMLVSLWTMLSMSOMTJMUOMYLOGDOLFONOPIHPUBPUCPVURAPRCARILRIWRKSROWRUIRWLSAASAFSBSSDYSGUSHRSLCSMNSNYSPFSTKSUNTCCTCSTEXTWFVELWBUWRLWSDWYS;America/Dominica|DCFDOM;America/Edmonton|LAKYBBYBYYCBYCKYCOYCTYEGYETYEVYFJYFRYFSYGHYHIYHKYHYYLEYLLYMMYOAYODYOJYOPYPCYPEYPYYQFYQLYQUYRAYRMYSDYSMYSYYUBYVGYVQYWJYWYYXCYXDYXHYYCYYHYZFYZHYZUZFMZFN;America/El_Salvador|SAL;America/Fortaleza|AJUAUXBPSBRACAUCLNCPVCRQFENFORGNMGRPIMPIOSJDOJPALAZLECMCPMCZMVFMVSNATOYKPAVPHBPMWPNBPNZQIGRECSLZSSATHEUNAVALVDC;America/Godthab|GOHJAVJCHJEGJFRJGOJHSJJUJNNJNSJQAJSUJUVLLUSFJUAKUMD;America/Grand_Turk|GDTMDSNCAPLSSLXXSC;America/Grenada|GND;America/Guadeloupe|BBRDSDGBJLSSPTPSFC;America/Guatemala|AAZAQBCBVFRSGSJGUAPBRRER;America/Guayaquil|ATFCUEESMETRGYELOHLTXMCHMECMRROCCPTZPVOSNCTPCTPNTUAUIOXMS;America/Guyana|GEOGFOIMBKAIKARLTMMHANAIOGLORJUSI;America/Halifax|YBIYCHYCLYDPYFCYHOYHZYMNYNPYQIYQMYQYYRFYRGYSJYSOYSUYWKYYGYYRYZXZBFZUM;America/Havana|AVIBCABYMCCCCFGCMWCYOGAOGERHAVHOGLCLMOAMZOQPDSCUSNUSZJTNDUPBUSSVRAVROVTU;America/Hermosillo|CENGYMHMONOGPPE;America/Jamaica|KINKTPMBJNEGOCJPOT;America/Jujuy|JUJ;America/La_Paz|BJOBYCCBBCCACIJGYALPBORUPOIPSZPURRBQREYRIBSBLSRESRJSRZTDDTJAUYUVLMVVI;America/Lima|ANSAOPAQPATAAYPCHHCHMCIXCJACUZHUUIBPILQIQTJAUJJIJULLIMNZCPCLPEMPIOPIUTBPTCQTGITPPTRUTYLYMS;America/Los_Angeles|ACVALWAPCASTAVXBABBFIBFLBLHBLIBNOBURBYSCCRCECCICCLDCLMCLSCOECVOCXLDLSEATEDWEKOELYESDEUGFATFRDFULGEGGRFHHRHIOHQMHSHHWDINSIPLIYKKLSLASLAXLGBLKVLMTLPCLPSLSVLVKLWSMAEMCCMCEMERMFRMHRMHVMMHMODMRYMWHMYVNFLNGZNJKNKXNLCNOTNTDNUQNUWNZJNZYOAKOAROCNOLMONPONTOTHOTKOXRPAEPAOPDTPDXPMDPOCPRZPSCPSPPUWPWTRALRBKRBLRDDRDMRIVRMYRNORNTSACSANSBASBDSBPSCKSDMSEASEESFFSFOSHNSJCSKASLESMFSMOSMXSNASQLSTSSUUTCMTIWTKFTOATRMTTDTVLUDDVBGVCVVGTVISVNYWHPXSDYKM;America/Managua|BEFBZAMGANCRPUZRFSRNISIUWSP;America/Martinique|FDF;America/Mazatlan|CJSCUACULCUULAPLMMLTOMZTNCGSJDTPQ;America/Mendoza|AFALGSMDZ;America/Mexico_City|ACAACNAGUBJXCLQCMECPECVJCVMCYWCZADGOGDLHUXIZTJALLOVLZCMAMMEXMIDMLMMTTMTYNLDNTROAXPAZPBCPDSPVRPXMQROREXSLPSLWSZTTAMTAPTCNTGZTLCTRCTSLUPNVERVSAZCLZIHZLOZMM;America/Miquelon|FSPMQC;America/Montevideo|CYRDZOMVDPDPRVYSTY;America/Montserrat|MNI;America/Nassau|ASDATCAXPBIMCCZCOXCRIDCTELHFPOGGTGHBGHCIGALGIMAYMHHMYGNASNMCPIDRCYRSDSAQSMLTBITCBTYMZSA;America/New_York|AAFABEABYACKACYADWAGCAGSAHNAIKAKCALBANDANPANQAOHAOOAPFAPGAPNARBARTASHATLATOAUGAVLAVOAVPAZOBAFBBXBCTBDLBDRBEDBFDBFPBFTBGEBGMBGRBHBBIDBKLBKWBLFBMGBOSBOWBQKBTVBUFBVYBWICAECAKCARCBECDNCDWCEFCEUCGFCHACHOCHSCIUCKBCLECLTCLWCMHCMXCOFCONCRECRWCSGCTHCTYCVGDABDANDAYDBNDCADETDKKDNLDNNDOVDREDTWDUJDXRDYLECAECGEENEKNELMERIESCESNEWBEWNEWREYWFAFFAYFBGFDYFFAFFOFFTFKLFLLFLOFMEFMHFMYFNTFOKFPRFRGFRYFTKFTYFWAFXEGAIGDWGEDGFLGGEGIFGNVGONGQQGRRGSBGSOGSPGUSGVLHAOHARHCWHDIHFDHGRHHHHKYHLGHPNHSTHTLHTSHUFHULHVNHWOHYAHZLIADIAGIKBILGILMILNIMMINDINTIPTISMISOISPITHJAXJFKJHWJRAJRBJSTJXNLAFLALLANLBELBTLCKLCQLDJLEBLEWLEXLFILGALGCLHVLIYLKPLLYLNALNNLNSLOULOZLSFLUKLWBLWMLYHLZUMBLMBSMCFMCNMCOMDTMEOMFDMGEMGJMGWMGYMHTMIAMIEMIVMKGMLBMMIMMUMNZMPVMQTMRBMRKMRNMSSMTCMTHMTNMUIMVLMVYMYRNCONELNGUNHKNIPNQXNTUNXXOAJOBEOCAOCFOCWOGSOPFORFORHORLOSCOSUOWDOXCPBGPBIPDKPGDPGVPHDPHFPHKPHLPHNPIEPIMPITPKBPLNPNEPOBPPMPQIPSMPTBPTKPVCPVDPVLPWMPYMRDGRDURICRKDRKHRMERMGROAROCRSWRUTRWISAVSBNSBYSCESCHSDFSEFSFBSFZSGHSHDSKYSLKSMDSMESOPSPGSRQSSCSSISUASVHSVNSWFSYRTEBTIXTLHTMATMBTNTTOCTOLTPATRITTNTVCTVITYSUSAUSTVADVLDVNCVQQVRBWALWBWWDRWFKWRBWRIWSTWWDYIPYNGZPH;America/Panama|BLBBOCCHXCTDDAVJQEONXPACPLPPTYPUESYP;America/Paramaribo|ABNAGIDRJICKMOJOEMORGPBMSMZTOTWSO;America/Phoenix|AVWAZABXKCGZDGLDMADUGDVTFHUFLGGCNGYRHIIINWLUFMSCMZJOLSPGAPHXPRCSADSCFSDXSOWTUSYUM;America/Port-au-Prince|CAPCYAJAKJEEPAPPAX;America/Port_of_Spain|POSTAB;America/Puerto_Rico|AREBQNCPXFAJMAZNRRPSESIGSJUVQS;America/Regina|YBEYENYHBYKYYLJYMJYNLYPAYQRYQVYQWYSFYVCYVTYXEYYNZFDZWL;America/Rio_Branco|CZSRBRTRQ;America/Santiago|ANFARIBBACCHCCPCJCESRFFUGXQIQQKNALSCLSQMHCPMCPNTPUQPZSQRCSCLVLRWCHWPRWPUYAIZALZOSZPC;America/Santo_Domingo|AZSBRXCBJCOZHEXJBQLRMPOPPUJSDQSTI;America/Sao_Paulo|AAXAQAARUBAUBFHBGXBJPBNUBSBCACCAWCCICCMCFBCFCCGHCLVCNFCPQCWBCXJDTIERMFBEFLNFRCGELGIGGPBGRUGUJGVRGYNIGUIPNITRIZAJCBJDFJOIJTCLAJLDBLIPMEAMGFMIIMOCMQHNVTPETPFBPLUPOAPOJPOOPPBQCJQNVQPSQSCRAORIARVDSDUSJKSJPSNZSODSRASSZTECTOWUBAUDIUMUURGVAGVCPVIXXAP;America/Scoresbysund|CNPOBY;America/St_Johns|YAYYDFYFXYHAYJTYMHYQXYWMYYT;America/St_Kitts|NEVSKB;America/St_Lucia|SLUUVF;America/St_Thomas|SPBSTTSTX;America/St_Vincent|BQUCIWMQSSVDUNI;America/Tegucigalpa|AHSBHGGJALCEPEURTBSAPTEATGUTJIUII;America/Thule|NAQTHU;America/Tijuana|ESEGUBMXLSFHTIJ;America/Toronto|AKVKIFSURWNNXGRXKSYAMYATYBCYBGYCCYCMYCNYCYYELYEMYERYFAYFBYFEYFHYGKYGLYGPYGQYGRYGTYGVYGWYGZYHFYHMYHNYHUYIKYIOYJNYKFYKGYKLYKQYKUYKXYKZYLCYLDYLHYLKYLTYMGYMOYMTYMWYMXYNAYNCYNDYNMYNSYOGYOOYOWYPDYPHYPJYPNYPOYPQYPXYQAYQBYQCYQGYQNYQTYRIYRJYRQYSBYSCYSPYSRYTAYTEYTFYTMYTQYTRYTSYTZYUDYULYUXYUYYVBYVMYVOYVPYVVYWAYWBYWPYXKYXPYXRYXUYXZYYBYYUYYWYYYYYZYZDYZEYZGYZRYZVZBMZEMZKE;America/Tortola|EISVIJ;America/Vancouver|CXHQBCYAAYAZYBLYBOYBWYCDYCGYCWYDAYDBYDLYDTYGBYGGYKAYLWYLYYMAYOCYPRYPWYQHYQQYQZYRVYVRYWHYWLYWSYXSYXTYXXYXYYYDYYEYYFYYJYZPYZTYZWYZZZFAZMHZMTZNAZSW;America/Winnipeg|ILFKEWMSAXBEXLBXSIXTLYABYACYAGYAXYBKYBRYBTYBVYCRYCSYDNYEKYEUYFOYGMYGOYGXYHDYHPYIVYNEYNOYOHYPGYPMYQDYQKYRBYRLYRSYRTYSTYTHYTLYUTYVZYWGYXLYXNYYLYYQZACZGIZGRZJNZPBZRJZSJZTM;Atlantic/Bermuda|BDA;Pacific/Honolulu|BKHBSFHDHHHIHNLHNMITOJHMJRFKOALIHLNYLUPMKKMUENGFOGGUPPWKL';
+let _airportTzMap = null;
+function airportTimezone(code) {
+  if (!code) return null;
+  if (!_airportTzMap) {
+    _airportTzMap = {};
+    AIRPORT_TZ_PACKED.split(';').forEach(seg => {
+      const [tz, codes] = seg.split('|');
+      for (let i = 0; i < codes.length; i += 3) _airportTzMap[codes.substr(i, 3)] = tz;
+    });
+  }
+  return _airportTzMap[String(code).trim().toUpperCase()] || null;
+}
+
+// Origin/destination for a flight event from either schedule source. Calendar
+// events carry them as fields (from classification); uploaded .ics events only
+// have them in the summary text, e.g. "FLT 3809 PHX-CID".
+function flightRoute(e) {
+  if (e?.origin || e?.destination) {
+    return { origin: String(e.origin || '').toUpperCase(), destination: String(e.destination || '').toUpperCase() };
+  }
+  const m = String(e?.summary || e?.title || '').match(/\b([A-Z]{3})\s*(?:-|–|>|\/|to)\s*([A-Z]{3})\b/);
+  return m ? { origin: m[1], destination: m[2] } : { origin: '', destination: '' };
+}
+
+// UTC offset in hours for an IANA zone at a given instant (DST-correct).
+function tzOffsetHours(tz, date) {
+  try {
+    const d = date || new Date();
+    const p = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric',
+      month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(d);
+    const g = t => +p.find(x => x.type === t).value;
+    return Math.round((Date.UTC(g('year'), g('month') - 1, g('day'), g('hour'), g('minute'), g('second')) - d.getTime()) / 60000) / 60;
+  } catch (e) { return null; }
+}
+
+// Home base zone. Explicit setting wins. Otherwise the most frequent airport
+// across the schedule (every trip starts and ends there), since the phone's
+// own zone follows the pilot to the layover and can't be trusted for "home".
+function inferHomeTimezone(events) {
+  if (ST.baseTimezone && ST.baseTimezone !== 'auto') return ST.baseTimezone;
+  // Count trip-starting origins (first leg after a 30h+ gap): every trip
+  // departs from base, while a single trip's outstations can outnumber it.
+  const counts = {};
+  const legs = (events || []).filter(e => e.type === 'flight')
+    .map(e => ({ ...flightRoute(e), s: new Date(e.start).getTime(), en: new Date(e.end).getTime() }))
+    .filter(f => !isNaN(f.s)).sort((a, b) => a.s - b.s);
+  legs.forEach((f, i) => {
+    const tripStart = i === 0 || (f.s - legs[i - 1].en) / 3600000 >= 30;
+    if (tripStart && f.origin && airportTimezone(f.origin)) counts[f.origin] = (counts[f.origin] || 0) + 1;
+  });
+  const base = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+  return (base && airportTimezone(base)) || Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+// Estimated body-clock offset. Starts fully adapted to home 10 days back, then
+// walks flight arrivals forward, drifting toward each new zone at the average
+// rates in the CDC Yellow Book (2026): 1.5 h/day westward, 1 h/day eastward.
+// An estimate from the schedule alone, not a measurement.
+const BODY_CLOCK_LOOKBACK_MS = 10 * 86400000;
+function computeBodyClock(events, nowMs) {
+  const now = nowMs || Date.now();
+  const homeTz = inferHomeTimezone(events);
+  const homeOffset = tzOffsetHours(homeTz, new Date(now));
+  if (homeOffset === null) return null;
+  let t = now - BODY_CLOCK_LOOKBACK_MS;
+  let body = tzOffsetHours(homeTz, new Date(t));
+  let env = body;
+  const drift = (toMs) => {
+    const days = Math.max(0, (toMs - t) / 86400000);
+    const delta = env - body;
+    if (Math.abs(delta) > 0.01) body += Math.sign(delta) * Math.min(Math.abs(delta), (delta > 0 ? 1.0 : 1.5) * days);
+    t = toMs;
+  };
+  (events || []).filter(e => e.type === 'flight')
+    .map(e => ({ ...flightRoute(e), en: new Date(e.end).getTime() }))
+    .filter(f => !isNaN(f.en) && f.en > t && f.en <= now)
+    .sort((a, b) => a.en - b.en)
+    .forEach(f => {
+      drift(f.en);
+      const tz = airportTimezone(f.destination);
+      const o = tz ? tzOffsetHours(tz, new Date(f.en)) : null;
+      if (o !== null) env = o;
+    });
+  drift(now);
+  const localOffset = -new Date(now).getTimezoneOffset() / 60;
+  let diff = Math.round((localOffset - body) * 2) / 2; // >0: body behind local (flew east)
+  // Short trip = a flight back into the home zone within 72h. Standard crew
+  // guidance for short trips is to stay on home-base time rather than adapt.
+  const returnsHomeSoon = (events || []).some(e => {
+    if (e.type !== 'flight') return false;
+    const s = new Date(e.start).getTime();
+    if (isNaN(s) || s <= now || s > now + 72 * 3600000) return false;
+    const tz = airportTimezone(flightRoute(e).destination);
+    return tz && tzOffsetHours(tz, new Date(s)) === homeOffset;
+  });
+  // On a short trip the advice is to hold home time, so assume the pilot is
+  // doing that rather than showing a half-adapted estimate that contradicts it.
+  if (returnsHomeSoon) {
+    body = homeOffset;
+    diff = Math.round((localOffset - body) * 2) / 2;
+  }
+  return { homeTz, homeOffset, bodyOffset: body, localOffset, diff, returnsHomeSoon,
+           atHome: Math.abs(localOffset - homeOffset) < 0.5 };
+}
+
+// Local wall-clock label for a given body-clock hour today.
+function bodyHourToLocalLabel(bodyHour, bc) {
+  const localHour = ((bodyHour + (bc.localOffset - bc.bodyOffset)) % 24 + 24) % 24;
+  const d = new Date(); d.setHours(Math.floor(localHour), Math.round((localHour % 1) * 60), 0, 0);
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function buildBodyClockHTML() {
+  const events = getActiveSchedule().events;
+  if (!events?.length) return '';
+  const bc = computeBodyClock(events);
+  if (!bc || Math.abs(bc.diff) < 1 || bc.atHome) return '';
+  const hrs = Math.abs(bc.diff);
+  const behind = bc.diff > 0;
+  const homeCity = (bc.homeTz.split('/')[1] || 'home').replace(/_/g, ' ');
+  const bodyNow = new Date(Date.now() + (bc.bodyOffset - bc.localOffset) * 3600000)
+    .toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  // Strength peaks roughly 16:00-20:00 body time (PMC12015785); use 16-19.
+  const trainWin = bodyHourToLocalLabel(16, bc) + ' to ' + bodyHourToLocalLabel(19, bc);
+  // Caffeine even 6h before bed cut total sleep by over an hour (Drake et al.,
+  // J Clin Sleep Med 2013). Assumes a 10:30 PM bedtime on whichever clock the
+  // pilot is living on.
+  const bedBody = bc.returnsHomeSoon ? 22.5 : 22.5 - (bc.localOffset - bc.bodyOffset);
+  const caffeineCut = bodyHourToLocalLabel(bedBody - 6, bc);
+  const strategy = bc.returnsHomeSoon
+    ? 'Short trip: stay on ' + homeCity + ' time. Sleep and eat close to your home schedule instead of local.'
+    : (behind
+      ? 'Adapting east: get outdoor light in the local morning, keep evenings dim.'
+      : 'Adapting west: get light in the local evening, keep mornings dim.');
+  return '<div class="card mb12">' +
+    '<div class="section-label" style="margin-top:0">🕐 BODY CLOCK</div>' +
+    (bc.returnsHomeSoon
+      ? '<div style="font-size:15px;font-weight:700;margin-bottom:2px">Holding ' + homeCity + ' time: ' + bodyNow + ' there</div>' +
+        '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">' + hrs + ' hr' + (hrs === 1 ? '' : 's') + ' ' + (behind ? 'behind' : 'ahead of') + ' local. Home within 3 days, so no need to adapt.</div>'
+      : '<div style="font-size:15px;font-weight:700;margin-bottom:2px">Your body thinks it\'s ' + bodyNow + '</div>' +
+        '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">About ' + hrs + ' hr' + (hrs === 1 ? '' : 's') + ' ' + (behind ? 'behind' : 'ahead of') + ' local time (estimate from your schedule)</div>') +
+    '<div style="font-size:12px;line-height:1.65">' +
+      '💪 Strongest window: <b>' + trainWin + '</b> local<br>' +
+      '☕ Last caffeine by <b>' + caffeineCut + '</b> local<br>' +
+      '☀️ ' + strategy +
+    '</div></div>';
+}
+
+// Compact summary for the AI coach's context.
+function bodyClockForAI() {
+  try {
+    const events = getActiveSchedule().events;
+    const bc = events?.length ? computeBodyClock(events) : null;
+    if (!bc || Math.abs(bc.diff) < 1 || bc.atHome) return null;
+    return { hoursOffLocal: Math.abs(bc.diff), direction: bc.diff > 0 ? 'body_behind_local_flew_east' : 'body_ahead_of_local_flew_west',
+             strategy: bc.returnsHomeSoon ? 'short_trip_stay_on_home_time' : 'adapting_to_local' };
+  } catch (e) { return null; }
+}
+
 // ─── FIRST-RUN SETUP CHECKLIST ───────────────────────────────────────────────
 // A brand new account used to land on Today with no guidance beyond a
 // calendar nudge, while the app quietly needs a goal/level (to build a
@@ -12098,6 +12264,7 @@ function renderToday(p) {
 
   parts.push('<div id="ouraTopSection">'+buildOuraTopSectionHTML(ctx)+'</div>');
   parts.push(buildSetupChecklistHTML());
+  parts.push(buildBodyClockHTML());
 
   // AI Preflight Schedule Mapping — Pro only, shown before Fatigue
   // Calibration since a multi-day trip overview is more useful context to

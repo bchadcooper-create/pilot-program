@@ -256,13 +256,13 @@ Deno.serve(async (req) => {
     // Server-side Pro gate — the client should never reach here on free tier,
     // but never trust the client alone for a paid feature.
     const { data: sub } = await supabase
-      .from('subscriptions').select('tier, status').eq('user_id', user.id).maybeSingle();
-    // DEV OVERRIDE — matches the client-side override in app.js isPro(),
-    // scoped to the same single account for testing AI coach features
-    // while App Store Connect IAP products are still being verified.
-    // REMOVE both overrides together before public release.
-    const isDevTestAccount = user.id === '7e41ca46-6e00-4c54-bc3f-2e45d923fe0b';
-    const isPro = isDevTestAccount || (sub?.tier === 'pro' && (sub?.status === 'active' || sub?.status === 'grace'));
+      .from('subscriptions').select('tier, status, current_period_end').eq('user_id', user.id).maybeSingle();
+    // Dev override removed before public release (owner account holds a real
+    // promo subscription row instead). Also now honors current_period_end,
+    // matching the client-side isPro(): previously a lapsed comp code still
+    // passed here because only tier/status were checked.
+    const notExpired = !sub?.current_period_end || new Date(sub.current_period_end) > new Date();
+    const isPro = sub?.tier === 'pro' && (sub?.status === 'active' || sub?.status === 'grace') && notExpired;
     if (!isPro) {
       return new Response(JSON.stringify({ error: 'pro_required' }), { status: 402, headers: CORS });
     }

@@ -1708,6 +1708,23 @@ async function checkAuth() {
     return session?.user || null;
   } catch(e) { return null; }
 }
+// Sign in with Apple only works when BOTH the native bridge is present (iOS
+// app) and the Apple provider is enabled in Supabase Auth. The second part is
+// a dashboard setting, so it's read from the public auth settings endpoint
+// rather than assumed. Result is cached for the session; the auth screen
+// re-renders once it's known.
+async function checkSiwaAvailability() {
+  ST.siwaAvailable = false; // guards against a second fetch while in flight
+  const native = !!(window.webkit?.messageHandlers?.signInWithApple);
+  if (!native) return;
+  try {
+    const r = await fetch('https://dnxkydxbyihgsictbzjz.supabase.co/auth/v1/settings', { headers: { apikey: SB_ANON_KEY } });
+    const j = await r.json();
+    ST.siwaAvailable = !!j?.external?.apple;
+  } catch (e) { ST.siwaAvailable = false; }
+  if (ST.siwaAvailable && !ST.authed) renderRoot();
+}
+
 async function doSignUp(email, pass) {
   const { data, error } = await SB.auth.signUp({ email, password: pass });
   if (error) throw error;
@@ -1820,6 +1837,17 @@ function renderAuth(root) {
   parts.push('<div class="field"><label>Password</label><input type="password" id="auth_pass" placeholder="'+(isSignup?'Choose a password (min 6 chars)':'Your password')+'" autocomplete="'+(isSignup?'new-password':'current-password')+'"></div>');
   if (isSignup) parts.push('<div class="field"><label>Confirm Password</label><input type="password" id="auth_pass2" placeholder="Re-enter your password" autocomplete="new-password"></div>');
   parts.push('<button class="btn btn-gold mt8" onclick="handleAuthSubmit()">'+(isSignup?'Create Account →':'Sign In →')+'</button>');
+  // Sign in with Apple. The native side and the success handler have existed
+  // since the first iOS build, but no button ever exposed them, so nobody
+  // could use it. Shown only inside the iOS app and only once the Apple
+  // provider is switched on in Supabase Auth (checked live, see
+  // checkSiwaAvailability), so the button can't appear before it works.
+  if (ST.siwaAvailable) {
+    parts.push('<div style="display:flex;align-items:center;gap:10px;margin:14px 0 4px;color:var(--muted);font-size:11px"><div style="flex:1;height:1px;background:var(--border)"></div>or<div style="flex:1;height:1px;background:var(--border)"></div></div>');
+    parts.push('<button class="btn mt8" style="background:#000;color:#fff;border:1px solid #333;font-weight:600" onclick="haptic(\'light\');FCFBridge.signInWithApple()">&#63743; Sign in with Apple</button>');
+  } else if (ST.siwaAvailable === undefined) {
+    checkSiwaAvailability();
+  }
   if (!isSignup) parts.push('<button class="btn-ghost mt8" style="display:block;width:100%;text-align:center;font-size:12px" onclick="ST.authView=\'forgot\';ST.authErr=\'\';ST.authInfo=\'\';renderRoot()">Forgot password?</button>');
   parts.push('<button class="btn-ghost mt12" style="display:block;width:100%;text-align:center" onclick="ST.showLanding=true;renderRoot()">← Back</button>');
   parts.push('</div></div>');
@@ -11961,12 +11989,60 @@ function dedupeDutyFreeEvents(events, getLabel) {
   });
 }
 
+// ─── FIRST-RUN SETUP CHECKLIST ───────────────────────────────────────────────
+// A brand new account used to land on Today with no guidance beyond a
+// calendar nudge, while the app quietly needs a goal/level (to build a
+// program), sex + bodyweight (strength scoring, nutrition targets), a
+// schedule source, and a wearable to do its best work. This card tracks
+// those four automatically from real state, links each straight to where
+// it's set, and removes itself once everything's done (or on dismiss).
+const SETUP_DISMISS_KEY = 'fcf_setup_checklist_dismissed';
+function getSetupChecklist() {
+  const isNative = typeof FCFBridge !== 'undefined' && FCFBridge.isNative;
+  const hasSchedule = !!(ST.flightSchedule?.length || ST.calendarEvents?.length);
+  const hasWearable = !!(ST.ouraConnected || ST.healthkit?.granted);
+  return [
+    { icon: '🎯', label: 'Pick your mission and level', done: !!(ST.goal && ST.level),
+      hint: 'Builds the right program for you', go: "switchTab('profile')" },
+    { icon: '⚖️', label: 'Add sex and bodyweight', done: !!(ST.sex && ST.lastWeight),
+      hint: 'Powers strength scoring and fuel targets', go: "switchTab('profile')" },
+    { icon: '📅', label: isNative ? 'Connect your calendar' : 'Upload your schedule', done: hasSchedule,
+      hint: 'Trip-aware training windows and layover plans',
+      go: isNative && !ST.calendarGranted ? "FCFBridge.requestCalendar(ST.baseTimezone)" : "switchTab('data')" },
+    { icon: '⌚', label: isNative ? 'Connect Oura or Apple Health' : 'Connect your Oura ring', done: hasWearable,
+      hint: 'Readiness-based go / no-go calls', go: "switchTab('devices')" },
+  ];
+}
+function buildSetupChecklistHTML() {
+  if (localStorage.getItem(SETUP_DISMISS_KEY) === '1') return '';
+  const items = getSetupChecklist();
+  const doneCount = items.filter(i => i.done).length;
+  if (doneCount === items.length) return '';
+  const parts = [];
+  parts.push('<div class="card mb12">');
+  parts.push('<div class="fb" style="align-items:center;margin-bottom:8px"><div class="section-label" style="margin:0">PREFLIGHT CHECKLIST</div>' +
+    '<div style="font-size:11px;color:var(--muted)">'+doneCount+' of '+items.length+'</div></div>');
+  parts.push('<div style="height:4px;background:var(--border);border-radius:2px;margin-bottom:12px"><div style="height:4px;width:'+Math.round(doneCount/items.length*100)+'%;background:var(--gold);border-radius:2px"></div></div>');
+  items.forEach(i => {
+    parts.push('<div class="fb" style="align-items:center;padding:8px 0;border-bottom:1px solid var(--border)" ' +
+      (i.done ? '' : 'onclick="haptic(\'light\');'+i.go+'"') + '>' +
+      '<div style="width:22px;font-size:14px;text-align:center;color:'+(i.done?'var(--green)':'var(--muted)')+'">'+(i.done?'✓':'○')+'</div>' +
+      '<div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600;'+(i.done?'color:var(--muted);text-decoration:line-through':'')+'">'+i.icon+' '+i.label+'</div>' +
+      (i.done ? '' : '<div style="font-size:11px;color:var(--muted)">'+i.hint+'</div>') + '</div>' +
+      (i.done ? '' : '<div style="color:var(--muted);font-size:16px">›</div>') + '</div>');
+  });
+  parts.push('<button class="btn-ghost mt8" style="display:block;width:100%;text-align:center;font-size:12px" onclick="haptic(\'light\');localStorage.setItem(SETUP_DISMISS_KEY,\'1\');renderPage()">I\'ll finish this later</button>');
+  parts.push('</div>');
+  return parts.join('');
+}
+
 function renderToday(p) {
   const ctx = getTodayContext();
   const gaps = buildTodayGaps(ctx);
   const parts = [];
 
   parts.push('<div id="ouraTopSection">'+buildOuraTopSectionHTML(ctx)+'</div>');
+  parts.push(buildSetupChecklistHTML());
 
   // AI Preflight Schedule Mapping — Pro only, shown before Fatigue
   // Calibration since a multi-day trip overview is more useful context to

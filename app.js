@@ -2897,6 +2897,11 @@ function applyProfileToState(profile) {
   // never matched anything, and the connection state never survived a
   // reload on any device, correctly saved or not.
   if (profile.ouraConnected !== undefined)  ST.ouraConnected = profile.ouraConnected;
+  // BUG FIX (reported: 'Possible duplicate' asked 3+ times about the same Oura
+  // workout after answering 'Already logged' each time). resolveOuraDuplicate()
+  // saved skips to profile.ouraDismissedIds, but nothing ever read them back,
+  // so every launch started with an empty list and re-asked.
+  if (Array.isArray(profile.ouraDismissedIds)) ST.ouraDismissedIds = profile.ouraDismissedIds;
   if (profile.ouraAccessToken)              ST.ouraAccessToken = profile.ouraAccessToken;
   if (profile.badges && typeof profile.badges === 'object') ST.badges = profile.badges;
   // BUG FIX (reported: call sign / age kept getting re-prompted for, or

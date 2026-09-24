@@ -6894,7 +6894,7 @@ function normalizeMovementName(name) {
 let _movementIndex = null;
 function buildMovementIndex() {
   if (_movementIndex) return _movementIndex;
-  const idToKey = {}, keyToIds = {};
+  const idToKey = {}, keyToIds = {}, idToName = {};
   const seen = new Set();
   (function walk(node) {
     if (!node || typeof node !== 'object' || seen.has(node)) return;
@@ -6903,22 +6903,86 @@ function buildMovementIndex() {
     if (node.id && node.name) {
       const key = normalizeMovementName(node.name);
       idToKey[node.id] = key;
+      idToName[node.id] = node.name;
       (keyToIds[key] = keyToIds[key] || []).push(node.id);
       return;
     }
     Object.values(node).forEach(walk);
   })(WORKOUTS);
-  _movementIndex = { idToKey, keyToIds };
+  _movementIndex = { idToKey, keyToIds, idToName };
   return _movementIndex;
 }
 
 // Every exercise id representing the same movement as this one — the set
 // that history should actually be read across.
+// History also holds ids the catalog doesn't know: custom exercises
+// (custom_<ts>, names in ST.customExercises), swaps and injury alternates
+// with a readable slug (swap_db_deadlift, inj_db_incline_press), and the
+// original June 2026 ids ('rdl', 'jm_squat'). Without names for these,
+// that history was invisible to every lookup.
+const LEGACY_EXERCISE_NAMES = {
+  rdl: 'Romanian Deadlift', squat: 'Back Squat', bench: 'Bench Press', ohp: 'Overhead Press',
+  legpress: 'Leg Press', lgpress: 'Leg Press', calf: 'Calf Raise', latpd: 'Lat Pulldown',
+  curl: 'Bicep Curl', facepull: 'Face Pull', lateral: 'Lateral Raise', pressdown: 'Tricep Pressdown',
+  cabrow: 'Cable Row', bss: 'Bulgarian Split Squat', tbdl: 'Trap Bar Deadlift', broad: 'Broad Jump',
+  boxjump: 'Box Jump', lunge: 'Lunge', plank: 'Plank',
+};
+function resolveExerciseName(id) {
+  const { idToName } = buildMovementIndex();
+  if (idToName[id]) return idToName[id];
+  const custom = (ST.customExercises || []).find(c => c?.exercise?.id === id);
+  if (custom) return custom.exercise.name;
+  const slug = String(id).replace(/^(swap|inj|jm)_/, '');
+  if (LEGACY_EXERCISE_NAMES[slug]) return LEGACY_EXERCISE_NAMES[slug];
+  if (/^(swap|inj)_/.test(id) && !/^\d+$/.test(slug)) return slug.replace(/_/g, ' ');
+  return null;
+}
+
+// Movement FAMILY: same movement regardless of implement or qualifier.
+// "DB Romanian Deadlift" and "Romanian Deadlift" share a family;
+// "Kettlebell Goblet Squat (Heavy)" and "(Warmup)" share one too.
+// Used only to say "you've done this before"; never for weight targets,
+// since a barbell weight is the wrong target for a dumbbell variation.
+function movementFamilyKey(name) {
+  return String(name || '').toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\b(db|dumbbells?|barbell|bb|kettlebells?|kb|cable|machine|smith|banded|band|weighted|heavy|light|warm-?up)\b/g, ' ')
+    .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// Most recent weighted log of the same family under a DIFFERENT exact
+// movement. Returns { name, weight } or null.
+function lastLoggedFamilyVariant(exId, exName) {
+  const fam = movementFamilyKey(exName);
+  if (!fam) return null;
+  const exact = new Set(equivalentExerciseIds(exId, exName));
+  const all = ST.sessionCache || [];
+  for (let i = all.length - 1; i >= 0; i--) {
+    for (const [id, sets] of Object.entries(all[i].sets || {})) {
+      if (exact.has(id) || !Array.isArray(sets)) continue;
+      const nm = resolveExerciseName(id);
+      if (!nm || movementFamilyKey(nm) !== fam) continue;
+      const w = sets.map(s => parseFloat(s.weight) || 0).filter(x => x > 0);
+      if (w.length) return { name: nm, weight: Math.max(...w) };
+    }
+  }
+  return null;
+}
+
 function equivalentExerciseIds(exId, exName) {
   const { idToKey, keyToIds } = buildMovementIndex();
   const key = (exName ? normalizeMovementName(exName) : null) || idToKey[exId];
   if (!key) return [exId];
-  const ids = keyToIds[key] || [];
+  const ids = [...(keyToIds[key] || [])];
+  // Non-catalog ids (custom, swaps, legacy) whose resolved name is the same
+  // exact movement count as full history, weights included.
+  for (const sess of (ST.sessionCache || [])) {
+    for (const id of Object.keys(sess.sets || {})) {
+      if (ids.includes(id) || idToKey[id]) continue; // catalog ids already handled above
+      const nm = resolveExerciseName(id);
+      if (nm && normalizeMovementName(nm) === key) ids.push(id);
+    }
+  }
   return ids.includes(exId) ? ids : [...ids, exId];
 }
 
@@ -7732,7 +7796,12 @@ function buildExCard(exItem, phaseKey) {
         parts.push('<span style="color:var(--gold);font-weight:700;font-size:12px">Target → '+suggested+' lb</span>');
         parts.push('</div></div>');
       } else {
-        parts.push('<div class="stat-banner-empty">First time logging — sets here to start tracking progress.</div>');
+        const variant = lastLoggedFamilyVariant(exItem.id, exItem.name);
+        if (variant) {
+          parts.push('<div class="stat-banner-empty">You\'ve done this as '+sanitizeUserText(variant.name)+' ('+variant.weight+' lb). First time with this version, so no target yet.</div>');
+        } else {
+          parts.push('<div class="stat-banner-empty">First time logging this one. Log your sets to start tracking progress.</div>');
+        }
       }
     }
 

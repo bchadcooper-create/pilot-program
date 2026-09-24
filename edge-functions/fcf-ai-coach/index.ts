@@ -53,18 +53,18 @@ const CORS = {
 // OLD prompt (e.g. one that doesn't know about incidentalWalk or recency)
 // for up to a full day after the fix ships. Included in the cache check so
 // a prompt change auto-invalidates any stale cached response.
-const WEEKLY_SUMMARY_PROMPT_VERSION = 3; // v3: model upgrade to Sonnet 5 // v2: incidentalWalk awareness + recency check + sandwich structure
+const WEEKLY_SUMMARY_PROMPT_VERSION = 4; // v4: goal-aware weight framing, house style; // v3: model upgrade to Sonnet 5 // v2: incidentalWalk awareness + recency check + sandwich structure
 // v2: added minutesActuallyFreeBeforeNeedingToLeave awareness, so the cache
 // (added the same day this constant was) doesn't keep serving a
 // pre-fix response — that field didn't exist in the context sent to
 // earlier cached responses, so their advice can't reflect it either.
-const FATIGUE_CALIBRATION_PROMPT_VERSION = 5; // v5: bodyClock awareness (v4: Sonnet 5)
+const FATIGUE_CALIBRATION_PROMPT_VERSION = 6; // v6: plain-words opener, house style; // v5: bodyClock awareness (v4: Sonnet 5)
 // BUG FIX (found while updating this prompt): fuel_logistics' cache key
 // (below) never had a prompt-version component at all, unlike the other
 // two cached modes — so a stale response from before this exact prompt
 // change could keep getting served back all day, for anyone who already
 // had a cached entry with the same meal count logged.
-const FUEL_LOGISTICS_PROMPT_VERSION = 3; // v3: model upgrade to Sonnet 5
+const FUEL_LOGISTICS_PROMPT_VERSION = 4; // v4: house style; // v3: model upgrade to Sonnet 5
 
 // ── Prompts per mode ──────────────────────────────────────────────────────────
 
@@ -93,6 +93,13 @@ function localDateKeyFor(timezone) {
   }
   return new Date().toISOString().slice(0, 10);
 }
+
+// Appended to every conversational mode. Real screenshots showed em dashes in
+// nearly every reply and one garbled opener ("Take it now, not train").
+const HOUSE_STYLE = `
+
+STYLE, NON-NEGOTIABLE: never use an em dash or en dash anywhere; use a comma, a period, or the word "and"
+instead. No "literally". Plain spoken English a tired pilot reads in five seconds.`;
 
 const PROMPTS = {
   weekly_summary: `You're a strength coach talking to a pilot or flight crew member for about 15 seconds — this
@@ -124,6 +131,11 @@ of their own logging, however gently phrased, breaks the coach illusion and adds
 You have real schedule context already. NEVER ask the user to log notes, tag trip days, or add anything to make
 your job easier.
 
+trainingGoal tells you how to read weightTrend, and you must read it that way: 'muscle' means weight going UP is
+the plan working (talk about it as progress, not a warning); 'fatloss' means weight going down is the goal and
+up is worth a nudge; 'longevity' and 'jump' mean weight is a minor signal unless the move is large. Never
+default to treating weight gain as a problem.
+
 Use this structure — a positive, then a critique, then a positive (the "sandwich"):
 1. Open with the ONE most interesting thing going well right now, weighted toward what actually happened in the
    last 5-7 days (consistency, a lift trending up, showing up on hard trip days, weight trend moving right).
@@ -135,7 +147,7 @@ Use this structure — a positive, then a critique, then a positive (the "sandwi
 FOUR SENTENCES TOTAL, not five or six. Roughly one sentence per part above, with the middle critique allowed two
 if it needs a reason. If your draft is longer, cut it down before responding — don't let it run long and get cut
 off mid-thought. Talk like you're texting a friend a quick note, not writing them a memo. No bullet points, no
-headers, no bold text, no jargon, no hedging phrases like "I want to flag" or "the thing I'd point out."`,
+headers, no bold text, no jargon, no hedging phrases like "I want to flag" or "the thing I'd point out."` + HOUSE_STYLE,
 
   fatigue_calibration: `You're a strength coach passing a pilot or flight crew member one quick line before they
 train today — this is a text message, not a briefing. Give the call (full send, dial it back, or take the day)
@@ -172,7 +184,8 @@ thorough. If they're doing well on a hard trip day, say that.
 
 TWO SENTENCES MAXIMUM. One for the call, one for the reason — combine them into one sentence if you can. If
 your draft runs longer, you're including detail nobody asked for; cut it. Talk directly and warmly, no clinical
-tone, no restating the raw numbers back at them.`,
+tone, no restating the raw numbers back at them. Open with the call in plain words a reader can't misparse:
+"Full send today", "Dial it back", "Take the day", or "No time to train before report" and then the reason.` + HOUSE_STYLE,
 
   fuel_logistics: `You're a coach passing a pilot or flight crew member one quick line about today's eating window
 — a text message, not a logistics report. Say which window today is worth using for real food and why the
@@ -196,7 +209,7 @@ TWO SENTENCES MAXIMUM. One naming the window (or saying there isn't a good one l
 about it — the logging nudge above, when it applies, IS one of your two sentences, not an addition to them. If
 your draft runs longer, you're including detail nobody asked for — cut it down before responding. Talk like
 you're texting a friend, not writing a logistics report. No jargon, no listing out every leg and gap in the
-schedule — just the one window that matters right now.`,
+schedule — just the one window that matters right now.` + HOUSE_STYLE,
 
   trip_plan: `You're a strength coach mapping out training for a pilot or flight crew member's upcoming or
 current multi-day trip. You will receive the trip's day-by-day structure — each day's flight count, duty hours,
@@ -212,7 +225,7 @@ Format: one line per day, in order. Each line starts with "Day N:" and gives the
 a short reason tied to that day's actual numbers. Example shape (do not copy the wording, generate your own):
 "Day 1: light session only — early report, short turn." / "Day 2: your best day — 14hr layover, no early duty
 after." Keep every line to one sentence. Do not add a summary, intro, or closing line — just the day-by-day list.
-No headers, no bullet symbols — plain "Day N:" prefixes only.`,
+No headers, no bullet symbols — plain "Day N:" prefixes only.` + HOUSE_STYLE,
 
   exercise_substitute: `You're a strength coach picking a one-for-one substitute exercise for a pilot or
 flight crew member who can't do the exercise as programmed — usually because of what's actually available where

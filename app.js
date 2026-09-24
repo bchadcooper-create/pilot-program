@@ -1521,6 +1521,7 @@ function parseFlightScheduleICS(icsText) {
     const val = line.slice(idx + 1);
     if (key === 'UID') cur.uid = val;
     else if (key === 'DESCRIPTION') cur.description = val;
+    else if (key === 'LOCATION') cur.location = val;
     else if (key === 'DTSTART') cur.start = parseICSDateTime(val);
     else if (key === 'DTEND') cur.end = parseICSDateTime(val);
     else if (key === 'SUMMARY') cur.summary = val;
@@ -1567,7 +1568,13 @@ function parseFlightScheduleICS(icsText) {
     } else if (/^Duty[\s-]?free\s+period$/i.test(e.summary)) {
       type = 'dutyfree';
     }
+    // Route, if the export carries one anywhere (summary "FLT 4033 PHX-XNA",
+    // description, or LOCATION). Many exports only have the flight number;
+    // then these stay empty and the body clock falls back to trip structure.
+    const rm = ((e.summary || '') + ' ' + (e.description || '') + ' ' + (e.location || ''))
+      .match(/\b([A-Z]{3})\s*(?:-|–|>|\/|to)\s*([A-Z]{3})\b/);
     return { uid: e.uid, start: e.start.toISOString(), end: e.end.toISOString(), summary: e.summary, type, airport,
+             origin: rm ? rm[1] : '', destination: rm ? rm[2] : '',
              localFromDescription: !!e.localFromDescription };
   });
 }
@@ -4912,6 +4919,9 @@ async function loadProgressionAnalytics() {
 
     const context = {
       windowDays: 42,
+      // Goal decides how a weight trend should be read: up is progress for
+      // 'muscle', a warning for 'fatloss', neutral-ish for the others.
+      trainingGoal: ST.goal || 'longevity',
       sessions: sessionsWithTripContext,
       weightTrend,
       biometrics,
@@ -12136,12 +12146,24 @@ function computeBodyClock(events, nowMs) {
   let diff = Math.round((localOffset - body) * 2) / 2; // >0: body behind local (flew east)
   // Short trip = a flight back into the home zone within 72h. Standard crew
   // guidance for short trips is to stay on home-base time rather than adapt.
-  const returnsHomeSoon = (events || []).some(e => {
-    if (e.type !== 'flight') return false;
-    const s = new Date(e.start).getTime();
-    if (isNaN(s) || s <= now || s > now + 72 * 3600000) return false;
-    const tz = airportTimezone(flightRoute(e).destination);
-    return tz && tzOffsetHours(tz, new Date(s)) === homeOffset;
+  // Two ways to know a flight within 72h lands at home: its destination
+  // resolves to the home zone, or it's the last leg of the trip (no flight
+  // follows within 30h). Most exports only carry flight numbers, so the
+  // structural test is what usually decides it.
+  const allFlights = (events || []).filter(e => e.type === 'flight')
+    .map(e => ({ e, s: new Date(e.start).getTime(), en: new Date(e.end).getTime() }))
+    .filter(f => !isNaN(f.s) && !isNaN(f.en)).sort((a, b) => a.s - b.s);
+  const returnsHomeSoon = allFlights.some((f, i) => {
+    if (f.s <= now || f.s > now + 72 * 3600000) return false;
+    const tz = airportTimezone(flightRoute(f.e).destination);
+    if (tz && tzOffsetHours(tz, new Date(f.s)) === homeOffset) return true;
+    const next = allFlights[i + 1];
+    if (next && (next.s - f.en) / 3600000 < 30) return false;
+    // No later flight known: a layover/rest event right after this leg means
+    // the trip continues past the loaded schedule, so it's not the last leg.
+    const layoverAfter = (events || []).some(x => (x.type === 'layover' || x.type === 'rest') &&
+      new Date(x.start).getTime() >= f.en - 3600000 && new Date(x.start).getTime() <= f.en + 6 * 3600000);
+    return !layoverAfter;
   });
   // On a short trip the advice is to hold home time, so assume the pilot is
   // doing that rather than showing a half-adapted estimate that contradicts it.

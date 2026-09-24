@@ -2902,6 +2902,28 @@ function applyProfileToState(profile) {
   // saved skips to profile.ouraDismissedIds, but nothing ever read them back,
   // so every launch started with an empty list and re-asked.
   if (Array.isArray(profile.ouraDismissedIds)) ST.ouraDismissedIds = profile.ouraDismissedIds;
+  // RESTORED (dropped by commit fe3dd70's rewrite of this function, found by
+  // diffing every field the original loaded): objective, level, injuries,
+  // custom exercises, saved custom routines and leaderboard bests were all
+  // still being SAVED but never loaded, so each silently reset to defaults
+  // on every launch. Restored verbatim from fe3dd70^, sanitizing included.
+  // ouraToken (legacy personal token) intentionally not restored: nothing
+  // reads ST.ouraToken anymore.
+  if (profile.level) ST.level = profile.level;
+  if (profile.goal)  ST.goal  = profile.goal;
+  ST.customExercises = (profile.customExercises || []).map(ce => {
+    if (ce?.exercise) {
+      ce.exercise.name = sanitizeUserText(ce.exercise.name);
+      ce.exercise.note = sanitizeUserText(ce.exercise.note);
+      ce.exercise.target = sanitizeUserText(ce.exercise.target) || '—';
+    }
+    return ce;
+  });
+  ST.customProfiles = (profile.customProfiles || []).map(cp => ({ ...cp, name: sanitizeUserText(cp.name) }));
+  ST.injuries = Array.isArray(profile.injuries) ? profile.injuries : [];
+  ST.lbBests  = profile.lbBests || {};
+  ST.runBest  = profile.runBest || 0;
+  if (profile.ouraRefreshToken) ST.ouraRefreshToken = profile.ouraRefreshToken;
   if (profile.ouraAccessToken)              ST.ouraAccessToken = profile.ouraAccessToken;
   if (profile.badges && typeof profile.badges === 'object') ST.badges = profile.badges;
   // BUG FIX (reported: call sign / age kept getting re-prompted for, or

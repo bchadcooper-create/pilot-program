@@ -2613,7 +2613,7 @@ function renderRunningRows(el, rows) {
 
 async function adminDeleteRunEntry(table, id, uname) {
   if (!isLbAdmin()) return;
-  if (!confirm('Delete '+uname+'\'s entry from this board? This can\'t be undone.')) return;
+  if (!(await appConfirm('Delete '+uname+'\'s entry from this board? This can\'t be undone.', 'Delete entry'))) return;
   try {
     const { error } = await withTimeout(SB.from(table).delete().eq('id', id));
     if (error) throw error;
@@ -2624,7 +2624,7 @@ async function adminDeleteRunEntry(table, id, uname) {
 
 async function adminDeleteLbEntry(id, uname) {
   if (!isLbAdmin()) return;
-  if (!confirm('Delete '+uname+'\'s entry from this board? This can\'t be undone.')) return;
+  if (!(await appConfirm('Delete '+uname+'\'s entry from this board? This can\'t be undone.', 'Delete entry'))) return;
   try {
     const { error } = await withTimeout(SB.from('leaderboard_entries').delete().eq('id', id));
     if (error) throw error;
@@ -4097,6 +4097,38 @@ function showCNSInfo() {
   showInfoModal('CNS Down-Regulation', CNS_EXPLAINER);
 }
 function closeModal() { document.getElementById('modalRoot').innerHTML = ''; }
+
+// In-app replacement for window.confirm(). Inside the iOS app's WKWebView,
+// confirm() returns false instantly and shows nothing unless the native side
+// implements runJavaScriptConfirmPanelWithMessage (it didn't until build 6),
+// so every "Delete ...?" guard silently cancelled. Reported via the progress
+// photo delete button doing nothing. Resolves true only on the confirm tap.
+// Message goes in via textContent, so names in it can't inject markup.
+let _appConfirmResolve = null;
+function appConfirm(message, confirmLabel) {
+  return new Promise(resolve => {
+    const root = document.getElementById('modalRoot');
+    if (!root) { resolve(false); return; }
+    if (_appConfirmResolve) _appConfirmResolve(false); // a newer prompt replaces an unanswered one
+    _appConfirmResolve = resolve;
+    root.innerHTML =
+      '<div class="modal-bg" onclick="if(event.target===this)_appConfirmAnswer(false)"><div class="modal-sheet">' +
+      '<div class="modal-handle"></div>' +
+      '<div class="modal-title">Are you sure?</div>' +
+      '<div class="modal-body" id="appConfirmMsg" style="margin-bottom:14px"></div>' +
+      '<button class="btn" style="background:var(--red,#ef4444);color:#fff" onclick="haptic(\'medium\');_appConfirmAnswer(true)"></button>' +
+      '<button class="btn btn-outline mt8" onclick="_appConfirmAnswer(false)">Cancel</button>' +
+      '</div></div>';
+    root.querySelector('#appConfirmMsg').textContent = message;
+    root.querySelector('.modal-sheet .btn').textContent = confirmLabel || 'Delete';
+  });
+}
+function _appConfirmAnswer(yes) {
+  const r = _appConfirmResolve;
+  _appConfirmResolve = null;
+  closeModal();
+  if (r) r(!!yes);
+}
 
 // ─── PERSISTENCE: in-progress workout survives app close/reload ─────────────
 const WORKOUT_STATE_KEY = 'fcf_inprogress_workout';
@@ -10537,10 +10569,13 @@ async function deleteProgressPhoto(idx) {
   if (!ST.user) return;
   const photo = (ST.photoTimeline||[])[idx];
   if (!photo) return;
-  if (!confirm('Delete this progress photo? This cannot be undone.')) return;
+  if (!(await appConfirm('Delete this progress photo? This cannot be undone.', 'Delete photo'))) return;
   try {
-    const { error } = await SB.storage.from('progress-photos').remove([photo.path]);
+    const { data, error } = await SB.storage.from('progress-photos').remove([photo.path]);
     if (error) throw error;
+    // Storage reports a permission-denied delete as success with nothing
+    // removed, so check that the file actually went away.
+    if (!Array.isArray(data) || !data.length) throw new Error('the photo could not be removed');
     showBigToast('Photo deleted.','ok');
     await loadPhotoTimeline();
   } catch(e) {
@@ -10570,7 +10605,7 @@ function buildPhotoTimelineHTML() {
       parts.push('<img src="'+p.url+'" style="width:100%;aspect-ratio:3/4;object-fit:cover;display:block">');
       parts.push('<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.65);display:flex;justify-content:space-between;align-items:center;padding:4px 6px">');
       parts.push('<span style="font-family:var(--mono);font-size:9px;color:#fff">'+p.date+'</span>');
-      parts.push('<button onclick="deleteProgressPhoto('+photoIdx+')" style="background:rgba(239,68,68,0.7);border:none;color:white;font-size:10px;padding:2px 6px;border-radius:4px;cursor:pointer">✕</button>');
+      parts.push('<button onclick="deleteProgressPhoto('+photoIdx+')" aria-label="Delete photo from '+p.date+'" style="background:rgba(239,68,68,0.8);border:none;color:white;font-size:14px;min-width:36px;min-height:36px;margin:-4px -2px;border-radius:6px;cursor:pointer">✕</button>');
       parts.push('</div>');
       parts.push('</div>');
     });

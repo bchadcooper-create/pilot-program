@@ -463,6 +463,47 @@ extension ViewController: WKUIDelegate {
             decisionHandler(.deny)
         }
     }
+
+    // BUG FIX (reported: the progress-photo delete button did nothing).
+    // Without these three delegate methods, WKWebView silently answers every
+    // JavaScript alert()/confirm()/prompt() on its own: confirm() returns
+    // false and nothing is shown, so any "Delete this?" guard in the web app
+    // cancelled invisibly. The web app now uses its own in-app dialog, but
+    // these make the standard browser dialogs work too, so a future confirm()
+    // can't silently break the same way. WebKit requires each completion
+    // handler to be called exactly once, including when a dialog can't be
+    // shown (another view already presented), or it raises an exception.
+    private func presentDialog(_ alert: UIAlertController, orElse fallback: () -> Void) {
+        guard presentedViewController == nil, view.window != nil else { fallback(); return }
+        present(alert, animated: true)
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
+                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
+        let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in completionHandler() })
+        presentDialog(alert, orElse: completionHandler)
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
+                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
+        let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in completionHandler(false) })
+        alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in completionHandler(true) })
+        presentDialog(alert, orElse: { completionHandler(false) })
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String,
+                 defaultText: String?, initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping (String?) -> Void) {
+        let alert = UIAlertController(title: nil, message: prompt, preferredStyle: .alert)
+        alert.addTextField { $0.text = defaultText }
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in completionHandler(nil) })
+        alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak alert] _ in
+            completionHandler(alert?.textFields?.first?.text)
+        })
+        presentDialog(alert, orElse: { completionHandler(nil) })
+    }
 }
 
 // MARK: - StoreKit 2

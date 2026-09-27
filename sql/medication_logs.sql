@@ -20,10 +20,10 @@ CREATE TABLE medication_logs (
 ALTER TABLE medication_logs ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "users can view own medication logs" ON medication_logs
-  FOR SELECT USING (auth.uid() = user_id);
+  FOR SELECT USING ((select auth.uid()) = user_id);
 
 CREATE POLICY "users can insert own medication logs" ON medication_logs
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+  FOR INSERT WITH CHECK ((select auth.uid()) = user_id);
 
 CREATE POLICY "users can delete own medication logs" ON medication_logs
-  FOR DELETE USING (auth.uid() = user_id);
+  FOR DELETE USING ((select auth.uid()) = user_id);

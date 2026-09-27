@@ -333,6 +333,23 @@ test('medicationNotificationPrefs only sends reminder-enabled doses with iOS wee
   assertEqual(prefs[1].weekdays.join(','), '1,7', 'JS 0/6 becomes iOS 1/7');
   ctx.ST.medications = [];
 });
+test('normalizeMedication restricts the id to safe characters and keeps apostrophes in names', () => {
+  const m = ctx.normalizeMedication({ id: "x');alert(1);//", name: "St. John's Wort" });
+  assertEqual(m.id, 'xalert1', 'quote/paren/semicolon stripped from id');
+  assertEqual(m.name, "St. John's Wort", 'apostrophe kept');
+  const blank = ctx.normalizeMedication({ id: "'''", name: 'A' });
+  assertEqual(/^med_/.test(blank.id), true, 'id that sanitizes to nothing gets a fresh one');
+});
+test('medReminderPlan stops at the iOS budget and reports the overflow', () => {
+  // Each weekday-restricted dose on 6 days costs 6 requests: 5 fit in 30.
+  ctx.ST.medications = [1,2,3,4,5,6].map(i =>
+    ctx.normalizeMedication({ id: 'w'+i, name: 'W'+i, times: ['08:00'], days: [1,2,3,4,5,6], remind: true }));
+  const plan = ctx.medReminderPlan();
+  assertEqual(plan.prefs.length, 5, 'five doses fit');
+  assertEqual(plan.overflow, true, 'overflow flagged');
+  assertEqual(plan.scheduled.has('w6|08:00'), false, 'sixth dose not scheduled');
+  ctx.ST.medications = [];
+});
 test('applyProfileToState hydrates medications and drops malformed entries', () => {
   ctx.applyProfileToState({ medications: [{ name: 'Zinc', dose: 25, unit: 'mg' }, { name: '' }, 'junk'] });
   assertEqual(ctx.ST.medications.length, 1, 'one valid entry survives');

@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.43.0 / 20260916_4
+ * Version/build: fcf-v5.43.1 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.43.0';
+const FCF_VERSION = 'fcf-v5.43.1';
 const FCF_BUILD   = '20260916_4';
 
 
@@ -1746,7 +1746,15 @@ async function doSignIn(email, pass) {
   if (error) throw error;
   return data.user;
 }
+// Pending local notifications live in iOS, not in this page, so signing out
+// or deleting the account has to clear them explicitly. Otherwise the phone
+// keeps firing the previous user's medication (and other) reminders.
+function cancelAllNativeNotifications() {
+  try { window.webkit?.messageHandlers?.notifications?.postMessage({ action: 'cancelAll' }); } catch(e) {}
+}
+
 async function doSignOut() {
+  cancelAllNativeNotifications();
   try { await SB.auth.signOut(); } catch(e) {/* best-effort remote signout — local state is cleared unconditionally below regardless */}
   ST.user = null;
   ST.authed = false;
@@ -3846,6 +3854,7 @@ async function performAccountDeletion() {
 
   try {
     await withDialogSpinner('Deleting your account…', async () => {
+      cancelAllNativeNotifications();
       // User-owned rows first, so nothing is orphaned if the auth deletion
       // fails partway. Each is allowed to fail independently — a missing
       // table must not strand someone half-deleted with no way to retry.
@@ -4099,10 +4108,24 @@ const MED_UNITS = ['mg','g','mcg','IU','mL','capsule','tablet','scoop','drop','s
 const MED_DAY_LABELS = ['S','M','T','W','T','F','S'];
 const MED_MAX_TIMES = 6;
 
+// Like sanitizeUserText but keeps apostrophes ("St. John's Wort"). Safe
+// here because med names and notes only ever render as element text or
+// inside double-quoted attributes, never inside a single-quoted onclick.
+function medText(s) {
+  return String(s || '').replace(/[<>"`\\]/g, '').slice(0, 120);
+}
+
+function newMedId() {
+  return 'med_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
 function normalizeMedication(m) {
   if (!m || typeof m !== 'object') return null;
-  const name = sanitizeUserText(m.name).trim();
+  const name = medText(m.name).trim();
   if (!name) return null;
+  // The id goes into inline onclick handlers and iOS notification ids, so
+  // it is restricted to a safe character set rather than trusted as stored.
+  const safeId = String(m.id || '').replace(/[^A-Za-z0-9_]/g, '').slice(0, 40);
   const times = (Array.isArray(m.times) ? m.times : [])
     .map(t => String(t || '').trim()).filter(t => /^\d{2}:\d{2}$/.test(t));
   const days = Array.isArray(m.days)
@@ -4110,14 +4133,14 @@ function normalizeMedication(m) {
     : null;
   const dose = parseFloat(m.dose);
   return {
-    id: String(m.id || ('med_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6))),
+    id: safeId || newMedId(),
     name,
     dose: isNaN(dose) || dose <= 0 ? null : dose,
     unit: MED_UNITS.includes(m.unit) ? m.unit : 'mg',
     times: times.length ? [...new Set(times)].sort() : ['08:00'],
     days: days && days.length && days.length < 7 ? [...new Set(days)].sort() : null,
     remind: !!m.remind,
-    notes: sanitizeUserText(m.notes).trim(),
+    notes: medText(m.notes).trim(),
   };
 }
 
@@ -4150,11 +4173,12 @@ function medsDueToday(now) {
 }
 
 async function saveMedicationsToProfile() {
+  // Reschedule first: the phone's reminders must match what is on screen
+  // even if the cloud save below fails (offline on a layover, say).
+  scheduleNotifications();
   const profile = (await dbGetProfile()) || {};
   profile.medications = ST.medications;
   await dbSetProfile(profile);
-  // Reminder settings changed, so the native schedule has to follow.
-  scheduleNotifications();
 }
 
 // ── Profile card ──────────────────────────────────────────────────────────
@@ -4164,6 +4188,10 @@ function renderMedicationsCard() {
   parts.push('<div class="section-label" style="margin-top:0">MEDS &amp; SUPPLEMENTS</div>');
   parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px">Track anything you take on a schedule. Due doses show on Today with a check-off, and the iOS app can remind you. This stays private to your account and is only shared if you export your data.</div>');
   const meds = ST.medications || [];
+  const plan = medReminderPlan();
+  if (plan.overflow) {
+    parts.push('<div class="alert alert-warn" style="margin-bottom:12px"><div class="alert-icon">🔔</div><div>iPhone limits how many reminders one app can hold. Some doses below won\'t ring; the ones without a bell. Turn reminders off for a few, or use every-day schedules instead of specific weekdays.</div></div>');
+  }
   if (!meds.length) {
     parts.push('<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px 0 12px">Nothing added yet.</div>');
   } else {
@@ -4171,7 +4199,9 @@ function renderMedicationsCard() {
       parts.push('<div class="fb" style="padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;align-items:center" onclick="haptic(\'light\');openMedicationEditor(\''+m.id+'\')">');
       parts.push('<div style="flex:1;padding-right:12px">');
       parts.push('<div style="font-size:14px;font-weight:600">'+m.name+(m.dose != null ? ' <span style="font-weight:400;color:var(--muted)">'+medDoseLabel(m)+'</span>' : '')+'</div>');
-      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:2px">'+medFrequencyLabel(m)+' · <span style="font-family:var(--mono)">'+m.times.join(', ')+'</span>'+(m.remind ? ' · 🔔' : '')+'</div>');
+      const ringing = m.remind && m.times.every(t => plan.scheduled.has(m.id + '|' + t));
+      const partial = m.remind && !ringing && m.times.some(t => plan.scheduled.has(m.id + '|' + t));
+      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:2px">'+medFrequencyLabel(m)+' · <span style="font-family:var(--mono)">'+m.times.join(', ')+'</span>'+(ringing ? ' · 🔔' : partial ? ' · 🔔 some times' : '')+'</div>');
       parts.push('</div>');
       parts.push('<div style="color:var(--muted)">›</div>');
       parts.push('</div>');
@@ -4189,7 +4219,10 @@ function openMedicationEditor(medId) {
   const existing = medId ? (ST.medications || []).find(m => m.id === medId) : null;
   ST.medDraft = existing
     ? JSON.parse(JSON.stringify(existing))
-    : { id: null, name: '', dose: '', unit: 'mg', times: ['08:00'], days: null, remind: true, notes: '' };
+    // Reminders only exist in the iOS app, so on web they default off
+    // rather than showing a setting that silently does nothing.
+    : { id: null, name: '', dose: '', unit: 'mg', times: ['08:00'], days: null,
+        remind: typeof FCFBridge !== 'undefined' && !!FCFBridge.isNative, notes: '' };
   renderMedicationEditor();
 }
 
@@ -4213,10 +4246,10 @@ function renderMedicationEditor() {
   parts.push('<div class="modal-handle"></div>');
   parts.push('<div class="modal-title">'+(isNew ? 'Add Medication / Supplement' : 'Edit '+d.name)+'</div>');
 
-  parts.push('<div class="field"><label>Name</label><input id="medName" type="text" maxlength="60" placeholder="e.g. Creatine" value="'+sanitizeUserText(d.name)+'"></div>');
+  parts.push('<div class="field"><label>Name</label><input id="medName" type="text" maxlength="60" placeholder="e.g. Creatine" value="'+medText(d.name)+'"></div>');
 
   parts.push('<div class="field-row" style="margin-bottom:10px">');
-  parts.push('<div class="field" style="margin-bottom:0"><label>Dose</label><input id="medDose" type="text" inputmode="decimal" placeholder="e.g. 5" value="'+(d.dose ?? '')+'"></div>');
+  parts.push('<div class="field" style="margin-bottom:0"><label>Dose</label><input id="medDose" type="text" inputmode="decimal" placeholder="e.g. 5" value="'+sanitizeUserText(d.dose ?? '')+'"></div>');
   parts.push('<div class="field" style="margin-bottom:0"><label>Unit</label><select id="medUnit">');
   MED_UNITS.forEach(u => parts.push('<option value="'+u+'"'+(d.unit===u?' selected':'')+'>'+u+'</option>'));
   parts.push('</select></div>');
@@ -4254,7 +4287,7 @@ function renderMedicationEditor() {
     '<button type="button" onclick="haptic(\'selection\');syncMedDraftFromDOM();ST.medDraft.remind=!ST.medDraft.remind;renderMedicationEditor()" style="cursor:pointer;flex-shrink:0;width:46px;height:26px;border-radius:13px;background:'+knobBg+';position:relative;border:none;padding:0;transition:background 0.15s;-webkit-tap-highlight-color:transparent;touch-action:manipulation">' +
     '<div style="position:absolute;top:3px;left:'+knobLeft+';width:20px;height:20px;border-radius:50%;background:#fff;transition:left 0.15s;box-shadow:0 1px 3px rgba(0,0,0,0.4)"></div></button></div>');
 
-  parts.push('<div class="field"><label>Notes (optional)</label><input id="medNotes" type="text" maxlength="120" placeholder="e.g. with food" value="'+sanitizeUserText(d.notes)+'"></div>');
+  parts.push('<div class="field"><label>Notes (optional)</label><input id="medNotes" type="text" maxlength="120" placeholder="e.g. with food" value="'+medText(d.notes)+'"></div>');
 
   parts.push('<button class="btn btn-gold mt8" onclick="saveMedicationFromEditor()">'+(isNew ? 'Add' : 'Save')+'</button>');
   if (!isNew) parts.push('<button class="btn btn-red-outline mt8" onclick="deleteMedication(\''+d.id+'\')">Remove</button>');
@@ -4289,7 +4322,7 @@ function removeMedDraftTime(i) {
 async function saveMedicationFromEditor() {
   syncMedDraftFromDOM();
   const draft = ST.medDraft;
-  if (!sanitizeUserText(draft.name).trim()) { showToast('Enter a name.'); return; }
+  if (!medText(draft.name).trim()) { showToast('Enter a name.'); return; }
   const med = normalizeMedication(draft);
   if (!med) { showToast('Enter a name.'); return; }
   const list = ST.medications || [];
@@ -4307,7 +4340,13 @@ async function saveMedicationFromEditor() {
 async function deleteMedication(id) {
   const med = (ST.medications || []).find(m => m.id === id);
   if (!med) return;
-  if (!(await appConfirm('Remove ' + med.name + '? Past check-offs are kept in your history.', 'Remove'))) return;
+  // The confirm dialog replaces the editor sheet, so a Cancel has to bring
+  // the editor back (with any unsaved edits) instead of closing everything.
+  syncMedDraftFromDOM();
+  if (!(await appConfirm('Remove ' + med.name + '? Past check-offs are kept in your history.', 'Remove'))) {
+    renderMedicationEditor();
+    return;
+  }
   ST.medications = ST.medications.filter(m => m.id !== id);
   closeModal();
   renderPage();
@@ -4322,31 +4361,45 @@ async function loadMedsTakenToday() {
   ST.medsTakenToday = {};
   if (!ST.user) return;
   try {
-    const { data, error } = await SB.from('medication_logs').select('med_id,time')
-      .eq('user_id', ST.user.id).eq('date', today);
+    const { data, error } = await withTimeout(SB.from('medication_logs').select('med_id,time')
+      .eq('user_id', ST.user.id).eq('date', today));
     if (error) throw error;
     (data || []).forEach(r => { ST.medsTakenToday[r.med_id + '|' + r.time] = true; });
   } catch (e) { /* table missing or offline: check-offs just start empty */ }
 }
 
+// Doses with a save still in flight. A second tap on the same dose is
+// ignored until the first request finishes, so a fast check-then-uncheck
+// can't reach the server out of order and leave it disagreeing with the
+// screen.
+const _medToggleInFlight = new Set();
+
 async function toggleMedTaken(medId, time) {
   const today = localDateStr(new Date());
   if (ST.medsTakenDate !== today) { ST.medsTakenDate = today; ST.medsTakenToday = {}; }
   const key = medId + '|' + time;
+  if (_medToggleInFlight.has(key)) return;
   const nowTaken = !ST.medsTakenToday[key];
   if (nowTaken) ST.medsTakenToday[key] = true; else delete ST.medsTakenToday[key];
   haptic(nowTaken ? 'medium' : 'light');
   renderPage();
   if (!ST.user) return;
+  _medToggleInFlight.add(key);
   try {
     if (nowTaken) {
-      const { error } = await SB.from('medication_logs').upsert(
+      // ignoreDuplicates makes this INSERT ... ON CONFLICT DO NOTHING. A
+      // plain upsert is ON CONFLICT DO UPDATE, which Postgres checks
+      // against an UPDATE policy this table doesn't have, so re-checking a
+      // dose already saved (from another device, or after an offline boot)
+      // failed with a row-level security error. "Already recorded" is
+      // exactly the outcome wanted here, so doing nothing is correct.
+      const { error } = await withTimeout(SB.from('medication_logs').upsert(
         { user_id: ST.user.id, med_id: medId, date: today, time, taken_at: new Date().toISOString() },
-        { onConflict: 'user_id,med_id,date,time' });
+        { onConflict: 'user_id,med_id,date,time', ignoreDuplicates: true }));
       if (error) throw error;
     } else {
-      const { error } = await SB.from('medication_logs').delete()
-        .eq('user_id', ST.user.id).eq('med_id', medId).eq('date', today).eq('time', time);
+      const { error } = await withTimeout(SB.from('medication_logs').delete()
+        .eq('user_id', ST.user.id).eq('med_id', medId).eq('date', today).eq('time', time));
       if (error) throw error;
     }
   } catch (e) {
@@ -4354,6 +4407,8 @@ async function toggleMedTaken(medId, time) {
     if (nowTaken) delete ST.medsTakenToday[key]; else ST.medsTakenToday[key] = true;
     renderPage();
     showBigToast('Could not save that check-off. Try again in a moment.', 'warn');
+  } finally {
+    _medToggleInFlight.delete(key);
   }
 }
 
@@ -4388,22 +4443,33 @@ function buildMedsTodayHTML(ctx) {
 // What the native shell needs to schedule reminders: one entry per dose
 // that has reminders on. Capped so a long list can never crowd out the
 // other notification types under iOS's 64-pending limit.
-function medicationNotificationPrefs() {
-  const out = [];
+// Each dose costs one iOS request, or one per weekday when day-restricted.
+// MED_REMINDER_BUDGET must match the `budget` in NotificationManager.swift's
+// scheduleMedicationReminders. Doses past the budget are dropped here, so
+// the web side knows exactly which ones will ring and can say so.
+const MED_REMINDER_BUDGET = 30;
+function medReminderPlan() {
+  const prefs = [], scheduled = new Set();
+  let used = 0, overflow = false;
   (ST.medications || []).forEach(m => {
     if (!m.remind) return;
     m.times.forEach(t => {
       const [h, mm] = t.split(':').map(n => parseInt(n));
       if (isNaN(h) || isNaN(mm)) return;
-      out.push({
+      const cost = m.days ? m.days.length : 1;
+      if (used + cost > MED_REMINDER_BUDGET) { overflow = true; return; }
+      used += cost;
+      scheduled.add(m.id + '|' + t);
+      prefs.push({
         id: m.id, name: m.name, dose: medDoseLabel(m), hour: h, minute: mm,
         // iOS weekday numbering: 1 = Sunday … 7 = Saturday.
         weekdays: m.days ? m.days.map(d => d + 1) : null,
       });
     });
   });
-  return out.slice(0, 20);
+  return { prefs, scheduled, overflow };
 }
+function medicationNotificationPrefs() { return medReminderPlan().prefs; }
 
 function showInfoModal(title, text) {
   const root = document.getElementById('modalRoot');
@@ -9938,18 +10004,31 @@ function renderDebrief(p) {
 }
 
 // ─── EXPORT CSV ──────────────────────────────────────────────────────────────
+// Supabase returns at most 1000 rows per request. The export used a single
+// request per table, so anyone with more history than that (a year of
+// meals, or of medication check-offs) got a silently truncated file. This
+// pages through with .range() until a short page comes back.
+async function fetchAllRows(makeQuery) {
+  const PAGE = 1000, out = [];
+  for (let from = 0; from < 100000; from += PAGE) {
+    const { data, error } = await makeQuery().range(from, from + PAGE - 1);
+    if (error) throw error;
+    out.push(...(data || []));
+    if (!data || data.length < PAGE) break;
+  }
+  return out;
+}
+
 async function exportCSV() {
   showBigToast('Building export...','info');
   let sessions = [];
   let biometrics = [];
   let ouraRows = [], mealRows = [], dailyInputRows = [], medLogRows = [];
   try {
-    const sFilter = ST.user ? SB.from('workout_sessions').select('*').eq('user_id', ST.user.id) : SB.from('workout_sessions').select('*');
-    const { data: sd } = await sFilter.order('started_at', { ascending: true });
-    sessions = (sd||[]).map(r => r.session_data).filter(Boolean);
-    const bFilter = ST.user ? SB.from('weight_log').select('*').eq('user_id', ST.user.id) : SB.from('weight_log').select('*');
-    const { data: bd } = await bFilter.order('logged_at', { ascending: true });
-    biometrics = bd || [];
+    const own = (t) => ST.user ? SB.from(t).select('*').eq('user_id', ST.user.id) : SB.from(t).select('*');
+    const sd = await fetchAllRows(() => own('workout_sessions').order('started_at', { ascending: true }));
+    sessions = sd.map(r => r.session_data).filter(Boolean);
+    biometrics = await fetchAllRows(() => own('weight_log').order('logged_at', { ascending: true }));
     // Everything else the app stores. Previously the export was workouts +
     // five biometrics only — Oura, meals, hydration and the flight schedule
     // were all absent, which left most of the picture out of any analysis.
@@ -9957,11 +10036,12 @@ async function exportCSV() {
     // whole export.
     const uid = ST.user?.id;
     if (uid) {
+      const all = (t, col) => fetchAllRows(() => SB.from(t).select('*').eq('user_id', uid).order(col, { ascending: true })).catch(() => null);
       const [o, m, di, ml] = await Promise.all([
-        SB.from('oura_daily').select('*').eq('user_id', uid).order('date', { ascending: true }).then(r=>r.data).catch(()=>null),
-        SB.from('meal_logs').select('*').eq('user_id', uid).order('logged_at', { ascending: true }).then(r=>r.data).catch(()=>null),
-        SB.from('daily_inputs').select('*').eq('user_id', uid).order('date', { ascending: true }).then(r=>r.data).catch(()=>null),
-        SB.from('medication_logs').select('*').eq('user_id', uid).order('date', { ascending: true }).then(r=>r.data).catch(()=>null),
+        all('oura_daily', 'date'),
+        all('meal_logs', 'logged_at'),
+        all('daily_inputs', 'date'),
+        all('medication_logs', 'date'),
       ]);
       ouraRows = o || []; mealRows = m || []; dailyInputRows = di || []; medLogRows = ml || [];
     }

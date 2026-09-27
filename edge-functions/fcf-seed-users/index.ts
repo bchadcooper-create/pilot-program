@@ -380,7 +380,7 @@ serve(async (req) => {
       const hoursLeft = Math.ceil((MIN_GAP_MS - (Date.now() - lastCreatedAt.getTime())) / 3600000);
       return new Response(JSON.stringify({
         skipped: true,
-        message: `Last fire was ${lastCreatedAt.toISOString()} — next one not due for ~${hoursLeft}h.`,
+        message: `Last fire was ${lastCreatedAt.toISOString()}; next one not due for ~${hoursLeft}h.`,
       }), { headers: { ...CORS, 'Content-Type': 'application/json' } });
     }
 

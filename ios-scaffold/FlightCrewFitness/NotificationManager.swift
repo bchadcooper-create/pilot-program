@@ -177,7 +177,7 @@ class NotificationManager {
 
         let content = UNMutableNotificationContent()
         content.title = "Time to log a session"
-        content.body  = "You haven't trained in 3 days. Even 20 minutes counts — open your plan."
+        content.body  = "You haven't trained in 3 days. Even 20 minutes counts. Open your plan."
         content.sound = .default
         content.userInfo = ["type": "workout_reminder", "deepLink": "today"]
 
@@ -274,7 +274,7 @@ class NotificationManager {
             let destination = flight["destination"] ?? "your destination"
 
             let content = UNMutableNotificationContent()
-            content.title = "Flight tomorrow — \(origin) → \(destination)"
+            content.title = "Flight tomorrow: \(origin) → \(destination)"
             content.body  = "Check your readiness score and hydration before wheels up."
             content.sound = .default
             content.userInfo = ["type": "preflight_check", "deepLink": "today",
@@ -358,7 +358,7 @@ class NotificationManager {
     func scheduleLayoverWorkoutReminder(airport: String, fireAt: Date) {
         guard fireAt > Date() else { return }
         let content = UNMutableNotificationContent()
-        content.title = "Layover window open — \(airport)"
+        content.title = "Layover window open: \(airport)"
         content.body  = "You've got time before your next duty. Good window for a session."
         content.sound = .default
         content.userInfo = ["type": "layover_window", "deepLink": "today"]

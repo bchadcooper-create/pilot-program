@@ -649,7 +649,7 @@ extension ViewController: ASAuthorizationControllerDelegate,
         // visibly happens, with no way to know why. Telling the web app
         // directly means it can at least show something rather than
         // leaving the user waiting on a sheet that will never appear.
-        postToWeb("fcf:siwa:error", data: ["error": "Could not present Sign in with Apple — no window available. Please try again."])
+        postToWeb("fcf:siwa:error", data: ["error": "Could not present Sign in with Apple: no window available. Please try again."])
         return UIWindow()
     }
 }

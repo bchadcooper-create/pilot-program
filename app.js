@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.43.2 / 20260916_4
+ * Version/build: fcf-v5.43.3 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.43.2';
+const FCF_VERSION = 'fcf-v5.43.3';
 const FCF_BUILD   = '20260916_4';
 
 
@@ -206,8 +206,8 @@ const GOALS = {
   muscle:   { label: 'Muscle Gain',      icon: '💪', desc: 'Bodybuilding-style hypertrophy training',   order: ['Lower Body','Upper Push','Upper Pull','Full Body'] },
   longevity:{ label: 'General Health',  icon: '🌿', desc: 'Joint-friendly, sustainable, long-term health', order: ['Lower Body','Upper Pull','Cardio','Longevity','Upper Push'] },
   fatloss:  { label: 'Weight Loss',     icon: '🔥', desc: 'Higher-volume, metabolic conditioning focus', order: ['Lower Body','Cardio','Upper Push','Upper Pull','Full Body'] },
-  chest:    { label: 'Chest & Shoulders', icon: '🏋️', desc: 'Pressing emphasis — Upper Push comes around twice per rotation', suggestFor: 'male', order: ['Upper Push','Lower Body','Upper Push','Upper Pull','Full Body'] },
-  glute:    { label: 'Glute Emphasis',   icon: '🍑', desc: 'Glute-focused programming — Lower Body comes around twice per rotation', suggestFor: 'female', order: ['Lower Body','Upper Push','Lower Body','Upper Pull','Full Body'] },
+  chest:    { label: 'Chest & Shoulders', icon: '🏋️', desc: 'Pressing emphasis: Upper Push comes around twice per rotation', suggestFor: 'male', order: ['Upper Push','Lower Body','Upper Push','Upper Pull','Full Body'] },
+  glute:    { label: 'Glute Emphasis',   icon: '🍑', desc: 'Glute-focused programming: Lower Body comes around twice per rotation', suggestFor: 'female', order: ['Lower Body','Upper Push','Lower Body','Upper Pull','Full Body'] },
   strength: { label: 'Overall Strength', icon: '⚡', desc: 'Heavy low-rep compounds plus explosive power work', order: ['Lower Body','Upper Push','Upper Pull','Power / Plyo','Full Body'] },
 };
 
@@ -215,7 +215,7 @@ const GOALS = {
 const FREQUENCY_GUIDE = {
   beginner:     { days: '2-3', split: 'Full-body each session', note: 'Allow 48 hours between sessions for the same muscle group. Consistency beats intensity at this stage.' },
   intermediate: { days: '3-4', split: 'Upper/Lower or Push/Pull split', note: 'This is the sweet spot for most lifters. 3-4 quality sessions per week with adequate recovery outperforms more frequent, lower-quality sessions.' },
-  advanced:     { days: '4-6', split: 'Body part split with planned recovery', note: 'Higher frequency requires real recovery infrastructure: sleep, protein, and at least one full rest day. Monitor for overreaching — persistent soreness or declining performance is a signal to pull back.' },
+  advanced:     { days: '4-6', split: 'Body part split with planned recovery', note: 'Higher frequency requires real recovery infrastructure: sleep, protein, and at least one full rest day. Monitor for overreaching: persistent soreness or declining performance is a signal to pull back.' },
 };
 
 // ─── HYDRATION ────────────────────────────────────────────────────────────────
@@ -279,9 +279,9 @@ function hydroAdvice(now) {
   if (paced <= hydroTarget() * 0.15) return null; // too early to advise anything yet
   const def = hydroPacedDeficit(now);
   if (def <= 0) return null;
-  if (def < 0.25) return `Sip ${Math.round(def*1000)}ml now — you're on pace, just top up a little.`;
+  if (def < 0.25) return `Sip ${Math.round(def*1000)}ml now; you're on pace, just top up a little.`;
   if (def < 0.5)  return `Drink ${Math.round(def*1000)}ml soon to stay on pace for the day. Even 2% dehydration measurably cuts strength, endurance, and focus.`;
-  return `You're ${def.toFixed(1)}L behind pace for this point in the day. Drink 500ml now, then sip regularly — total target is still ${hydroTarget().toFixed(1)}L.`;
+  return `You're ${def.toFixed(1)}L behind pace for this point in the day. Drink 500ml now, then sip regularly. Total target is still ${hydroTarget().toFixed(1)}L.`;
 }
 
 // Patches just the hydration display elements on every keystroke instead of
@@ -362,7 +362,7 @@ function updateHydrationUI() {
 
   const noFlyBox = document.getElementById('noFlyBox');
   if (noFlyBox) noFlyBox.innerHTML = (ST.flightHrsTouched && ST.flightHrs === 0)
-    ? '<div class="alert alert-info" style="margin-bottom:8px"><div class="alert-icon">ℹ️</div><div>No-fly day — minimum 1.0L hydration target still applies. Your body needs baseline water regardless of duty status.</div></div>'
+    ? '<div class="alert alert-info" style="margin-bottom:8px"><div class="alert-icon">ℹ️</div><div>No-fly day: minimum 1.0L hydration target still applies. Your body needs baseline water regardless of duty status.</div></div>'
     : '';
 
   const targetEl = document.getElementById('hydroTargetVal');
@@ -433,16 +433,16 @@ WORKOUTS.comm['Lower Body'] = {
   ],
   enroute: [
     ex('c_lb_er1','Single Leg Split Squat','3×8/leg',3,'Rear foot elevated on bench. Drive through front heel. High transfer to strength and jump performance.',false,'reps_only'),
-    ex('c_lb_er2','Leg Press','3×12',3,'Moderate weight. Full ROM — don\'t lock knees.'),
-    ex('c_lb_er3','Standing Calf Raise','4×12',4,'Full ROM — stretch at bottom, pause at top.'),
+    ex('c_lb_er2','Leg Press','3×12',3,'Moderate weight. Full ROM. Don\'t lock knees.'),
+    ex('c_lb_er3','Standing Calf Raise','4×12',4,'Full ROM: stretch at bottom, pause at top.'),
     ex('c_lb_er4','Lateral Band Walk','2×15/side',2,'Band above knees. Stay low. Activates glute med.',false,'reps_only'),
     ex('c_lb_er5','Leg Extension (Machine)','3×15',3,'Seated machine. Squeeze at the top, control the negative. Quad isolation.'),
     ex('c_lb_er6','Seated Leg Curl (Machine)','3×12',3,'Pad above the heel, full stretch at the bottom. Hamstring isolation.'),
-    ex('c_lb_er7','Standing Calf Raise (Machine)','4×15',4,'Shoulder pads or plate-loaded — full ROM, pause at the top and stretch at the bottom.'),
-    ex('c_lb_er8','Glute Kickback (Machine)','3×12/leg',3,'Foot on the platform, drive back and squeeze the glute — don\'t hyperextend the lower back.'),
-    ex('c_lb_er9','Seated Calf Raise (Machine)','4×15',4,'Knees bent under the pad — targets the soleus, distinct from standing calf raises which emphasize the gastrocnemius.'),
-    ex('c_lb_er10','Hip Abduction (Machine)','3×15',3,'Seated, push knees outward against the pads. Glute medius — often neglected but key for hip stability.'),
-    ex('c_lb_er11','Hip Adduction (Machine)','3×15',3,'Seated, squeeze knees together against the pads. Inner thigh — commonly skipped but balances the abductors.'),
+    ex('c_lb_er7','Standing Calf Raise (Machine)','4×15',4,'Shoulder pads or plate-loaded. Full ROM, pause at the top and stretch at the bottom.'),
+    ex('c_lb_er8','Glute Kickback (Machine)','3×12/leg',3,'Foot on the platform, drive back and squeeze the glute. Don\'t hyperextend the lower back.'),
+    ex('c_lb_er9','Seated Calf Raise (Machine)','4×15',4,'Knees bent under the pad. Targets the soleus, distinct from standing calf raises, which emphasize the gastrocnemius.'),
+    ex('c_lb_er10','Hip Abduction (Machine)','3×15',3,'Seated, push knees outward against the pads. Glute medius: often neglected but key for hip stability.'),
+    ex('c_lb_er11','Hip Adduction (Machine)','3×15',3,'Seated, squeeze knees together against the pads. Inner thigh: commonly skipped but balances the abductors.'),
   ],
   landing: [
     ex('c_lb_l1','Pigeon Pose','90s/side',1,'External hip rotation stretch. Hold completely still.',true,'timed_bilateral'),
@@ -458,25 +458,25 @@ WORKOUTS.comm['Upper Push'] = {
     ex('c_up_t3','Thoracic Extension (chair)','10 reps',1,'Hands behind head, extend over chair back.',false,'reps_only'),
   ],
   takeoff: [
-    ex('c_up_to1','Flat Barbell Bench Press','5×5',5,'Work up to a heavy 5. Elbows 45-70° — not flared. Control the descent, explode up.'),
-    ex('c_up_to2','Standing Overhead Press','4×5',4,'Standing — not seated. Full lockout overhead. Core braced.'),
+    ex('c_up_to1','Flat Barbell Bench Press','5×5',5,'Work up to a heavy 5. Elbows 45-70°, not flared. Control the descent, explode up.'),
+    ex('c_up_to2','Standing Overhead Press','4×5',4,'Standing, not seated. Full lockout overhead. Core braced.'),
   ],
   enroute: [
     ex('c_up_er1','Incline DB Press','3×10',3,'30-45° incline. Full stretch at the bottom.'),
     ex('c_up_er2','Close Grip Bench','3×8',3,'Hands shoulder-width. Tricep emphasis.'),
-    ex('c_up_er3','Lateral Raise','3×15',3,'Light and strict — no momentum.'),
+    ex('c_up_er3','Lateral Raise','3×15',3,'Light and strict, no momentum.'),
     ex('c_up_er4','DB Tricep Overhead','3×12',3,'Both hands on one DB. Full stretch at top.'),
-    ex('c_up_er10','Push-Up','3×15',3,'Standard form — hands under shoulders, straight line head to heels. Good bodyweight finisher regardless of equipment access.',false,'reps_only'),
-    ex('c_up_er5','Incline Chest Press (Machine)','3×10',3,'Seated, pads set to mid-chest height. Controlled tempo — no bouncing off the bottom.'),
-    ex('c_up_er6','Decline Chest Press (Machine)','3×10',3,'Seated, pads angled downward. Targets lower chest — full extension without locking the elbows hard.'),
+    ex('c_up_er10','Push-Up','3×15',3,'Standard form: hands under shoulders, straight line head to heels. Good bodyweight finisher regardless of equipment access.',false,'reps_only'),
+    ex('c_up_er5','Incline Chest Press (Machine)','3×10',3,'Seated, pads set to mid-chest height. Controlled tempo, no bouncing off the bottom.'),
+    ex('c_up_er6','Decline Chest Press (Machine)','3×10',3,'Seated, pads angled downward. Targets lower chest. Full extension without locking the elbows hard.'),
     ex('c_up_er7','Pec Fly (Machine)','3×15',3,'Seated, arms slightly bent throughout. Squeeze at full contraction, control the stretch back.'),
-    ex('c_up_er8','Cable Tricep Pushdown','3×15',3,'Elbows pinned to your sides — the whole rep should come from the elbow, not the shoulder.'),
-    ex('c_up_er9','Assisted Dip (Machine)','3×10',3,'Counterweight assists the lift — lean forward slightly for more chest emphasis.'),
+    ex('c_up_er8','Cable Tricep Pushdown','3×15',3,'Elbows pinned to your sides. The whole rep should come from the elbow, not the shoulder.'),
+    ex('c_up_er9','Assisted Dip (Machine)','3×10',3,'Counterweight assists the lift. Lean forward slightly for more chest emphasis.'),
   ],
   landing: [
     ex('c_up_l1','Doorframe Chest Stretch','60s/side',1,'Arm at 90° in doorframe, rotate body away.',true,'timed_bilateral'),
     ex('c_up_l2','Lat Overhead Stretch','60s/side',1,'Reach one arm overhead, grab a rack or door frame, lean away.',true,'timed_bilateral'),
-    ex('c_up_l3','Diaphragmatic Breathing','10 breaths',1,'Lie on back. Inhale 4 counts, hold 2, exhale 6. Shifts the nervous system from sympathetic to parasympathetic — see "What is CNS Down-Regulation" in Wisdom.',false,'reps_only'),
+    ex('c_up_l3','Diaphragmatic Breathing','10 breaths',1,'Lie on back. Inhale 4 counts, hold 2, exhale 6. Shifts the nervous system from sympathetic to parasympathetic. See "What is CNS Down-Regulation" in Wisdom.',false,'reps_only'),
   ],
 };
 
@@ -492,12 +492,12 @@ WORKOUTS.comm['Upper Pull'] = {
   ],
   enroute: [
     ex('c_ul_er1','Lat Pulldown','3×10',3,'Full overhead stretch, pull to upper chest.'),
-    ex('c_ul_er2','Seated Cable Row','3×12',3,'Retract fully at the end — shoulder blades together.'),
+    ex('c_ul_er2','Seated Cable Row','3×12',3,'Retract fully at the end: shoulder blades together.'),
     ex('c_ul_er3','Face Pull','3×20',3,'Cable at face height. Pull to forehead, elbows high and wide.'),
-    ex('c_ul_er4','EZ Bar Curl','3×12',3,'Strict — no swing. Control the eccentric.'),
-    ex('c_ul_er6','Assisted Pull-Up (Machine)','3×8',3,'Counterweight assists the lift — dial in just enough assistance to hit real reps with good form.'),
+    ex('c_ul_er4','EZ Bar Curl','3×12',3,'Strict, no swing. Control the eccentric.'),
+    ex('c_ul_er6','Assisted Pull-Up (Machine)','3×8',3,'Counterweight assists the lift. Dial in just enough assistance to hit real reps with good form.'),
     ex('c_ul_er7','T-Bar Row (Machine)','3×10',3,'Chest supported, pull to the lower ribs. Removes lower-back strain compared to a free-standing barbell row.'),
-    ex('c_ul_er5','Preacher Curl','3×12',3,'Arm braced on the pad — isolates the biceps by removing shoulder swing entirely.'),
+    ex('c_ul_er5','Preacher Curl','3×12',3,'Arm braced on the pad. Isolates the biceps by removing shoulder swing entirely.'),
   ],
   landing: [
     ex('c_ul_l1','Lat Hang Stretch','45s',1,'Hang from pullup bar, completely relaxed.',true,'timed'),
@@ -521,13 +521,13 @@ WORKOUTS.comm['Power / Plyo'] = {
     ex('c_pp_er2','Lunge (Walking)','3×10/leg',3,'Light-moderate. Hip flexor strength critical for takeoff mechanics.',false,'reps_only'),
     ex('c_pp_er3','Sprint 40yd','6 reps',6,'Full speed. Walk back. Log time or distance in the notes.',false,'reps_only'),
     ex('c_pp_er4','Ankle Hop','3×20',3,'Minimal knee bend. Fast and springy.',false,'reps_only'),
-    ex('c_pp_er5','Kettlebell Swing','4×15',4,'Explosive hip hinge — the ballistic hip snap this category is all about. Bell floats to chest height, not overhead.'),
+    ex('c_pp_er5','Kettlebell Swing','4×15',4,'Explosive hip hinge: the ballistic hip snap this category is all about. Bell floats to chest height, not overhead.'),
     ex('c_pp_er6','Medicine Ball Rotational Throw','3×8/side',3,'Stand side-on to a wall, rotate and throw the ball hard into the wall at hip height, catch the rebound and reset. Builds rotational core power and hip-shoulder separation.'),
   ],
   landing: [
     ex('c_pp_l1','Achilles / Calf Stretch','90s/side',1,'Step on step edge, drop heel slowly.',true,'timed_bilateral'),
-    ex('c_pp_l2','Slow Pogo Hops (25% effort)','30s',1,'Gentle bouncing — minimal effort.',true,'timed'),
-    ex('c_pp_l3','Non-Sleep Deep Rest (NSDR)','5 min',1,'Lie flat. Eyes closed. Breathe slowly. Use the NSDR timer below — it will chime at 5 minutes and record your session automatically.',true,'nsdr'),
+    ex('c_pp_l2','Slow Pogo Hops (25% effort)','30s',1,'Gentle bouncing, minimal effort.',true,'timed'),
+    ex('c_pp_l3','Non-Sleep Deep Rest (NSDR)','5 min',1,'Lie flat. Eyes closed. Breathe slowly. Use the NSDR timer below. It will chime at 5 minutes and record your session automatically.',true,'nsdr'),
   ],
 };
 
@@ -541,18 +541,18 @@ WORKOUTS.comm['Full Body'] = {
     ex('c_fb_to2','Bench Press','4×5',4,'Heavy. Primary upper push.'),
   ],
   enroute: [
-    ex('c_fb_er1','Deadlift','3×3',3,'Heavy triple. Maximum posterior chain. Take the FULL rest timer — heavy pulls after squat and bench demand complete recovery.'),
+    ex('c_fb_er1','Deadlift','3×3',3,'Heavy triple. Maximum posterior chain. Take the FULL rest timer: heavy pulls after squat and bench demand complete recovery.'),
     ex('c_fb_er2','Weighted Pullups','3×6',3,'Add weight if bodyweight is easy.'),
     ex('c_fb_er3','Overhead Press','3×8',3,'Moderate. Standing.'),
     ex('c_fb_er4','Single Leg Split Squat','3×8/leg',3,'Unilateral leg accessory.',false,'reps_only'),
     ex('c_fb_er5','Sit-Up','3×20',3,'Classic ab exercise, no equipment needed.',false,'reps_only'),
-    ex('c_fb_er6','Bicycle Crunch','3×20/side',3,'Opposite elbow to opposite knee, controlled — not a race.',false,'reps_only'),
-    ex('c_fb_er7','Kettlebell Swing','4×15',4,'Hip hinge, not a squat — the power comes from snapping your hips forward, not your arms lifting. Bell floats to chest height, not overhead.'),
-    ex('c_fb_er8','Kettlebell Clean & Press','3×8/side',3,'Clean the bell to your shoulder in one motion, then press overhead. Reset between reps — this isn\'t a swing.'),
+    ex('c_fb_er6','Bicycle Crunch','3×20/side',3,'Opposite elbow to opposite knee. Controlled, not a race.',false,'reps_only'),
+    ex('c_fb_er7','Kettlebell Swing','4×15',4,'Hip hinge, not a squat: the power comes from snapping your hips forward, not your arms lifting. Bell floats to chest height, not overhead.'),
+    ex('c_fb_er8','Kettlebell Clean & Press','3×8/side',3,'Clean the bell to your shoulder in one motion, then press overhead. Reset between reps. This isn\'t a swing.'),
     ex('c_fb_er9','Single-Arm Kettlebell Row','3×10/side',3,'Hinge forward, free hand on a bench for support, row the bell to your hip keeping your elbow close to your body.'),
-    ex('c_fb_er10','Turkish Get-Up','3×3/side',3,'Slow and controlled — this is a mobility and stability drill as much as strength. Start light. Follow the bell with your eyes the entire rep.'),
+    ex('c_fb_er10','Turkish Get-Up','3×3/side',3,'Slow and controlled. This is a mobility and stability drill as much as strength. Start light. Follow the bell with your eyes the entire rep.'),
     ex('c_fb_er11','Kettlebell Halo','3×8/side',3,'Hold the bell by the horns at chest height, circle it around your head, leading with the same direction each set. Keeps your core braced throughout.'),
-    ex('c_fb_er12','Medicine Ball Slam','3×12',3,'Raise the ball overhead and slam it straight down as hard as you can, catching it on the bounce or picking it back up. Full body — legs, core, and shoulders drive the power.'),
+    ex('c_fb_er12','Medicine Ball Slam','3×12',3,'Raise the ball overhead and slam it straight down as hard as you can, catching it on the bounce or picking it back up. Full body: legs, core, and shoulders drive the power.'),
     ex('c_fb_er13','Medicine Ball Russian Twist','3×16/side',3,'Sit with knees bent, lean back slightly, rotate the ball side to side, tapping it to the floor on each side.',false,'reps_only'),
   ],
   landing: [
@@ -594,9 +594,9 @@ WORKOUTS.comm['Cardio'] = {
     ex('c_ca_to2','Assault Bike Intervals','8×30s',8,'All-out 30 seconds, 60s easy spin. Log calories or RPM as the rep value.',false,'reps_only'),
   ],
   enroute: [
-    ex('c_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace — speak in full sentences. Log distance for the leaderboard.',true,'timed_distance'),
+    ex('c_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace: speak in full sentences. Log distance for the leaderboard.',true,'timed_distance'),
     ex('c_ca_er3','Walking','30-45 min',1,'Zone 1-2 steady pace. Great low-impact active recovery. Log distance if you tracked it.',true,'timed_distance'),
-    ex('c_ca_er4','Treadmill','30 min',1,'Any steady treadmill session — walk, incline, or run.',true,'timed'),
+    ex('c_ca_er4','Treadmill','30 min',1,'Any steady treadmill session: walk, incline, or run.',true,'timed'),
     ex('c_ca_er5','Outdoor Run','20-40 min',1,'Any pace, any route. Log distance for the leaderboard.',true,'timed_distance'),
     ex('c_ca_er2','Step-Up','3×15/leg',3,'Active recovery strength.'),
   ],
@@ -632,7 +632,7 @@ WORKOUTS.hotel['Upper Push'] = {
     ex('h_up_er2','DB Lateral Raise','3×15',3,'Light and strict.'),
     ex('h_up_er3','DB Tricep Overhead','3×12',3,'Both hands on one DB.'),
     ex('h_up_er4','DB Front Raise','3×12',3,'Alternating. Light weight.'),
-    ex('h_up_er5','Push-Up','3×15',3,'Standard form — hands under shoulders, straight line head to heels. No equipment needed.',false,'reps_only'),
+    ex('h_up_er5','Push-Up','3×15',3,'Standard form: hands under shoulders, straight line head to heels. No equipment needed.',false,'reps_only'),
   ],
   landing: WORKOUTS.comm['Upper Push'].landing,
 };
@@ -662,7 +662,7 @@ WORKOUTS.hotel['Power / Plyo'] = {
     ex('h_pp_er2','Sprint (hall/outside)','6×20yd',6,'Full speed. Walk back.',false,'reps_only'),
     ex('h_pp_er3','Split Jump','3×6',3,'Lunge position, jump and switch.',false,'reps_only'),
     ex('h_pp_er4','Depth Drop','3×5',3,'Step off low bench, land softly, absorb.',false,'reps_only'),
-    ex('h_pp_er5','Kettlebell Swing','4×15',4,'Explosive hip hinge — the ballistic hip snap this category is all about. Bell floats to chest height, not overhead.'),
+    ex('h_pp_er5','Kettlebell Swing','4×15',4,'Explosive hip hinge: the ballistic hip snap this category is all about. Bell floats to chest height, not overhead.'),
     ex('h_pp_er6','Medicine Ball Rotational Throw','3×8/side',3,'Stand side-on to a wall, rotate and throw the ball hard into the wall at hip height, catch the rebound and reset. Builds rotational core power and hip-shoulder separation.'),
   ],
   landing: WORKOUTS.comm['Power / Plyo'].landing,
@@ -679,13 +679,13 @@ WORKOUTS.hotel['Full Body'] = {
     ex('h_fb_er3','Single Leg Split Squat','3×8/leg',3,'Unilateral leg.',false,'reps_only'),
     ex('h_fb_er4','DB Row','3×10/side',3,'Back.'),
     ex('h_fb_er5','Sit-Up','3×20',3,'Classic ab exercise, no equipment needed.',false,'reps_only'),
-    ex('h_fb_er6','Bicycle Crunch','3×20/side',3,'Opposite elbow to opposite knee, controlled — not a race.',false,'reps_only'),
-    ex('h_fb_er7','Kettlebell Swing','4×15',4,'Hip hinge, not a squat — the power comes from snapping your hips forward, not your arms lifting. Bell floats to chest height, not overhead.'),
-    ex('h_fb_er8','Kettlebell Clean & Press','3×8/side',3,'Clean the bell to your shoulder in one motion, then press overhead. Reset between reps — this isn\'t a swing.'),
+    ex('h_fb_er6','Bicycle Crunch','3×20/side',3,'Opposite elbow to opposite knee. Controlled, not a race.',false,'reps_only'),
+    ex('h_fb_er7','Kettlebell Swing','4×15',4,'Hip hinge, not a squat: the power comes from snapping your hips forward, not your arms lifting. Bell floats to chest height, not overhead.'),
+    ex('h_fb_er8','Kettlebell Clean & Press','3×8/side',3,'Clean the bell to your shoulder in one motion, then press overhead. Reset between reps. This isn\'t a swing.'),
     ex('h_fb_er9','Single-Arm Kettlebell Row','3×10/side',3,'Hinge forward, free hand on a bench for support, row the bell to your hip keeping your elbow close to your body.'),
-    ex('h_fb_er10','Turkish Get-Up','3×3/side',3,'Slow and controlled — this is a mobility and stability drill as much as strength. Start light. Follow the bell with your eyes the entire rep.'),
+    ex('h_fb_er10','Turkish Get-Up','3×3/side',3,'Slow and controlled. This is a mobility and stability drill as much as strength. Start light. Follow the bell with your eyes the entire rep.'),
     ex('h_fb_er11','Kettlebell Halo','3×8/side',3,'Hold the bell by the horns at chest height, circle it around your head, leading with the same direction each set. Keeps your core braced throughout.'),
-    ex('h_fb_er12','Medicine Ball Slam','3×12',3,'Raise the ball overhead and slam it straight down as hard as you can, catching it on the bounce or picking it back up. Full body — legs, core, and shoulders drive the power.'),
+    ex('h_fb_er12','Medicine Ball Slam','3×12',3,'Raise the ball overhead and slam it straight down as hard as you can, catching it on the bounce or picking it back up. Full body: legs, core, and shoulders drive the power.'),
     ex('h_fb_er13','Medicine Ball Russian Twist','3×16/side',3,'Sit with knees bent, lean back slightly, rotate the ball side to side, tapping it to the floor on each side.',false,'reps_only'),
   ],
   landing: [
@@ -736,7 +736,7 @@ WORKOUTS.hotel['Cardio'] = {
   enroute: [
     ex('h_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace. Log distance for the leaderboard.',true,'timed_distance'),
     ex('h_ca_er3','Walking','30-45 min',1,'Zone 1-2 steady pace. Great low-impact active recovery. Log distance if you tracked it.',true,'timed_distance'),
-    ex('h_ca_er4','Treadmill','30 min',1,'Any steady treadmill session — walk, incline, or run.',true,'timed'),
+    ex('h_ca_er4','Treadmill','30 min',1,'Any steady treadmill session: walk, incline, or run.',true,'timed'),
     ex('h_ca_er5','Outdoor Run','20-40 min',1,'Any pace, any route. Log distance for the leaderboard.',true,'timed_distance'),
     ex('h_ca_er2','Step-Up','3×15/leg',3,'Active recovery strength.'),
   ],
@@ -770,7 +770,7 @@ WORKOUTS.room['Upper Push'] = {
     ex('r_up_er2','Chair Dips','3×max',3,'Tricep focus.',false,'reps_only'),
     ex('r_up_er3','Decline Pushup','3×12',3,'Feet on bed.',false,'reps_only'),
     ex('r_up_er4','Plank','3×60s',3,'Straight line head to heels.',true,'timed'),
-    ex('r_up_er5','Push-Up','3×15',3,'Standard form — hands under shoulders, straight line head to heels. The baseline version, no variation needed.',false,'reps_only'),
+    ex('r_up_er5','Push-Up','3×15',3,'Standard form: hands under shoulders, straight line head to heels. The baseline version, no variation needed.',false,'reps_only'),
   ],
   landing: WORKOUTS.comm['Upper Push'].landing,
 };
@@ -864,11 +864,11 @@ WORKOUTS.band = {};
 WORKOUTS.band['Lower Body'] = {
   taxi: WORKOUTS.comm['Lower Body'].taxi,
   takeoff: [
-    ex('b_lb_to1','Banded Squat','4×15',4,'Stand on the band with feet shoulder-width, bring the ends up over your shoulders or hold at chest height. Full depth — bands add the most resistance at the top, so drive hard out of the bottom.',false,'reps_only'),
-    ex('b_lb_to2','Banded Deadlift','4×12',4,'Stand on the middle of the band, feet hip-width, hinge down to grip an end in each hand, drive your hips forward to stand tall. Keep the band taut the whole rep — no slack at the bottom.',false,'reps_only'),
+    ex('b_lb_to1','Banded Squat','4×15',4,'Stand on the band with feet shoulder-width, bring the ends up over your shoulders or hold at chest height. Full depth. Bands add the most resistance at the top, so drive hard out of the bottom.',false,'reps_only'),
+    ex('b_lb_to2','Banded Deadlift','4×12',4,'Stand on the middle of the band, feet hip-width, hinge down to grip an end in each hand, drive your hips forward to stand tall. Keep the band taut the whole rep, no slack at the bottom.',false,'reps_only'),
   ],
   enroute: [
-    ex('b_lb_er1','Lateral Band Walk','3×15 steps/side',3,'Loop a band above your knees, drop into a quarter-squat, step sideways keeping tension in the band the entire time. Targets glute medius — often neglected.',false,'reps_only'),
+    ex('b_lb_er1','Lateral Band Walk','3×15 steps/side',3,'Loop a band above your knees, drop into a quarter-squat, step sideways keeping tension in the band the entire time. Targets glute medius, often neglected.',false,'reps_only'),
     ex('b_lb_er2','Banded Leg Curl','3×15/side',3,'Anchor the band low to something stable, loop the other end around one ankle, curl your heel toward your glute. Switch legs.',false,'reps_only'),
     ex('b_lb_er3','Banded Lateral Lunge','3×10/side',3,'Band looped around your ankles. Take a big step to the side, hinge at the hips and sit into the working leg, push back to center.',false,'reps_only'),
     ex('b_lb_er4','Banded Hip Thrust','3×15',3,'Band across your hips, shoulders on a bench or the floor, feet flat and knees bent. Drive your hips up, squeeze your glutes at the top.',false,'reps_only'),
@@ -879,20 +879,20 @@ WORKOUTS.band['Lower Body'] = {
 WORKOUTS.band['Upper Push'] = {
   taxi: WORKOUTS.comm['Upper Push'].taxi,
   takeoff: [
-    ex('b_up_to1','Banded Push-Up','4×15',4,'Loop the band across your upper back, holding one end under each hand. Adds resistance right where a bodyweight push-up gets easiest — the top of the rep.',false,'reps_only'),
+    ex('b_up_to1','Banded Push-Up','4×15',4,'Loop the band across your upper back, holding one end under each hand. Adds resistance right where a bodyweight push-up gets easiest: the top of the rep.',false,'reps_only'),
     ex('b_up_to2','Banded Overhead Press','4×15',4,'Stand on the middle of the band, press both ends straight overhead to full lockout. Core braced, don\'t arch your lower back.',false,'reps_only'),
   ],
   enroute: [
     ex('b_up_er1','Banded Single-Arm Chest Press','3×12/side',3,'Anchor the band behind you at chest height, face away from the anchor, press forward and slightly across your body.',false,'reps_only'),
     ex('b_up_er2','Banded Tricep Pushdown','3×15',3,'Anchor the band overhead, elbows pinned to your sides, extend your arms down until straight.',false,'reps_only'),
-    ex('b_up_er3','Banded Lateral Raise','3×15',3,'Stand on the band, raise both arms out to shoulder height. Light tension, strict form — no swinging.',false,'reps_only'),
+    ex('b_up_er3','Banded Lateral Raise','3×15',3,'Stand on the band, raise both arms out to shoulder height. Light tension, strict form. No swinging.',false,'reps_only'),
   ],
   landing: WORKOUTS.comm['Upper Push'].landing,
 };
 WORKOUTS.band['Upper Pull'] = {
   taxi: WORKOUTS.comm['Upper Pull'].taxi.slice(0,2),
   takeoff: [
-    ex('b_ul_to1','Banded Bent-Over Row','4×15',4,'Stand on the band, feet hip-width, hinge forward about 30°. Pull the band to your chest, keeping elbows close to your sides — they should skim your ribs.',false,'reps_only'),
+    ex('b_ul_to1','Banded Bent-Over Row','4×15',4,'Stand on the band, feet hip-width, hinge forward about 30°. Pull the band to your chest, keeping elbows close to your sides. They should skim your ribs.',false,'reps_only'),
     ex('b_ul_to2','Banded Upright Row','4×12',4,'Stand on the band with it crossed into an X in front of you. Pull your hands up to shoulder height, elbows leading out to the sides.',false,'reps_only'),
   ],
   enroute: [
@@ -911,7 +911,7 @@ WORKOUTS.band['Full Body'] = {
   enroute: [
     ex('b_fb_er1','Banded Push-Up','3×15',3,'Band looped across your upper back.',false,'reps_only'),
     ex('b_fb_er2','Banded Bent-Over Row','3×15',3,'Elbows close to your sides the whole pull.',false,'reps_only'),
-    ex('b_fb_er3','Banded Woodchop','3×12/side',3,'Anchor the band low or high, rotate it diagonally across your body — the movement should come from your core, not your arms.',false,'reps_only'),
+    ex('b_fb_er3','Banded Woodchop','3×12/side',3,'Anchor the band low or high, rotate it diagonally across your body. The movement should come from your core, not your arms.',false,'reps_only'),
     ex('b_fb_er4','Standing Banded Oblique Twist','3×12/side',3,'Band anchored at your side around waist height, twist your torso away from the anchor point and back.',false,'reps_only'),
     ex('b_fb_er5','Banded Thruster','3×12',3,'Squat down keeping the band taut, then drive up through your legs and press the band straight overhead in one continuous motion as you stand.',false,'reps_only'),
   ],
@@ -945,7 +945,7 @@ const GOAL_OVERLAYS = {
     swaps: {
       comm: { 'Lower Body': {
         takeoff: { 'Romanian Deadlift': ex('g_c_lb_ht','Barbell Hip Thrust','4×8',4,'Shoulders on a bench, bar over hips, chin tucked. Drive to full lockout and squeeze hard for 2 seconds. The single best glute builder.') },
-        enroute: { 'Leg Press': ex('g_c_lb_gk','Cable Glute Kickback','3×12/leg',3,'Slight forward lean, kick straight back through the heel. Squeeze at full extension — no swinging.') },
+        enroute: { 'Leg Press': ex('g_c_lb_gk','Cable Glute Kickback','3×12/leg',3,'Slight forward lean, kick straight back through the heel. Squeeze at full extension. No swinging.') },
       }},
       hotel: { 'Lower Body': {
         takeoff: { 'DB Romanian Deadlift': ex('g_h_lb_ht','DB Hip Thrust','4×10',4,'Shoulders on the bench edge, dumbbell over hips. Full lockout, hard glute squeeze at the top.') },
@@ -1248,158 +1248,158 @@ function getExGuide(exId, exName) {
 // because individual study citations require per-paper verification we cannot
 // guarantee at this scale. Every link below was checked to match its card's topic.
 const WISDOM = [
-  { title:'Hydration SOP', text:'Aviation medicine guidance sets roughly 0.3L of water per flight hour as a baseline hydration target. Cabin humidity at altitude drops below 20% — drier than most deserts — so fluid loss outpaces thirst. By the time you feel thirsty, you may already be mildly dehydrated, which is enough to measurably affect reaction time and decision-making. On no-fly days, a 1L minimum keeps you on track.', link:'https://www.cdc.gov/healthy-weight-growth/water-healthy-drinks/index.html' },
+  { title:'Hydration SOP', text:'Aviation medicine guidance sets roughly 0.3L of water per flight hour as a baseline hydration target. Cabin humidity at altitude drops below 20% (drier than most deserts), so fluid loss outpaces thirst. By the time you feel thirsty, you may already be mildly dehydrated, which is enough to measurably affect reaction time and decision-making. On no-fly days, a 1L minimum keeps you on track.', link:'https://www.cdc.gov/healthy-weight-growth/water-healthy-drinks/index.html' },
   { title:'Seated Correction', text:'Sustained sitting compresses the spinal discs, deactivates the glutes, and tightens the hip flexors. Set a reminder every 60 minutes: 10 glute squeezes, a few standing hip hinges, and a brief thoracic extension over a chair back. Small, frequent breaks matter more than one long stretch session.', link:'https://www.mayoclinic.org/healthy-lifestyle/adult-health/in-depth/sitting/art-20270991' },
   { title:'Landing Prep Breathing', text:'Slow, extended-exhale breathing (such as 4 seconds in, 7 hold, 8 out) activates the parasympathetic nervous system, lowering heart rate and reducing the mental "noise" of a high-workload environment within a few cycles. Useful immediately after landing or before a stressful task.', link:'https://www.health.harvard.edu/mind-and-mood/relaxation-techniques-breath-control-helps-quell-errant-stress-response' },
-  { title:'BP Accuracy Protocol', text:'Blood pressure readings are sensitive to method. Rest quietly for 5 full minutes first. Sit with your back supported, feet flat, and arm at heart level — no talking. Take three readings a minute or two apart and average the last two. Caffeine or exercise in the prior 30 minutes can inflate the number.', link:'https://www.heart.org/en/health-topics/high-blood-pressure/understanding-blood-pressure-readings' },
+  { title:'BP Accuracy Protocol', text:'Blood pressure readings are sensitive to method. Rest quietly for 5 full minutes first. Sit with your back supported, feet flat, and arm at heart level. No talking. Take three readings a minute or two apart and average the last two. Caffeine or exercise in the prior 30 minutes can inflate the number.', link:'https://www.heart.org/en/health-topics/high-blood-pressure/understanding-blood-pressure-readings' },
   { title:'Fasting Glucose Baseline', text:'Fasting glucose should be measured upon waking, before any food or coffee, after at least 8 hours without eating. Normal is roughly 70-99 mg/dL; 100-125 is considered pre-diabetic range; 126+ is the diabetic threshold. Stress and poor sleep can elevate readings independent of diet, so track the trend over weeks, not single readings.', link:'https://www.cdc.gov/diabetes/diabetes-testing/' },
-  { title:'Blue Light Management', text:'Screens emit blue wavelengths that suppress melatonin release in the evening, delaying sleep onset. Blue-light-filtering glasses or built-in "night mode" settings after sunset are simple, evidence-supported countermeasures — useful for pilots managing irregular schedules.', link:'https://www.sleepfoundation.org/bedroom-environment/blue-light' },
-  { title:'Why Squats Matter', text:'The squat loads the entire postural and lower body system at once — lumbar spine, hips, knees, ankles, and core all participate. For pilots, it directly counters the seated posture of the cockpit. Regular squatting supports bone density and overall functional strength as you age.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
-  { title:'Post-Meal Walk', text:'A short walk after eating — even 10 minutes — measurably blunts the post-meal blood sugar spike by helping muscles take up glucose without relying on extra insulin. For pilots with irregular meal timing, this is one of the easiest interventions available in almost any environment.', link:'https://www.diabetes.org/healthy-living/fitness/getting-started-safely/walking' },
-  { title:'Sleep Consistency', text:'A consistent wake time — more than bedtime — anchors your circadian rhythm and the hormonal cascade that depends on it. Even after irregular trips, returning to a fixed wake-time window within a few days helps rebuild that rhythm faster than chasing extra sleep alone.', link:'https://www.sleepfoundation.org/sleep-hygiene/sleep-schedule' },
-  { title:'Box Breathing for Pilots', text:'Box breathing — inhale 4 counts, hold 4, exhale 4, hold 4 — is a simple, trainable technique used across military and high-performance settings to reduce acute stress and steady heart rate before a demanding task.', link:'https://www.health.harvard.edu/mind-and-mood/relaxation-techniques-breath-control-helps-quell-errant-stress-response' },
+  { title:'Blue Light Management', text:'Screens emit blue wavelengths that suppress melatonin release in the evening, delaying sleep onset. Blue-light-filtering glasses or built-in "night mode" settings after sunset are simple, evidence-supported countermeasures, useful for pilots managing irregular schedules.', link:'https://www.sleepfoundation.org/bedroom-environment/blue-light' },
+  { title:'Why Squats Matter', text:'The squat loads the entire postural and lower body system at once: lumbar spine, hips, knees, ankles, and core all participate. For pilots, it directly counters the seated posture of the cockpit. Regular squatting supports bone density and overall functional strength as you age.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
+  { title:'Post-Meal Walk', text:'A short walk after eating, even 10 minutes, measurably blunts the post-meal blood sugar spike by helping muscles take up glucose without relying on extra insulin. For pilots with irregular meal timing, this is one of the easiest interventions available in almost any environment.', link:'https://www.diabetes.org/healthy-living/fitness/getting-started-safely/walking' },
+  { title:'Sleep Consistency', text:'A consistent wake time, more than bedtime, anchors your circadian rhythm and the hormonal cascade that depends on it. Even after irregular trips, returning to a fixed wake-time window within a few days helps rebuild that rhythm faster than chasing extra sleep alone.', link:'https://www.sleepfoundation.org/sleep-hygiene/sleep-schedule' },
+  { title:'Box Breathing for Pilots', text:'Box breathing (inhale 4 counts, hold 4, exhale 4, hold 4) is a simple, trainable technique used across military and high-performance settings to reduce acute stress and steady heart rate before a demanding task.', link:'https://www.health.harvard.edu/mind-and-mood/relaxation-techniques-breath-control-helps-quell-errant-stress-response' },
   { title:'Protein Priority', text:'Aiming for roughly 25-30g of protein per meal, spread across the day, supports muscle maintenance and satiety better than concentrating protein into one large meal. For pilots eating in airports and hotels, this means actively choosing protein-forward options at each stop.', link:'https://nutritionsource.hsph.harvard.edu/what-should-you-eat/protein/' },
-  { title:'Fiber Intake', text:'Most adults fall well short of the roughly 25-30g of daily fiber recommended for digestive and metabolic health. Fiber slows glucose absorption, feeds beneficial gut bacteria, and supports satiety — valuable when travel limits food choices.', link:'https://nutritionsource.hsph.harvard.edu/carbohydrates/fiber/' },
-  { title:'Zone 2 Training', text:'Training at a conversational pace — roughly 60-70% of max heart rate — builds the aerobic base that underlies recovery from harder efforts. Most evidence-based guidelines recommend 150+ minutes of this kind of moderate cardio per week for general health.', link:'https://www.heart.org/en/healthy-living/fitness/fitness-basics/aha-recs-for-physical-activity-in-adults' },
-  { title:'Thoracic Mobility', text:'Prolonged forward-flexed postures — like extended seat time — encourage the upper back to round. Daily thoracic extension drills (over a chair back or foam roller) help counteract this and protect the neck and lower back from compensating.', link:'https://www.spine-health.com/wellness/exercise/thoracic-spine-stretches-and-exercises' },
-  { title:'Caffeine Cutoff', text:'Caffeine has a half-life of roughly 5-6 hours, meaning a substantial dose remains active in your system well into the evening if consumed in the afternoon. For pilots with variable schedules, a personal cutoff time — even 8 hours before target sleep — meaningfully protects sleep quality.', link:'https://www.sleepfoundation.org/nutrition/caffeine-and-sleep' },
-  { title:'Morning Light Exposure', text:'Getting outside within the first hour of waking — even on a cloudy day — provides far more light intensity than indoor lighting and helps anchor your circadian clock. For pilots adjusting across time zones, morning light at the destination is one of the fastest resynchronization tools available.', link:'https://www.sleepfoundation.org/bedroom-environment/light-and-sleep' },
+  { title:'Fiber Intake', text:'Most adults fall well short of the roughly 25-30g of daily fiber recommended for digestive and metabolic health. Fiber slows glucose absorption, feeds beneficial gut bacteria, and supports satiety, which is valuable when travel limits food choices.', link:'https://nutritionsource.hsph.harvard.edu/carbohydrates/fiber/' },
+  { title:'Zone 2 Training', text:'Training at a conversational pace (roughly 60-70% of max heart rate) builds the aerobic base that underlies recovery from harder efforts. Most evidence-based guidelines recommend 150+ minutes of this kind of moderate cardio per week for general health.', link:'https://www.heart.org/en/healthy-living/fitness/fitness-basics/aha-recs-for-physical-activity-in-adults' },
+  { title:'Thoracic Mobility', text:'Prolonged forward-flexed postures, like extended seat time, encourage the upper back to round. Daily thoracic extension drills (over a chair back or foam roller) help counteract this and protect the neck and lower back from compensating.', link:'https://www.spine-health.com/wellness/exercise/thoracic-spine-stretches-and-exercises' },
+  { title:'Caffeine Cutoff', text:'Caffeine has a half-life of roughly 5-6 hours, meaning a substantial dose remains active in your system well into the evening if consumed in the afternoon. For pilots with variable schedules, a personal cutoff time, even 8 hours before target sleep, meaningfully protects sleep quality.', link:'https://www.sleepfoundation.org/nutrition/caffeine-and-sleep' },
+  { title:'Morning Light Exposure', text:'Getting outside within the first hour of waking, even on a cloudy day, provides far more light intensity than indoor lighting and helps anchor your circadian clock. For pilots adjusting across time zones, morning light at the destination is one of the fastest resynchronization tools available.', link:'https://www.sleepfoundation.org/bedroom-environment/light-and-sleep' },
   { title:'The Big Three Lifts', text:'A squat pattern, a hip-hinge pattern (like a deadlift), and a pulling pattern cover most of what the body needs for durable, functional strength. If your time is limited, maintaining competence in these three patterns gives the broadest return.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
-  { title:'Active Recovery on Layovers', text:'Total rest on a layover often feels appealing, but light movement — an easy walk, gentle mobility work — tends to leave you feeling better than complete inactivity, by promoting blood flow and reducing stiffness without adding training stress.', link:'https://health.clevelandclinic.org/active-recovery' },
-  { title:'Waist Measurement Protocol', text:'Measure at the navel, at the end of a normal exhale, without pulling in your stomach. A waist circumference over 40 inches in men (35 inches in women) is the commonly cited clinical threshold associated with higher metabolic and cardiovascular risk — independent of total body weight.', link:'https://www.nhlbi.nih.gov/health/educational/lose_wt/risk.htm' },
+  { title:'Active Recovery on Layovers', text:'Total rest on a layover often feels appealing, but light movement (an easy walk, gentle mobility work) tends to leave you feeling better than complete inactivity, by promoting blood flow and reducing stiffness without adding training stress.', link:'https://health.clevelandclinic.org/active-recovery' },
+  { title:'Waist Measurement Protocol', text:'Measure at the navel, at the end of a normal exhale, without pulling in your stomach. A waist circumference over 40 inches in men (35 inches in women) is the commonly cited clinical threshold associated with higher metabolic and cardiovascular risk, independent of total body weight.', link:'https://www.nhlbi.nih.gov/health/educational/lose_wt/risk.htm' },
   { title:'Meal Timing', text:'Eating close to bedtime can interfere with the normal drop in core body temperature that supports sleep onset, and is associated with poorer overnight glucose control. A loose guideline of finishing meals 2-3 hours before bed is a reasonable target.', link:'https://www.sleepfoundation.org/nutrition/food-and-drink-promote-good-sleep' },
-  { title:'CNS Recovery', text:'Strength adaptations happen during the recovery period after a workout — not during the workout itself. Adequate sleep and protein intake in the 24-48 hours following a hard session are what convert training stress into actual progress.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
-  { title:'Scapular Position', text:'A neutral, slightly retracted shoulder blade position — sometimes cued as "shoulders back and down" — helps offset the forward-rounded posture common after years in a cockpit seat, and reduces shoulder impingement risk during pressing movements.', link:'https://www.spine-health.com/wellness/exercise/thoracic-spine-stretches-and-exercises' },
+  { title:'CNS Recovery', text:'Strength adaptations happen during the recovery period after a workout, not during the workout itself. Adequate sleep and protein intake in the 24-48 hours following a hard session are what convert training stress into actual progress.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
+  { title:'Scapular Position', text:'A neutral, slightly retracted shoulder blade position (sometimes cued as "shoulders back and down") helps offset the forward-rounded posture common after years in a cockpit seat, and reduces shoulder impingement risk during pressing movements.', link:'https://www.spine-health.com/wellness/exercise/thoracic-spine-stretches-and-exercises' },
   { title:'Spinal Decompression', text:'Gentle stretches like child\'s pose create mild traction on the spine, helping offset the compressive load of long periods of sitting. This is a useful addition after a heavy lower body session.', link:'https://www.spine-health.com/wellness/exercise/thoracic-spine-stretches-and-exercises' },
   { title:'Blood Sugar Control', text:'Refined carbohydrates and added sugars tend to produce a rapid glucose rise followed by a crash, which can affect alertness a couple of hours later. Pairing carbohydrates with protein, fat, or fiber slows this response and tends to produce steadier energy.', link:'https://www.cdc.gov/diabetes/healthy-eating/' },
-  { title:'Urine Color Chart', text:'Urine color remains one of the simplest, free hydration indicators — pale straw suggests good hydration, while dark amber suggests you need more fluids soon. Note that certain vitamins (like B-complex) can cause bright yellow urine unrelated to hydration status.', link:'https://www.mayoclinic.org/healthy-lifestyle/nutrition-and-healthy-eating/in-depth/water/art-20044256' },
+  { title:'Urine Color Chart', text:'Urine color remains one of the simplest, free hydration indicators: pale straw suggests good hydration, while dark amber suggests you need more fluids soon. Note that certain vitamins (like B-complex) can cause bright yellow urine unrelated to hydration status.', link:'https://www.mayoclinic.org/healthy-lifestyle/nutrition-and-healthy-eating/in-depth/water/art-20044256' },
   { title:'Cold Exposure', text:'Brief cold exposure at the end of a shower has been associated with improved alertness and mood in some studies, likely through norepinephrine release. It is not required for fitness progress but is a low-cost tool some people find energizing.', link:'https://www.health.harvard.edu/staying-healthy/the-power-of-the-cold-water-plunge' },
   { title:'Two-Minute Mindfulness', text:'Even short, focused-breathing breaks of a couple of minutes have been shown to reduce momentary stress markers and improve subsequent focus. For high-workload professions, brief resets between tasks may be more sustainable than longer sessions.', link:'https://www.health.harvard.edu/mind-and-mood/relaxation-techniques-breath-control-helps-quell-errant-stress-response' },
-  { title:'Tempo Training for Longevity', text:'Slowing down the lowering (eccentric) portion of a lift increases time under tension and may better stimulate connective tissue adaptation than fast, uncontrolled reps — a useful emphasis for joint-friendly, longevity-focused training.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
-  { title:'Dietary Blood Pressure', text:'Reducing sodium intake and increasing potassium-rich foods — leafy greens, avocado, sweet potatoes, legumes — are two of the most well-supported dietary levers for lowering blood pressure over time.', link:'https://www.heart.org/en/health-topics/high-blood-pressure/changes-you-can-make-to-manage-high-blood-pressure' },
+  { title:'Tempo Training for Longevity', text:'Slowing down the lowering (eccentric) portion of a lift increases time under tension and may better stimulate connective tissue adaptation than fast, uncontrolled reps, making it a useful emphasis for joint-friendly, longevity-focused training.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
+  { title:'Dietary Blood Pressure', text:'Reducing sodium intake and increasing potassium-rich foods (leafy greens, avocado, sweet potatoes, legumes) are two of the most well-supported dietary levers for lowering blood pressure over time.', link:'https://www.heart.org/en/health-topics/high-blood-pressure/changes-you-can-make-to-manage-high-blood-pressure' },
   { title:'Anti-Movement Core Training', text:'Exercises like planks and dead bugs train the core to resist unwanted movement of the spine, which is generally considered more protective for the lower back than traditional flexion-based exercises like sit-ups.', link:'https://www.spine-health.com/wellness/exercise/core-exercises-low-back-pain' },
-  { title:'Screen-Free Pre-Sleep Window', text:'Reducing screen exposure in the hour before bed — and replacing it with reading, journaling, or a podcast — is a simple, low-cost habit associated with falling asleep more easily over time.', link:'https://www.sleepfoundation.org/bedroom-environment/blue-light' },
+  { title:'Screen-Free Pre-Sleep Window', text:'Reducing screen exposure in the hour before bed (and replacing it with reading, journaling, or a podcast) is a simple, low-cost habit associated with falling asleep more easily over time.', link:'https://www.sleepfoundation.org/bedroom-environment/blue-light' },
   { title:'Dynamic Warmup Science', text:'Dynamic movement-based warmups (leg swings, bodyweight squats, hip hinges) tend to outperform static stretching for preparing the body for performance, while static stretching is better reserved for after the session.', link:'https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/stretching/art-20047931' },
   { title:'Muscle as Metabolic Insurance', text:'Skeletal muscle is a major site of glucose disposal in the body. Building and maintaining muscle mass through resistance training supports better blood sugar regulation over the long term, independent of weight changes.', link:'https://www.cdc.gov/diabetes/healthy-eating/' },
   { title:'Trap Release Protocol', text:'The upper traps and neck muscles often carry chronic tension from supporting the head during long periods of sitting. A few minutes of self-massage with a lacrosse ball or foam roller against a wall can meaningfully reduce that tension.', link:'https://www.spine-health.com/wellness/exercise/thoracic-spine-stretches-and-exercises' },
   { title:'Daily Weight Protocol', text:'Body weight naturally fluctuates several pounds day to day from water and food volume. Weighing at the same time, same conditions, and tracking a weekly average gives a far clearer signal than any single day\'s number.', link:'https://www.health.harvard.edu/staying-healthy/is-bmi-the-best-predictor-of-future-health' },
-  { title:'Vitamin D for Pilots', text:'Limited sun exposure — common for flight crew due to schedules and UV-filtering cockpit glass — is a known risk factor for low vitamin D. Annual testing and supplementation when needed is a reasonable precaution.', link:'https://ods.od.nih.gov/factsheets/VitaminD-Consumer/' },
+  { title:'Vitamin D for Pilots', text:'Limited sun exposure, common for flight crew due to schedules and UV-filtering cockpit glass, is a known risk factor for low vitamin D. Annual testing and supplementation when needed is a reasonable precaution.', link:'https://ods.od.nih.gov/factsheets/VitaminD-Consumer/' },
   { title:'Building Your Aerobic Base', text:'A broad aerobic base, built through consistent moderate-intensity cardio over months, improves recovery capacity between harder training sessions and supports long-term cardiovascular health.', link:'https://www.heart.org/en/healthy-living/fitness/fitness-basics/aha-recs-for-physical-activity-in-adults' },
-  { title:'Chin Tuck Protocol', text:'A simple chin-tuck exercise — drawing the chin straight back without tilting down — helps counteract forward head posture from screens and cockpit positioning, reducing strain on the neck over time.', link:'https://www.spine-health.com/wellness/exercise/thoracic-spine-stretches-and-exercises' },
-  { title:'Progressive Overload', text:'Strength gains require gradually increasing demand on the muscle over time — more reps, more weight, or more total volume. Tracking your numbers (which this app does automatically) is what makes that progression visible and intentional.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
-  { title:'Hydration and Cognition', text:'Even mild dehydration has been linked to reduced alertness and slower reaction time. Because thirst can lag behind actual need — especially in dry cabin air — drinking on a schedule rather than waiting to feel thirsty is the more reliable approach.', link:'https://www.cdc.gov/healthy-weight-growth/water-healthy-drinks/index.html' },
+  { title:'Chin Tuck Protocol', text:'A simple chin-tuck exercise (drawing the chin straight back without tilting down) helps counteract forward head posture from screens and cockpit positioning, reducing strain on the neck over time.', link:'https://www.spine-health.com/wellness/exercise/thoracic-spine-stretches-and-exercises' },
+  { title:'Progressive Overload', text:'Strength gains require gradually increasing demand on the muscle over time: more reps, more weight, or more total volume. Tracking your numbers (which this app does automatically) is what makes that progression visible and intentional.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
+  { title:'Hydration and Cognition', text:'Even mild dehydration has been linked to reduced alertness and slower reaction time. Because thirst can lag behind actual need, especially in dry cabin air, drinking on a schedule rather than waiting to feel thirsty is the more reliable approach.', link:'https://www.cdc.gov/healthy-weight-growth/water-healthy-drinks/index.html' },
   { title:'Time-Restricted Eating', text:'Compressing eating into a consistent daily window (such as 10am-8pm) is one approach some people use to support metabolic health, though it works best as a consistency tool rather than a rigid rule, especially with irregular pilot schedules.', link:'https://nutritionsource.hsph.harvard.edu/healthy-weight/diet-reviews/intermittent-fasting/' },
   { title:'Hip Hinge for Back Health', text:'Learning to hinge at the hips rather than round the lower back when lifting or bending is one of the most protective movement patterns for long-term spine health, especially relevant for handling bags and gear.', link:'https://www.spine-health.com/wellness/exercise/core-exercises-low-back-pain' },
   { title:'Post-Workout Nutrition', text:'Eating a combination of protein and carbohydrates within an hour or two after training supports recovery and glycogen replenishment. Simple options like Greek yogurt with fruit work well when you don\'t have time to prepare a full meal.', link:'https://nutritionsource.hsph.harvard.edu/what-should-you-eat/protein/' },
   { title:'Nasal Breathing', text:'Breathing through the nose during lower-intensity activity filters and humidifies air and may support more efficient oxygen exchange compared with mouth breathing. It\'s a skill that can be practiced gradually during easy cardio.', link:'https://www.health.harvard.edu/mind-and-mood/relaxation-techniques-breath-control-helps-quell-errant-stress-response' },
-  { title:'Physical = Professional', text:'Physical fitness and cognitive performance are linked — better cardiovascular health and sleep quality both support sharper decision-making under workload. Training is not separate from professional readiness; it supports it directly.', link:'https://www.heart.org/en/healthy-living/fitness/fitness-basics/aha-recs-for-physical-activity-in-adults' },
+  { title:'Physical = Professional', text:'Physical fitness and cognitive performance are linked: better cardiovascular health and sleep quality both support sharper decision-making under workload. Training is not separate from professional readiness; it supports it directly.', link:'https://www.heart.org/en/healthy-living/fitness/fitness-basics/aha-recs-for-physical-activity-in-adults' },
   { title:'Darkness for Sleep', text:'A fully dark sleeping environment supports deeper, more restorative sleep. For pilots in unfamiliar hotel rooms, packing a quality sleep mask is a small investment with an outsized payoff.', link:'https://www.sleepfoundation.org/bedroom-environment/light-and-sleep' },
-  { title:'Frequency Over Duration', text:'For mobility work specifically, doing a little every day tends to produce better results than doing a lot once a week. This is part of why the Taxi phase of every workout matters — consistency compounds.', link:'https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/stretching/art-20047931' },
-  { title:'Track Your Weights', text:'Without tracking, it is easy to believe you are progressing when you have actually plateaued. Logging sets, reps, and weight — as this app does — is the most direct way to confirm real progress and catch stalls early.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
-  { title:'Resting Heart Rate as a Metric', text:'A resting heart rate noticeably higher than your personal baseline can be an early signal of inadequate recovery, illness, or excessive training stress — useful information for deciding whether to push or pull back on a given day.', link:'https://www.heart.org/en/healthy-living/fitness/fitness-basics/target-heart-rates' },
+  { title:'Frequency Over Duration', text:'For mobility work specifically, doing a little every day tends to produce better results than doing a lot once a week. This is part of why the Taxi phase of every workout matters: consistency compounds.', link:'https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/stretching/art-20047931' },
+  { title:'Track Your Weights', text:'Without tracking, it is easy to believe you are progressing when you have actually plateaued. Logging sets, reps, and weight (as this app does) is the most direct way to confirm real progress and catch stalls early.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
+  { title:'Resting Heart Rate as a Metric', text:'A resting heart rate noticeably higher than your personal baseline can be an early signal of inadequate recovery, illness, or excessive training stress: useful information for deciding whether to push or pull back on a given day.', link:'https://www.heart.org/en/healthy-living/fitness/fitness-basics/target-heart-rates' },
   { title:'The Long Game', text:'Consistency over many months outperforms any short, intense burst of effort. A sustainable training rhythm you can maintain for a year will produce better outcomes than an unsustainable one you abandon after a few weeks.', link:'https://www.heart.org/en/healthy-living/fitness/fitness-basics/aha-recs-for-physical-activity-in-adults' },
   { title:'Delayed Onset Muscle Soreness', text:'Soreness that peaks 24-48 hours after a new or harder-than-usual session is a normal adaptive response, not necessarily a sign of damage. Light movement, hydration, and protein support recovery; soreness lasting more than 4-5 days or accompanied by severe swelling warrants medical attention.', link:'https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/stretching/art-20047931' },
-  { title:'Grip Strength as a Health Marker', text:'Grip strength is one of the most studied simple measures linked to overall health outcomes in research populations. Farmer carries, dead hangs, and heavy rows all build grip incidentally — useful general training, not just a niche skill.', link:'https://www.heart.org/en/healthy-living/fitness/fitness-basics/aha-recs-for-physical-activity-in-adults' },
+  { title:'Grip Strength as a Health Marker', text:'Grip strength is one of the most studied simple measures linked to overall health outcomes in research populations. Farmer carries, dead hangs, and heavy rows all build grip incidentally, making them useful general training, not just a niche skill.', link:'https://www.heart.org/en/healthy-living/fitness/fitness-basics/aha-recs-for-physical-activity-in-adults' },
   { title:'Jet Lag and Training Timing', text:'Training in late afternoon or early evening at your destination can help shift your circadian clock faster than training right after arrival when your body still expects to be asleep. Light exposure timing matters more than the workout itself for adjustment speed.', link:'https://www.sleepfoundation.org/jet-lag' },
   { title:'Static vs Dynamic Stretching Timing', text:'Static stretches (held for 20-60 seconds without movement) are best done after training or on rest days, when tissue is warm and the goal is mobility rather than power output. Doing them cold, before lifting, can temporarily reduce strength and power.', link:'https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/stretching/art-20047931' },
-  { title:'Electrolytes Beyond Water', text:'On long flights or hot layovers, water alone may not fully replace what is lost through sweat. Sodium, potassium, and magnesium support muscle function and fluid balance — a pinch of salt or an electrolyte tablet is reasonable after heavy sweating, not just plain water.', link:'https://www.mayoclinic.org/healthy-lifestyle/nutrition-and-healthy-eating/in-depth/water/art-20044256' },
-  { title:'The Knee-Over-Toe Myth', text:'Older coaching cues warned against letting the knee travel past the toe in a squat or lunge. Current biomechanics research shows this movement is normal and safe for most people with adequate ankle mobility — restricting it artificially can actually increase strain elsewhere.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
+  { title:'Electrolytes Beyond Water', text:'On long flights or hot layovers, water alone may not fully replace what is lost through sweat. Sodium, potassium, and magnesium support muscle function and fluid balance. A pinch of salt or an electrolyte tablet is reasonable after heavy sweating, not just plain water.', link:'https://www.mayoclinic.org/healthy-lifestyle/nutrition-and-healthy-eating/in-depth/water/art-20044256' },
+  { title:'The Knee-Over-Toe Myth', text:'Older coaching cues warned against letting the knee travel past the toe in a squat or lunge. Current biomechanics research shows this movement is normal and safe for most people with adequate ankle mobility. Restricting it artificially can actually increase strain elsewhere.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
   { title:'Warm-Up Specificity', text:'A general warm-up raises heart rate and tissue temperature, but a few lighter sets of the actual exercise you are about to perform (rehearsal sets) prepare the specific movement pattern and joint angles better than generic cardio alone.', link:'https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/stretching/art-20047931' },
   { title:'Sleep Debt Does Not Fully Repay', text:'Sleeping in on days off helps somewhat, but research suggests chronic short sleep during the work week is not fully offset by weekend catch-up. Protecting sleep on duty days matters more than trying to recover it afterward.', link:'https://www.sleepfoundation.org/sleep-deprivation' },
-  { title:'Training Around a Minor Injury', text:'A minor strain in one area does not require stopping all training. Working unaffected muscle groups (sometimes called the "minimal effective dose" approach) maintains fitness and can even support healing through circulation — but always within pain-free range and ideally with medical guidance for anything beyond mild discomfort.', link:'https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/stretching/art-20047931' },
+  { title:'Training Around a Minor Injury', text:'A minor strain in one area does not require stopping all training. Working unaffected muscle groups (sometimes called the "minimal effective dose" approach) maintains fitness and can even support healing through circulation, but always within pain-free range and ideally with medical guidance for anything beyond mild discomfort.', link:'https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/stretching/art-20047931' },
   { title:'The Talk Test for Cardio Intensity', text:'A practical way to gauge Zone 2 effort without a heart rate monitor: you should be able to hold a conversation, but not comfortably sing. If you cannot speak in full sentences, you have drifted into a harder zone than intended for base-building cardio.', link:'https://www.heart.org/en/healthy-living/fitness/fitness-basics/aha-recs-for-physical-activity-in-adults' },
   { title:'Why Tendons Take Longer Than Muscle', text:'Muscle tissue can show measurable strength adaptation in 1-2 weeks, but tendons and ligaments adapt over months due to slower blood supply and collagen turnover. This is part of why progressing load too quickly increases tendon injury risk even when muscles feel ready.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
   { title:'Hydration and Altitude', text:'Cabin pressurization simulates an altitude of roughly 6,000-8,000 feet, which increases respiratory water loss compared to sea level even without physical exertion. This is part of why pilots and frequent flyers need more deliberate hydration than ground-based schedules suggest.', link:'https://www.cdc.gov/healthy-weight-growth/water-healthy-drinks/index.html' },
-  { title:'Protein Timing Is Less Critical Than Total', text:'While post-workout protein timing gets a lot of attention, total daily protein intake matters more for muscle maintenance and growth than the exact hour you consume it — useful to know when travel schedules make precise meal timing unrealistic.', link:'https://nutritionsource.hsph.harvard.edu/what-should-you-eat/protein/' },
+  { title:'Protein Timing Is Less Critical Than Total', text:'While post-workout protein timing gets a lot of attention, total daily protein intake matters more for muscle maintenance and growth than the exact hour you consume it, which is useful to know when travel schedules make precise meal timing unrealistic.', link:'https://nutritionsource.hsph.harvard.edu/what-should-you-eat/protein/' },
   { title:'The Vestibular System and Balance Training', text:'Single-leg exercises and balance work train the vestibular and proprioceptive systems, which naturally decline with age and inactivity. This has practical relevance for fall prevention later in life and for general movement confidence now.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
-  { title:'Cortisol and Chronic Stress', text:'Persistently elevated cortisol from chronic stress (including irregular schedules) is associated with increased abdominal fat storage, disrupted sleep, and impaired recovery from training. Stress management is not separate from fitness — it is a determinant of how well your training actually works.', link:'https://www.health.harvard.edu/staying-healthy/understanding-the-stress-response' },
+  { title:'Cortisol and Chronic Stress', text:'Persistently elevated cortisol from chronic stress (including irregular schedules) is associated with increased abdominal fat storage, disrupted sleep, and impaired recovery from training. Stress management is not separate from fitness; it is a determinant of how well your training actually works.', link:'https://www.health.harvard.edu/staying-healthy/understanding-the-stress-response' },
   { title:'Deload Weeks', text:'Periodically reducing training volume or intensity for a week (a "deload") allows accumulated fatigue to dissipate and is associated with better long-term progress than continuous, unbroken intensity. Roughly every 4-8 weeks is a common guideline, adjusted to how you are recovering.', link:'https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/stretching/art-20047931' },
   { title:'Air Travel and Blood Clot Risk', text:'Prolonged sitting on long flights is associated with increased risk of deep vein thrombosis. Calf raises, ankle circles, and brief walks through the cabin when possible help maintain circulation. This applies to frequent flyers and crew, not just passengers on the longest routes.', link:'https://www.cdc.gov/blood-clots/risk-factors/travel.html' },
-  { title:'The Plateau Is Information, Not Failure', text:'A training plateau usually signals that one input — sleep, nutrition, recovery, or programming — needs to change, not that effort was wasted. Reviewing logged data (which this app captures automatically) helps identify which variable has stalled before assuming you need to simply work harder.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
+  { title:'The Plateau Is Information, Not Failure', text:'A training plateau usually signals that one input (sleep, nutrition, recovery, or programming) needs to change, not that effort was wasted. Reviewing logged data (which this app captures automatically) helps identify which variable has stalled before assuming you need to simply work harder.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
   { title:'Omega-3s and Inflammation', text:'Omega-3 fatty acids (found in fatty fish, walnuts, flaxseed) are associated with modestly reduced inflammatory markers and may support joint comfort and recovery in people training regularly. They are a reasonable dietary target rather than a required supplement for most people.', link:'https://ods.od.nih.gov/factsheets/Omega3FattyAcids-Consumer/' },
-  { title:'Why Soreness Is Not a Progress Metric', text:'Feeling sore after a workout does not reliably indicate how effective that session was for strength or muscle gains — some highly effective sessions produce little soreness, and some unproductive ones produce a lot. Logged performance data is a far more reliable signal than how you feel the next day.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
+  { title:'Why Soreness Is Not a Progress Metric', text:'Feeling sore after a workout does not reliably indicate how effective that session was for strength or muscle gains. Some highly effective sessions produce little soreness, and some unproductive ones produce a lot. Logged performance data is a far more reliable signal than how you feel the next day.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
   { title:'Compression Garments on Long Flights', text:'Graduated compression socks may help reduce leg swelling and discomfort on long-haul flights by supporting venous return. They are not a substitute for movement and hydration, but a reasonable addition for very long duty days.', link:'https://www.cdc.gov/blood-clots/risk-factors/travel.html' },
-  { title:'The Difference Between Tired and Fatigued', text:'Feeling sleepy is different from accumulated training fatigue — you can be well-rested and still carrying unresolved muscular or nervous system fatigue from recent hard sessions. The Pilot Condition toggle in this app is meant to capture that distinction, not just whether you slept well.', link:'https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/stretching/art-20047931' },
-  { title:'Resistance Training and Bone Density', text:'Mechanical loading from resistance training, particularly compound lower-body lifts, stimulates bone remodeling and is one of the most effective non-pharmacological interventions for maintaining bone density as you age — relevant well before osteoporosis becomes a concern.', link:'https://www.nia.nih.gov/health/exercise-and-physical-activity/three-types-exercise-can-improve-your-health-and-physical' },
+  { title:'The Difference Between Tired and Fatigued', text:'Feeling sleepy is different from accumulated training fatigue: you can be well-rested and still carrying unresolved muscular or nervous system fatigue from recent hard sessions. The Pilot Condition toggle in this app is meant to capture that distinction, not just whether you slept well.', link:'https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/stretching/art-20047931' },
+  { title:'Resistance Training and Bone Density', text:'Mechanical loading from resistance training, particularly compound lower-body lifts, stimulates bone remodeling and is one of the most effective non-pharmacological interventions for maintaining bone density as you age, relevant well before osteoporosis becomes a concern.', link:'https://www.nia.nih.gov/health/exercise-and-physical-activity/three-types-exercise-can-improve-your-health-and-physical' },
   { title:'Why Single-Joint and Multi-Joint Exercises Both Matter', text:'Compound lifts (squat, deadlift, press) build the most overall strength efficiently, but isolation exercises (lateral raises, curls, face pulls) address specific weak points and joint health that compounds alone do not fully cover. A well-rounded program needs both, not one or the other.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
-  { title:'The Cephalic Phase of Digestion', text:'Simply seeing or smelling food triggers digestive hormone release before you take a bite. This is part of why eating mindfully — without screens, slowly — tends to produce better satiety signals than eating distracted, which matters when travel makes rushed meals common.', link:'https://nutritionsource.hsph.harvard.edu/what-should-you-eat/protein/' },
+  { title:'The Cephalic Phase of Digestion', text:'Simply seeing or smelling food triggers digestive hormone release before you take a bite. This is part of why eating mindfully (without screens, slowly) tends to produce better satiety signals than eating distracted, which matters when travel makes rushed meals common.', link:'https://nutritionsource.hsph.harvard.edu/what-should-you-eat/protein/' },
   { title:'Why Warmup Sets Should Not Be Skipped', text:'Working up to a heavy top set through 2-3 progressively heavier warm-up sets primes the nervous system and reduces injury risk compared to loading the working weight cold. This is built into every Takeoff phase exercise in this app for that reason.', link:'https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/stretching/art-20047931' },
-  { title:'Sodium Is Not Universally Bad', text:'While excess sodium is linked to high blood pressure in sodium-sensitive individuals, very low sodium combined with heavy sweating (long flights, hot layovers, hard training) can also cause problems. The right amount depends on your individual health status and activity level — context matters more than a blanket rule.', link:'https://www.heart.org/en/health-topics/high-blood-pressure/changes-you-can-make-to-manage-high-blood-pressure' },
-  { title:'The Overload Principle Applies to Mobility Too', text:'Just as muscles need progressive load to get stronger, joints need progressively deeper or longer-held stretches over time to improve range of motion. Holding the same easy stretch for months will maintain — but not improve — flexibility.', link:'https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/stretching/art-20047931' },
-  { title:'Hotel Gym Programming Reality', text:'Limited equipment does not mean limited results. Dumbbells alone can effectively train every major movement pattern — squat, hinge, push, pull, carry — with appropriate exercise selection, which is exactly why this app builds full hotel-gym and hotel-room programs rather than treating them as compromises.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
+  { title:'Sodium Is Not Universally Bad', text:'While excess sodium is linked to high blood pressure in sodium-sensitive individuals, very low sodium combined with heavy sweating (long flights, hot layovers, hard training) can also cause problems. The right amount depends on your individual health status and activity level: context matters more than a blanket rule.', link:'https://www.heart.org/en/health-topics/high-blood-pressure/changes-you-can-make-to-manage-high-blood-pressure' },
+  { title:'The Overload Principle Applies to Mobility Too', text:'Just as muscles need progressive load to get stronger, joints need progressively deeper or longer-held stretches over time to improve range of motion. Holding the same easy stretch for months will maintain, but not improve, flexibility.', link:'https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/stretching/art-20047931' },
+  { title:'Hotel Gym Programming Reality', text:'Limited equipment does not mean limited results. Dumbbells alone can effectively train every major movement pattern (squat, hinge, push, pull, carry) with appropriate exercise selection, which is exactly why this app builds full hotel-gym and hotel-room programs rather than treating them as compromises.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
   { title:'Caffeine and Performance', text:'Moderate caffeine intake (roughly 3-6mg per kg of bodyweight) 30-60 minutes before training is associated with modest improvements in strength and endurance performance for many people. Individual tolerance varies widely, and the sleep cost of late-day use generally outweighs any performance benefit from afternoon or evening caffeine.', link:'https://www.sleepfoundation.org/nutrition/caffeine-and-sleep' },
-  { title:'The Difference Between Pain and Discomfort', text:'Muscular burning and breathlessness during hard effort are expected discomfort. Sharp, localized, or joint pain is a different signal that warrants stopping and reassessing — learning this distinction is one of the most valuable skills in long-term training longevity.', link:'https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/stretching/art-20047931' },
+  { title:'The Difference Between Pain and Discomfort', text:'Muscular burning and breathlessness during hard effort are expected discomfort. Sharp, localized, or joint pain is a different signal that warrants stopping and reassessing Learning this distinction is one of the most valuable skills in long-term training longevity.', link:'https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/stretching/art-20047931' },
   { title:'Magnesium and Sleep Quality', text:'Magnesium is involved in regulating the nervous system pathways related to sleep, and some research associates adequate intake with improved sleep quality. Leafy greens, nuts, and seeds are good dietary sources; supplementation is reasonable for those who do not get enough through food.', link:'https://ods.od.nih.gov/factsheets/Magnesium-Consumer/' },
-  { title:'Recovery Nutrition on Travel Days', text:'Travel days without training still deplete the body through dehydration, irregular meals, and disrupted sleep. Treating a travel day with the same nutritional care as a hard training day — adequate protein, hydration, and sleep hygiene — supports faster bounce-back when you do train next.', link:'https://nutritionsource.hsph.harvard.edu/what-should-you-eat/protein/' },
-  { title:'Why Rep Ranges Are a Spectrum, Not Strict Categories', text:'Traditional guidance assigns strength to low reps (1-5), hypertrophy to moderate reps (6-12), and endurance to high reps (15+), but research shows meaningful overlap across all these ranges when training is taken close to fatigue. Range matters less than most people assume — consistency and effort matter more.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
-  { title:'The Value of a Training Log Beyond Weights', text:'Recording how a session felt — energy, sleep the night before, stress level — alongside the numbers can reveal patterns that explain performance swings better than the numbers alone. Several fields in this app capture exactly that context for this reason.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
-  { title:'Cold and Flu Risk After Hard Training', text:'A single bout of very intense or prolonged exercise can temporarily suppress immune markers for several hours afterward — sometimes called the "open window." Adequate sleep and nutrition around hard sessions, and being mindful of contagious exposure during this window, are reasonable precautions, especially for crew moving through airports.', link:'https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/stretching/art-20047931' },
+  { title:'Recovery Nutrition on Travel Days', text:'Travel days without training still deplete the body through dehydration, irregular meals, and disrupted sleep. Treating a travel day with the same nutritional care as a hard training day (adequate protein, hydration, and sleep hygiene) supports faster bounce-back when you do train next.', link:'https://nutritionsource.hsph.harvard.edu/what-should-you-eat/protein/' },
+  { title:'Why Rep Ranges Are a Spectrum, Not Strict Categories', text:'Traditional guidance assigns strength to low reps (1-5), hypertrophy to moderate reps (6-12), and endurance to high reps (15+), but research shows meaningful overlap across all these ranges when training is taken close to fatigue. Range matters less than most people assume; consistency and effort matter more.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
+  { title:'The Value of a Training Log Beyond Weights', text:'Recording how a session felt (energy, sleep the night before, stress level) alongside the numbers can reveal patterns that explain performance swings better than the numbers alone. Several fields in this app capture exactly that context for this reason.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
+  { title:'Cold and Flu Risk After Hard Training', text:'A single bout of very intense or prolonged exercise can temporarily suppress immune markers for several hours afterward, sometimes called the "open window." Adequate sleep and nutrition around hard sessions, and being mindful of contagious exposure during this window, are reasonable precautions, especially for crew moving through airports.', link:'https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/stretching/art-20047931' },
   { title:'Why Hip Mobility Affects the Whole Body', text:'Restricted hip mobility commonly causes the lower back or knees to compensate during squatting, lunging, and even walking. This is why hip-focused mobility work appears so often across every mission profile in this app rather than being treated as an isolated stretch.', link:'https://www.spine-health.com/wellness/exercise/thoracic-spine-stretches-and-exercises' },
   { title:'The Role of Carbohydrates Around Training', text:'Carbohydrates are the primary fuel for higher-intensity training. Restricting them too aggressively around hard sessions can reduce performance and recovery quality, even for people otherwise managing weight through reduced carbohydrate intake at other times of day.', link:'https://nutritionsource.hsph.harvard.edu/carbohydrates/' },
-  { title:'Why Form Cues Matter More Than Load Early On', text:'Adding weight before movement quality is consistent increases injury risk and often reinforces poor mechanics that are harder to correct later. Mastering the pattern first, then adding load, is slower initially but more durable long-term — this is the logic behind the Taxi phase rehearsal sets before heavier work.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
+  { title:'Why Form Cues Matter More Than Load Early On', text:'Adding weight before movement quality is consistent increases injury risk and often reinforces poor mechanics that are harder to correct later. Mastering the pattern first, then adding load, is slower initially but more durable long-term. This is the logic behind the Taxi phase rehearsal sets before heavier work.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
   { title:'Sleep Architecture and Travel', text:'Crossing time zones disrupts not just total sleep time but the proportion of deep and REM sleep within each cycle, which affects both physical recovery and cognitive sharpness independent of how many hours you slept. This is why jet lag can feel worse than the hour count alone would suggest.', link:'https://www.sleepfoundation.org/jet-lag' },
   { title:'The Case for Unilateral Training', text:'Single-leg and single-arm exercises expose and correct side-to-side strength imbalances that bilateral lifts can mask, and they train core stability and balance simultaneously. This is part of why split squats, step-ups, and single-arm rows appear throughout this program rather than only bilateral lifts.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
   { title:'Why Breathing Mechanics Affect Lifting', text:'Bracing the core with a controlled breath (sometimes called the Valsalva maneuver for very heavy lifts) increases intra-abdominal pressure and spinal stability during heavy compound lifts. This is a learnable skill, not an innate one, and is worth deliberate practice on lighter sets before applying it under heavy load.', link:'https://www.spine-health.com/wellness/exercise/core-exercises-low-back-pain' },
-  { title:'Why You Should Not Compare Your Program to Someone Else\'s', text:'Training history, recovery capacity, joint structure, and goals all vary enormously between individuals. A program perfectly suited to a 25-year-old bodybuilder is often inappropriate for a 45-year-old pilot prioritizing longevity — this is the entire reason this app offers goal-specific tracks rather than one universal program.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
+  { title:'Why You Should Not Compare Your Program to Someone Else\'s', text:'Training history, recovery capacity, joint structure, and goals all vary enormously between individuals. A program perfectly suited to a 25-year-old bodybuilder is often inappropriate for a 45-year-old pilot prioritizing longevity. This is the entire reason this app offers goal-specific tracks rather than one universal program.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
   { title:'The Importance of Tracking Trends, Not Just Totals', text:'A single high or low reading in weight, blood pressure, or glucose is far less meaningful than the trend across several weeks. This app\'s charts are designed to surface the trend line precisely because individual data points are noisy and easy to overreact to.', link:'https://www.cdc.gov/diabetes/diabetes-testing/' },
-  { title:'Why Stretching Alone Will Not Fix Tightness Caused by Weakness', text:'Muscles that feel chronically tight are sometimes compensating for weakness elsewhere, not actually short. In these cases, strengthening the underactive muscle resolves the tightness better than stretching the tight one — a common pattern in hip flexors compensating for weak glutes.', link:'https://www.spine-health.com/wellness/exercise/core-exercises-low-back-pain' },
-  { title:'Hydration Needs Scale With Body Size and Climate', text:'Hydration guidelines are a reasonable baseline, but actual needs scale up with body size, heat, humidity, and sweat rate. Someone training in a hot, humid layover city needs meaningfully more than the baseline recommendation — use the app\'s targets as a floor, not a ceiling, when conditions demand more.', link:'https://www.cdc.gov/healthy-weight-growth/water-healthy-drinks/index.html' },
+  { title:'Why Stretching Alone Will Not Fix Tightness Caused by Weakness', text:'Muscles that feel chronically tight are sometimes compensating for weakness elsewhere, not actually short. In these cases, strengthening the underactive muscle resolves the tightness better than stretching the tight one. This is a common pattern in hip flexors compensating for weak glutes.', link:'https://www.spine-health.com/wellness/exercise/core-exercises-low-back-pain' },
+  { title:'Hydration Needs Scale With Body Size and Climate', text:'Hydration guidelines are a reasonable baseline, but actual needs scale up with body size, heat, humidity, and sweat rate. Someone training in a hot, humid layover city needs meaningfully more than the baseline recommendation. Use the app\'s targets as a floor, not a ceiling, when conditions demand more.', link:'https://www.cdc.gov/healthy-weight-growth/water-healthy-drinks/index.html' },
   { title:'The Connection Between Gut Health and Energy', text:'Digestive discomfort from poor airport food choices or irregular eating can affect energy levels and training quality the same day. Prioritizing fiber, hydration, and consistent meal timing when possible supports both digestion and the training performance that depends on feeling well.', link:'https://nutritionsource.hsph.harvard.edu/carbohydrates/fiber/' },
-  { title:'Why "Functional Training" Is Not a Separate Category', text:'All resistance training that improves strength, balance, and movement quality is functional in the sense that it transfers to daily activities and reduces injury risk — there is no meaningful separate category of magic "functional" exercises distinct from well-programmed traditional strength training.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
-  { title:'Bodyweight Training Has a Real Ceiling — And That\'s Fine', text:'Pure bodyweight training (relevant in hotel rooms with no equipment) eventually plateaus in strength gains once movements become easy, but it remains highly effective for maintaining muscle, mobility, and conditioning during travel-limited periods. It is a legitimate maintenance tool, not just a poor substitute for weights.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
+  { title:'Why "Functional Training" Is Not a Separate Category', text:'All resistance training that improves strength, balance, and movement quality is functional in the sense that it transfers to daily activities and reduces injury risk. There is no meaningful separate category of magic "functional" exercises distinct from well-programmed traditional strength training.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
+  { title:'Bodyweight Training Has a Real Ceiling, and That\'s Fine', text:'Pure bodyweight training (relevant in hotel rooms with no equipment) eventually plateaus in strength gains once movements become easy, but it remains highly effective for maintaining muscle, mobility, and conditioning during travel-limited periods. It is a legitimate maintenance tool, not just a poor substitute for weights.', link:'https://www.acefitness.org/resources/everyone/blog/6913/breaking-down-fitness-myths-and-misconceptions/' },
   { title:'The Value of a Pre-Sleep Routine', text:'A consistent sequence of low-stimulation activities before bed (dimming lights, light reading, stretching) cues the brain that sleep is approaching, similar to how athletes use pre-performance routines to cue focus. This conditioning effect builds over weeks of consistent repetition.', link:'https://www.sleepfoundation.org/sleep-hygiene' },
   { title:'Why This App Tracks Waist Alongside Weight', text:'Body weight alone cannot distinguish between fat loss and muscle loss, or fat gain and muscle gain. Waist circumference, tracked alongside weight, gives a clearer picture of body composition trends over time without requiring expensive body-fat testing equipment.', link:'https://www.nhlbi.nih.gov/health/educational/lose_wt/risk.htm' },
-  { title:'Final Briefing: Build the Habit Before the Optimization', text:'A consistent, "good enough" training habit sustained for a year will outperform a perfectly optimized program abandoned after a month. Get the habit locked in first — proper timing, ideal rep ranges, and supplement protocols are refinements that matter far less than simply showing up consistently.', link:'https://www.heart.org/en/healthy-living/fitness/fitness-basics/aha-recs-for-physical-activity-in-adults' },
+  { title:'Final Briefing: Build the Habit Before the Optimization', text:'A consistent, "good enough" training habit sustained for a year will outperform a perfectly optimized program abandoned after a month. Get the habit locked in first. Proper timing, ideal rep ranges, and supplement protocols are refinements that matter far less than simply showing up consistently.', link:'https://www.heart.org/en/healthy-living/fitness/fitness-basics/aha-recs-for-physical-activity-in-adults' },
 ];
 
 // ─── CNS DOWN-REGULATION EXPLAINER (referenced from Landing phase + Wisdom) ──
-const CNS_EXPLAINER = "CNS down-regulation means deliberately shifting your nervous system from a sympathetic state (\"fight-or-flight\" — activated during hard training) back to a parasympathetic state (\"rest-and-digest\"). After intense exercise, your heart rate, breathing, and stress hormones are elevated. Slow breathing, stillness, and gentle stretching signal to your nervous system that the demand has passed, which speeds recovery and improves the sleep that follows. This is why the Landing phase exists in every workout — skipping it doesn't make you tougher, it just means you carry that activation into the rest of your day.";
+const CNS_EXPLAINER = "CNS down-regulation means deliberately shifting your nervous system from a sympathetic state (\"fight-or-flight\", activated during hard training) back to a parasympathetic state (\"rest-and-digest\"). After intense exercise, your heart rate, breathing, and stress hormones are elevated. Slow breathing, stillness, and gentle stretching signal to your nervous system that the demand has passed, which speeds recovery and improves the sleep that follows. This is why the Landing phase exists in every workout. Skipping it doesn't make you tougher, it just means you carry that activation into the rest of your day.";
 
 // ─── BIOMETRIC INFO POPUPS ────────────────────────────────────────────────────
 const BIO_INFO = {
   injury: {
     title: 'Injury Flag',
-    text: 'Flag a body region that\'s currently bothering you. The app checks every exercise in your program against your flagged region(s): where a proven safer alternative already exists in the exercise library, it swaps it in automatically and shows what it replaced. Where no confident substitute exists, it leaves the original exercise in place but marks it with a caution badge so you can decide — open Alternate to browse other options, or skip it that day. This is a conservative heuristic based on exercise names and movement patterns, not a medical assessment. It won\'t catch everything, and it\'s not a substitute for a doctor or physical therapist if something actually hurts. Clear the flag once you\'re past it.',
+    text: 'Flag a body region that\'s currently bothering you. The app checks every exercise in your program against your flagged region(s): where a proven safer alternative already exists in the exercise library, it swaps it in automatically and shows what it replaced. Where no confident substitute exists, it leaves the original exercise in place but marks it with a caution badge so you can decide: open Alternate to browse other options, or skip it that day. This is a conservative heuristic based on exercise names and movement patterns, not a medical assessment. It won\'t catch everything, and it\'s not a substitute for a doctor or physical therapist if something actually hurts. Clear the flag once you\'re past it.',
   },
   timeAvail: {
     title: 'Time Available',
-    text: 'Tell the app how many minutes you actually have today, and it trims your session to fit — the same way a coach would shorten a workout on a tight schedule. Warm-up (Taxi) and cooldown (Landing) are protected and trimmed last, since skipping them to save time is exactly backwards: they\'re what prevent the injuries that cost you far more training time later. The accessory volume (En Route) gets cut first, since that\'s the lowest-cost place to lose a set when time is short. Leave it blank for your full programmed session.',
+    text: 'Tell the app how many minutes you actually have today, and it trims your session to fit, the same way a coach would shorten a workout on a tight schedule. Warm-up (Taxi) and cooldown (Landing) are protected and trimmed last, since skipping them to save time is exactly backwards: they\'re what prevent the injuries that cost you far more training time later. The accessory volume (En Route) gets cut first, since that\'s the lowest-cost place to lose a set when time is short. Leave it blank for your full programmed session.',
   },
   sleepHours: {
     title: 'Sleep Hours',
-    text: 'If you don\'t have a wearable, this gives the app the single most useful recovery signal after Oura: how much you actually slept. Under 6 hours suggests dialing back to MARGINAL, under 5 suggests NO-GO — sleep debt measurably impairs strength output, reaction time, and injury resistance the next day. This only suggests; your own Pilot Condition selection always has the final say. If Oura is connected, its readiness score already accounts for sleep, so this field is hidden.',
+    text: 'If you don\'t have a wearable, this gives the app the single most useful recovery signal after Oura: how much you actually slept. Under 6 hours suggests dialing back to MARGINAL, under 5 suggests NO-GO. Sleep debt measurably impairs strength output, reaction time, and injury resistance the next day. This only suggests; your own Pilot Condition selection always has the final say. If Oura is connected, its readiness score already accounts for sleep, so this field is hidden.',
   },
   age: {
     title: 'Age',
-    text: 'Recovery capacity between sets and between sessions declines gradually with age — not dramatically, but enough that most strength coaches build in slightly longer rest periods for lifters over 45, and more so over 60. The app applies a modest rest-timer adjustment on that basis. It does not change your program\'s exercise selection, volume, or intensity — those are governed by your Fitness Level and Mission Objective, not age. Nothing here implies age is a limit; it\'s a small recovery-window adjustment, nothing more.',
+    text: 'Recovery capacity between sets and between sessions declines gradually with age: not dramatically, but enough that most strength coaches build in slightly longer rest periods for lifters over 45, and more so over 60. The app applies a modest rest-timer adjustment on that basis. It does not change your program\'s exercise selection, volume, or intensity. Those are governed by your Fitness Level and Mission Objective, not age. Nothing here implies age is a limit; it\'s a small recovery-window adjustment, nothing more.',
   },
   readiness: {
     title: 'Daily Readiness (1-5)',
-    text: 'A quick self-check: how recovered do you actually feel today? This captures things no wearable can — motivation, life stress, an oncoming cold, how last night\'s duty day actually felt. A rating of 1-2 suggests NO-GO, 3 suggests MARGINAL, 4-5 suggests GO — the same bands Oura\'s readiness score maps to. Like every other automatic suggestion in this app, it only pre-selects your Pilot Condition; you can always override it with the GO / MARGINAL / NO-GO buttons directly. If Oura is connected, its readiness score takes precedence and this is hidden to avoid two competing signals.',
+    text: 'A quick self-check: how recovered do you actually feel today? This captures things no wearable can: motivation, life stress, an oncoming cold, how last night\'s duty day actually felt. A rating of 1-2 suggests NO-GO, 3 suggests MARGINAL, 4-5 suggests GO. These are the same bands Oura\'s readiness score maps to. Like every other automatic suggestion in this app, it only pre-selects your Pilot Condition; you can always override it with the GO / MARGINAL / NO-GO buttons directly. If Oura is connected, its readiness score takes precedence and this is hidden to avoid two competing signals.',
   },
   hrv: {
     title: 'HRV Balance',
-    text: 'HRV Balance is Oura\'s score (0-100) comparing your recent heart rate variability to your own 2-week baseline — not a raw HRV number, and not comparable between people. Higher means your nervous system is more recovered relative to your normal; lower means accumulated stress, poor sleep, illness, or overtraining is dragging on recovery. A single low day matters less than a multi-day downward trend, which is a real signal to back off training intensity.',
+    text: 'HRV Balance is Oura\'s score (0-100) comparing your recent heart rate variability to your own 2-week baseline, not a raw HRV number, and not comparable between people. Higher means your nervous system is more recovered relative to your normal; lower means accumulated stress, poor sleep, illness, or overtraining is dragging on recovery. A single low day matters less than a multi-day downward trend, which is a real signal to back off training intensity.',
   },
   weight: {
     title: 'Body Weight Protocol',
-    text: 'Weigh yourself at the same time daily — ideally upon waking, after using the restroom, before eating or drinking, on the same scale. Daily weight can swing 2-4 lbs from water and food alone, so look at your 7-day rolling average rather than any single reading.',
+    text: 'Weigh yourself at the same time daily, ideally upon waking, after using the restroom, before eating or drinking, on the same scale. Daily weight can swing 2-4 lbs from water and food alone, so look at your 7-day rolling average rather than any single reading.',
   },
   waist: {
     title: 'Waist Circumference Protocol',
-    text: 'Measure at the navel, at the end of a normal exhale. Do not pull in your stomach. Use a flexible tape, snug but not compressing. Measure once per week, same time. A waist over 40 inches (men) or 35 inches (women) is the commonly cited clinical threshold for elevated metabolic risk — and it is a better predictor of visceral fat than body weight alone.',
+    text: 'Measure at the navel, at the end of a normal exhale. Do not pull in your stomach. Use a flexible tape, snug but not compressing. Measure once per week, same time. A waist over 40 inches (men) or 35 inches (women) is the commonly cited clinical threshold for elevated metabolic risk, and it is a better predictor of visceral fat than body weight alone.',
   },
   systolic: {
-    title: 'Blood Pressure — Systolic',
-    text: 'Rest quietly for 5 minutes before measuring. Sit with back supported, feet flat, arm at heart level — no talking. Take 3 readings 1-2 minutes apart and record the average of the last two. Optimal systolic (the top number) is under 120 mmHg.',
+    title: 'Blood Pressure: Systolic',
+    text: 'Rest quietly for 5 minutes before measuring. Sit with back supported, feet flat, arm at heart level, no talking. Take 3 readings 1-2 minutes apart and record the average of the last two. Optimal systolic (the top number) is under 120 mmHg.',
   },
   diastolic: {
-    title: 'Blood Pressure — Diastolic',
-    text: 'Diastolic (the bottom number) reflects pressure between heartbeats. Same measurement protocol as systolic — quiet rest first, proper arm position, average of the last two readings. Optimal diastolic is under 80 mmHg.',
+    title: 'Blood Pressure: Diastolic',
+    text: 'Diastolic (the bottom number) reflects pressure between heartbeats. Same measurement protocol as systolic: quiet rest first, proper arm position, average of the last two readings. Optimal diastolic is under 80 mmHg.',
   },
   glucose: {
     title: 'Fasting Glucose Protocol',
-    text: 'Measure upon waking, before any food or coffee, after at least 8 hours fasted. Normal range: 70-99 mg/dL. Pre-diabetic: 100-125. Diabetic threshold: 126+. Stress and poor sleep can elevate readings independent of diet — track the weekly trend rather than reacting to one number.',
+    text: 'Measure upon waking, before any food or coffee, after at least 8 hours fasted. Normal range: 70-99 mg/dL. Pre-diabetic: 100-125. Diabetic threshold: 126+. Stress and poor sleep can elevate readings independent of diet. Track the weekly trend rather than reacting to one number.',
   },
 };
 
@@ -1773,9 +1773,9 @@ function renderLanding(root) {
   parts.push('<div id="zuluClock" style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.05em;white-space:nowrap"></div></div>');
   parts.push('<div class="landing-tag">BUILT FOR PILOTS, BY THE REALITIES OF FLYING</div>');
   parts.push('<div class="landing-h1">Train hard between <span class="accent">duty days</span>, not despite them.</div>');
-  parts.push('<div class="landing-sub">A workout system that adapts to your gym access, your fatigue level, and your schedule — whether you\'re home, on layover, or stuck with nothing but a hotel room.</div>');
+  parts.push('<div class="landing-sub">A workout system that adapts to your gym access, your fatigue level, and your schedule, whether you\'re home, on layover, or stuck with nothing but a hotel room.</div>');
   parts.push('<div class="landing-cta">');
-  parts.push('<button class="btn btn-gold" onclick="ST.showLanding=false;ST.authMode=\'signup\';renderRoot()">Get Started — Free</button>');
+  parts.push('<button class="btn btn-gold" onclick="ST.showLanding=false;ST.authMode=\'signup\';renderRoot()">Get Started Free</button>');
   parts.push('<button class="btn btn-outline mt8" onclick="ST.showLanding=false;ST.authMode=\'signin\';renderRoot()">I have an account</button>');
   parts.push('</div>');
   parts.push('</div>');
@@ -1784,19 +1784,19 @@ function renderLanding(root) {
   parts.push('<div class="landing-section-title">Why pilots need a different program</div>');
 
   const features = [
-    ['🌍','Environment-aware workouts','Every session adapts automatically to Commercial Gym, Hotel Gym, Hotel Room, or just resistance bands — no equipment excuses.'],
-    ['🚦','Fatigue-gated intensity','A pilot condition toggle (Go / Marginal / No-Go) reduces or removes heavy lifting when you\'re running on insufficient rest — auto-set from Apple Health if you sync a wearable, or a 15-second self-check if you don\'t.'],
-    ['⌚','Wearable auto-sync','Connect once via Apple Health and your daily readiness, sleep, HRV, resting heart rate, steps, and workouts drive your training automatically — works with Apple Watch, Oura, Whoop, Garmin, or anything else that writes to Health. Connect Oura directly for its own full readiness score.'],
-    ['🏆','Leaderboards, scored fairly','Compete on bench, squat, deadlift, and more against fellow pilots — ranked by DOTS score, which adjusts for bodyweight and sex, so a 160 lb first officer and a 220 lb captain are compared on equal footing, not just raw weight. Opt-in only — no call sign, nothing is shared.'],
-    ['🎖️','Badges for reaching goals','Hit a personal record, a training streak, or a milestone and it gets recognized automatically — pulled from your real logged history, not just a login count.'],
-    ['🩹','Injury-aware programming','Flag a sore shoulder or knee and the app automatically swaps in a safer alternative where one exists, or flags the exercise so you can decide — instead of just handing you the same plan regardless.'],
-    ['⏱️','Fits the time you actually have','Tell it how much time you\'ve got and it trims the session to fit — protecting your warmup and cooldown, never your actual lift.'],
-    ['🎯','Goal-driven programming','Seven mission objectives — from Vertical Jump to Glute Emphasis to Overall Strength — each with real, distinct exercise programming behind it, not just a label.'],
+    ['🌍','Environment-aware workouts','Every session adapts automatically to Commercial Gym, Hotel Gym, Hotel Room, or just resistance bands. No equipment excuses.'],
+    ['🚦','Fatigue-gated intensity','A pilot condition toggle (Go / Marginal / No-Go) reduces or removes heavy lifting when you\'re running on insufficient rest, auto-set from Apple Health if you sync a wearable, or a 15-second self-check if you don\'t.'],
+    ['⌚','Wearable auto-sync','Connect once via Apple Health and your daily readiness, sleep, HRV, resting heart rate, steps, and workouts drive your training automatically. It works with Apple Watch, Oura, Whoop, Garmin, or anything else that writes to Health. Connect Oura directly for its own full readiness score.'],
+    ['🏆','Leaderboards, scored fairly','Compete on bench, squat, deadlift, and more against fellow pilots, ranked by DOTS score, which adjusts for bodyweight and sex, so a 160 lb first officer and a 220 lb captain are compared on equal footing, not just raw weight. Opt-in only: no call sign, nothing is shared.'],
+    ['🎖️','Badges for reaching goals','Hit a personal record, a training streak, or a milestone and it gets recognized automatically, pulled from your real logged history, not just a login count.'],
+    ['🩹','Injury-aware programming','Flag a sore shoulder or knee and the app automatically swaps in a safer alternative where one exists, or flags the exercise so you can decide, instead of just handing you the same plan regardless.'],
+    ['⏱️','Fits the time you actually have','Tell it how much time you\'ve got and it trims the session to fit, protecting your warmup and cooldown, never your actual lift.'],
+    ['🎯','Goal-driven programming','Seven mission objectives (from Vertical Jump to Glute Emphasis to Overall Strength), each with real, distinct exercise programming behind it, not just a label.'],
     ['💧','Hydration math built in','0.3L per flight hour, with a sensible floor on no-fly days. The app tells you exactly how much to drink and when.'],
-    ['🛫','Aviation-phased structure','Every workout follows Taxi (warmup) → Takeoff (heavy) → En Route (volume) → Landing (decompression) — a logical, recoverable structure, not just a random exercise list.'],
-    ['📊','Real biometric tracking','Weight, waist, blood pressure, and fasting glucose — with the actual clinical protocol for measuring each one correctly.'],
+    ['🛫','Aviation-phased structure','Every workout follows Taxi (warmup) → Takeoff (heavy) → En Route (volume) → Landing (decompression): a logical, recoverable structure, not just a random exercise list.'],
+    ['📊','Real biometric tracking','Weight, waist, blood pressure, and fasting glucose, with the actual clinical protocol for measuring each one correctly.'],
     ['💊','Meds and supplements on schedule','Log anything you take, from creatine to prescriptions, with the dose and times. Check doses off on your Today screen, get a phone reminder when one is due, and include the history in your data export for AI analysis. Private to your account.'],
-    ['📶','Works with no signal','Keeps working with zero connectivity — at altitude, in a dead-zone layover hotel, wherever.'],
+    ['📶','Works with no signal','Keeps working with zero connectivity: at altitude, in a dead-zone layover hotel, wherever.'],
   ];
   features.forEach(([icon,title,desc]) => {
     parts.push('<div class="feature-row"><div class="feature-icon">'+icon+'</div><div class="feature-text"><h4>'+title+'</h4><p>'+desc+'</p></div></div>');
@@ -1804,7 +1804,7 @@ function renderLanding(root) {
   parts.push('</div>');
 
   parts.push('<div class="landing-section" style="background:var(--bg2)">');
-  parts.push('<div class="landing-quote">"The biggest mistake I see in shift-work athletes is treating every day the same. Your training should respond to how you actually feel — not an arbitrary schedule." — Sports medicine consensus on fatigue-informed training</div>');
+  parts.push('<div class="landing-quote">"The biggest mistake I see in shift-work athletes is treating every day the same. Your training should respond to how you actually feel, not an arbitrary schedule." (Sports medicine consensus on fatigue-informed training)</div>');
   parts.push('<div class="landing-stat-row">');
   parts.push('<div class="landing-stat"><div class="num">9</div><div class="lbl">Mission Profiles</div></div>');
   parts.push('<div class="landing-stat"><div class="num">7</div><div class="lbl">Goal Tracks</div></div>');
@@ -1815,7 +1815,7 @@ function renderLanding(root) {
   parts.push('<div class="landing-section">');
   parts.push('<div class="landing-section-title">How it works</div>');
   parts.push('<div class="feature-row"><div class="feature-icon">1️⃣</div><div class="feature-text"><h4>Preflight</h4><p>Set your environment, log your hydration, and tell the app how you\'re actually feeling today.</p></div></div>');
-  parts.push('<div class="feature-row"><div class="feature-icon">2️⃣</div><div class="feature-text"><h4>Flight</h4><p>Work through your generated plan phase by phase, with rest timers that chime when they\'re done and a form guide on every exercise — built-in animations where we have them, a YouTube search where we don\'t.</p></div></div>');
+  parts.push('<div class="feature-row"><div class="feature-icon">2️⃣</div><div class="feature-text"><h4>Flight</h4><p>Work through your generated plan phase by phase, with rest timers that chime when they\'re done and a form guide on every exercise: built-in animations where we have them, a YouTube search where we don\'t.</p></div></div>');
   parts.push('<div class="feature-row"><div class="feature-icon">3️⃣</div><div class="feature-text"><h4>Trends</h4><p>Log your biometrics and watch your progress chart itself over weeks and months.</p></div></div>');
   parts.push('</div>');
 
@@ -1881,7 +1881,7 @@ function renderForgotPassword(root) {
   parts.push('<div class="auth-wrap">');
   parts.push('<div style="text-align:center;margin-bottom:24px"><div class="landing-logo">✈ FLIGHT CREW FITNESS</div></div>');
   parts.push('<div style="font-size:14px;font-weight:700;margin-bottom:4px">Reset your password</div>');
-  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Enter the email you signed up with — we\'ll send a link to set a new password.</div>');
+  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Enter the email you signed up with. We\'ll send a link to set a new password.</div>');
   if (ST.authInfo) parts.push('<div class="alert alert-ok mt8"><div class="alert-icon">✅</div><div>'+sanitizeUserTextLong(ST.authInfo)+'</div></div>');
   if (ST.authErr)  parts.push('<div class="alert alert-danger mt8"><div class="alert-icon">⚠️</div><div>'+sanitizeUserTextLong(ST.authErr)+'</div></div>');
   parts.push('<div class="field"><label>Email</label><input type="email" id="forgot_email" placeholder="you@example.com" autocomplete="email"></div>');
@@ -1928,7 +1928,7 @@ async function handlePasswordRecovery() {
   const pass = document.getElementById('recovery_pass')?.value;
   const pass2 = document.getElementById('recovery_pass2')?.value;
   if (!pass || pass.length < 6) { ST.authErr = 'Password must be at least 6 characters.'; renderRoot(); return; }
-  if (pass !== pass2) { ST.authErr = 'Passwords do not match — please re-enter.'; renderRoot(); return; }
+  if (pass !== pass2) { ST.authErr = 'Passwords do not match. Please re-enter.'; renderRoot(); return; }
   try {
     const { error } = await withTimeout(SB.auth.updateUser({ password: pass }));
     if (error) throw error;
@@ -1939,7 +1939,7 @@ async function handlePasswordRecovery() {
     ST.user = await checkAuth();
     ST.authed = !!ST.user;
     if (ST.authed) { showToast('Password updated.'); await bootApp(); }
-    else { ST.showLanding = false; ST.authMode = 'signin'; ST.authInfo = 'Password updated — sign in with your new password.'; renderRoot(); }
+    else { ST.showLanding = false; ST.authMode = 'signin'; ST.authInfo = 'Password updated. Sign in with your new password.'; renderRoot(); }
   } catch(e) {
     ST.authErr = 'Couldn\'t update your password: ' + (e.message || 'unknown error');
     renderRoot();
@@ -1954,7 +1954,7 @@ async function handleAuthSubmit() {
   if (ST.authMode === 'signup') {
     if (pass.length < 6) { ST.authErr = 'Password must be at least 6 characters.'; renderRoot(); return; }
     const pass2 = document.getElementById('auth_pass2')?.value;
-    if (pass !== pass2) { ST.authErr = 'Passwords do not match — please re-enter.'; renderRoot(); return; }
+    if (pass !== pass2) { ST.authErr = 'Passwords do not match. Please re-enter.'; renderRoot(); return; }
   }
   try {
     const user = ST.authMode === 'signup' ? await doSignUp(email, pass) : await doSignIn(email, pass);
@@ -1964,7 +1964,7 @@ async function handleAuthSubmit() {
   } catch(e) {
     let msg = e.message || 'Authentication failed.';
     if (msg.includes('Invalid login') || msg.includes('invalid_credentials')) msg = 'Incorrect email or password.';
-    if (msg.includes('User already registered')) msg = 'An account with this email already exists — try signing in.';
+    if (msg.includes('User already registered')) msg = 'An account with this email already exists. Try signing in.';
     if (msg.includes('Password should be')) msg = 'Password must be at least 6 characters.';
     ST.authErr = msg; renderRoot();
   }
@@ -1986,7 +1986,7 @@ function renderDisclaimerGate(root) {
   parts.push('Exercise carries inherent risk of injury. You are responsible for exercising within your own physical limits, using proper form, and stopping immediately if you experience pain, dizziness, chest discomfort, or shortness of breath beyond normal exertion.<br><br>');
   parts.push('By continuing, you acknowledge that you use this app and its workout recommendations at your own risk.');
   parts.push('</div>');
-  parts.push('<button class="btn btn-gold mt16" onclick="acceptDisclaimer()">I Understand — Continue</button>');
+  parts.push('<button class="btn btn-gold mt16" onclick="acceptDisclaimer()">I Understand, Continue</button>');
   parts.push('</div>');
   parts.push('</div>');
   parts.push('</div>');
@@ -2123,7 +2123,7 @@ const BADGES = [
   { id:'logger_7',     icon:'📋', title:'Flight Recorder',  desc:'Log biometrics 7 days in a row',         check:s => s.bioStreak >= 7 },
   { id:'century',      icon:'💯', title:'Century Club',     desc:'500 lifetime sets logged',               check:s => s.totalSets >= 500 },
   { id:'iron_will',    icon:'🦾', title:'Iron Will',        desc:'20+ sets in a single session',           check:s => s.maxSetsInSession >= 20 },
-  { id:'redline',      icon:'🔴', title:'Redline',          desc:'Trained through NO-GO fatigue 3 times — showing up beats the mood you showed up in', check:s => s.nogoTrainedCount >= 3 },
+  { id:'redline',      icon:'🔴', title:'Redline',          desc:'Trained through NO-GO fatigue 3 times: showing up beats the mood you showed up in', check:s => s.nogoTrainedCount >= 3 },
   { id:'all_weather',  icon:'🌍', title:'All-Weather',      desc:'Trained in 3 different environments (room, gym, or bands)', check:s => s.envsTrained >= 3 },
   { id:'early_bird',   icon:'🌅', title:'Early Bird',       desc:'Logged a workout before 6 AM, 5 times',  check:s => s.earlyBirdCount >= 5 },
   { id:'top_gun',      icon:'🎖️', title:'Top Gun',          desc:'Hold the #1 spot on any leaderboard',    check:null, live:true },
@@ -2459,7 +2459,7 @@ function renderLeaderboard(p) {
   parts.push('<div class="section-label">RANKS</div>');
   if (!ST.username) {
     parts.push('<div class="card mb12" style="border-color:var(--gold)">');
-    parts.push('<div style="font-size:12px;line-height:1.6;margin-bottom:10px">🏆 <strong>Want on the boards?</strong> Set a call sign in More → Pilot Profile. No call sign = you\'re not listed — your lifts and runs stay private.</div>');
+    parts.push('<div style="font-size:12px;line-height:1.6;margin-bottom:10px">🏆 <strong>Want on the boards?</strong> Set a call sign in More → Pilot Profile. No call sign = you\'re not listed. Your lifts and runs stay private.</div>');
     parts.push('<button class="btn btn-outline" onclick="switchTab(\'profile\')">Set My Call Sign →</button>');
     parts.push('</div>');
   }
@@ -2506,7 +2506,7 @@ function renderLeaderboard(p) {
   parts.push('</select></div>');
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:8px">'+segBtn('lbSex','all','ALL')+segBtn('lbSex','male','MEN')+segBtn('lbSex','female','WOMEN')+'</div>');
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'+segBtn('lbMode','weight','TOP WEIGHT')+segBtn('lbMode','dots','DOTS SCORE')+'</div>');
-  if (ST.lbMode === 'dots') parts.push('<div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5">DOTS normalizes for bodyweight and sex — a fair strength score across sizes. Needs bodyweight + sex on file.</div>');
+  if (ST.lbMode === 'dots') parts.push('<div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5">DOTS normalizes for bodyweight and sex: a fair strength score across sizes. Needs bodyweight + sex on file.</div>');
   parts.push('</div>');
   parts.push('<div id="lbRows"><div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">Loading standings…</div></div>');
   p.innerHTML = parts.join('');
@@ -2525,7 +2525,7 @@ async function loadLeaderboardRows() {
     const { data, error } = await withTimeout(q.limit(50));
     if (error) throw error;
     if (!data || !data.length) {
-      el.innerHTML = '<div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">No entries yet for this lift — be the first on the board.</div>';
+      el.innerHTML = '<div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">No entries yet for this lift. Be the first on the board.</div>';
       return;
     }
     const admin = isLbAdmin();
@@ -2550,7 +2550,7 @@ async function loadLeaderboardRows() {
   } catch(e) {
     const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
     el.innerHTML = '<div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">'+(offline
-      ? '📡 Leaderboards need a connection — reconnect to see standings.'
+      ? '📡 Leaderboards need a connection. Reconnect to see standings.'
       : 'Couldn\'t load standings. If this persists, the leaderboard table may not be set up yet.')+'</div>';
   }
 }
@@ -2602,14 +2602,14 @@ async function loadRunningRows() {
   } catch(e) {
     const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
     el.innerHTML = '<div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">'+(offline
-      ? '📡 Leaderboards need a connection — reconnect to see standings.'
+      ? '📡 Leaderboards need a connection. Reconnect to see standings.'
       : 'Couldn\'t load standings. If this persists, the running_pr_entries / running_log tables may not be set up yet.')+'</div>';
   }
 }
 
 function renderRunningRows(el, rows) {
   if (!rows.length) {
-    el.innerHTML = '<div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">No runs logged yet for this board — be the first.</div>';
+    el.innerHTML = '<div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">No runs logged yet for this board. Be the first.</div>';
     return;
   }
   const admin = isLbAdmin();
@@ -2794,12 +2794,12 @@ async function logRunningVolume(session) {
 // algorithmically schedule into a strength rotation.
 WORKOUTS.comm['Run'] = {
   taxi: [
-    ex('c_rn_t1','Leg Swings (Front & Side)','2x10/leg',2,'Dynamic — hold a wall or rail. Warms hips before running; skip static stretching here.',true,'timed'),
+    ex('c_rn_t1','Leg Swings (Front & Side)','2x10/leg',2,'Dynamic: hold a wall or rail. Warms hips before running; skip static stretching here.',true,'timed'),
     ex('c_rn_t2','Walking High Knees','2x20yd',2,'Gentle pace, drive knees up. Raises heart rate and primes hip flexors.',false,'reps_only'),
   ],
   takeoff: [],
   enroute: [
-    ex('c_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace — speak in full sentences. Log distance for the leaderboard.',true,'timed_distance'),
+    ex('c_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace: speak in full sentences. Log distance for the leaderboard.',true,'timed_distance'),
     ex('c_ca_er5','Outdoor Run','20-40 min',1,'Any pace, any route. Log distance for the leaderboard.',true,'timed_distance'),
   ],
   landing: [
@@ -2849,8 +2849,8 @@ function renderPage() {
   p.innerHTML = '';
   if (ST.tab === 'preflight') {
     renderPreflight(p).catch(e => {
-      p.innerHTML = '<div class="section-label">PREFLIGHT BRIEFING — '+FCF_VERSION+'</div>' +
-        '<div class="card mb12"><div style="font-size:13px;color:var(--muted);margin-bottom:10px">Couldn\'t load your calendar — this can happen with no signal.</div>' +
+      p.innerHTML = '<div class="section-label">PREFLIGHT BRIEFING · '+FCF_VERSION+'</div>' +
+        '<div class="card mb12"><div style="font-size:13px;color:var(--muted);margin-bottom:10px">Couldn\'t load your calendar. This can happen with no signal.</div>' +
         '<button class="btn btn-outline" onclick="renderPage()">↻ Retry</button></div>';
     });
   }
@@ -2932,7 +2932,7 @@ function applyProfileToState(profile) {
     if (ce?.exercise) {
       ce.exercise.name = sanitizeUserText(ce.exercise.name);
       ce.exercise.note = sanitizeUserText(ce.exercise.note);
-      ce.exercise.target = sanitizeUserText(ce.exercise.target) || '—';
+      ce.exercise.target = sanitizeUserText(ce.exercise.target) || '–';
     }
     return ce;
   });
@@ -3039,13 +3039,13 @@ function applyScheduleEnvironmentSuggestion() {
   const layover = inferCurrentLayover(events);
   if (layover) {
     if (ST.env !== 'hotel' && ST.env !== 'room') ST.env = 'hotel';
-    ST.scheduleEnvNote = '📅 Layover' + (layover.airport ? ' in ' + layover.airport : '') + ' today — set to Hotel Gym.';
+    ST.scheduleEnvNote = '📅 Layover' + (layover.airport ? ' in ' + layover.airport : '') + ' today: set to Hotel Gym.';
     return;
   }
   const status = getCurrentScheduleStatus(events);
   if (status?.type === 'dutyfree') {
     ST.env = 'comm';
-    ST.scheduleEnvNote = '📅 Duty-free day today — set to Commercial Gym.';
+    ST.scheduleEnvNote = '📅 Duty-free day today: set to Commercial Gym.';
   }
 }
 
@@ -3330,7 +3330,7 @@ async function bootAppInner() {
         await loadSubscription();
       }
       renderPage();
-      showBigToast(isPro() ? '✓ Pro active — thanks.' : 'Payment received. Access will appear shortly.', 'ok');
+      showBigToast(isPro() ? '✓ Pro active. Thanks.' : 'Payment received. Access will appear shortly.', 'ok');
     })();
   }
 }
@@ -3362,7 +3362,7 @@ function glowTile(label, value, colorKey, valueColor) {
     '<div style="position:relative;border-radius:16px;border:1px solid rgba(255,255,255,0.07);overflow:hidden;padding:12px 10px 10px;min-height:90px;background:#0f1623">' +
     '<div style="position:absolute;top:-28px;right:-28px;width:110px;height:110px;border-radius:50%;background:radial-gradient(circle,' + gs + ' 0%,' + gf + ' 50%,transparent 75%);pointer-events:none"></div>' +
     '<div style="font-family:var(--mono);font-size:8px;letter-spacing:.12em;color:' + accent + ';opacity:0.9;position:relative;z-index:1">' + label + '</div>' +
-    '<div style="position:absolute;bottom:10px;left:10px;font-family:var(--mono);font-size:30px;font-weight:700;color:' + vc + ';line-height:1;z-index:1">' + (value ?? '—') + '</div>' +
+    '<div style="position:absolute;bottom:10px;left:10px;font-family:var(--mono);font-size:30px;font-weight:700;color:' + vc + ';line-height:1;z-index:1">' + (value ?? '–') + '</div>' +
     '</div>'
   );
 }
@@ -3462,7 +3462,7 @@ function showToast(msg) { showBigToast(msg, 'info'); }
 // CSVs can't carry an executable "system prompt" — ChatGPT/Gemini just see it
 // as data. This is the copy-paste prompt users attach alongside the CSV upload
 // so the receiving AI knows how to read our specific column schema.
-const AI_ANALYSIS_PROMPT = `You are analyzing my personal workout and biometric data, exported from Flight Crew Fitness, a training app I use. Don't give generic fitness platitudes — look at the actual numbers and tell me what's really happening.
+const AI_ANALYSIS_PROMPT = `You are analyzing my personal workout and biometric data, exported from Flight Crew Fitness, a training app I use. Don't give generic fitness platitudes. Look at the actual numbers and tell me what's really happening.
 
 ABOUT THE CSV
 Each row is one logged set:
@@ -3475,17 +3475,17 @@ Each row is one logged set:
 - Height (in): box jump height, Distance (in): broad jump distance
 - Seconds Left / Seconds Right: independently-timed left/right stretches
 - Body Weight (lb), Waist (in), Systolic/Diastolic BP, Fasting Glucose (mg/dL): my daily biometrics, repeated on every row logged that day
-- Rows marked "(session summary)" mean I logged a session without a full exercise breakdown — treat those as attendance only, not performance data
+- Rows marked "(session summary)" mean I logged a session without a full exercise breakdown; treat those as attendance only, not performance data
 
-OPTIONAL — MY FLIGHT SCHEDULE
+OPTIONAL: MY FLIGHT SCHEDULE
 If I've also attached an .ics calendar file, it's my flight/duty schedule. Cross-reference it against the training data: layovers, long duty days, red-eyes, and time zone changes all affect recovery, sleep, and which environment (hotel room / hotel gym / commercial gym) I had access to. If I attached this file, factor travel load into your analysis rather than treating training gaps or off-trend days as unexplained.
 
 WHAT I WANT FROM YOU
-1. Trend analysis — is my strength on key lifts trending up, flat, or down over the logged period? Call out any plateaus by name.
-2. Consistency — how many sessions per week am I actually completing, and are there concerning gaps?
-3. Biometric trends — track body weight, waist, blood pressure, and fasting glucose over time. Flag anything moving the wrong direction or outside normal ranges.
-4. Cross-reference — connect biometric shifts to training patterns (e.g. did BP or glucose move after a change in training volume or a gap in sessions?), and to my flight schedule if I attached it (e.g. did a rough travel stretch line up with a training gap or a biometric dip?).
-5. Direct recommendations — 3-5 concrete bullet points on what to change next: which lifts need progression, what's stalling, what to prioritize.
+1. Trend analysis: is my strength on key lifts trending up, flat, or down over the logged period? Call out any plateaus by name.
+2. Consistency: how many sessions per week am I actually completing, and are there concerning gaps?
+3. Biometric trends: track body weight, waist, blood pressure, and fasting glucose over time. Flag anything moving the wrong direction or outside normal ranges.
+4. Cross-reference: connect biometric shifts to training patterns (e.g. did BP or glucose move after a change in training volume or a gap in sessions?), and to my flight schedule if I attached it (e.g. did a rough travel stretch line up with a training gap or a biometric dip?).
+5. Direct recommendations: 3-5 concrete bullet points on what to change next: which lifts need progression, what's stalling, what to prioritize.
 
 Reference actual numbers and dates from the data, not general advice. If something in the biometric data looks concerning, say so plainly rather than softening it.
 
@@ -3500,7 +3500,7 @@ function showAIPromptModal() {
     '<div class="modal-sheet">' +
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">AI Analysis Prompt</div>' +
-    '<div class="modal-body" style="margin-bottom:12px">Copy this, paste it into ChatGPT or Gemini, upload the exported CSV in the same message, and send. Best done weekly — frequent enough to catch a stall early, infrequent enough for the trend lines to mean something. If you also export your flight schedule as an .ics calendar file, upload that alongside the CSV — it gives the AI the full picture of how travel is affecting your training.</div>' +
+    '<div class="modal-body" style="margin-bottom:12px">Copy this, paste it into ChatGPT or Gemini, upload the exported CSV in the same message, and send. Best done weekly: frequent enough to catch a stall early, infrequent enough for the trend lines to mean something. If you also export your flight schedule as an .ics calendar file, upload that alongside the CSV. It gives the AI the full picture of how travel is affecting your training.</div>' +
     '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:11px;line-height:1.6;color:var(--text);white-space:pre-wrap;max-height:40vh;overflow-y:auto;margin-bottom:12px">' + escaped + '</div>' +
     '<button class="btn btn-gold" onclick="copyAIPrompt()">📋 Copy Prompt</button>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">CLOSE</button>' +
@@ -3510,10 +3510,10 @@ function showAIPromptModal() {
 function copyAIPrompt() {
   if (navigator.clipboard?.writeText) {
     navigator.clipboard.writeText(AI_ANALYSIS_PROMPT)
-      .then(() => showToast('Prompt copied — paste it into ChatGPT or Gemini.'))
-      .catch(() => showToast('Copy failed — select and copy the text manually.'));
+      .then(() => showToast('Prompt copied. Paste it into ChatGPT or Gemini.'))
+      .catch(() => showToast('Copy failed. Select and copy the text manually.'));
   } else {
-    showToast('Copy not supported here — select and copy the text manually.');
+    showToast('Copy not supported here. Select and copy the text manually.');
   }
 }
 
@@ -3524,9 +3524,9 @@ function showFeedbackModal() {
     '<div class="modal-sheet">' +
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">Send Feedback</div>' +
-    '<div class="modal-body" style="margin-bottom:10px">Bugs, ideas, anything not working right — this goes straight to the person building the app.</div>' +
+    '<div class="modal-body" style="margin-bottom:10px">Bugs, ideas, anything not working right: this goes straight to the person building the app.</div>' +
     '<textarea id="feedbackText" rows="5" placeholder="What\'s on your mind?" style="width:100%;background:var(--bg3);border:1.5px solid var(--border);border-radius:8px;padding:12px;font-size:16px;color:var(--text);resize:vertical;margin-bottom:10px"></textarea>' +
-    '<div class="field" style="margin-bottom:14px"><label>Your email (optional — only if you want a reply)</label>' +
+    '<div class="field" style="margin-bottom:14px"><label>Your email (optional, only if you want a reply)</label>' +
     '<input id="feedbackEmail" type="email" placeholder="you@example.com"></div>' +
     '<button class="btn btn-gold" onclick="submitFeedback()">Send Feedback</button>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">CANCEL</button>' +
@@ -3552,10 +3552,10 @@ async function submitFeedback() {
 
     if (!res.ok || data.error) {
       const detail = data.error || data.message || rawText.slice(0,150) || 'no response body';
-      throw new Error('HTTP '+res.status+' — '+detail);
+      throw new Error('HTTP '+res.status+': '+detail);
     }
     closeModal();
-    showBigToast('Feedback sent — thank you.', 'ok');
+    showBigToast('Feedback sent. Thank you.', 'ok');
     awardLiveBadge('debrief').catch(() => {});
   } catch(e) {
     console.warn('Feedback submission error:', e);
@@ -3687,7 +3687,7 @@ function showPaywall(reason) {
   const why = {
     photos:   'You\'ve used your ' + FREE_WEEKLY_PHOTOS + ' free photo analyses this week.',
     coach:    'AI coaching is a Pro feature.',
-    oura:     'Connecting your Oura Ring directly — for full readiness scores — is a Pro feature.',
+    oura:     'Connecting your Oura Ring directly (for full readiness scores) is a Pro feature.',
     trends:   'Full trend history beyond 30 days is a Pro feature.',
     calendar: 'Unlimited AI calendar classification is a Pro feature.',
   }[reason] || 'This is a Pro feature.';
@@ -3700,7 +3700,7 @@ function showPaywall(reason) {
 
   parts.push('<div class="card" style="padding:14px;margin-bottom:12px">');
   [['📷','Unlimited food photo analysis'],
-   ['✦','AI Coach — pattern analysis, fatigue calibration, fueling logistics'],
+   ['✦','AI Coach: pattern analysis, fatigue calibration, fueling logistics'],
    ['📅','Unlimited AI calendar classification'],
    ['📊','Full trend history and exports']].forEach(([icon,label]) => {
     parts.push('<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px"><span>'+icon+'</span><span style="font-size:13px">'+label+'</span></div>');
@@ -3810,7 +3810,7 @@ async function redeemPromoCode() {
         already_redeemed: 'You\'ve already redeemed this code.',
         missing_code:     'Enter a code first.',
       };
-      if (resultEl) { resultEl.style.color = 'var(--red)'; resultEl.textContent = messages[result.error] || 'Something went wrong — try again.'; }
+      if (resultEl) { resultEl.style.color = 'var(--red)'; resultEl.textContent = messages[result.error] || 'Something went wrong. Try again.'; }
       return;
     }
 
@@ -3821,7 +3821,7 @@ async function redeemPromoCode() {
     const until = new Date(result.proUntil).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
     showBigToast('✓ Pro unlocked through ' + until + '!', 'ok');
   } catch (e) {
-    if (resultEl) { resultEl.style.color = 'var(--red)'; resultEl.textContent = 'Network error — try again.'; }
+    if (resultEl) { resultEl.style.color = 'var(--red)'; resultEl.textContent = 'Network error. Try again.'; }
   }
 }
 
@@ -3840,7 +3840,7 @@ function confirmDeleteAccount() {
     '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet">' +
     '<div class="modal-handle"></div>' +
     '<div class="modal-title" style="color:var(--red)">Delete Account</div>' +
-    '<div class="modal-body">This permanently deletes your account and everything in it — every workout, meal, biometric reading, schedule and personal record. It cannot be undone and there is no backup.</div>' +
+    '<div class="modal-body">This permanently deletes your account and everything in it: every workout, meal, biometric reading, schedule and personal record. It cannot be undone and there is no backup.</div>' +
     '<div class="modal-body" style="margin-top:10px">Export your data first if you want to keep it.</div>' +
     '<div class="field" style="margin-top:14px"><label>Type DELETE to confirm</label>' +
     '<input type="text" id="deleteConfirmInput" autocapitalize="characters" autocomplete="off" placeholder="DELETE"></div>' +
@@ -3884,7 +3884,7 @@ async function performAccountDeletion() {
     showInfoModal('Account deleted', 'Your account and all associated data have been removed. Sorry to see you go.');
     setTimeout(() => location.reload(), 2500);
   } catch (e) {
-    showBigToast('Could not complete deletion: ' + (e?.message || 'unknown error') + '. Nothing was partially removed — please try again.', 'warn');
+    showBigToast('Could not complete deletion: ' + (e?.message || 'unknown error') + '. Nothing was partially removed. Please try again.', 'warn');
   }
 }
 
@@ -4788,10 +4788,10 @@ function renderInstallPrompt() {
   const parts = ['<div class="card mb12" style="border-color:var(--gold)">'];
   parts.push('<div class="fb" style="align-items:flex-start;margin-bottom:8px"><div style="font-size:13px;font-weight:700">📲 Get the full-screen app experience</div><div class="btn-ghost" style="font-size:16px;padding:0 4px" onclick="dismissInstallPrompt()">✕</div></div>');
   if (deferredInstallPrompt) {
-    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">Install Flight Crew Fitness on your home screen — opens instantly, no browser bar, works offline.</div>');
+    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">Install Flight Crew Fitness on your home screen: opens instantly, no browser bar, works offline.</div>');
     parts.push('<button class="btn btn-outline" onclick="triggerInstall()">Install App</button>');
   } else {
-    parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.6">Add this to your home screen so it opens like a real app — full screen, no browser bar, works offline:<br><br>1. Tap the <strong>Share</strong> icon <span style="font-family:var(--mono)">⬆️</span> at the bottom of Safari<br>2. Scroll down and tap <strong>Add to Home Screen</strong><br>3. Tap <strong>Add</strong></div>');
+    parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.6">Add this to your home screen so it opens like a real app (full screen, no browser bar, works offline):<br><br>1. Tap the <strong>Share</strong> icon <span style="font-family:var(--mono)">⬆️</span> at the bottom of Safari<br>2. Scroll down and tap <strong>Add to Home Screen</strong><br>3. Tap <strong>Add</strong></div>');
   }
   parts.push('</div>');
   return parts.join('');
@@ -4841,14 +4841,14 @@ if ('serviceWorker' in navigator) {
 async function checkForAppUpdate() {
   if (!swRegistration) return; // WKWebView — SW updates automatically, no toast needed
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    showToast('📡 You\'re offline — reconnect to check for updates. The app keeps working normally in the meantime.');
+    showToast('📡 You\'re offline. Reconnect to check for updates. The app keeps working normally in the meantime.');
     return;
   }
   showToast('Checking for updates…');
   try {
     await swRegistration.update();
     if (swRegistration.installing || swRegistration.waiting) {
-      showToast('Update found — installing now…');
+      showToast('Update found. Installing now…');
     } else {
       showToast('You\'re on the latest version ('+FCF_VERSION+' · '+FCF_BUILD+').');
     }
@@ -4857,7 +4857,7 @@ async function checkForAppUpdate() {
     // ("Script ... load failed") — translate connectivity-shaped failures.
     const msg = e.message || '';
     if (/load failed|failed to fetch|networkerror|network error/i.test(msg)) {
-      showToast('📡 Couldn\'t reach the update server — you may be offline. The app keeps working normally.');
+      showToast('📡 Couldn\'t reach the update server. You may be offline. The app keeps working normally.');
     } else {
       showToast('Update check failed: '+msg);
     }
@@ -4980,7 +4980,7 @@ window.addEventListener('fcf:purchase', async (e) => {
     await loadSubscription();
     closeModal();
     renderPage();
-    showBigToast(isPro() ? '✓ Pro active — thanks.' : 'Purchase received. Entitlement will appear shortly.', 'ok');
+    showBigToast(isPro() ? '✓ Pro active. Thanks.' : 'Purchase received. Entitlement will appear shortly.', 'ok');
   } else if (d.error) {
     showBigToast('Purchase did not complete: ' + d.error, 'warn');
   }
@@ -5007,7 +5007,7 @@ window.addEventListener('fcf:products', (e) => {
 // Sign In with Apple: success
 window.addEventListener('fcf:siwa:success', async (e) => {
   const d = e.detail || {};
-  if (!d.identityToken) { ST.authErr = 'Sign in failed — no identity token returned.'; renderRoot(); return; }
+  if (!d.identityToken) { ST.authErr = 'Sign in failed: no identity token returned.'; renderRoot(); return; }
   try {
     const { data, error } = await SB.auth.signInWithIdToken({
       provider: 'apple',
@@ -5661,7 +5661,7 @@ async function classifyCalendarEvents(events, fingerprint) {
       const errText = await res.text();
       console.warn('Calendar classify failed:', errText);
       ST.calendarEvents = rawFallback;
-      ST.calendarSyncError = 'Classification temporarily unavailable — showing ' + rawFallback.length + ' unclassified events. Try Sync Now again shortly.';
+      ST.calendarSyncError = 'Classification temporarily unavailable. Showing ' + rawFallback.length + ' unclassified events. Try Sync Now again shortly.';
       renderPage();
       return;
     }
@@ -5680,7 +5680,7 @@ async function classifyCalendarEvents(events, fingerprint) {
     // anyway rather than trust that invariant blindly.
     ST.calendarEvents = (data.classified?.length) ? data.classified : rawFallback;
     ST.calendarFingerprint = fingerprint;
-    ST.calendarSyncError = data.classified?.length ? null : 'Classification returned no results — showing ' + rawFallback.length + ' unclassified events.';
+    ST.calendarSyncError = data.classified?.length ? null : 'Classification returned no results. Showing ' + rawFallback.length + ' unclassified events.';
     renderPage();
   } catch(e) {
     console.warn('classifyCalendarEvents error:', e);
@@ -5690,11 +5690,11 @@ async function classifyCalendarEvents(events, fingerprint) {
     // reads like something the user did, when it was actually just this
     // sync taking longer than expected.
     const reason = e.name === 'AbortError'
-      ? 'timed out — this can happen with a very large calendar'
+      ? 'timed out; this can happen with a very large calendar'
       : (e.message || 'network error');
     ST.calendarEvents = rawFallback;
     ST.calendarSyncError = rawFallback.length
-      ? 'Classification failed (' + reason + ') — showing ' + rawFallback.length + ' unclassified events.'
+      ? 'Classification failed (' + reason + '). Showing ' + rawFallback.length + ' unclassified events.'
       : 'Sync failed: ' + reason;
     renderPage();
   }
@@ -5870,20 +5870,20 @@ function formatSetPerformance(exItem, sets) {
   }
   if (exItem.inputType === 'reps_only') {
     const reps = loggedSets.map(s => s.reps).filter(Boolean);
-    return loggedSets.length+'×'+(reps.length?Math.max(...reps.map(Number)):'—')+' reps';
+    return loggedSets.length+'×'+(reps.length?Math.max(...reps.map(Number)):'–')+' reps';
   }
   if (exItem.inputType === 'reps_height') {
     const heights = loggedSets.map(s=>parseFloat(s.height)||0).filter(v=>v>0);
-    return loggedSets.length+' sets · best '+(heights.length?Math.max(...heights):'—')+' in height';
+    return loggedSets.length+' sets · best '+(heights.length?Math.max(...heights):'–')+' in height';
   }
   if (exItem.inputType === 'reps_distance') {
     const dists = loggedSets.map(s=>parseFloat(s.distance)||0).filter(v=>v>0);
-    return loggedSets.length+' sets · best '+(dists.length?Math.max(...dists):'—')+' in distance';
+    return loggedSets.length+' sets · best '+(dists.length?Math.max(...dists):'–')+' in distance';
   }
   // reps_weight (default)
   const weights = loggedSets.map(s=>parseFloat(s.weight)||0).filter(v=>v>0);
   const topSet = loggedSets.reduce((best,s) => (parseFloat(s.weight)||0) > (parseFloat(best.weight)||0) ? s : best, loggedSets[0]);
-  return loggedSets.length+'×'+(topSet.reps||'—')+' @ '+(weights.length?Math.max(...weights):'—')+' lb';
+  return loggedSets.length+'×'+(topSet.reps||'–')+' @ '+(weights.length?Math.max(...weights):'–')+' lb';
 }
 
 // Was this exercise's best value on this day higher than every prior session? (PR at the time)
@@ -5956,11 +5956,11 @@ async function showCalendarDay(isoDate) {
     parts.push('<div class="modal-title">'+(session.muscle_group||'Workout')+(session.importedFromOura ? ' <span style="font-size:11px;color:var(--blue);font-weight:400">📱 via Oura</span>' : '')+'</div>');
     parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:14px">'+sessionDate.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+' at '+sessionDate.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})+'</div>');
     parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">');
-    parts.push(glowTile('MINUTES', summary.durationMinutes||'—', 'gold'));
+    parts.push(glowTile('MINUTES', summary.durationMinutes||'–', 'gold'));
     parts.push(glowTile('SETS', summary.totalSets, 'blue'));
     parts.push(glowTile('CALORIES', summary.estCalories, 'teal'));
     parts.push('</div>');
-    parts.push('<div class="modal-body" style="margin-bottom:10px">Environment: '+(session.env||'—')+' · Condition: '+(session.fatigue||'go')+'</div>');
+    parts.push('<div class="modal-body" style="margin-bottom:10px">Environment: '+(session.env||'–')+' · Condition: '+(session.fatigue||'go')+'</div>');
 
     if (exerciseRows.length) {
       parts.push('<div class="section-label" style="margin-top:4px">EXERCISES</div>');
@@ -6460,7 +6460,7 @@ function edFilterExercises(q) {
   });
   const qSafe = q.replace(/[<>'"]/g,'');
   if (matches.length) parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin:8px 0 6px">NOT LISTED? ADD IT AS CUSTOM:</div>');
-  else parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin:2px 0 6px">NO MATCH — ADD "'+qSafe.toUpperCase()+'" AS CUSTOM:</div>');
+  else parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin:2px 0 6px">NO MATCH · ADD "'+qSafe.toUpperCase()+'" AS CUSTOM:</div>');
   parts.push('<div style="display:flex;gap:8px;margin-bottom:6px">');
   parts.push('<button class="btn btn-blue" style="flex:1;font-size:12px;padding:12px 8px" onclick="edAddCustomExercise(\''+qSafe+'\',\'timed\')">⏱ ADD AS TIMED</button>');
   parts.push('<button class="btn btn-blue" style="flex:1;font-size:12px;padding:12px 8px" onclick="edAddCustomExercise(\''+qSafe+'\',\'reps_weight\')">🏋️ ADD AS REPS × WEIGHT</button>');
@@ -6650,7 +6650,7 @@ function renderProfileBuilder() {
       return true;
     });
     parts.push('<select class="fcf-input" onchange="bpAddFromDropdown(\''+section+'\',this.value);this.value=\'\'" style="margin-top:6px">');
-    parts.push('<option value="">— Or browse to add —</option>');
+    parts.push('<option value="">Or browse to add</option>');
     dropdownPool.forEach(e => {
       parts.push('<option value="'+e.id+'">'+e.name+'</option>');
     });
@@ -6845,7 +6845,7 @@ async function renderPreflight(p) {
 
   const parts = [];
   parts.push('<button class="btn-ghost" style="font-size:12px;margin-bottom:10px" onclick="switchTab(\'today\')">← Back to Today</button>');
-  parts.push('<div class="section-label">PREFLIGHT BRIEFING — '+FCF_VERSION+'</div>');
+  parts.push('<div class="section-label">PREFLIGHT BRIEFING · '+FCF_VERSION+'</div>');
   parts.push(installPromptHtml);
   if (profileIncomplete) {
     parts.push('<div class="card mb12" style="border-color:var(--gold);cursor:pointer" onclick="haptic(\'light\');switchTab(\'profile\')">');
@@ -6921,11 +6921,11 @@ async function renderPreflight(p) {
     // Detailed phase-by-phase preview only shown while the plan editor is
     // open — informational once you've already seen it, not a decision.
     if (wk) {
-      parts.push('<div class="section-label">FLIGHT PLAN PREVIEW — '+totalEx+' EXERCISES ('+(ST.activeCustomProfileId?'CUSTOM — AS SAVED':levelLabel+(ST.fatigue!=='go'?' / '+fatigueLabel:'')+(ST.timeAvailMin?' / ⏱ '+ST.timeAvailMin+'min':''))+')</div>');
+      parts.push('<div class="section-label">FLIGHT PLAN PREVIEW · '+totalEx+' EXERCISES ('+(ST.activeCustomProfileId?'CUSTOM · AS SAVED':levelLabel+(ST.fatigue!=='go'?' / '+fatigueLabel:'')+(ST.timeAvailMin?' / ⏱ '+ST.timeAvailMin+'min':''))+')</div>');
       parts.push('<div class="card card-dark mb12"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
       [['🚕 TAXI',wk.taxi],['🛫 TAKEOFF',wk.takeoff],['✈️ EN ROUTE',wk.enroute],['🛬 LANDING',wk.landing]].forEach(([label,exs]) => {
         parts.push('<div style="background:var(--bg);border-radius:8px;padding:10px"><div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">'+label+'</div>');
-        if (!exs.length) parts.push('<div style="font-size:11px;color:var(--muted);font-style:italic">— skipped —</div>');
+        if (!exs.length) parts.push('<div style="font-size:11px;color:var(--muted);font-style:italic">(skipped)</div>');
         else exs.forEach(e => parts.push('<div style="font-size:11px;color:'+(e.swappedForInjury?'var(--blue)':e.injuryCaution?'var(--amber)':'var(--text)')+';margin-bottom:3px">· '+e.name+(e.swappedForInjury?' 🩹':e.injuryCaution?' ⚠️':'')+'</div>'));
         parts.push('</div>');
       });
@@ -6942,7 +6942,7 @@ async function renderPreflight(p) {
 
   if (showCond) {
     parts.push('<div class="card mb12">');
-    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">Your physical readiness today. This gates workout intensity — training through fatigue increases injury risk and impairs adaptation.</div>');
+    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">Your physical readiness today. This gates workout intensity: training through fatigue increases injury risk and impairs adaptation.</div>');
 
     const condBtns =
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">' +
@@ -6967,7 +6967,7 @@ async function renderPreflight(p) {
         parts.push('<div class="env-btn" style="padding:8px 2px'+(ST.readiness===i?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="setReadiness('+i+')"><div style="font-size:15px;font-weight:700">'+i+'</div></div>');
       }
       parts.push('</div>');
-      const condMeta = {go:[statusDot('go'),'GO — full protocol'], marginal:[statusDot('marginal'),'MARGINAL — light only'], nogo:[statusDot('nogo'),'NO-GO — mobility only']}[ST.fatigue];
+      const condMeta = {go:[statusDot('go'),'GO: full protocol'], marginal:[statusDot('marginal'),'MARGINAL: light only'], nogo:[statusDot('nogo'),'NO-GO: mobility only']}[ST.fatigue];
       parts.push('<div class="fb" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">');
       parts.push('<div style="font-size:12px">Pilot Condition: <strong>'+condMeta[0]+' '+condMeta[1]+'</strong></div>');
       parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);cursor:pointer" onclick="haptic(\'light\');ST.showCondOverride=!ST.showCondOverride;renderPage()">'+(ST.showCondOverride?'HIDE':'OVERRIDE')+'</div>');
@@ -6979,7 +6979,7 @@ async function renderPreflight(p) {
     if (ST.fatigue === 'marginal') {
       parts.push('<div class="alert alert-warn" style="margin-top:8px"><div class="alert-icon">⚠️</div><div>Heavy Takeoff phase removed. One light En Route exercise only.</div></div>');
     } else if (ST.fatigue === 'nogo') {
-      parts.push('<div class="alert alert-danger" style="margin-top:8px"><div class="alert-icon">🔴</div><div>Only Taxi and Landing phases active. Training under significant fatigue increases injury risk — this is physiology, not weakness.</div></div>');
+      parts.push('<div class="alert alert-danger" style="margin-top:8px"><div class="alert-icon">🔴</div><div>Only Taxi and Landing phases active. Training under significant fatigue increases injury risk. This is physiology, not weakness.</div></div>');
     }
     parts.push('</div>');
   }
@@ -7023,7 +7023,7 @@ async function renderPreflight(p) {
   parts.push('<div class="section-label">HYDRATION PAYLOAD</div>');
   parts.push('<div class="card mb12">');
   if (!ST.flightHrsTouched && ST.flightSchedule && computeTodaysFlightHours(ST.flightSchedule) !== null) {
-    parts.push('<div style="font-size:10px;color:var(--muted);margin-bottom:6px">📅 Flight hours auto-filled from your schedule — edit if it\'s off.</div>');
+    parts.push('<div style="font-size:10px;color:var(--muted);margin-bottom:6px">📅 Flight hours auto-filled from your schedule. Edit if it\'s off.</div>');
   }
   parts.push('<div class="field-row" style="margin-bottom:10px">');
   parts.push('<div class="field" style="margin-bottom:0"><label>Flight Hours Today</label>');
@@ -7031,7 +7031,7 @@ async function renderPreflight(p) {
   parts.push('<div class="field" style="margin-bottom:0"><label>Water Consumed (L)</label>');
   parts.push('<input type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="'+ST.waterInRaw+'" placeholder="e.g. 1.2 or .5" oninput="ST.waterInRaw=this.value;ST.waterIn=parseFloat(this.value)||0;updateHydrationUI()"></div>');
   parts.push('</div>');
-  parts.push('<div id="noFlyBox">'+(ST.flightHrsTouched && ST.flightHrs === 0 ? '<div class="alert alert-info" style="margin-bottom:8px"><div class="alert-icon">ℹ️</div><div>No-fly day — minimum 1.0L hydration target still applies. Your body needs baseline water regardless of duty status.</div></div>' : '')+'</div>');
+  parts.push('<div id="noFlyBox">'+(ST.flightHrsTouched && ST.flightHrs === 0 ? '<div class="alert alert-info" style="margin-bottom:8px"><div class="alert-icon">ℹ️</div><div>No-fly day: minimum 1.0L hydration target still applies. Your body needs baseline water regardless of duty status.</div></div>' : '')+'</div>');
   parts.push('<div class="fb" style="margin-bottom:6px"><span style="font-family:var(--mono);font-size:11px;color:var(--muted)">TARGET: <span id="hydroTargetVal" style="color:var(--text)">'+hydroTarget().toFixed(1)+'L</span></span><span id="hydroStatusLbl" style="font-family:var(--mono);font-size:11px;color:'+hs.color+'">'+hs.label+'</span></div>');
   parts.push('<div class="hydro-bar-wrap"><div id="hydroBar" class="hydro-bar '+(pct>=1?'hydro-ok':'hydro-warn')+'" style="width:'+Math.round(pct*100)+'%"></div></div>');
   parts.push('<div id="hydroPctText" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px;text-align:right">'+Math.round(pct*100)+'% of target</div>');
@@ -7044,7 +7044,7 @@ async function renderPreflight(p) {
     const lastDate = new Date(ST.lastSession.date).toLocaleDateString('en-US',{month:'short',day:'numeric'});
     parts.push('<div class="section-label">LAST MISSION</div>');
     parts.push('<div class="card card-dark mb12">');
-    parts.push('<div class="fb"><div style="font-size:13px;font-weight:600">'+(ST.lastSession.muscle_group||'—')+'</div><div style="font-family:var(--mono);font-size:11px;color:var(--muted)">'+lastDate+'</div></div>');
+    parts.push('<div class="fb"><div style="font-size:13px;font-weight:600">'+(ST.lastSession.muscle_group||'–')+'</div><div style="font-family:var(--mono);font-size:11px;color:var(--muted)">'+lastDate+'</div></div>');
     parts.push('<div style="font-size:11px;color:var(--green);margin-top:6px">→ Recommended next: <strong>'+recommended+'</strong></div>');
     parts.push('</div>');
   }
@@ -7119,7 +7119,7 @@ function showStyleUpdatePrompt(suggestedGoal) {
     '<div class="modal-sheet">' +
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">Update your workout style?</div>' +
-    '<div class="modal-body" style="margin-bottom:14px">Based on your profile, we suggest <strong>'+g.icon+' '+g.label+'</strong> — '+g.desc.toLowerCase()+'. Your training history stays exactly as it is either way, and you can change this anytime in Mission Objective.</div>' +
+    '<div class="modal-body" style="margin-bottom:14px">Based on your profile, we suggest <strong>'+g.icon+' '+g.label+'</strong>: '+g.desc.toLowerCase()+'. Your training history stays exactly as it is either way, and you can change this anytime in Mission Objective.</div>' +
     '<button class="btn btn-gold" onclick="applyStyleUpdate(\''+suggestedGoal+'\')">'+g.icon+' SWITCH TO '+g.label.toUpperCase()+'</button>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">KEEP MY CURRENT OBJECTIVE</button>' +
     '</div></div>';
@@ -7130,7 +7130,7 @@ async function applyStyleUpdate(goal) {
   await saveGoalLevel();
   closeModal();
   renderPage();
-  showToast('Objective updated — workouts now reflect your profile.');
+  showToast('Objective updated. Workouts now reflect your profile.');
 }
 
 function setReadiness(n) {
@@ -7480,26 +7480,26 @@ async function loadSessionCache() {
 // ─── ALTERNATE EXERCISE SYSTEM ───────────────────────────────────────────────
 const ALTERNATES = {
   'Standing Calf Stretch': [
-    {name:'Seated Calf Stretch (Strap or Towel)',target:'2×30s/leg',note:'Same muscle, no wall needed — good for a hotel room floor.',inputType:'timed_bilateral'},
+    {name:'Seated Calf Stretch (Strap or Towel)',target:'2×30s/leg',note:'Same muscle, no wall needed. Good for a hotel room floor.',inputType:'timed_bilateral'},
     {name:'Downward Dog Calf Pumps',target:'2×10/leg',note:'Alternating heel drives. Dynamic instead of static, works well as a warmup too.',inputType:'reps_only'},
   ],
   'Standing Hamstring Stretch': [
-    {name:'Seated Forward Fold',target:'2×30s',note:'No step needed — floor-based, same hamstring line.',inputType:'timed'},
+    {name:'Seated Forward Fold',target:'2×30s',note:'No step needed: floor-based, same hamstring line.',inputType:'timed'},
     {name:'Lying Hamstring Stretch (Strap)',target:'2×30s/leg',note:'Strap or towel around the foot, lying on your back. Easier to control intensity.',inputType:'timed_bilateral'},
   ],
   'Kneeling Hip Flexor Stretch': [
-    {name:'Standing Hip Flexor Stretch',target:'2×30s/leg',note:'No floor contact needed — works in a hotel room or aircraft galley.',inputType:'timed_bilateral'},
+    {name:'Standing Hip Flexor Stretch',target:'2×30s/leg',note:'No floor contact needed. Works in a hotel room or aircraft galley.',inputType:'timed_bilateral'},
     {name:'Couch Stretch',target:'2×30s/leg',note:'Deeper hip flexor and quad stretch using a couch, bed, or wall.',inputType:'timed_bilateral'},
   ],
   'Back Squat': [
     {name:'Goblet Squat (Heavy)',target:'4×10',note:'DB front-loaded squat. Less spinal compression.'},
     {name:'Hack Squat (Machine)',target:'4×10',note:'Machine substitute. Quad dominant, adjustable load.'},
     {name:'Leg Press',          target:'4×12',note:'Seated machine. Good if knees or back are an issue.'},
-    {name:'Smith Machine Squat',target:'4×8', note:'Fixed bar path — good when the rack is busy or you want less stabilizer demand.'},
+    {name:'Smith Machine Squat',target:'4×8', note:'Fixed bar path. Good when the rack is busy or you want less stabilizer demand.'},
   ],
   'Romanian Deadlift': [
     {name:'DB Romanian Deadlift',target:'4×10',note:'Same hip hinge, dumbbells if no barbell available.'},
-    {name:'Seated Leg Curl',    target:'3×12',note:'Machine isolation — direct hamstring without the hinge.'},
+    {name:'Seated Leg Curl',    target:'3×12',note:'Machine isolation: direct hamstring without the hinge.'},
     {name:'Good Morning',       target:'3×10',note:'Bar on back, hip hinge. Excellent hamstring stretch.'},
   ],
   'Conventional Deadlift': [
@@ -7516,11 +7516,11 @@ const ALTERNATES = {
     {name:'DB Bench Press',     target:'4×10',note:'Greater ROM. Often easier on shoulders.'},
     {name:'Machine Chest Press',target:'4×12',note:'Shoulder-friendly machine alternative.'},
     {name:'Close Grip Bench',   target:'4×8', note:'More tricep emphasis. Same pressing stimulus.'},
-    {name:'Smith Machine Bench Press',target:'4×8',note:'Fixed bar path — good when the rack is busy or you\'re training without a spotter.'},
+    {name:'Smith Machine Bench Press',target:'4×8',note:'Fixed bar path. Good when the rack is busy or you\'re training without a spotter.'},
   ],
   'Standing Overhead Press': [
     {name:'DB Overhead Press',  target:'4×8', note:'Independent arms. Easier shoulder position.'},
-    {name:'Push Press',         target:'4×5', note:'Leg drive added — allows heavier overhead loads.'},
+    {name:'Push Press',         target:'4×5', note:'Leg drive added, allowing heavier overhead loads.'},
     {name:'Pike Pushup',        target:'4×12',note:'Bodyweight overhead pressing. No equipment.',inputType:'reps_only'},
   ],
   'Barbell Row (Pendlay)': [
@@ -7544,7 +7544,7 @@ const ALTERNATES = {
     {name:'DB Jump Squat',      target:'4×5',note:'Light DBs add load without a box.'},
   ],
   'Single Leg Split Squat': [
-    {name:'Reverse Lunge',      target:'3×12/leg',note:'Both feet on floor — lower balance demand.',inputType:'reps_only'},
+    {name:'Reverse Lunge',      target:'3×12/leg',note:'Both feet on floor: lower balance demand.',inputType:'reps_only'},
     {name:'Step-Up',            target:'3×12/leg',note:'Same glute + quad pattern. Use a bench.'},
     {name:'Single Leg Squat (Pistol)',target:'3×5/leg',note:'Harder bodyweight version.',inputType:'reps_only'},
   ],
@@ -7555,7 +7555,7 @@ const ALTERNATES = {
   ],
   'Goblet Squat': [
     {name:'Back Squat',         target:'5×5',note:'Barbell version for heavier loading.'},
-    {name:'Single Leg Squat (Pistol)',target:'3×5/leg',note:'Bodyweight unilateral — very demanding.',inputType:'reps_only'},
+    {name:'Single Leg Squat (Pistol)',target:'3×5/leg',note:'Bodyweight unilateral: very demanding.',inputType:'reps_only'},
     {name:'Leg Press',          target:'4×12',note:'Machine alternative.'},
   ],
   'Rowing Machine Intervals': [
@@ -7577,34 +7577,34 @@ const ALTERNATES = {
   ],
   'Step-Up (Weighted)': [
     {name:'Reverse Lunge',target:'3×12/leg',note:'No bench needed. Same unilateral quad/glute demand.'},
-    {name:'Single Leg Split Squat',target:'3×8/leg',note:'Rear foot elevated variant — more quad stretch.'},
+    {name:'Single Leg Split Squat',target:'3×8/leg',note:'Rear foot elevated variant: more quad stretch.'},
     {name:'Step-Up',target:'3×12/leg',note:'Unweighted version if the loaded step feels too aggressive.'},
   ],
   'Single-Leg Calf Raise': [
-    {name:'Standing Calf Raise',target:'4×15',note:'Bilateral — easier balance, still loads the calf hard.'},
+    {name:'Standing Calf Raise',target:'4×15',note:'Bilateral: easier balance, still loads the calf hard.'},
     {name:'Calf Raise (step)',target:'3×15/leg',note:'Same unilateral pattern using a step for extra range.'},
   ],
   'Dumbbell Lateral Lunge': [
-    {name:'Reverse Lunge',target:'3×12/leg',note:'Sagittal-plane substitute — easier on the groin/adductors.'},
+    {name:'Reverse Lunge',target:'3×12/leg',note:'Sagittal-plane substitute, easier on the groin/adductors.'},
     {name:'Step-Up (Weighted)',target:'3×12/leg',note:'Different plane, same single-leg strength demand.'},
   ],
   'DB Bench Press': [
-    {name:'Machine Chest Press',target:'4×12',note:'Fixed path — easier on the shoulders for higher reps.'},
+    {name:'Machine Chest Press',target:'4×12',note:'Fixed path, easier on the shoulders for higher reps.'},
     {name:'Pushup Variations',target:'4×max',note:'Bodyweight substitute if dumbbells aren\'t heavy enough or available.',inputType:'reps_only'},
     {name:'DB Incline Press',target:'4×10',note:'Shifts emphasis to upper chest.'},
   ],
   'DB Overhead Press': [
-    {name:'Standing Overhead Press',target:'4×8',note:'Barbell version — heavier bilateral loading.'},
+    {name:'Standing Overhead Press',target:'4×8',note:'Barbell version: heavier bilateral loading.'},
     {name:'Pike Pushup',target:'4×12',note:'Bodyweight overhead pressing, no equipment needed.',inputType:'reps_only'},
     {name:'DB Incline Press',target:'4×10',note:'Still hits the front delts, less overhead shoulder strain.'},
   ],
   'DB Incline Press': [
     {name:'DB Bench Press',target:'4×10',note:'Flat variant if an incline bench isn\'t available.'},
     {name:'Machine Chest Press',target:'4×12',note:'Fixed path alternative.'},
-    {name:'Pushup Variations',target:'4×max',note:'Bodyweight substitute — elevate feet for upper-chest emphasis.',inputType:'reps_only'},
+    {name:'Pushup Variations',target:'4×max',note:'Bodyweight substitute. Elevate feet for upper-chest emphasis.',inputType:'reps_only'},
   ],
   'DB Lateral Raise': [
-    {name:'Cable Lateral Raise',target:'3×15',note:'Constant tension through the full range — harder than DBs.'},
+    {name:'Cable Lateral Raise',target:'3×15',note:'Constant tension through the full range. Harder than DBs.'},
     {name:'Upright Row',target:'3×12',note:'Hits lateral delt and upper trap together.'},
   ],
   'DB Front Raise': [
@@ -7612,29 +7612,29 @@ const ALTERNATES = {
     {name:'DB Lateral Raise',target:'3×15',note:'Different plane, same front-delt-adjacent shoulder work.'},
   ],
   'Pullups': [
-    {name:'Lat Pulldown',target:'4×10',note:'Adjustable load — good if bodyweight pullups are too hard yet.'},
+    {name:'Lat Pulldown',target:'4×10',note:'Adjustable load. Good if bodyweight pullups are too hard yet.'},
     {name:'DB Row',target:'4×10/side',note:'Horizontal pulling substitute, no bar needed.'},
-    {name:'Chinups',target:'4×max',note:'Supinated grip — more bicep involvement.',inputType:'reps_only'},
+    {name:'Chinups',target:'4×max',note:'Supinated grip: more bicep involvement.',inputType:'reps_only'},
   ],
   'DB Row': [
     {name:'Seated Cable Row',target:'4×12',note:'Bilateral, constant tension version.'},
     {name:'Barbell Row (Pendlay)',target:'4×6',note:'Heavier bilateral pulling if a barbell is available.'},
   ],
   'Chinups': [
-    {name:'Pullups',target:'4×max',note:'Pronated grip — more lat, less bicep.',inputType:'reps_only'},
+    {name:'Pullups',target:'4×max',note:'Pronated grip: more lat, less bicep.',inputType:'reps_only'},
     {name:'Lat Pulldown',target:'4×10',note:'Adjustable load, supinated grip on most machines.'},
   ],
   'Bent-Over DB Face Pull': [
-    {name:'Band Pull-Apart',target:'3×20',note:'No dumbbells needed — great shoulder health work.',inputType:'reps_only'},
+    {name:'Band Pull-Apart',target:'3×20',note:'No dumbbells needed. Great shoulder health work.',inputType:'reps_only'},
     {name:'DB Lateral Raise',target:'3×15',note:'Different but complementary rear/side delt work.'},
   ],
   'DB Hammer Curl': [
     {name:'EZ Bar Curl',target:'3×12',note:'Barbell substitute if available.'},
-    {name:'Towel Curl',target:'3×12',note:'No equipment needed — partner or fixed object required.'},
+    {name:'Towel Curl',target:'3×12',note:'No equipment needed; partner or fixed object required.'},
   ],
   'Bench/Box Jump': [
     {name:'Broad Jump',target:'5×3',note:'Horizontal power, no box height needed.',inputType:'reps_distance'},
-    {name:'Squat Jump',target:'4×5',note:'No box needed — same explosive demand.',inputType:'reps_only'},
+    {name:'Squat Jump',target:'4×5',note:'No box needed; same explosive demand.',inputType:'reps_only'},
     {name:'DB Jump Squat',target:'4×5',note:'Light DBs add load without needing a box.'},
   ],
   'Broad Jump': [
@@ -7667,7 +7667,7 @@ const ALTERNATES = {
   ],
   'Treadmill Zone 2 Run': [
     {name:'Stationary Bike Intervals',target:'20 min',note:'Same aerobic zone, lower impact.',inputType:'reps_only'},
-    {name:'Walking',target:'30-45 min',note:'Zone 1-2 substitute — easier recovery day option.',inputType:'timed'},
+    {name:'Walking',target:'30-45 min',note:'Zone 1-2 substitute: easier recovery day option.',inputType:'timed'},
   ],
   'Treadmill': [
     {name:'Stationary Bike Intervals',target:'20 min',note:'Lower-impact substitute for the same duration.',inputType:'reps_only'},
@@ -7676,7 +7676,7 @@ const ALTERNATES = {
 
   // HOTEL ROOM
   'Single Leg Squat (Pistol)': [
-    {name:'Slow Bodyweight Squat',target:'4×12',note:'Bilateral regression — build control before going unilateral.'},
+    {name:'Slow Bodyweight Squat',target:'4×12',note:'Bilateral regression. Build control before going unilateral.'},
     {name:'Reverse Lunge',target:'3×12/leg',note:'Easier balance demand, same single-leg strength focus.',inputType:'reps_only'},
   ],
   'Hamstring Raise (Nordic Curl)': [
@@ -7688,22 +7688,22 @@ const ALTERNATES = {
     {name:'Reverse Lunge',target:'3×12/leg',note:'Standing alternative, same glute emphasis.',inputType:'reps_only'},
   ],
   'Calf Raise (step)': [
-    {name:'Single-Leg Calf Raise',target:'3×15/leg',note:'No step needed — harder unilateral version.',inputType:'reps_only'},
+    {name:'Single-Leg Calf Raise',target:'3×15/leg',note:'No step needed; harder unilateral version.',inputType:'reps_only'},
   ],
   'Reverse Lunge': [
-    {name:'Split Squat',target:'3×10/leg',note:'Static stance — easier balance, same quad/glute demand.',inputType:'reps_only'},
+    {name:'Split Squat',target:'3×10/leg',note:'Static stance: easier balance, same quad/glute demand.',inputType:'reps_only'},
     {name:'Single Leg Squat (Pistol)',target:'3×5/leg',note:'Harder progression once lunges feel easy.',inputType:'reps_only'},
   ],
   'Archer Pushup': [
     {name:'Pushup Variations',target:'4×max',note:'Standard version if the archer variant is too advanced.',inputType:'reps_only'},
-    {name:'Decline Pushup',target:'4×max',note:'Different difficulty lever — feet elevated instead of arm reach.',inputType:'reps_only'},
+    {name:'Decline Pushup',target:'4×max',note:'Different difficulty lever: feet elevated instead of arm reach.',inputType:'reps_only'},
   ],
   'Pike Pushup': [
     {name:'Chair Dips',target:'3×12',note:'Different pressing angle, still shoulder/tricep focused.',inputType:'reps_only'},
     {name:'Decline Pushup',target:'4×max',note:'Upper-chest/shoulder emphasis without full overhead position.',inputType:'reps_only'},
   ],
   'Pushup Variations': [
-    {name:'Decline Pushup',target:'4×max',note:'Feet elevated — more upper chest and shoulder.',inputType:'reps_only'},
+    {name:'Decline Pushup',target:'4×max',note:'Feet elevated: more upper chest and shoulder.',inputType:'reps_only'},
     {name:'Archer Pushup',target:'4×max',note:'Harder unilateral progression.',inputType:'reps_only'},
   ],
   'Chair Dips': [
@@ -7719,7 +7719,7 @@ const ALTERNATES = {
     {name:'Bird Dog',target:'3×10/side',note:'Adds an anti-rotation component.',inputType:'reps_only'},
   ],
   'Pullups (bar if available)': [
-    {name:'Table / Inverted Row',target:'3×12',note:'No bar needed — use a sturdy table edge.',inputType:'reps_only'},
+    {name:'Table / Inverted Row',target:'3×12',note:'No bar needed. Use a sturdy table edge.',inputType:'reps_only'},
     {name:'Door Frame Row',target:'3×12',note:'Another no-equipment pulling substitute.',inputType:'reps_only'},
   ],
   'Table / Inverted Row': [
@@ -7769,7 +7769,7 @@ const ALTERNATES = {
   ],
   'Dead Bug': [
     {name:'Bird Dog',target:'3×10/side',note:'Similar anti-extension demand from a different position.',inputType:'reps_only'},
-    {name:'Plank',target:'3×30s',note:'Static alternative — less coordination-dependent.',inputType:'timed'},
+    {name:'Plank',target:'3×30s',note:'Static alternative, less coordination-dependent.',inputType:'timed'},
   ],
   'Bird Dog': [
     {name:'Dead Bug',target:'3×10/side',note:'Similar anti-rotation demand, on your back instead of hands and knees.',inputType:'reps_only'},
@@ -7784,7 +7784,7 @@ const ALTERNATES = {
     {name:'Burpee Intervals',target:'8×30s',note:'Full-body conditioning alternative.',inputType:'timed'},
   ],
   'Jump Lunge': [
-    {name:'Split Jump',target:'4×6/side',note:'Very similar movement — pick whichever cues better for you.',inputType:'reps_only'},
+    {name:'Split Jump',target:'4×6/side',note:'Very similar movement. Pick whichever cues better for you.',inputType:'reps_only'},
     {name:'Reverse Lunge',target:'3×12/leg',note:'Remove the jump if you want the pattern without impact.',inputType:'reps_only'},
   ],
   'Mountain Climbers': [
@@ -7794,7 +7794,7 @@ const ALTERNATES = {
 
   // EN ROUTE accessories
   'Lateral Raise': [
-    {name:'Cable Lateral Raise',target:'3×15',note:'Cable keeps tension at the bottom — harder than DBs.'},
+    {name:'Cable Lateral Raise',target:'3×15',note:'Cable keeps tension at the bottom, making it harder than DBs.'},
     {name:'Machine Lateral Raise',target:'3×15',note:'Machine version. Strict form, no cheating.'},
     {name:'Upright Row',target:'3×12',note:'Barbell or DB. Hits lateral delt and upper trap.'},
   ],
@@ -7804,7 +7804,7 @@ const ALTERNATES = {
     {name:'Hammer Curl',target:'3×12',note:'Neutral grip. Hits brachialis and brachioradialis.'},
   ],
   'DB Curl': [
-    {name:'Preacher Curl',target:'3×12',note:'Removes shoulder swing entirely — strictest possible bicep isolation.'},
+    {name:'Preacher Curl',target:'3×12',note:'Removes shoulder swing entirely for the strictest possible bicep isolation.'},
     {name:'EZ Bar Curl',target:'3×12',note:'Barbell variation. Slightly easier on the wrists.'},
     {name:'Cable Curl',target:'3×15',note:'Constant tension. Good isolation.'},
     {name:'Hammer Curl',target:'3×12',note:'Neutral grip. Different muscle emphasis.'},
@@ -7865,7 +7865,7 @@ function showAlternates(exId, exName, phaseKey) {
   parts.push('<div class="modal-handle"></div>');
   parts.push('<div class="modal-title">Alternate Exercises</div>');
   if (alts.length) {
-    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Same muscle group — different movement. Tap to swap in.</div>');
+    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Same muscle group, different movement. Tap to swap in.</div>');
     alts.forEach(alt => {
       parts.push('<div style="background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">');
       parts.push('<div style="font-weight:700;font-size:14px;margin-bottom:3px">'+alt.name+'</div>');
@@ -7875,7 +7875,7 @@ function showAlternates(exId, exName, phaseKey) {
       parts.push('</div>');
     });
   } else {
-    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px">No alternates specifically curated for this exercise yet — search the catalog or create your own below.</div>');
+    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px">No alternates specifically curated for this exercise yet. Search the catalog or create your own below.</div>');
   }
 
   parts.push('<div style="border-top:1px solid var(--border);margin-top:6px;padding-top:14px">');
@@ -7894,7 +7894,7 @@ function showAlternates(exId, exName, phaseKey) {
     const exItem = (ST.workout?.[phaseKey] || []).find(e => e.id === exId);
     parts.push('<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">');
     parts.push('<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">');
-    parts.push('<span style="font-size:12px">✦</span><span style="font-size:12px;font-weight:600">AI Coach — Don\'t have any of this?</span>');
+    parts.push('<span style="font-size:12px">✦</span><span style="font-size:12px;font-weight:600">AI Coach: Don\'t have any of this?</span>');
     parts.push('</div>');
     parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Describe what you actually have access to and the AI will pick a substitute that trains the same thing.</div>');
     parts.push('<div class="field"><input type="text" id="aiSubExplain" placeholder="e.g. hotel room, no equipment, carpeted floor" autocomplete="off"></div>');
@@ -7968,7 +7968,7 @@ function swapFilterExercises(exId, q) {
   matches.forEach((e, i) => {
     parts.push('<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:13px" onclick="swapAddCatalogExercise(\''+exId+'\','+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+(e.target||'')+'</span></div>');
   });
-  if (matches.length) parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin:8px 0 2px">TAP TO SWAP IN — OR USE "CREATE YOUR OWN" BELOW</div>');
+  if (matches.length) parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin:8px 0 2px">TAP TO SWAP IN, OR USE "CREATE YOUR OWN" BELOW</div>');
   box.innerHTML = parts.join('');
 }
 function swapAddCatalogExercise(exId, matchIdx, q) {
@@ -7987,7 +7987,7 @@ async function requestAISubstitute(exId, phaseKey, exItem) {
   const resultBox = document.getElementById('aiSubResult');
   const available = (input?.value || '').trim();
   if (!available) { showBigToast('Describe what you have access to first.', 'warn'); return; }
-  if (!exItem) { showBigToast('Could not read the current exercise — try closing and reopening this sheet.', 'warn'); return; }
+  if (!exItem) { showBigToast('Could not read the current exercise. Try closing and reopening this sheet.', 'warn'); return; }
 
   if (resultBox) resultBox.innerHTML = '<div style="font-size:11px;color:var(--muted);margin:8px 0">Asking the AI coach…</div>';
 
@@ -8004,7 +8004,7 @@ async function requestAISubstitute(exId, phaseKey, exItem) {
   if (!resultBox) return; // sheet closed while waiting
 
   if (result.error) {
-    resultBox.innerHTML = '<div style="font-size:11px;color:var(--amber);margin:8px 0">Couldn\'t get a suggestion — try describing it differently, or use catalog search above.</div>';
+    resultBox.innerHTML = '<div style="font-size:11px;color:var(--amber);margin:8px 0">Couldn\'t get a suggestion. Try describing it differently, or use catalog search above.</div>';
     return;
   }
 
@@ -8012,11 +8012,11 @@ async function requestAISubstitute(exId, phaseKey, exItem) {
   try {
     alt = JSON.parse(result.text.replace(/```json|```/g, '').trim());
   } catch (e) {
-    resultBox.innerHTML = '<div style="font-size:11px;color:var(--amber);margin:8px 0">Got an unreadable response — try again.</div>';
+    resultBox.innerHTML = '<div style="font-size:11px;color:var(--amber);margin:8px 0">Got an unreadable response. Try again.</div>';
     return;
   }
   if (alt.error || !alt.name) {
-    resultBox.innerHTML = '<div style="font-size:11px;color:var(--muted);margin:8px 0">No good substitute found for that — try catalog search above, or describe what you have differently.</div>';
+    resultBox.innerHTML = '<div style="font-size:11px;color:var(--muted);margin:8px 0">No good substitute found for that. Try catalog search above, or describe what you have differently.</div>';
     return;
   }
 
@@ -8078,10 +8078,10 @@ function swapExercise(exId, alt) {
 
 // ─── FLIGHT TAB ───────────────────────────────────────────────────────────────
 const PHASES_META = [
-  { key:'taxi',    label:'TAXI',     sub:'Pilot Protocol — mobilization and activation', icon:'🚕', cls:'phase-taxi'    },
-  { key:'takeoff', label:'TAKEOFF',  sub:'Primary compound — the heavy work',             icon:'🛫', cls:'phase-takeoff' },
-  { key:'enroute', label:'EN ROUTE', sub:'Secondary movements — volume and accessory',    icon:'✈️', cls:'phase-enroute' },
-  { key:'landing', label:'LANDING',  sub:'Descent — decompression and CNS down-reg ⓘ',  icon:'🛬', cls:'phase-landing' },
+  { key:'taxi',    label:'TAXI',     sub:'Pilot Protocol: mobilization and activation', icon:'🚕', cls:'phase-taxi'    },
+  { key:'takeoff', label:'TAKEOFF',  sub:'Primary compound: the heavy work',             icon:'🛫', cls:'phase-takeoff' },
+  { key:'enroute', label:'EN ROUTE', sub:'Secondary movements: volume and accessory',    icon:'✈️', cls:'phase-enroute' },
+  { key:'landing', label:'LANDING',  sub:'Descent: decompression and CNS down-reg ⓘ',  icon:'🛬', cls:'phase-landing' },
 ];
 
 function renderFlight(p) {
@@ -8100,7 +8100,7 @@ function renderFlight(p) {
 
   const parts = [];
   parts.push('<button class="btn-ghost" style="font-size:12px;margin-bottom:6px" onclick="switchTab(\'today\')">← Back to Today</button>');
-  parts.push('<div class="section-label">ACTIVE FLIGHT — '+ST.muscleGroup.toUpperCase()+'</div>');
+  parts.push('<div class="section-label">ACTIVE FLIGHT · '+ST.muscleGroup.toUpperCase()+'</div>');
   parts.push('<div class="card card-dark mb12">');
   parts.push('<div class="fb mb8"><span style="font-family:var(--mono);font-size:11px;color:var(--muted)">MISSION PROGRESS</span><span style="font-family:var(--mono);font-size:11px;color:var(--gold)" id="missionProgCount">'+done+'/'+allEx.length+' EXERCISES</span></div>');
   parts.push('<div class="prog-wrap"><div class="prog-fill" id="missionProgFill" style="width:'+pct+'%"></div></div>');
@@ -8127,7 +8127,7 @@ function renderFlight(p) {
   // Disabled while a save is in flight so the guard is visible rather than
   // a silent no-op — repeated tapping is what produced duplicates, and a
   // button that looks live invites exactly that.
-  parts.push('<button class="btn btn-green" '+(ST.chocksSaving?'disabled':'')+' onclick="confirmSetChocks()">'+(ST.chocksSaving?'⏳ SAVING…':'🔒 SET THE CHOCKS — FINISH WORKOUT')+'</button>');
+  parts.push('<button class="btn btn-green" '+(ST.chocksSaving?'disabled':'')+' onclick="confirmSetChocks()">'+(ST.chocksSaving?'⏳ SAVING…':'🔒 SET THE CHOCKS · FINISH WORKOUT')+'</button>');
 
   p.innerHTML = parts.join('');
 }
@@ -8163,7 +8163,7 @@ function openExerciseGuide(exName) {
     // innerHTML never executes scripts regardless. Fall back gracefully.
     if (html.includes('support.js') || html.includes('<x-import')) {
       closeModal();
-      showToast('In-app animation coming soon — opening YouTube guide.');
+      showToast('In-app animation coming soon. Opening YouTube guide.');
       openYouTubeSearch(exName);
       return;
     }
@@ -8189,7 +8189,7 @@ function openYouTubeSearch(exName) {
     '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet">' +
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">' + sanitizeUserText(exName) + '</div>' +
-    '<div class="modal-body">No built-in form guide for this one yet — this opens a YouTube search in your browser.</div>' +
+    '<div class="modal-body">No built-in form guide for this one yet. This opens a YouTube search in your browser.</div>' +
     '<a class="btn btn-gold mt12" style="display:block;text-align:center;text-decoration:none" href="' + url + '" ' + externalLinkAttrs() + ' onclick="closeModal()">▶ Watch on YouTube</a>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">Cancel</button>' +
     '</div></div>';
@@ -8205,9 +8205,9 @@ function buildExCard(exItem, phaseKey) {
   parts.push('<div class="ex-card'+(exItem.custom?' custom-ex':'')+'" id="excard_'+exItem.id+'">');
   parts.push('<div class="ex-hdr"><div style="flex:1;cursor:pointer" onclick="toggleEx(\''+exItem.id+'\')"><div class="ex-name">'+exItem.name+(exItem.custom?' <span style="font-size:9px;color:var(--gold)">CUSTOM</span>':'')+'</div><div class="ex-target">'+exItem.target+(exItem.timed?' · ⏱ TIMED':'')+'</div></div><div class="ex-right"><button class="btn-ghost" style="font-size:11px;padding:4px 8px;margin-right:4px;color:var(--blue)" onclick="event.stopPropagation();openExerciseGuide(\''+exItem.name.replace(/'/g,'&#39;')+'\')">ⓘ Guide</button><div class="ex-done '+(hasData?'ok':'')+'" id="exdone_'+exItem.id+'">'+(hasData?'✓':'')+'</div><div class="ex-caret '+(isOpen?'open':'')+'">⌄</div></div></div>');
   if (exItem.swappedForInjury) {
-    parts.push('<div style="padding:6px 14px;background:rgba(56,189,248,0.08);border-top:1px solid var(--border);font-size:10px;color:var(--blue)">🩹 Swapped from '+exItem.originalName+' — '+exItem.flaggedRegion+' flagged</div>');
+    parts.push('<div style="padding:6px 14px;background:rgba(56,189,248,0.08);border-top:1px solid var(--border);font-size:10px;color:var(--blue)">🩹 Swapped from '+exItem.originalName+': '+exItem.flaggedRegion+' flagged</div>');
   } else if (exItem.injuryCaution) {
-    parts.push('<div style="padding:6px 14px;background:rgba(245,158,11,0.08);border-top:1px solid var(--border);font-size:10px;color:var(--amber)">⚠️ May stress your flagged '+exItem.flaggedRegion+' — consider Alternate below</div>');
+    parts.push('<div style="padding:6px 14px;background:rgba(245,158,11,0.08);border-top:1px solid var(--border);font-size:10px;color:var(--amber)">⚠️ May stress your flagged '+exItem.flaggedRegion+'; consider Alternate below</div>');
   }
 
   if (isOpen) {
@@ -8245,7 +8245,7 @@ function buildExCard(exItem, phaseKey) {
         parts.push('<span style="font-size:12px">Best '+label+': <strong style="color:var(--teal)">'+lastBest+' in</strong></span>');
         parts.push('</div>');
       } else {
-        parts.push('<div class="stat-banner-empty">First time logging — record your '+label+' in inches to start tracking progress.</div>');
+        parts.push('<div class="stat-banner-empty">First time logging. Record your '+label+' in inches to start tracking progress.</div>');
       }
     }
 
@@ -8511,7 +8511,7 @@ function showRestTimerInfo() {
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">Why does rest time change?</div>' +
     '<div class="modal-body" style="line-height:1.65">' +
-    'Rest time is set by rep range, not by where an exercise sits in the workout — this is standard NSCA guidance, not something specific to this app.' +
+    'Rest time is set by rep range, not by where an exercise sits in the workout. This is standard NSCA guidance, not something specific to this app.' +
     '<br><br>' +
     '<strong style="color:var(--text)">1-5 reps (strength/power):</strong> 2-5 min. Heavy loads deplete the phosphagen energy system, which needs several minutes to fully recover.' +
     '<br><br>' +
@@ -8519,7 +8519,7 @@ function showRestTimerInfo() {
     '<br><br>' +
     '<strong style="color:var(--text)">13+ reps (muscular endurance):</strong> 30-60 sec. The goal is working through fatigue, not full recovery between sets.' +
     '<br><br>' +
-    'A 12-rep set of Cable Rows and a 3-rep heavy Deadlift both being programmed early in a workout doesn\'t mean they need the same rest — the rep count is what matters.' +
+    'A 12-rep set of Cable Rows and a 3-rep heavy Deadlift both being programmed early in a workout doesn\'t mean they need the same rest. The rep count is what matters.' +
     '</div>' +
     '<button class="btn btn-outline mt12" onclick="closeModal()">Got it</button>' +
     '</div></div>';
@@ -8565,7 +8565,7 @@ function tickRestTimer(exId) {
     persistTimerState();
     playChime();
     haptic('success'); // BUG FIX (reported): was never actually called on completion
-    showToast('⏱ Rest complete — next set.');
+    showToast('⏱ Rest complete. Next set.');
     renderFlight(document.getElementById('mainPage'));
   }
 }
@@ -8609,7 +8609,7 @@ function buildStopwatchWidget(exId, side, targetLabel) {
   const targetSec = parseTargetSeconds(targetLabel);
   const parts = [];
   parts.push('<div class="timed-box" style="margin-top:8px" id="sw_'+domId+'">');
-  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">STOPWATCH'+(targetSec?' — CHIMES AT '+formatStopwatch(targetSec):'')+'</div>');
+  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">STOPWATCH'+(targetSec?' · CHIMES AT '+formatStopwatch(targetSec):'')+'</div>');
   parts.push('<div class="stopwatch-display" id="sw_disp_'+domId+'">'+formatStopwatch(isActive?ST.stopwatch.seconds:0)+'</div>');
   if (!isActive) {
     parts.push('<button class="stopwatch-btn btn-blue" onclick="startStopwatch(\''+exId+'\','+(side?"'"+side+"'":'null')+','+(targetSec||'null')+')">START</button>');
@@ -8683,12 +8683,12 @@ function autoregSuggestion(exItem, sets) {
   if (wentUpInWeight && missedPct <= 0.25) {
     // A near-miss immediately after adding weight is the expected, GOOD
     // outcome of testing a heavier load — not something to correct.
-    return { tone: 'positive', text: 'Came in at '+actual+'/'+target+' at a heavier weight than last set — that\'s a strong effort, not a miss. That\'s roughly where a top set on a weight increase should land.' };
+    return { tone: 'positive', text: 'Came in at '+actual+'/'+target+' at a heavier weight than last set. That\'s a strong effort, not a miss. That\'s roughly where a top set on a weight increase should land.' };
   }
   if (missedPct <= 0.2) {
-    return { tone: 'minor', text: 'Came in at '+actual+'/'+target+' — close. Hold the same weight and take a bit more rest before the next set.' };
+    return { tone: 'minor', text: 'Came in at '+actual+'/'+target+', close. Hold the same weight and take a bit more rest before the next set.' };
   }
-  return { tone: 'major', text: 'Came in at '+actual+'/'+target+'. That\'s a real miss, not just an off rep — drop the weight roughly 5-10% for the next set so you can actually hit the target range.' };
+  return { tone: 'major', text: 'Came in at '+actual+'/'+target+'. That\'s a real miss, not just an off rep. Drop the weight roughly 5-10% for the next set so you can actually hit the target range.' };
 }
 
 function parseTargetSeconds(target) {
@@ -8715,7 +8715,7 @@ function tickStopwatch(exId, side) {
     ST.stopwatch.chimed = true;
     persistTimerState();
     playChime();
-    showToast('🔔 Target time reached — stop when ready.');
+    showToast('🔔 Target time reached. Stop when ready.');
   }
   const domId = side ? exId+'_'+side : exId;
   const el = document.getElementById('sw_disp_'+domId);
@@ -8744,7 +8744,7 @@ function buildNSDRWidget(exId, currentVal) {
   const isActive = ST.nsdrTimer.active;
   const parts = [];
   parts.push('<div class="timed-box '+(currentVal?'ok':'')+'" id="nsdr_'+exId+'">');
-  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">NSDR TIMER — CHIMES AT 5:00</div>');
+  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">NSDR TIMER · CHIMES AT 5:00</div>');
   parts.push('<div class="stopwatch-display" id="nsdr_disp">'+formatStopwatch(isActive?ST.nsdrTimer.seconds:(parseInt(currentVal)||0))+'</div>');
   if (!isActive) {
     parts.push('<button class="stopwatch-btn btn-blue" onclick="startNSDR(\''+exId+'\')">START NSDR</button>');
@@ -8769,7 +8769,7 @@ function tickNSDR(exId) {
     ST.nsdrTimer.chimed = true;
     persistTimerState();
     playChime();
-    showToast('🔔 5 minutes complete — continue or stop and save.');
+    showToast('🔔 5 minutes complete. Continue or stop and save.');
   }
 }
 function stopNSDR(exId) {
@@ -8825,7 +8825,7 @@ function buildAddExerciseCard() {
     parts.push('<div class="field"><label>Search the exercise catalog first</label>');
     parts.push('<input type="text" id="addExCatalogSearch" placeholder="e.g. wall slide, row, curl…" oninput="filterAddExerciseCatalog(this.value)" autocomplete="off"></div>');
     parts.push('<div id="addExCatalogResults"></div>');
-    parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin:12px 0 10px;text-align:center">— OR CREATE YOUR OWN BELOW —</div>');
+    parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin:12px 0 10px;text-align:center">OR CREATE YOUR OWN BELOW</div>');
     parts.push('<div class="field"><label>Exercise Name</label><input type="text" id="custom_ex_name" placeholder="e.g. Cable Woodchopper"></div>');
     parts.push('<div class="field-row">');
     parts.push('<div class="field"><label>Target (sets×reps)</label><input type="text" id="custom_ex_target" placeholder="e.g. 3×12"></div>');
@@ -8839,7 +8839,7 @@ function buildAddExerciseCard() {
     // previous fixed behavior, so anyone who doesn't touch this dropdown
     // sees no change.
     parts.push('<div class="field"><label>Add to which part of the workout?</label><select id="custom_ex_phase">');
-    PHASES_META.forEach(p => parts.push('<option value="'+p.key+'"'+(p.key==='enroute'?' selected':'')+'>'+p.label+' — '+p.sub.replace(/ ⓘ$/,'')+'</option>'));
+    PHASES_META.forEach(p => parts.push('<option value="'+p.key+'"'+(p.key==='enroute'?' selected':'')+'>'+p.label+' · '+p.sub.replace(/ ⓘ$/,'')+'</option>'));
     parts.push('</select></div>');
     parts.push('<div class="field"><label>Notes (optional)</label><input type="text" id="custom_ex_note" placeholder="Form cue or reminder"></div>');
     parts.push('<button class="btn btn-gold" id="saveCustomExBtn" onclick="saveCustomExercise()">Add to This Workout</button>');
@@ -8866,7 +8866,7 @@ function filterAddExerciseCatalog(q) {
     parts.push('<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:13px" onclick="addExistingCatalogExercise('+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+(e.target||'')+'</span></div>');
   });
   if (!matches.length) {
-    parts.push('<div style="font-size:11px;color:var(--muted);padding:6px 2px">No catalog match — create it below.</div>');
+    parts.push('<div style="font-size:11px;color:var(--muted);padding:6px 2px">No catalog match. Create it below.</div>');
   }
   box.innerHTML = parts.join('');
 }
@@ -8936,7 +8936,7 @@ function sanitizeUserTextLong(s) {
 
 async function saveCustomExercise() {
   const name = sanitizeUserText(document.getElementById('custom_ex_name')?.value?.trim());
-  const target = sanitizeUserText(document.getElementById('custom_ex_target')?.value?.trim()) || '—';
+  const target = sanitizeUserText(document.getElementById('custom_ex_target')?.value?.trim()) || '–';
   const inputType = document.getElementById('custom_ex_type')?.value || 'reps_weight';
   const note = sanitizeUserText(document.getElementById('custom_ex_note')?.value?.trim()) || 'User-created exercise.';
   if (!name) { showToast('Enter an exercise name.'); return; }
@@ -8967,7 +8967,7 @@ async function saveCustomExercise() {
   await withDialogSpinner('Saving exercise…', () => dbSetProfile(profile));
 
   ST.showAddExercise = false;
-  showToast('✅ "'+name+'" added — it will appear in this workout going forward.');
+  showToast('✅ "'+name+'" added. It will appear in this workout going forward.');
   renderFlight(document.getElementById('mainPage'));
 }
 
@@ -8978,7 +8978,7 @@ function confirmRemoveExercise(exId, exName, isCustom) {
     '<div class="modal-sheet">' +
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">Remove '+exName+'?</div>' +
-    '<div class="modal-body" style="margin-bottom:14px">This removes it from today\'s workout. Any sets already logged for it will be discarded when you set the chocks. This only affects today — it won\'t change tomorrow\'s plan.</div>' +
+    '<div class="modal-body" style="margin-bottom:14px">This removes it from today\'s workout. Any sets already logged for it will be discarded when you set the chocks. This only affects today. It won\'t change tomorrow\'s plan.</div>' +
     '<button class="btn" style="background:var(--red);color:#fff" onclick="'+(isCustom?'deleteCustomExercise':'removeCatalogExercise')+'(\''+exId+'\')">✕ CONFIRM REMOVE</button>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">CANCEL</button>' +
     '</div></div>';
@@ -9168,28 +9168,28 @@ function buildWorkoutSummary(session, allExDefs, weeklySessions, bodyWeightLb) {
 function buildDebriefMessages(summary) {
   const msgs = [];
   if (summary.completionPct === 100) {
-    msgs.push({ type:'ok', icon:'🎯', text:'Full mission complete — every exercise logged. That\'s the standard.' });
+    msgs.push({ type:'ok', icon:'🎯', text:'Full mission complete: every exercise logged. That\'s the standard.' });
   } else if (summary.completionPct >= 70) {
-    msgs.push({ type:'info', icon:'👍', text:'Solid session — '+summary.completionPct+'% of planned exercises logged.' });
+    msgs.push({ type:'info', icon:'👍', text:'Solid session: '+summary.completionPct+'% of planned exercises logged.' });
   } else {
     msgs.push({ type:'warn', icon:'📋', text:'Partial session ('+summary.completionPct+'% complete). Any movement counts, but try to close out all phases next time.' });
   }
 
   if (summary.prHits.length) {
     summary.prHits.forEach(pr => {
-      msgs.push({ type:'ok', icon:'🏆', text:'New PR: '+pr.name+' at '+pr.weight+' '+(pr.unit||'lb')+' — nice work.' });
+      msgs.push({ type:'ok', icon:'🏆', text:'New PR: '+pr.name+' at '+pr.weight+' '+(pr.unit||'lb')+'. Nice work.' });
     });
   }
 
   if (summary.sessionsThisWeek >= summary.targetDays) {
-    msgs.push({ type:'ok', icon:'🔥', text:summary.sessionsThisWeek+' sessions this week — you\'ve hit your '+summary.targetDays+'-day target. Consistency is what actually drives results.' });
+    msgs.push({ type:'ok', icon:'🔥', text:summary.sessionsThisWeek+' sessions this week. You\'ve hit your '+summary.targetDays+'-day target. Consistency is what actually drives results.' });
   } else {
     const remaining = summary.targetDays - summary.sessionsThisWeek;
-    msgs.push({ type:'info', icon:'📅', text:summary.sessionsThisWeek+' of '+summary.targetDays+' sessions this week — '+remaining+' more to hit your target.' });
+    msgs.push({ type:'info', icon:'📅', text:summary.sessionsThisWeek+' of '+summary.targetDays+' sessions this week: '+remaining+' more to hit your target.' });
   }
 
   if (summary.landingLogged === false) {
-    msgs.push({ type:'warn', icon:'🛬', text:'You skipped the Landing phase. Decompression and CNS down-regulation is what actually starts the recovery process — don\'t treat it as optional.' });
+    msgs.push({ type:'warn', icon:'🛬', text:'You skipped the Landing phase. Decompression and CNS down-regulation is what actually starts the recovery process. Don\'t treat it as optional.' });
   }
 
   return msgs;
@@ -9225,7 +9225,7 @@ function confirmSetChocks() {
       '<div class="modal-sheet">' +
       '<div class="modal-handle"></div>' +
       '<div class="modal-title">Nothing logged yet</div>' +
-      '<div class="modal-body" style="margin-bottom:14px">There\'s nothing to save — no exercise has any reps, weight, or time logged. You can discard this workout and head back, or keep going if you\'re not done.</div>' +
+      '<div class="modal-body" style="margin-bottom:14px">There\'s nothing to save: no exercise has any reps, weight, or time logged. You can discard this workout and head back, or keep going if you\'re not done.</div>' +
       '<button class="btn btn-outline" onclick="closeModal();discardWorkout()">Discard Workout</button>' +
       '<button class="btn btn-green mt8" onclick="closeModal()">Keep Training</button>' +
       '</div></div>';
@@ -9237,7 +9237,7 @@ function confirmSetChocks() {
     '<div class="modal-sheet">' +
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">Finish this workout now?</div>' +
-    '<div class="modal-body" style="margin-bottom:14px">You still have '+remaining+' exercise'+(remaining===1?'':'s')+' left ('+done+'/'+allEx.length+' done). Setting the chocks finishes and saves the workout as-is — anything not logged won\'t be recorded.</div>' +
+    '<div class="modal-body" style="margin-bottom:14px">You still have '+remaining+' exercise'+(remaining===1?'':'s')+' left ('+done+'/'+allEx.length+' done). Setting the chocks finishes and saves the workout as-is. Anything not logged won\'t be recorded.</div>' +
     '<button class="btn btn-green" '+(ST.chocksSaving?'disabled':'')+' onclick="closeModal();setTheChocks()">'+(ST.chocksSaving?'⏳ Saving…':'🔒 Finish Anyway')+'</button>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">Keep Training</button>' +
     '</div></div>';
@@ -9319,7 +9319,7 @@ async function setTheChocks() {
     showToast('✅ Chocks set. Data synced.');
     cancelWorkoutReminderNative(); // suppress 3-day reminder — user just trained
   } catch(e) {
-    showToast('⚠️ Saved locally — will sync when online.');
+    showToast('⚠️ Saved locally. Will sync when online.');
     localStorage.setItem('fcf_session_' + Date.now(), JSON.stringify(session));
   }
 
@@ -9515,10 +9515,10 @@ async function renderTrends(p) {
   // Chad's call was to show a teaser instead, so the feature isn't
   // invisible to people who'd never otherwise know it exists.
   if (isPro()) {
-    parts.push(aiCoachCard('aiProgressionCard', 'aiProgressionText', 'AI COACH — YOUR PATTERNS', 'gold'));
+    parts.push(aiCoachCard('aiProgressionCard', 'aiProgressionText', 'AI COACH · YOUR PATTERNS', 'gold'));
   } else {
-    parts.push(aiCoachTeaser('AI COACH — YOUR PATTERNS', 'gold',
-      'You\'ve been consistent with your upper body work this week, and your recovery scores are trending in the right direction — but there\'s a pattern in your training around long duty days worth knowing about.'));
+    parts.push(aiCoachTeaser('AI COACH · YOUR PATTERNS', 'gold',
+      'You\'ve been consistent with your upper body work this week, and your recovery scores are trending in the right direction, but there\'s a pattern in your training around long duty days worth knowing about.'));
   }
 
   parts.push('<div class="section-label">BIOMETRICS LOG &amp; TRENDS</div>');
@@ -9698,13 +9698,13 @@ async function saveBio() {
         const pending = JSON.parse(localStorage.getItem('fcf_bio_pending') || '[]');
         pending.push({ weight_lb:wt, waist_in:waist, systolic_bp:sys, diastolic_bp:dia, fasting_glucose:gluc, logged_at: new Date().toISOString() });
         localStorage.setItem('fcf_bio_pending', JSON.stringify(pending));
-        showBigToast('No connection — saved locally, will sync automatically.', 'warn');
+        showBigToast('No connection: saved locally, will sync automatically.', 'warn');
       } catch(e2) {
         console.warn('saveBio local fallback also failed:', e2);
-        showBigToast('Could not save — check connection.','warn');
+        showBigToast('Could not save. Check connection.','warn');
       }
     } else {
-      showBigToast('Could not save — check connection.','warn');
+      showBigToast('Could not save. Check connection.','warn');
     }
   }
 
@@ -9978,7 +9978,7 @@ function renderDebrief(p) {
   parts.push('</div>');
 
   parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">');
-  parts.push(glowTile('MINUTES', s.durationMinutes||'—', 'gold'));
+  parts.push(glowTile('MINUTES', s.durationMinutes||'–', 'gold'));
   parts.push(glowTile('SETS', s.totalSets, 'blue'));
   parts.push(glowTile('CALORIES', s.estCalories, 'teal'));
   parts.push('</div>');
@@ -10127,7 +10127,7 @@ async function exportCSV() {
       ]);
     });
   });
-  section('NUTRITION — ITEMS', ['Date','Time','Meal','Food','Source','Calories','Protein (g)','Carbs (g)','Fat (g)','Fiber (g)','Sugar (g)'], mealItemRows);
+  section('NUTRITION · ITEMS', ['Date','Time','Meal','Food','Source','Calories','Protein (g)','Carbs (g)','Fat (g)','Fiber (g)','Sugar (g)'], mealItemRows);
 
   section('DAILY INPUTS', ['Date','Water (L)','Flight Hours','Flight Hours Edited','Sleep Hours','Readiness'],
     dailyInputRows.map(d => [d.date||'', d.water_in??'', d.flight_hrs??'', d.flight_hrs_touched ? 'yes':'', d.sleep_hours??'', d.readiness??'']));
@@ -10169,7 +10169,7 @@ async function exportCSV() {
   a.href = url; a.download = 'flight-crew-fitness-'+new Date().toISOString().slice(0,10)+'.csv';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  setTimeout(() => showBigToast('CSV exported — ready for AI analysis.','ok'), 300);
+  setTimeout(() => showBigToast('CSV exported, ready for AI analysis.','ok'), 300);
 }
 
 // ─── OURA RING OAUTH2 + DATA SYNC ────────────────────────────────────────────
@@ -10207,7 +10207,7 @@ async function handleOuraCallback() {
 
   const savedState = localStorage.getItem('oura_state');
   if (state !== savedState) {
-    showBigToast('Oura auth state mismatch — please try again.','warn');
+    showBigToast('Oura auth state mismatch. Please try again.','warn');
     window.history.replaceState({}, '', window.location.pathname);
     return;
   }
@@ -10629,8 +10629,8 @@ function showOuraDuplicateConfirm() {
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">Possible duplicate</div>' +
     '<div class="modal-body" style="margin-bottom:14px">Oura logged a '+mins+'-minute '+label+' on <strong>'+dateStr+'</strong> at '+timeStr+'. This overlaps with '+similarStr+'. Same workout, or a separate one?</div>' +
-    '<button class="btn btn-outline" onclick="resolveOuraDuplicate(\'skip\')">Already logged — skip this one</button>' +
-    '<button class="btn btn-gold mt8" onclick="resolveOuraDuplicate(\'import\')">Different workout — import it too</button>' +
+    '<button class="btn btn-outline" onclick="resolveOuraDuplicate(\'skip\')">Already logged, skip this one</button>' +
+    '<button class="btn btn-gold mt8" onclick="resolveOuraDuplicate(\'import\')">Different workout, import it too</button>' +
     '</div></div>';
 }
 
@@ -10711,7 +10711,7 @@ async function syncOuraData(force) {
     let activityDiagnostic = null;
     if (force && !activityItem) {
       if (!activity) {
-        activityDiagnostic = 'The daily_activity request itself failed — a network error, expired token, or missing permission scope. This is NOT the "Oura hasn\'t posted today\'s data yet" case; something is actually broken in the connection.';
+        activityDiagnostic = 'The daily_activity request itself failed: a network error, expired token, or missing permission scope. This is NOT the "Oura hasn\'t posted today\'s data yet" case; something is actually broken in the connection.';
       } else if (!activity.data || !activity.data.length) {
         activityDiagnostic = 'The request succeeded but returned zero rows for the range '+yesterday+' to '+fetchEnd+'.';
       } else {
@@ -10720,7 +10720,7 @@ async function syncOuraData(force) {
     }
 
     if (!readinessItem) {
-      if (force) showBigToast('No readiness data yet — sync your Oura app first.','info');
+      if (force) showBigToast('No readiness data yet. Sync your Oura app first.','info');
       return;
     }
 
@@ -10771,7 +10771,7 @@ async function syncOuraData(force) {
       // deliberate action expecting confirmation.
       const alreadyShownToday = localStorage.getItem(OURA_TOAST_KEY) === today;
       if (force || !alreadyShownToday) {
-        const sleepScoreStr = row.sleep_score ? String(row.sleep_score) : '—';
+        const sleepScoreStr = row.sleep_score ? String(row.sleep_score) : '–';
         showBigToast('Oura synced\nReadiness: '+score+' → '+label+'\nSleep Score: '+sleepScoreStr,'ok');
         localStorage.setItem(OURA_TOAST_KEY, today);
       }
@@ -10912,7 +10912,7 @@ async function uploadProgressPhoto(useCamera) {
       await loadPhotoTimeline();
     } catch(e) {
       if (e.message?.includes('Bucket not found')) {
-        showBigToast('Photo storage isn\'t set up yet — please try again later or send feedback.','warn');
+        showBigToast('Photo storage isn\'t set up yet. Please try again later or send feedback.','warn');
       } else {
         showBigToast('Upload failed: '+e.message,'warn');
       }
@@ -10939,7 +10939,7 @@ async function loadAllPhotoMeta() {
     offset += pageSize;
   }
   return all.map(f => {
-    const datePart = f.name.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] || f.created_at?.slice(0,10) || '—';
+    const datePart = f.name.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] || f.created_at?.slice(0,10) || '–';
     const uploadTs = parseInt(f.name.match(/-(\d+)\./)?.[1] || '0', 10);
     return { name: f.name, date: datePart, uploadTs };
   }).sort((a, b) => {
@@ -11064,7 +11064,7 @@ function renderProfile(p) {
   parts.push('<div class="section-label" style="margin-top:0">BODY METRICS</div>');
   parts.push('<div class="field-row" style="margin-bottom:10px">');
   parts.push('<div class="field" style="margin-bottom:0"><label>Sex</label><select id="bmSex">');
-  parts.push('<option value=""'+(!ST.sex?' selected':'')+'>—</option>');
+  parts.push('<option value=""'+(!ST.sex?' selected':'')+'>–</option>');
   parts.push('<option value="male"'+(ST.sex==='male'?' selected':'')+'>Male</option>');
   parts.push('<option value="female"'+(ST.sex==='female'?' selected':'')+'>Female</option>');
   parts.push('</select></div>');
@@ -11074,20 +11074,20 @@ function renderProfile(p) {
   // free-text entry for a value with exactly 4x12 sane combinations.
   parts.push('<div class="field" style="margin-bottom:0"><label>Height</label><div style="display:flex;gap:6px">');
   parts.push('<select id="bmFt" style="flex:1">');
-  parts.push('<option value=""'+(hFt===null?' selected':'')+'>— ft</option>');
+  parts.push('<option value=""'+(hFt===null?' selected':'')+'>– ft</option>');
   for (let f=4; f<=7; f++) parts.push('<option value="'+f+'"'+(hFt===f?' selected':'')+'>'+f+' ft</option>');
   parts.push('</select>');
   parts.push('<select id="bmIn" style="flex:1">');
-  parts.push('<option value=""'+(hIn===null?' selected':'')+'>— in</option>');
+  parts.push('<option value=""'+(hIn===null?' selected':'')+'>– in</option>');
   for (let i2=0; i2<=11; i2++) parts.push('<option value="'+i2+'"'+(hIn===i2?' selected':'')+'>'+i2+' in</option>');
   parts.push('</select>');
   parts.push('</div></div>');
   parts.push('</div>');
   parts.push('<div class="field"><label>Age <span class="info-i" onclick="showBioInfo(\'age\')">i</span></label>');
   parts.push('<input id="bmAge" type="text" inputmode="numeric" placeholder="e.g. 42" value="'+(ST.age||'')+'"></div>');
-  parts.push('<div class="field"><label>Call Sign — Leaderboard Name</label>');
+  parts.push('<div class="field"><label>Call Sign (Leaderboard Name)</label>');
   parts.push('<input id="bmUsername" type="text" maxlength="20" placeholder="e.g. MaverickPHX" value="'+(ST.username||'')+'">');
-  parts.push('<div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.5">Shown publicly on the leaderboards. Leave blank to stay off the boards — your lifts stay private either way until you set one.</div></div>');
+  parts.push('<div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.5">Shown publicly on the leaderboards. Leave blank to stay off the boards. Your lifts stay private either way until you set one.</div></div>');
   parts.push('<button class="btn btn-outline" onclick="saveBodyMetrics()">💾 Save Body Metrics</button>');
   parts.push('</div>');
 
@@ -11120,7 +11120,7 @@ function renderProfile(p) {
   parts.push('</div>');
   const freq = FREQUENCY_GUIDE[ST.level];
   parts.push('<div class="divider"></div>');
-  parts.push('<div style="font-size:11px;color:var(--muted);line-height:1.6"><strong style="color:var(--text)">'+freq.days+' days/week</strong> recommended — '+freq.split+'. '+freq.note+'</div>');
+  parts.push('<div style="font-size:11px;color:var(--muted);line-height:1.6"><strong style="color:var(--text)">'+freq.days+' days/week</strong> recommended: '+freq.split+'. '+freq.note+'</div>');
   parts.push('</div>');
 
   // ── Fuel plan ────────────────────────────────────────────────────────────
@@ -11206,13 +11206,13 @@ function renderMore(p) {
   if (isPro()) {
     const until = ST.subscription?.current_period_end
       ? new Date(ST.subscription.current_period_end).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : null;
-    parts.push('<div class="fb"><span style="font-size:13px;font-weight:600;color:var(--gold)">❖ Pro — all features unlocked</span></div>');
+    parts.push('<div class="fb"><span style="font-size:13px;font-weight:600;color:var(--gold)">❖ Pro: all features unlocked</span></div>');
     if (until) {
       // "Renews" implies auto-billing, which a promo grant doesn't have —
       // it just runs out. Saying "Renews" for a comped account would be
       // actively misleading about what happens when the date arrives.
       const isPromo = ST.subscription?.platform === 'promo';
-      const label = isPromo ? 'Pro (promo) — expires ' : (ST.subscription?.status==='grace'?'Renewal pending — ':'Renews ');
+      const label = isPromo ? 'Pro (promo): expires ' : (ST.subscription?.status==='grace'?'Renewal pending: ':'Renews ');
       parts.push('<div style="font-size:11px;color:var(--muted);margin-top:4px">'+label+until+'</div>');
     }
     // BUG FIX (reported: a web/Stripe subscriber saw "Manage or cancel in
@@ -11226,7 +11226,7 @@ function renderMore(p) {
     // pointing at "your Apple ID settings" (false) or inventing a portal
     // link that doesn't exist (also false) are both wrong — support is the
     // only honest option today.
-    const manageCopy = ST.subscription?.platform === 'promo' ? 'Comp/promo access — no billing, nothing to manage.'
+    const manageCopy = ST.subscription?.platform === 'promo' ? 'Comp/promo access: no billing, nothing to manage.'
       : ST.subscription?.platform === 'web' ? 'Manage or cancel by contacting support.'
       : 'Manage or cancel in your Apple ID subscription settings.';
     parts.push('<div style="font-size:11px;color:var(--muted);margin-top:8px">'+manageCopy+'</div>');
@@ -11239,14 +11239,14 @@ function renderMore(p) {
       ['Meds & supplement reminders',  '✓',       '✓'],
       ['Food photo analysis',          '3/week',  'Unlimited'],
       ['AI calendar classification',   '1/month', 'Unlimited'],
-      ['AI progression analytics',     '—',       '✓'],
-      ['AI fatigue calibration',       '—',       '✓'],
-      ['AI fueling logistics',         '—',       '✓'],
-      ['Full trends history',          '—',       '✓'],
-      ['Oura Ring direct connect',     '—',       '✓'],
-      ['HRV drop alert',               '—',       '✓'],
-      ['Layover workout reminder',     '—',       '✓'],
-      ['Weekly training summary',      '—',       '✓'],
+      ['AI progression analytics',     '–',       '✓'],
+      ['AI fatigue calibration',       '–',       '✓'],
+      ['AI fueling logistics',         '–',       '✓'],
+      ['Full trends history',          '–',       '✓'],
+      ['Oura Ring direct connect',     '–',       '✓'],
+      ['HRV drop alert',               '–',       '✓'],
+      ['Layover workout reminder',     '–',       '✓'],
+      ['Weekly training summary',      '–',       '✓'],
     ];
     parts.push('<div style="display:grid;grid-template-columns:1fr auto auto;gap:0;margin-bottom:14px;position:relative">');
     parts.push('<div style="position:absolute;top:0;bottom:0;right:0;width:33%;background:linear-gradient(180deg,rgba(201,168,76,0.08),rgba(201,168,76,0.03));border-radius:8px;pointer-events:none"></div>');
@@ -11256,11 +11256,11 @@ function renderMore(p) {
     parts.push('<div style="font-size:10px;color:var(--gold);letter-spacing:.06em;padding:0 0 6px 8px;text-align:center;font-weight:700;position:relative">PRO</div>');
     rows.forEach(([label, free, pro], i) => {
       const border = i < rows.length - 1 ? 'border-bottom:1px solid var(--border)' : '';
-      const proColor = pro === '—' ? 'var(--muted)' : pro === '✓' ? 'var(--green)' : 'var(--gold)';
-      const freeColor = free === '—' ? 'var(--muted)' : free === '✓' ? 'var(--green)' : 'var(--muted)';
+      const proColor = pro === '–' ? 'var(--muted)' : pro === '✓' ? 'var(--green)' : 'var(--gold)';
+      const freeColor = free === '–' ? 'var(--muted)' : free === '✓' ? 'var(--green)' : 'var(--muted)';
       parts.push('<div style="font-size:12px;padding:8px 0;'+border+';position:relative">'+label+'</div>');
       parts.push('<div style="font-size:11px;color:'+freeColor+';padding:8px 10px;'+border+';text-align:center;position:relative">'+free+'</div>');
-      parts.push('<div style="font-size:11px;color:'+proColor+';padding:8px 0 8px 8px;'+border+';text-align:center;font-weight:'+(pro!=='—'?'600':'400')+';position:relative">'+pro+'</div>');
+      parts.push('<div style="font-size:11px;color:'+proColor+';padding:8px 0 8px 8px;'+border+';text-align:center;font-weight:'+(pro!=='–'?'600':'400')+';position:relative">'+pro+'</div>');
     });
     parts.push('</div>');
     parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px">');
@@ -11356,14 +11356,14 @@ function renderDevices(p) {
       parts.push('<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5">Oura data detected via Apple Health. Connect directly below for full readiness scores.</div>');
     }
     if (appleWatch) {
-      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5">Apple Watch detected — workouts, HR, and HRV sync automatically.</div>');
+      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5">Apple Watch detected: workouts, HR, and HRV sync automatically.</div>');
     }
   }
   parts.push('</div>');
 
   // ── Oura Direct (optional, enhanced) ────────────────────────────────────
   parts.push('<div class="card mb12">');
-  parts.push('<div class="section-label" style="margin-top:0">OURA RING — ENHANCED</div>');
+  parts.push('<div class="section-label" style="margin-top:0">OURA RING · ENHANCED</div>');
   if (ST.ouraConnected && ST.ouraScore !== null) {
     const scoreColor = ST.ouraScore >= 70 ? 'var(--green)' : ST.ouraScore >= 60 ? 'var(--amber)' : 'var(--red)';
     const scoreCondition = ST.ouraScore >= 70 ? 'go' : ST.ouraScore >= 60 ? 'marginal' : 'nogo';
@@ -11373,18 +11373,18 @@ function renderDevices(p) {
     parts.push('<div class="fb mt8"><span style="font-size:13px">Today\'s Readiness</span><span style="font-family:var(--mono);font-size:18px;font-weight:700;color:'+scoreColor+'">'+ST.ouraScore+'</span></div>');
     parts.push('<div style="font-size:12px;color:'+scoreColor+';font-weight:600;margin-top:2px">Pilot Condition → '+scoreLabel+'</div>');
     if (ST.ouraData) {
-      const hrv = ST.ouraData.hrv_balance || '—';
+      const hrv = ST.ouraData.hrv_balance || '–';
       parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px">');
-      parts.push(glowTile('SLEEP SCORE', ST.ouraData.sleep_score||'—', 'blue'));
+      parts.push(glowTile('SLEEP SCORE', ST.ouraData.sleep_score||'–', 'blue'));
       parts.push(glowTile('HRV BAL.', hrv, 'green'));
-      parts.push(glowTile('ACTIVITY', ST.ouraData.activity_score||'—', 'teal'));
+      parts.push(glowTile('ACTIVITY', ST.ouraData.activity_score||'–', 'teal'));
       parts.push('</div>');
     }
     parts.push('</div>');
     parts.push('<button class="btn btn-outline" onclick="syncOuraData(true)">↻ Sync Now</button>');
     parts.push('<button class="btn btn-outline mt8" onclick="importHistoricalOura(180)">📥 Import Last 6 Months</button>');
   } else {
-    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.65">Optional — connect directly to Oura for full readiness scores used to auto-set your Pilot Condition. Readiness 70+ = GO, 60–69 = MARGINAL, below 60 = NO-GO.</div>');
+    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.65">Optional: connect directly to Oura for full readiness scores used to auto-set your Pilot Condition. Readiness 70+ = GO, 60–69 = MARGINAL, below 60 = NO-GO.</div>');
     parts.push('<button class="btn btn-outline" onclick="connectOura()">Connect Oura Directly →</button>');
   }
   parts.push('</div>');
@@ -11414,29 +11414,29 @@ async function loadSuperUserStats() {
     const stat = (n, lbl) => '<div class="stat-box"><div class="stat-val">'+n+'</div><div class="stat-lbl">'+lbl+'</div></div>';
     el.innerHTML =
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">' +
-      stat(seen7.size, 'Active — 7 Days') + stat(seen30.size, 'Active — 30 Days') +
+      stat(seen7.size, 'Active (7 Days)') + stat(seen30.size, 'Active (30 Days)') +
       '</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
-      stat(sessions7, 'Sessions — 7 Days') + stat(seenAll.size, 'All-Time Active Users') +
+      stat(sessions7, 'Sessions (7 Days)') + stat(seenAll.size, 'All-Time Active Users') +
       '</div>';
   } catch(e) {
     const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
     el.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px">'+(offline
       ? '📡 Needs a connection to load.'
-      : 'Couldn\'t load — the admin read policy on workout_sessions may not be set up yet.')+'</div>';
+      : 'Couldn\'t load. The admin read policy on workout_sessions may not be set up yet.')+'</div>';
   }
 }
 
 function renderSuperUser(p) {
   if (!isSuperUser()) { p.innerHTML = '<div class="section-label">NOT AUTHORIZED</div>'; return; }
   const parts = [moreBackLink()];
-  parts.push('<div class="section-label" style="margin-top:0">SUPER USER — ACTIVITY REPORT</div>');
+  parts.push('<div class="section-label" style="margin-top:0">SUPER USER · ACTIVITY REPORT</div>');
   parts.push('<div class="card mb12">');
-  parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">"Active" means a real logged workout, not just an account existing — a truer signal than raw signups, which aren\'t readable from the app at all.</div>');
+  parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">"Active" means a real logged workout, not just an account existing (a truer signal than raw signups, which aren\'t readable from the app at all).</div>');
   parts.push('<div id="suStats" style="text-align:center;color:var(--muted);font-size:12px">Loading…</div>');
   parts.push('</div>');
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">TEMP: RAW OURA WORKOUT DUMP</div>');
-  parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">One-time diagnostic — an auto-detected treadmill run imported with no duration. Dumps the raw Oura workout data for the last 3 days to see exactly what fields an auto-detected session actually has, compared to a manually-confirmed one.</div>');
+  parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">One-time diagnostic: an auto-detected treadmill run imported with no duration. Dumps the raw Oura workout data for the last 3 days to see exactly what fields an auto-detected session actually has, compared to a manually-confirmed one.</div>');
   parts.push('<button class="btn btn-outline" onclick="dumpRawOuraWorkouts()">🔬 Dump Raw Workout Data</button>');
   parts.push('<div id="ouraDumpResults" style="margin-top:10px;font-family:var(--mono);font-size:9px;color:var(--muted);word-break:break-all;white-space:pre-wrap"></div>');
   parts.push('</div>');
@@ -11771,7 +11771,7 @@ async function loadTodaysMeals() {
 }
 
 async function deleteMealLog(id) {
-  try { await SB.from('meal_logs').delete().eq('id', id); } catch(e) { console.warn('Deleting meal log failed:', e); showToast('⚠️ Could not delete — try again.'); }
+  try { await SB.from('meal_logs').delete().eq('id', id); } catch(e) { console.warn('Deleting meal log failed:', e); showToast('⚠️ Could not delete. Try again.'); }
   ST.todaysMeals = (ST.todaysMeals || []).filter(m => m.id !== id);
   renderPage();
 }
@@ -12293,7 +12293,7 @@ function buildTodayBriefing(ctx) {
 
   // 2. Low readiness overrides an available window. Rest is the recommendation.
   if (readiness !== null && readiness < 60) {
-    return { tone:'rest', headline:'Readiness is low — take it easy',
+    return { tone:'rest', headline:'Readiness is low: take it easy',
       body:'Readiness at '+readiness+'. A hard session today costs more than it returns. Stretching, an easy walk, or a nap if there\'s time before your next report.',
       action:{ label:'Start a light session', fn:"switchTab('preflight')" } };
   }
@@ -12304,7 +12304,7 @@ function buildTodayBriefing(ctx) {
   // Framed as a question, not a directive: only the person actually knows
   // if the nap was enough.
   if (oura.napDetected) {
-    return { tone:'go', headline:'Nice nap — feeling recharged?',
+    return { tone:'go', headline:'Nice nap. Feeling recharged?',
       body:'Sleep score just went from '+oura.napDetected.from+' to '+oura.napDetected.to+'. That\'s real recovery. If you\'re feeling it, this could be a good window to train.',
       action:{ label:'Start a workout', fn:"switchTab('preflight')" } };
   }
@@ -12312,7 +12312,7 @@ function buildTodayBriefing(ctx) {
   // 3. Long duty yesterday is a real recovery cost even when readiness looks fine.
   if (sched.yesterdayDutyHours >= 8 && !training.workoutToday) {
     return { tone:'ease', headline:'Yesterday was a long day',
-      body:sched.yesterdayDutyHours+' hours of flying yesterday. Something moderate today — mobility or a walk — will do more for you than pushing hard.',
+      body:sched.yesterdayDutyHours+' hours of flying yesterday. Something moderate today (mobility or a walk) will do more for you than pushing hard.',
       action:{ label:'Start a session', fn:"switchTab('preflight')" } };
   }
 
@@ -12350,8 +12350,8 @@ function buildTodayBriefing(ctx) {
     const hydrationTip = ST.trackHydration ? 'Keep water up through the rest of the day and protect your sleep window tonight.' : 'Protect your sleep window tonight.';
     const tierCopy = {
       well_short: 'Work\'s done. You\'re still well short on protein, and that\'s the piece that turns the session into progress.',
-      behind: 'Work\'s done. You\'re falling behind on protein for this point in the day — make it a priority at your next meal.',
-      slightly_behind: 'Work\'s done. You\'re a bit behind on protein for this point in the day — not urgent, but worth catching up at your next meal.',
+      behind: 'Work\'s done. You\'re falling behind on protein for this point in the day. Make it a priority at your next meal.',
+      slightly_behind: 'Work\'s done. You\'re a bit behind on protein for this point in the day. Not urgent, but worth catching up at your next meal.',
       on_track: 'Work\'s done. '+hydrationTip,
       tracking_off: 'Work\'s done. '+hydrationTip,
     };
@@ -12426,26 +12426,26 @@ function buildTodayBriefing(ctx) {
     const dutyEndHour = dutyEndMs ? new Date(dutyEndMs).getHours() : null;
     const isLateLanding = dutyEndHour !== null && (dutyEndHour >= 22 || dutyEndHour < 3);
 
-    let body = ord + ' leg done, ' + legWord + (dutyEnd ? ' — off at ' + dutyEnd + '.' : '.') + ' ';
+    let body = ord + ' leg done, ' + legWord + (dutyEnd ? ', off at ' + dutyEnd + '.' : '.') + ' ';
 
     if (isLateLanding) {
       if (!ate && usableMin >= 10) {
-        body += 'Grab dinner now — most places will be closed by the time you land. Something portable is worth taking for later too.';
+        body += 'Grab dinner now. Most places will be closed by the time you land. Something portable is worth taking for later too.';
       } else if (ate) {
-        body += 'Late landing — sleep is the priority tonight. Skip the session, get horizontal as soon as you can.';
+        body += 'Late landing: sleep is the priority tonight. Skip the session, get horizontal as soon as you can.';
       } else {
-        body += 'Not enough ground time for a real meal. Late landing means restaurants will be closed — grab anything portable you can find now.';
+        body += 'Not enough ground time for a real meal. Late landing means restaurants will be closed, so grab anything portable you can find now.';
       }
       const action = (!ate && usableMin >= 10)
-        ? { label: 'Fuel up — log a meal', fn: "switchTab('nutrition')" }
+        ? { label: 'Fuel up: log a meal', fn: "switchTab('nutrition')" }
         : null;
-      return { tone: 'neutral', headline: ord + ' leg done — ' + gapStr + where, body, action };
+      return { tone: 'neutral', headline: ord + ' leg done: ' + gapStr + where, body, action };
     }
 
     if (usableMin >= 20 && !ate) {
       body += gapStr+' on the ground is really about '+usableMin+' min once '
            + (stillDeplaning ? 'deplaning duties and the '+PRE_DEPARTURE_BUFFER_MIN+'-minute report requirement are' : 'the '+PRE_DEPARTURE_BUFFER_MIN+'-minute report requirement is')
-           + ' accounted for — worth eating now.';
+           + ' accounted for, so it\'s worth eating now.';
     } else if (usableMin >= 20 && ate) {
       // BUG FIX: unconditionally said "keep water up" — same gap as the
       // protein-pacing fix above, just for hydration this time.
@@ -12455,11 +12455,11 @@ function buildTodayBriefing(ctx) {
     } else if (usableMin >= 5) {
       body += gapStr+' on the ground is really only about '+usableMin+' min after '
            + (stillDeplaning ? 'duty requirements on both ends' : 'the report requirement')
-           + ' — enough for something quick and portable, not a real meal.';
+           + ': enough for something quick and portable, not a real meal.';
     } else {
       body += gapStr+' isn\'t real ground time once '
            + (stillDeplaning ? 'deplaning and report requirements are' : 'the report requirement is')
-           + ' accounted for — basically none of it is usable. Water if you can grab it, don\'t plan around food here.';
+           + ' accounted for, so basically none of it is usable. Water if you can grab it, don\'t plan around food here.';
     }
     if (dutyEnd) body += ' The window after '+dutyEnd+' is where a real session and dinner fit.';
 
@@ -12468,9 +12468,9 @@ function buildTodayBriefing(ctx) {
     // meal" regardless of the toggle, unlike every other action button
     // in this function.
     const action = (usableMin >= 5 && ST.trackNutrition)
-      ? { label: (usableMin >= 20 && !ate) ? 'Fuel up — log a meal' : 'Log a meal', fn:"switchTab('nutrition')" }
+      ? { label: (usableMin >= 20 && !ate) ? 'Fuel up: log a meal' : 'Log a meal', fn:"switchTab('nutrition')" }
       : null;
-    return { tone:'neutral', headline:ord+' leg done — '+gapStr+where, body, action };
+    return { tone:'neutral', headline:ord+' leg done: '+gapStr+where, body, action };
   }
 
   // 6. Duty is finished for the day (or hasn't started and there's real room).
@@ -12492,7 +12492,7 @@ function buildTodayBriefing(ctx) {
     return { tone: marginal ? 'ease' : 'go',
       headline:'You have '+gapStr.trim()+' before your next flight',
       body: marginal
-        ? 'Readiness at '+readiness+' — enough time to train, but keep the intensity honest rather than chasing a PR.'
+        ? 'Readiness at '+readiness+'. There\'s enough time to train, but keep the intensity honest rather than chasing a PR.'
         : (sched.layoverAirport ? 'On a layover in '+sched.layoverAirport+'. ' : '') + 'Good window for a full session.',
       action:{ label:'Start a workout', fn:"switchTab('preflight')" } };
   }
@@ -12501,13 +12501,13 @@ function buildTodayBriefing(ctx) {
   if (sched.legsCompleted > 0 && sched.legsRemaining === 0) {
     const endStr = sched.dutyEndsAt ? new Date(sched.dutyEndsAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : null;
     return { tone:'go', headline:'Done flying for the day',
-      body:(endStr ? 'Last leg landed at '+endStr+'. ' : '')+'This is your window — a full session now, then dinner, and you\'re still in good shape for tomorrow.',
+      body:(endStr ? 'Last leg landed at '+endStr+'. ' : '')+'This is your window: a full session now, then dinner, and you\'re still in good shape for tomorrow.',
       action:{ label:'Start a workout', fn:"switchTab('preflight')" } };
   }
 
   // 6. A short window — worth naming honestly rather than pretending it's enough.
   if (usableBeforeDeparture !== null && usableBeforeDeparture > 0 && usableBeforeDeparture < 45) {
-    return { tone:'neutral', headline:'Tight window — '+usableBeforeDeparture+' min',
+    return { tone:'neutral', headline:'Tight window: '+usableBeforeDeparture+' min',
       body: sched.layoverAirport
         ? 'Not enough time for a session once getting to the airport is factored in. Focus on getting ready and heading out.'
         : 'Not enough for a full session without rushing it. A brisk walk through the terminal or some mobility work fits better.',
@@ -12882,7 +12882,7 @@ function renderToday(p) {
   // see first than a single-day scaling call. Only fires when there's an
   // actual multi-day trip on the calendar; loadTripPlan no-ops otherwise.
   if (isPro()) {
-    parts.push(aiCoachCard('aiTripPlanCard', 'aiTripPlanText', 'AI COACH — TRIP PLAN', 'blue'));
+    parts.push(aiCoachCard('aiTripPlanCard', 'aiTripPlanText', 'AI COACH · TRIP PLAN', 'blue'));
   }
 
   // AI Fatigue Calibration — Pro only. Adds trip-context reasoning on top of
@@ -13060,8 +13060,8 @@ async function saveManualTargets(bmr, mode, trainingDays, tdee) {
     ST.manualCal = String(g.calories);
     ST.manualFat = String(g.fat);
     const msgs = [];
-    if (g.calorieClamped) msgs.push('Calories can\'t go below your resting metabolic rate ('+Math.round(bmrNum)+') — adjusted up.');
-    if (g.fatClamped) msgs.push('Fat can\'t go below '+MIN_DAILY_FAT_G+'g — adjusted up.');
+    if (g.calorieClamped) msgs.push('Calories can\'t go below your resting metabolic rate ('+Math.round(bmrNum)+'). Adjusted up.');
+    if (g.fatClamped) msgs.push('Fat can\'t go below '+MIN_DAILY_FAT_G+'g. Adjusted up.');
     ST.manualTargetsWarning = msgs.join(' ');
     renderPage();
     return;
@@ -13091,7 +13091,7 @@ function renderNutritionGoalsSetup(p) {
   parts.push('<div class="section-label" style="margin-top:0">FUEL PLAN SETUP</div>');
 
   if (!nutritionGoalsComplete()) {
-    parts.push('<div class="alert alert-info mb12"><div class="alert-icon">📋</div><div>Targets are calculated from your sex, age, height, and weight. Add those in Pilot Profile first and come back — nothing here works off guessed numbers.</div></div>');
+    parts.push('<div class="alert alert-info mb12"><div class="alert-icon">📋</div><div>Targets are calculated from your sex, age, height, and weight. Add those in Pilot Profile first and come back. Nothing here works off guessed numbers.</div></div>');
     parts.push('<button class="btn btn-outline" onclick="switchTab(\'profile\')">Go to Pilot Profile →</button>');
     p.innerHTML = parts.join('');
     return;
@@ -13137,8 +13137,8 @@ function renderNutritionGoalsSetup(p) {
         parts.push('<div class="fb" style="margin-bottom:7px"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--muted)">'+n+'</span><span style="font-family:var(--mono);font-size:13px;color:'+c+'">'+v+'g</span></div>');
       });
       parts.push('<div style="font-size:11px;color:var(--muted);line-height:1.65;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">');
-      if (t.mode === 'fatloss') parts.push('A '+MAX_DAILY_DEFICIT+'-calorie deficit, which is roughly a pound a week. Protein stays high on purpose — that\'s what protects the strength you\'re building while you lose fat.');
-      else if (t.mode === 'muscle') parts.push('A '+MAX_DAILY_SURPLUS+'-calorie surplus — enough to build, small enough that most of it isn\'t fat. Protein is set to support recovery between sessions.');
+      if (t.mode === 'fatloss') parts.push('A '+MAX_DAILY_DEFICIT+'-calorie deficit, which is roughly a pound a week. Protein stays high on purpose. That\'s what protects the strength you\'re building while you lose fat.');
+      else if (t.mode === 'muscle') parts.push('A '+MAX_DAILY_SURPLUS+'-calorie surplus: enough to build, small enough that most of it isn\'t fat. Protein is set to support recovery between sessions.');
       else parts.push('Matched to what you\'re burning, so you\'re fueling your training rather than running it on empty.');
       parts.push('</div>');
       if (t.flooredAtBMR) {
@@ -13151,7 +13151,7 @@ function renderNutritionGoalsSetup(p) {
       } else {
         parts.push('<div class="card mb12">');
         parts.push('<div class="section-label" style="margin-top:0">CUSTOM TARGETS</div>');
-        parts.push('<div style="font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:12px">Starting from the calculated numbers above — adjust anything you want. The same safety limits still apply: calories can\'t go below what your body burns at rest, and fat can\'t go below '+MIN_DAILY_FAT_G+'g regardless of the goal.</div>');
+        parts.push('<div style="font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:12px">Starting from the calculated numbers above, adjust anything you want. The same safety limits still apply: calories can\'t go below what your body burns at rest, and fat can\'t go below '+MIN_DAILY_FAT_G+'g regardless of the goal.</div>');
         parts.push('<div class="field"><label>Calories / day</label><input type="text" inputmode="numeric" value="'+ST.manualCal+'" oninput="ST.manualCal=this.value"></div>');
         parts.push('<div class="field-row">');
         parts.push('<div class="field"><label>Protein (g)</label><input type="text" inputmode="numeric" value="'+ST.manualProtein+'" oninput="ST.manualProtein=this.value"></div>');
@@ -13167,7 +13167,7 @@ function renderNutritionGoalsSetup(p) {
       parts.push('<button class="btn btn-gold" onclick="saveNutritionGoals('+JSON.stringify(t).replace(/"/g,'&quot;')+').then(()=>{switchTab(\'nutrition\')})">Use These Targets</button>');
     }
   } else {
-    parts.push('<div class="alert alert-info mb12"><div class="alert-icon">👍</div><div>No targets set. You\'ll still see calories and macros for everything you log — just without a goal attached.</div></div>');
+    parts.push('<div class="alert alert-info mb12"><div class="alert-icon">👍</div><div>No targets set. You\'ll still see calories and macros for everything you log, just without a goal attached.</div></div>');
     parts.push('<button class="btn btn-gold" onclick="saveNutritionGoals(null).then(()=>{switchTab(\'nutrition\')})">Log Without Targets</button>');
   }
 
@@ -13178,14 +13178,14 @@ function renderNutritionGoalsSetup(p) {
 async function renderNutrition(p) {
   await loadTodaysMeals();
   const parts = [moreBackLink()];
-  parts.push('<div class="section-label" style="margin-top:0">FUEL LOG — TODAY</div>');
+  parts.push('<div class="section-label" style="margin-top:0">FUEL LOG · TODAY</div>');
 
   const g = ST.nutritionGoals;
   const meals = ST.todaysMeals || [];
   const dayTotals = sumMealNutrients(meals.flatMap(m => m.meal_data.items));
 
   if (!g) {
-    parts.push('<div class="card mb12"><div style="font-size:13px;font-weight:600;margin-bottom:6px">Set up your fuel plan</div><div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px">Calorie and macro targets built from your own biometrics — or skip targets entirely and just log what you eat.</div><button class="btn btn-gold" onclick="switchTab(\'fuelplan\')">Set Up Fuel Plan</button></div>');
+    parts.push('<div class="card mb12"><div style="font-size:13px;font-weight:600;margin-bottom:6px">Set up your fuel plan</div><div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px">Calorie and macro targets built from your own biometrics, or skip targets entirely and just log what you eat.</div><button class="btn btn-gold" onclick="switchTab(\'fuelplan\')">Set Up Fuel Plan</button></div>');
   } else if (g.mode !== 'none') {
     // One consolidated card — ring plus macro bars — replacing what used to
     // be two separate totals displays (a goals-progress card, then a second
@@ -13219,7 +13219,7 @@ async function renderNutrition(p) {
   // an actual schedule to reason over (calendar or uploaded ICS).
   const hasScheduleForFueling = ST.flightSchedule?.length || ST.calendarEvents?.length;
   if (isPro() && hasScheduleForFueling) {
-    parts.push(aiCoachCard('aiFuelCard', 'aiFuelText', "AI COACH — TODAY'S FUELING", 'teal'));
+    parts.push(aiCoachCard('aiFuelCard', 'aiFuelText', "AI COACH · TODAY'S FUELING", 'teal'));
   }
 
   // Moved up per direct feedback — this used to be the last thing on the
@@ -13230,7 +13230,7 @@ async function renderNutrition(p) {
   // someone could scan 3 times, get blocked, and only then learn a limit
   // existed at all. This surfaces it up front instead.
   if (!isPro()) {
-    parts.push('<div style="font-size:10px;color:var(--muted);text-align:center;margin-top:-8px;margin-bottom:12px">📷 AI photo scans: '+FREE_WEEKLY_PHOTOS+'/week free — manual entry and barcode scan are unlimited</div>');
+    parts.push('<div style="font-size:10px;color:var(--muted);text-align:center;margin-top:-8px;margin-bottom:12px">📷 AI photo scans: '+FREE_WEEKLY_PHOTOS+'/week free; manual entry and barcode scan are unlimited</div>');
   }
   parts.push('<div id="mealBuilderRoot"></div>');
 
@@ -13513,7 +13513,7 @@ function renderMealBuilder() {
   // Meal Type and (implicitly) time are auto-set when the builder opens —
   // Meal Type by time of day, time to now at save — both still editable
   // here rather than requiring a tap before you can even take the photo.
-  parts.push('<div class="field" style="margin-top:12px"><label>Meal Type (auto-detected — change if needed)</label><select onchange="ST.mealBuilder.mealType=this.value">');
+  parts.push('<div class="field" style="margin-top:12px"><label>Meal Type (auto-detected, change if needed)</label><select onchange="ST.mealBuilder.mealType=this.value">');
   MEAL_TYPES.forEach(t => parts.push('<option value="'+t+'"'+(mb.mealType===t?' selected':'')+'>'+t[0].toUpperCase()+t.slice(1)+'</option>'));
   parts.push('</select></div>');
 
@@ -13611,7 +13611,7 @@ function filterUSDASearch(query) {
   usdaSearchDebounce = setTimeout(async () => {
     const results = await searchUSDAFoods(query);
     if (!document.getElementById('usdaSearchResults')) return; // builder closed mid-search
-    if (!results.length) { box.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-top:6px">No matches — try manual entry below.</div>'; return; }
+    if (!results.length) { box.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-top:6px">No matches. Try manual entry below.</div>'; return; }
     box.innerHTML = results.map((f,i) =>
       '<div class="card" style="padding:8px;margin-top:6px;cursor:pointer" onclick="selectUSDAFood('+i+')"><div style="font-size:13px">'+foodEmoji(f.description)+' '+f.description+(f.brandName?' <span style="color:var(--muted);font-size:11px">('+f.brandName+')</span>':'')+'</div><div style="font-size:11px;color:var(--muted)">'+f.nutrients.calories+' cal per '+usdaReferenceLabel(f)+'</div></div>'
     ).join('');
@@ -13978,7 +13978,7 @@ const FCFCamera = (() => {
           document.getElementById('recentMealsSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
       } else {
-        showToast('No recent meals yet — log a few and they\'ll show up here.');
+        showToast('No recent meals yet. Log a few and they\'ll show up here.');
       }
     });
   }
@@ -14012,7 +14012,7 @@ function analyzeFoodPhoto() {
   } else {
     bindFoodPhotoInputs();
     const el = document.getElementById('foodCameraInput');
-    if (!el) { showBigToast('Camera unavailable — try reloading the app.', 'warn'); return; }
+    if (!el) { showBigToast('Camera unavailable. Try reloading the app.', 'warn'); return; }
     el.value = '';
     el.click();
   }
@@ -14043,7 +14043,7 @@ function analyzeFoodPhotoFromLibrary() {
   if (!ST.user) { showBigToast('Sign in to analyze food photos.', 'warn'); return; }
   bindFoodPhotoInputs();
   const el = document.getElementById('foodLibraryInput');
-  if (!el) { showBigToast('Photo library unavailable — try reloading the app.', 'warn'); return; }
+  if (!el) { showBigToast('Photo library unavailable. Try reloading the app.', 'warn'); return; }
   el.value = '';
   el.click();
 }
@@ -14141,14 +14141,14 @@ function buildItemReviewCardHTML(index) {
   const lowConfidence = meta.source === 'photo' && meta.confidence < 0.8;
   const parts = [];
   parts.push('<div class="card mt8" style="border-color:var(--gold)">');
-  parts.push('<div style="font-size:11px;color:var(--gold);font-weight:700;margin-bottom:8px">✓ ADDED — review or correct below</div>');
+  parts.push('<div style="font-size:11px;color:var(--gold);font-weight:700;margin-bottom:8px">✓ ADDED: review or correct below</div>');
 
   if (meta.source === 'photo' && meta.imageUrl) {
     parts.push('<img src="' + meta.imageUrl + '" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;margin-bottom:10px">');
   }
 
   if (lowConfidence) {
-    parts.push('<div style="font-size:12px;color:var(--amber);margin-bottom:8px">⚠ Best guess only (' + Math.round(meta.confidence * 100) + '% confidence) — is this right? Edit anything below if not.</div>');
+    parts.push('<div style="font-size:12px;color:var(--amber);margin-bottom:8px">⚠ Best guess only (' + Math.round(meta.confidence * 100) + '% confidence). Is this right? Edit anything below if not.</div>');
   } else if (meta.source === 'photo') {
     parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + Math.round(meta.confidence * 100) + '% confidence</div>');
   } else if (meta.brandName) {
@@ -14260,7 +14260,7 @@ function logMealFromReview() {
 // itself never touches the photo quota or costs an API call.
 function scanFoodBarcode() {
   if (!ST.user) { showBigToast('Sign in to scan barcodes.', 'warn'); return; }
-  if (typeof Html5Qrcode === 'undefined') { showBigToast('Barcode scanner failed to load — check your connection and reload.', 'warn'); return; }
+  if (typeof Html5Qrcode === 'undefined') { showBigToast('Barcode scanner failed to load. Check your connection and reload.', 'warn'); return; }
   const root = document.getElementById('modalRoot');
   if (!root) return;
   root.innerHTML =
@@ -14384,7 +14384,7 @@ function renderData(p) {
     parts.push('<div class="card mb12" style="border-left:3px solid var(--gold)">');
     parts.push('<div style="font-size:13px;font-weight:600;margin-bottom:6px">📅 Schedule Import</div>');
     parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.65">');
-    parts.push('On the <strong style="color:var(--text)">iOS app</strong>, your flights sync automatically from Apple Calendar — no upload needed. ');
+    parts.push('On the <strong style="color:var(--text)">iOS app</strong>, your flights sync automatically from Apple Calendar, no upload needed. ');
     parts.push('If you\'re using the web version, or your airline gives you a schedule export, upload it as an <strong style="color:var(--text)">.ics file</strong> below. ');
     parts.push('Most crew scheduling systems (Crew Web, PBS, Google Calendar) can export .ics. ');
     parts.push('If yours exports CSV, email it to yourself, open it in Google Calendar, and export from there as .ics.');
@@ -14461,7 +14461,7 @@ function renderData(p) {
     if (ST.calendarGranted && ST.calendarEvents?.length) {
       const flights = ST.calendarEvents.filter(e => e.type === 'flight').length;
       const total   = ST.calendarEvents.length;
-      parts.push('<div style="font-size:11px;color:var(--green);margin-bottom:8px">✅ Connected — '+total+' events classified ('+flights+' flights)</div>');
+      parts.push('<div style="font-size:11px;color:var(--green);margin-bottom:8px">✅ Connected: '+total+' events classified ('+flights+' flights)</div>');
       if (ST.calendarDuplicatesRemoved > 0) {
         parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">ℹ️ '+ST.calendarDuplicatesRemoved+' duplicate calendar entries were automatically filtered out.</div>');
       }
@@ -14474,7 +14474,7 @@ function renderData(p) {
       parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">'+msg+'</div>');
       parts.push('<button class="btn btn-outline" onclick="haptic(\'light\');showToast(\'Syncing calendar\u2026\');if(typeof FCFBridge!==\'undefined\')FCFBridge.syncCalendar(ST.baseTimezone)">↻ Sync Now</button>');
     } else {
-      parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Grant access to your Apple Calendar and FCF will automatically detect your flights, layovers, and personal commitments — no manual upload needed.</div>');
+      parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Grant access to your Apple Calendar and FCF will automatically detect your flights, layovers, and personal commitments, no manual upload needed.</div>');
       parts.push('<button class="btn btn-outline" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.requestCalendar(ST.baseTimezone)">Connect Apple Calendar</button>');
     }
     parts.push('<div style="height:1px;background:var(--border);margin:16px 0"></div>');
@@ -14482,12 +14482,12 @@ function renderData(p) {
 
   // ── Uploaded File sub-section ───────────────────────────────────────────
   parts.push('<div style="font-size:11px;font-weight:700;color:var(--text);letter-spacing:0.04em;margin-bottom:8px">'+(isNative ? 'UPLOADED FILE (.ICS)' : 'FLIGHT SCHEDULE')+'</div>');
-  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">'+(isNative ? 'If your airline gives you a .ics export from their crew scheduling app, you can upload it here as an alternative or supplement to Apple Calendar.' : 'Upload your crew schedule as an .ics file — Preflight will automatically default your Mission Environment based on whether you\'re on a layover or at home today.')+'</div>');
+  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">'+(isNative ? 'If your airline gives you a .ics export from their crew scheduling app, you can upload it here as an alternative or supplement to Apple Calendar.' : 'Upload your crew schedule as an .ics file. Preflight will automatically default your Mission Environment based on whether you\'re on a layover or at home today.')+'</div>');
   if (ST.flightSchedule && ST.flightSchedule.length) {
     const dates = ST.flightSchedule.map(e => new Date(e.start)).sort((a,b)=>a-b);
     const first = dates[0].toLocaleDateString('en-US',{month:'short',day:'numeric'});
     const last  = dates[dates.length-1].toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-    parts.push('<div style="font-size:11px;color:var(--green);margin-bottom:8px">✅ Schedule loaded — covers '+first+' to '+last+' ('+ST.flightSchedule.length+' events)</div>');
+    parts.push('<div style="font-size:11px;color:var(--green);margin-bottom:8px">✅ Schedule loaded: covers '+first+' to '+last+' ('+ST.flightSchedule.length+' events)</div>');
     parts.push('<button class="btn btn-outline" onclick="downloadFlightScheduleICS()">📅 Download My Uploaded Schedule</button>');
   }
   parts.push('<input type="file" id="icsFileInput" accept=".ics" style="display:none" onchange="handleICSUpload(this.files[0])">');
@@ -14511,7 +14511,7 @@ async function handleICSUpload(file) {
     const text = await file.text();
     const events = parseFlightScheduleICS(text);
     if (!events.length) {
-      showBigToast("Couldn't find any events in that file — check it's the right format.", 'warn');
+      showBigToast("Couldn't find any events in that file. Check it's the right format.", 'warn');
       return;
     }
     ST.flightSchedule = events;
@@ -14520,11 +14520,11 @@ async function handleICSUpload(file) {
     profile.flightSchedule = events;
     profile.flightScheduleRaw = text;
     await dbSetProfile(profile);
-    showBigToast('✓ Schedule loaded — ' + events.length + ' events.', 'ok');
+    showBigToast('✓ Schedule loaded: ' + events.length + ' events.', 'ok');
     applyScheduleEnvironmentSuggestion();
     renderPage();
   } catch (e) {
-    showBigToast("Couldn't read that file — make sure it's a valid .ics export.", 'warn');
+    showBigToast("Couldn't read that file. Make sure it's a valid .ics export.", 'warn');
   }
 }
 

@@ -42,7 +42,7 @@ Classify each event into one of these types:
 - reserve: On-call reserve duty (may say "Reserve", "RSV", "Standby", "SBY").
 - training: Simulator, recurrent training, CRM, ground school, check ride.
 - duty: Check-in time, pre/post flight duty, sign-in/sign-out.
-- personal: Personal appointment — medical, family, social, errands.
+- personal: Personal appointment (medical, family, social, errands).
 - rest: Scheduled rest period between duty days.
 - unknown: Cannot determine from the available information.
 

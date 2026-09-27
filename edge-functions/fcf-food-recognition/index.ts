@@ -183,7 +183,7 @@ Respond with ONLY a JSON object, no other text, in exactly this shape:
   "advisorNote": "1-2 short sentences on the nutritional value of this specific meal, written for someone actively training - e.g. why the protein content helps, or why a mostly-refined-carb plate is more of an energy top-up than a balanced meal"
 }
 
-Confidence guidance: use 0.85+ only for a single, clearly identifiable, commonly-portioned food. Use below 0.8 for mixed dishes, ambiguous portions, poor lighting, partially visible food, or anything home-made/restaurant-plated where the exact ingredients aren't certain. Be conservative — an overconfident wrong guess is worse than an honest low score.
+Confidence guidance: use 0.85+ only for a single, clearly identifiable, commonly-portioned food. Use below 0.8 for mixed dishes, ambiguous portions, poor lighting, partially visible food, or anything home-made/restaurant-plated where the exact ingredients aren't certain. Be conservative: an overconfident wrong guess is worse than an honest low score.
 
 qualityRating guidance: judge THIS specific plate, not the food category in the abstract - a candy bar is "limited", a grilled protein + vegetables + whole grain plate is "nutritious", most everyday home-cooked meals with a good protein source land on "good", and anything mostly refined carbs/fried/sugary with little protein or fiber is "fair" at best.
 

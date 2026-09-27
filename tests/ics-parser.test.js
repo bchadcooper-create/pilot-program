@@ -350,6 +350,17 @@ test('medReminderPlan stops at the iOS budget and reports the overflow', () => {
   assertEqual(plan.scheduled.has('w6|08:00'), false, 'sixth dose not scheduled');
   ctx.ST.medications = [];
 });
+test('Preflight Checklist meds item completes with a med added or with "None"', () => {
+  const item = () => ctx.getSetupChecklist().find(i => i.icon === '💊');
+  ctx.ST.medications = []; ctx.ST.medsSkipped = false;
+  assertEqual(item().done, false, 'open by default');
+  ctx.ST.medsSkipped = true;
+  assertEqual(item().done, true, 'None completes it');
+  ctx.ST.medsSkipped = false;
+  ctx.ST.medications = [ctx.normalizeMedication({ name: 'Creatine' })];
+  assertEqual(item().done, true, 'adding a med completes it');
+  ctx.ST.medications = [];
+});
 test('applyProfileToState hydrates medications and drops malformed entries', () => {
   ctx.applyProfileToState({ medications: [{ name: 'Zinc', dose: 25, unit: 'mg' }, { name: '' }, 'junk'] });
   assertEqual(ctx.ST.medications.length, 1, 'one valid entry survives');

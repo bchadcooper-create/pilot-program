@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.43.1 / 20260916_4
+ * Version/build: fcf-v5.43.2 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.43.1';
+const FCF_VERSION = 'fcf-v5.43.2';
 const FCF_BUILD   = '20260916_4';
 
 
@@ -131,6 +131,7 @@ const ST = {
   medications: [],
   medsTakenToday: {},
   medsTakenDate: null,
+  medsSkipped: false,     // answered "None" on the Preflight Checklist meds item
   healthkit: null,        // populated after iOS HealthKit permission granted
   calendarEvents: null,   // classified calendar events from Apple Calendar or ICS
   calendarGranted: false, // whether Apple Calendar permission was granted
@@ -1794,6 +1795,7 @@ function renderLanding(root) {
     ['💧','Hydration math built in','0.3L per flight hour, with a sensible floor on no-fly days. The app tells you exactly how much to drink and when.'],
     ['🛫','Aviation-phased structure','Every workout follows Taxi (warmup) → Takeoff (heavy) → En Route (volume) → Landing (decompression) — a logical, recoverable structure, not just a random exercise list.'],
     ['📊','Real biometric tracking','Weight, waist, blood pressure, and fasting glucose — with the actual clinical protocol for measuring each one correctly.'],
+    ['💊','Meds and supplements on schedule','Log anything you take, from creatine to prescriptions, with the dose and times. Check doses off on your Today screen, get a phone reminder when one is due, and include the history in your data export for AI analysis. Private to your account.'],
     ['📶','Works with no signal','Keeps working with zero connectivity — at altitude, in a dead-zone layover hotel, wherever.'],
   ];
   features.forEach(([icon,title,desc]) => {
@@ -2956,6 +2958,7 @@ function applyProfileToState(profile) {
   if (typeof profile.trackHydration === 'boolean') ST.trackHydration = profile.trackHydration;
   if (profile.nutritionGoals)               ST.nutritionGoals = profile.nutritionGoals;
   ST.medications = Array.isArray(profile.medications) ? profile.medications.map(normalizeMedication).filter(Boolean) : [];
+  if (profile.medsSkipped) ST.medsSkipped = true;
   // Re-engagement / disengagement nudges for nutrition + hydration
   // tracking — see computeTrackingNudges().
   if (profile.nutritionTrackingDisabledAt)   ST.nutritionTrackingDisabledAt = profile.nutritionTrackingDisabledAt;
@@ -11233,6 +11236,7 @@ function renderMore(p) {
       ['Basic trends (30 days)',       '✓',       '✓'],
       ['3-day workout reminder',       '✓',       '✓'],
       ['Water & pre-flight reminders', '✓',       '✓'],
+      ['Meds & supplement reminders',  '✓',       '✓'],
       ['Food photo analysis',          '3/week',  'Unlimited'],
       ['AI calendar classification',   '1/month', 'Unlimited'],
       ['AI progression analytics',     '—',       '✓'],
@@ -12822,7 +12826,22 @@ function getSetupChecklist() {
       go: isNative && !ST.calendarGranted ? "FCFBridge.requestCalendar(ST.baseTimezone)" : "switchTab('data')" },
     { icon: '⌚', label: isNative ? 'Connect Oura or Apple Health' : 'Connect your Oura ring', done: hasWearable,
       hint: 'Readiness-based go / no-go calls', go: "switchTab('devices')" },
+    // Optional by nature: many pilots take nothing, so "None" completes it
+    // too. Otherwise this item could never be checked off for them.
+    { icon: '💊', label: 'Add meds or supplements', done: !!(ST.medications?.length || ST.medsSkipped),
+      hint: 'Dose check-offs on Today' + (isNative ? ' and reminders' : ''), go: "openMedicationEditor()",
+      skip: 'setMedsSkipped()' },
   ];
+}
+
+async function setMedsSkipped() {
+  ST.medsSkipped = true;
+  renderPage();
+  try {
+    const profile = (await dbGetProfile()) || {};
+    profile.medsSkipped = true;
+    await dbSetProfile(profile);
+  } catch (e) { /* worst case the item shows again on another device */ }
 }
 function buildSetupChecklistHTML() {
   if (localStorage.getItem(SETUP_DISMISS_KEY) === '1') return '';
@@ -12840,7 +12859,9 @@ function buildSetupChecklistHTML() {
       '<div style="width:22px;font-size:14px;text-align:center;color:'+(i.done?'var(--green)':'var(--muted)')+'">'+(i.done?'✓':'○')+'</div>' +
       '<div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600;'+(i.done?'color:var(--muted);text-decoration:line-through':'')+'">'+i.icon+' '+i.label+'</div>' +
       (i.done ? '' : '<div style="font-size:11px;color:var(--muted)">'+i.hint+'</div>') + '</div>' +
-      (i.done ? '' : '<div style="color:var(--muted);font-size:16px">›</div>') + '</div>');
+      (i.done ? '' : i.skip
+        ? '<button class="btn-ghost" style="font-size:12px;padding:6px 4px 6px 10px;text-decoration:none;color:var(--muted)" onclick="event.stopPropagation();haptic(\'light\');'+i.skip+'">None</button>'
+        : '<div style="color:var(--muted);font-size:16px">›</div>') + '</div>');
   });
   parts.push('<button class="btn-ghost mt8" style="display:block;width:100%;text-align:center;font-size:12px" onclick="haptic(\'light\');localStorage.setItem(SETUP_DISMISS_KEY,\'1\');renderPage()">I\'ll finish this later</button>');
   parts.push('</div>');

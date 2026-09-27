@@ -293,6 +293,53 @@ test('applyProfileToState leaves ST.calendarEvents alone when profile has none y
   assertEqual(ctx.ST.calendarEvents, null, 'calendarEvents stays null, not overwritten with garbage');
 });
 
+console.log('\nMedications & supplements:');
+test('normalizeMedication fills defaults and strips markup from user text', () => {
+  const m = ctx.normalizeMedication({ name: 'Creatine <b>x</b>', dose: '5', unit: 'g', times: ['19:00', '07:00', 'bad'], remind: 1 });
+  assertEqual(m.name, 'Creatine bx/b', 'angle brackets stripped');
+  assertEqual(m.dose, 5, 'dose parsed');
+  assertEqual(m.unit, 'g', 'unit kept');
+  assertEqual(m.times.join(','), '07:00,19:00', 'times validated and sorted');
+  assertEqual(m.days, null, 'no days means every day');
+  assertEqual(m.remind, true, 'remind coerced to boolean');
+  assertEqual(typeof m.id, 'string', 'id generated');
+});
+test('normalizeMedication rejects an empty name and unknown units', () => {
+  assertEqual(ctx.normalizeMedication({ name: '   ' }), null, 'blank name rejected');
+  assertEqual(ctx.normalizeMedication({ name: 'X', unit: 'gallons' }).unit, 'mg', 'unknown unit falls back');
+  assertEqual(ctx.normalizeMedication({ name: 'X', days: [0,1,2,3,4,5,6] }).days, null, 'all seven days collapses to every day');
+});
+test('medsDueToday only includes day-restricted meds on their days, in time order', () => {
+  ctx.ST.medications = [
+    ctx.normalizeMedication({ id: 'a', name: 'Creatine', dose: 5, unit: 'g', times: ['19:00', '07:00'] }),
+    ctx.normalizeMedication({ id: 'b', name: 'Test', dose: 0.5, unit: 'mL', times: ['08:00'], days: [1, 4] }), // Mon, Thu
+  ];
+  const monday = new Date(2026, 8, 28, 12, 0, 0); // Sep 28 2026 is a Monday
+  const tuesday = new Date(2026, 8, 29, 12, 0, 0);
+  assertEqual(ctx.medsDueToday(monday).map(d => d.key).join(','), 'a|07:00,b|08:00,a|19:00', 'Monday includes weekly med');
+  assertEqual(ctx.medsDueToday(tuesday).map(d => d.key).join(','), 'a|07:00,a|19:00', 'Tuesday excludes it');
+  ctx.ST.medications = [];
+});
+test('medicationNotificationPrefs only sends reminder-enabled doses with iOS weekday numbers', () => {
+  ctx.ST.medications = [
+    ctx.normalizeMedication({ id: 'a', name: 'Creatine', dose: 5, unit: 'g', times: ['07:00'], remind: true }),
+    ctx.normalizeMedication({ id: 'b', name: 'Quiet', times: ['09:00'], remind: false }),
+    ctx.normalizeMedication({ id: 'c', name: 'Weekly', times: ['20:30'], days: [0, 6], remind: true }),
+  ];
+  const prefs = ctx.medicationNotificationPrefs();
+  assertEqual(prefs.length, 2, 'silent med excluded');
+  assertEqual(prefs[0].hour + ':' + prefs[0].minute, '7:0', 'hour/minute split');
+  assertEqual(prefs[0].dose, '5 g', 'dose label');
+  assertEqual(prefs[1].weekdays.join(','), '1,7', 'JS 0/6 becomes iOS 1/7');
+  ctx.ST.medications = [];
+});
+test('applyProfileToState hydrates medications and drops malformed entries', () => {
+  ctx.applyProfileToState({ medications: [{ name: 'Zinc', dose: 25, unit: 'mg' }, { name: '' }, 'junk'] });
+  assertEqual(ctx.ST.medications.length, 1, 'one valid entry survives');
+  assertEqual(ctx.ST.medications[0].name, 'Zinc', 'name hydrated');
+  ctx.ST.medications = [];
+});
+
 console.log('\n' + '─'.repeat(50));
 console.log(passed + ' passed, ' + failed + ' failed');
 if (failed > 0) process.exit(1);

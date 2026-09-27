@@ -20,6 +20,7 @@ import Foundation
 //   workout_reminder    — fires exactly 3 days after the last logged workout, 9am
 //   water_reminder      — fires mid-afternoon if hydration tracking is on (2pm)
 //   preflight_readiness — fires the evening before a detected flight (8pm prior day)
+//   medication_reminder — repeating, at each dose time the user set (Profile)
 //
 // PRO:
 //   hrv_drop            — fires morning if HRV is genuinely >20% below the user's
@@ -94,6 +95,55 @@ class NotificationManager {
            let fireAtStr = layover["fireAt"] as? String,
            let fireAt = iso.date(from: fireAtStr) {
             scheduleLayoverWorkoutReminder(airport: airport, fireAt: fireAt)
+        }
+        if let meds = prefs["medications"] as? [[String: Any]] {
+            scheduleMedicationReminders(meds)
+        }
+    }
+
+    // ── FREE: Medication / supplement reminders ────────────────────────────
+    // One repeating notification per (medication, time). The web app has
+    // already filtered to reminder-enabled entries and capped the list
+    // (see medicationNotificationPrefs() in app.js). weekdays is nil for
+    // every day, otherwise iOS weekday numbers (1 = Sunday), which needs a
+    // separate repeating request per weekday since a calendar trigger
+    // matches one weekday value at a time.
+    func scheduleMedicationReminders(_ meds: [[String: Any]]) {
+        // Hard ceiling on requests this function adds, so day-of-week
+        // splitting (up to 7 per dose) can never eat the whole 64-pending
+        // budget shared with every other reminder type.
+        var budget = 30
+        for med in meds {
+            if budget <= 0 { break }
+            guard let id = med["id"] as? String,
+                  let name = med["name"] as? String,
+                  let hour = med["hour"] as? Int,
+                  let minute = med["minute"] as? Int else { continue }
+            let dose = (med["dose"] as? String) ?? ""
+            let weekdays = (med["weekdays"] as? [Int]) ?? []
+
+            let content = UNMutableNotificationContent()
+            content.title = "Time for \(name)"
+            content.body  = dose.isEmpty ? "Tap to check it off on Today." : "\(dose). Tap to check it off on Today."
+            content.sound = .default
+            content.userInfo = ["type": "medication_reminder", "deepLink": "today", "medId": id]
+
+            let slot = String(format: "%02d%02d", hour, minute)
+            let targets: [Int?] = weekdays.isEmpty ? [nil] : weekdays.map { Optional($0) }
+            for weekday in targets {
+                if budget <= 0 { break }
+                budget -= 1
+                var components = DateComponents()
+                components.hour = hour
+                components.minute = minute
+                if let wd = weekday { components.weekday = wd }
+                let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+                let identifier = "fcf_med_\(id)_\(slot)" + (weekday.map { "_wd\($0)" } ?? "")
+                let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+                UNUserNotificationCenter.current().add(request) { err in
+                    if let err = err { self.logNative("medication reminder error: \(err)") }
+                }
+            }
         }
     }
 

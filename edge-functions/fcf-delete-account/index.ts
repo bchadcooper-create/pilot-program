@@ -44,7 +44,8 @@ serve(async (req) => {
     // deletes what its RLS policies allow; this catches anything it couldn't,
     // so no orphaned personal data is left behind after the auth row goes.
     const tables = ['workout_sessions','meal_logs','weight_log','oura_daily',
-                    'daily_inputs','food_photo_usage','photo_quota_weekly','subscriptions'];
+                    'daily_inputs','food_photo_usage','photo_quota_weekly','subscriptions',
+                    'medication_logs'];
     for (const t of tables) {
       try { await admin.from(t).delete().eq('user_id', user.id); } catch (_) { /* table may not exist */ }
     }

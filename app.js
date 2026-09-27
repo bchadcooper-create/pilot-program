@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.42.5 / 20260916_4
+ * Version/build: fcf-v5.43.0 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.42.5';
+const FCF_VERSION = 'fcf-v5.43.0';
 const FCF_BUILD   = '20260916_4';
 
 
@@ -125,6 +125,12 @@ const ST = {
   manualTargetsOpen: false, manualCal: '', manualProtein: '', manualCarbs: '', manualFat: '', manualTargetsWarning: null,
   sleepBaselineScore: null,
   sleepBaselineDate: null,
+  // Medications / supplements. Definitions are saved in the profile
+  // (profile.medications); today's "taken" check-offs come from the
+  // medication_logs table and are keyed "medId|HH:MM".
+  medications: [],
+  medsTakenToday: {},
+  medsTakenDate: null,
   healthkit: null,        // populated after iOS HealthKit permission granted
   calendarEvents: null,   // classified calendar events from Apple Calendar or ICS
   calendarGranted: false, // whether Apple Calendar permission was granted
@@ -2941,6 +2947,7 @@ function applyProfileToState(profile) {
   if (typeof profile.trackNutrition === 'boolean') ST.trackNutrition = profile.trackNutrition;
   if (typeof profile.trackHydration === 'boolean') ST.trackHydration = profile.trackHydration;
   if (profile.nutritionGoals)               ST.nutritionGoals = profile.nutritionGoals;
+  ST.medications = Array.isArray(profile.medications) ? profile.medications.map(normalizeMedication).filter(Boolean) : [];
   // Re-engagement / disengagement nudges for nutrition + hydration
   // tracking — see computeTrackingNudges().
   if (profile.nutritionTrackingDisabledAt)   ST.nutritionTrackingDisabledAt = profile.nutritionTrackingDisabledAt;
@@ -3203,7 +3210,8 @@ async function bootAppInner() {
     dbGetLastSession().catch(e => { console.warn('dbGetLastSession failed:', e); return null; }),
     loadSessionCache().catch(e => { console.warn('loadSessionCache failed:', e); return []; }),
     loadSubscription().catch(e => { console.warn('loadSubscription failed:', e); return null; }),
-    hydrateOuraFromRecent()
+    hydrateOuraFromRecent(),
+    loadMedsTakenToday()
   ]);
 
   applyProfileToState(profile);
@@ -3470,7 +3478,8 @@ WHAT I WANT FROM YOU
 
 Reference actual numbers and dates from the data, not general advice. If something in the biometric data looks concerning, say so plainly rather than softening it.
 
-If I'm also tracking any supplements, medications, or protocols alongside this (e.g. hormone therapy, GLP-1/GIP medications, peptides), I'll mention them below this prompt — factor their expected physiological effects into the analysis if I do.`;
+MEDICATIONS & SUPPLEMENTS
+The CSV may also contain a "### MEDICATIONS & SUPPLEMENTS" section (what I take, dose, schedule) and a "### MEDICATION LOG" section (each dose I checked off, by date and time). If present, factor their expected physiological effects into the analysis, and note any adherence gaps that line up with off-trend stretches. If I mention anything else below this prompt (e.g. hormone therapy, GLP-1/GIP medications, peptides), treat it the same way.`;
 
 function showAIPromptModal() {
   const root = document.getElementById('modalRoot');
@@ -3841,7 +3850,7 @@ async function performAccountDeletion() {
       // fails partway. Each is allowed to fail independently — a missing
       // table must not strand someone half-deleted with no way to retry.
       const tables = ['workout_sessions','meal_logs','weight_log','oura_daily',
-                      'daily_inputs','food_photo_usage','photo_quota_weekly'];
+                      'daily_inputs','food_photo_usage','photo_quota_weekly','medication_logs'];
       for (const t of tables) {
         try { await SB.from(t).delete().eq('user_id', uid); } catch(e) {}
       }
@@ -4076,6 +4085,324 @@ function renderTrackingToggles() {
       row('trackHydration','Hydration','Water logging and hydration status') +
       '<div style="font-size:11px;color:var(--muted);margin-top:10px">Turning these off hides the screens and stops the reminders. Nothing you have already logged is deleted.</div>' +
     '</div>';
+}
+
+// ─── MEDICATIONS & SUPPLEMENTS ────────────────────────────────────────────
+// Definitions live in the profile (profile.medications). Each one:
+//   { id, name, dose, unit, times:['07:00','19:00'], days:null|[0..6],
+//     remind:bool, notes }
+// days === null means every day; otherwise a list of JS weekday numbers
+// (0 = Sunday). "Taken" check-offs are rows in medication_logs, one per
+// (med, local date, time slot), mirrored into ST.medsTakenToday for the
+// current day so the Today card can toggle instantly.
+const MED_UNITS = ['mg','g','mcg','IU','mL','capsule','tablet','scoop','drop','spray','unit'];
+const MED_DAY_LABELS = ['S','M','T','W','T','F','S'];
+const MED_MAX_TIMES = 6;
+
+function normalizeMedication(m) {
+  if (!m || typeof m !== 'object') return null;
+  const name = sanitizeUserText(m.name).trim();
+  if (!name) return null;
+  const times = (Array.isArray(m.times) ? m.times : [])
+    .map(t => String(t || '').trim()).filter(t => /^\d{2}:\d{2}$/.test(t));
+  const days = Array.isArray(m.days)
+    ? m.days.map(d => parseInt(d)).filter(d => d >= 0 && d <= 6)
+    : null;
+  const dose = parseFloat(m.dose);
+  return {
+    id: String(m.id || ('med_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6))),
+    name,
+    dose: isNaN(dose) || dose <= 0 ? null : dose,
+    unit: MED_UNITS.includes(m.unit) ? m.unit : 'mg',
+    times: times.length ? [...new Set(times)].sort() : ['08:00'],
+    days: days && days.length && days.length < 7 ? [...new Set(days)].sort() : null,
+    remind: !!m.remind,
+    notes: sanitizeUserText(m.notes).trim(),
+  };
+}
+
+function medDoseLabel(m) {
+  if (m.dose == null) return '';
+  const n = Math.round(m.dose * 100) / 100;
+  const plural = (n !== 1 && ['capsule','tablet','scoop','drop','spray','unit'].includes(m.unit)) ? 's' : '';
+  return n + ' ' + m.unit + plural;
+}
+
+function medFrequencyLabel(m) {
+  const perDay = m.times.length === 1 ? 'once a day' : m.times.length === 2 ? 'twice a day' : m.times.length + '× a day';
+  if (!m.days) return perDay;
+  const names = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  return perDay + ' on ' + m.days.map(d => names[d]).join(', ');
+}
+
+function medIsDueOn(m, date) {
+  return !m.days || m.days.includes(date.getDay());
+}
+
+// Every dose due today, in time order: [{ med, time, key }].
+function medsDueToday(now) {
+  const out = [];
+  (ST.medications || []).forEach(m => {
+    if (!medIsDueOn(m, now)) return;
+    m.times.forEach(t => out.push({ med: m, time: t, key: m.id + '|' + t }));
+  });
+  return out.sort((a, b) => a.time.localeCompare(b.time) || a.med.name.localeCompare(b.med.name));
+}
+
+async function saveMedicationsToProfile() {
+  const profile = (await dbGetProfile()) || {};
+  profile.medications = ST.medications;
+  await dbSetProfile(profile);
+  // Reminder settings changed, so the native schedule has to follow.
+  scheduleNotifications();
+}
+
+// ── Profile card ──────────────────────────────────────────────────────────
+function renderMedicationsCard() {
+  const parts = [];
+  parts.push('<div class="card mb12">');
+  parts.push('<div class="section-label" style="margin-top:0">MEDS &amp; SUPPLEMENTS</div>');
+  parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px">Track anything you take on a schedule. Due doses show on Today with a check-off, and the iOS app can remind you. This stays private to your account and is only shared if you export your data.</div>');
+  const meds = ST.medications || [];
+  if (!meds.length) {
+    parts.push('<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px 0 12px">Nothing added yet.</div>');
+  } else {
+    meds.forEach(m => {
+      parts.push('<div class="fb" style="padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;align-items:center" onclick="haptic(\'light\');openMedicationEditor(\''+m.id+'\')">');
+      parts.push('<div style="flex:1;padding-right:12px">');
+      parts.push('<div style="font-size:14px;font-weight:600">'+m.name+(m.dose != null ? ' <span style="font-weight:400;color:var(--muted)">'+medDoseLabel(m)+'</span>' : '')+'</div>');
+      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:2px">'+medFrequencyLabel(m)+' · <span style="font-family:var(--mono)">'+m.times.join(', ')+'</span>'+(m.remind ? ' · 🔔' : '')+'</div>');
+      parts.push('</div>');
+      parts.push('<div style="color:var(--muted)">›</div>');
+      parts.push('</div>');
+    });
+  }
+  parts.push('<button class="btn btn-outline mt12" onclick="haptic(\'light\');openMedicationEditor()">+ Add Medication or Supplement</button>');
+  parts.push('</div>');
+  return parts.join('');
+}
+
+// ── Editor modal ──────────────────────────────────────────────────────────
+// The draft lives in ST.medDraft so the sheet can re-render (adding or
+// removing a time row) without losing what has been typed so far.
+function openMedicationEditor(medId) {
+  const existing = medId ? (ST.medications || []).find(m => m.id === medId) : null;
+  ST.medDraft = existing
+    ? JSON.parse(JSON.stringify(existing))
+    : { id: null, name: '', dose: '', unit: 'mg', times: ['08:00'], days: null, remind: true, notes: '' };
+  renderMedicationEditor();
+}
+
+function syncMedDraftFromDOM() {
+  const d = ST.medDraft; if (!d) return;
+  const g = id => document.getElementById(id);
+  if (g('medName')) d.name = g('medName').value;
+  if (g('medDose')) d.dose = g('medDose').value;
+  if (g('medUnit')) d.unit = g('medUnit').value;
+  if (g('medNotes')) d.notes = g('medNotes').value;
+  d.times = d.times.map((t, i) => (g('medTime'+i) ? g('medTime'+i).value : t) || t);
+}
+
+function renderMedicationEditor() {
+  const root = document.getElementById('modalRoot');
+  const d = ST.medDraft;
+  if (!root || !d) return;
+  const isNew = !d.id;
+  const parts = [];
+  parts.push('<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet">');
+  parts.push('<div class="modal-handle"></div>');
+  parts.push('<div class="modal-title">'+(isNew ? 'Add Medication / Supplement' : 'Edit '+d.name)+'</div>');
+
+  parts.push('<div class="field"><label>Name</label><input id="medName" type="text" maxlength="60" placeholder="e.g. Creatine" value="'+sanitizeUserText(d.name)+'"></div>');
+
+  parts.push('<div class="field-row" style="margin-bottom:10px">');
+  parts.push('<div class="field" style="margin-bottom:0"><label>Dose</label><input id="medDose" type="text" inputmode="decimal" placeholder="e.g. 5" value="'+(d.dose ?? '')+'"></div>');
+  parts.push('<div class="field" style="margin-bottom:0"><label>Unit</label><select id="medUnit">');
+  MED_UNITS.forEach(u => parts.push('<option value="'+u+'"'+(d.unit===u?' selected':'')+'>'+u+'</option>'));
+  parts.push('</select></div>');
+  parts.push('</div>');
+
+  // Days: every day, or a subset. Tapping a chip toggles it; tapping
+  // "Every day" clears the subset.
+  parts.push('<div class="field"><label>Days</label>');
+  parts.push('<div style="display:flex;gap:6px;align-items:center">');
+  parts.push('<button type="button" class="env-btn '+(!d.days?'sel':'')+'" style="flex:0 0 auto;padding:8px 10px" onclick="syncMedDraftFromDOM();ST.medDraft.days=null;renderMedicationEditor()"><div class="el">EVERY DAY</div></button>');
+  MED_DAY_LABELS.forEach((lbl, i) => {
+    const on = d.days && d.days.includes(i);
+    parts.push('<button type="button" class="env-btn '+(on?'sel':'')+'" style="flex:1;padding:8px 0;min-width:0" onclick="toggleMedDraftDay('+i+')"><div class="el">'+lbl+'</div></button>');
+  });
+  parts.push('</div></div>');
+
+  parts.push('<div class="field"><label>Times</label>');
+  d.times.forEach((t, i) => {
+    parts.push('<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">');
+    parts.push('<input id="medTime'+i+'" type="time" value="'+t+'" style="flex:1">');
+    if (d.times.length > 1) parts.push('<button type="button" class="btn btn-outline" style="width:auto;padding:10px 14px;margin:0" aria-label="Remove time" onclick="removeMedDraftTime('+i+')">✕</button>');
+    parts.push('</div>');
+  });
+  if (d.times.length < MED_MAX_TIMES) parts.push('<button type="button" class="btn-ghost" style="padding:4px 0" onclick="addMedDraftTime()">+ Add another time</button>');
+  parts.push('</div>');
+
+  // Same toggle control as the Tracking card, so it reads as one system
+  // (a .field-wrapped native checkbox would inherit the input reset and
+  // render invisible).
+  const knobLeft = d.remind ? '23px' : '3px';
+  const knobBg   = d.remind ? 'var(--gold)' : 'rgba(255,255,255,0.12)';
+  parts.push('<div class="fb" style="padding:10px 0 14px;align-items:center">' +
+    '<div style="flex:1;padding-right:16px"><div style="font-size:14px">Remind me</div>' +
+    '<div style="font-size:11px;color:var(--muted);margin-top:2px">Phone notification at each time above (iOS app)</div></div>' +
+    '<button type="button" onclick="haptic(\'selection\');syncMedDraftFromDOM();ST.medDraft.remind=!ST.medDraft.remind;renderMedicationEditor()" style="cursor:pointer;flex-shrink:0;width:46px;height:26px;border-radius:13px;background:'+knobBg+';position:relative;border:none;padding:0;transition:background 0.15s;-webkit-tap-highlight-color:transparent;touch-action:manipulation">' +
+    '<div style="position:absolute;top:3px;left:'+knobLeft+';width:20px;height:20px;border-radius:50%;background:#fff;transition:left 0.15s;box-shadow:0 1px 3px rgba(0,0,0,0.4)"></div></button></div>');
+
+  parts.push('<div class="field"><label>Notes (optional)</label><input id="medNotes" type="text" maxlength="120" placeholder="e.g. with food" value="'+sanitizeUserText(d.notes)+'"></div>');
+
+  parts.push('<button class="btn btn-gold mt8" onclick="saveMedicationFromEditor()">'+(isNew ? 'Add' : 'Save')+'</button>');
+  if (!isNew) parts.push('<button class="btn btn-red-outline mt8" onclick="deleteMedication(\''+d.id+'\')">Remove</button>');
+  parts.push('<button class="btn-ghost" style="display:block;width:100%;text-align:center;margin-top:10px" onclick="closeModal()">Cancel</button>');
+  parts.push('</div></div>');
+  root.innerHTML = parts.join('');
+}
+
+function toggleMedDraftDay(i) {
+  syncMedDraftFromDOM();
+  const d = ST.medDraft;
+  const days = d.days ? [...d.days] : [];
+  const idx = days.indexOf(i);
+  if (idx >= 0) days.splice(idx, 1); else days.push(i);
+  d.days = days.length ? days.sort() : null;
+  renderMedicationEditor();
+}
+
+function addMedDraftTime() {
+  syncMedDraftFromDOM();
+  if (ST.medDraft.times.length >= MED_MAX_TIMES) return;
+  ST.medDraft.times.push('12:00');
+  renderMedicationEditor();
+}
+
+function removeMedDraftTime(i) {
+  syncMedDraftFromDOM();
+  ST.medDraft.times.splice(i, 1);
+  renderMedicationEditor();
+}
+
+async function saveMedicationFromEditor() {
+  syncMedDraftFromDOM();
+  const draft = ST.medDraft;
+  if (!sanitizeUserText(draft.name).trim()) { showToast('Enter a name.'); return; }
+  const med = normalizeMedication(draft);
+  if (!med) { showToast('Enter a name.'); return; }
+  const list = ST.medications || [];
+  const idx = list.findIndex(m => m.id === med.id);
+  if (idx >= 0) list[idx] = med; else list.push(med);
+  ST.medications = list;
+  closeModal();
+  renderPage();
+  try {
+    await saveMedicationsToProfile();
+    showBigToast(med.name + ' saved.', 'ok');
+  } catch (e) { showBigToast('Saved on this device, but could not sync.', 'warn'); }
+}
+
+async function deleteMedication(id) {
+  const med = (ST.medications || []).find(m => m.id === id);
+  if (!med) return;
+  if (!(await appConfirm('Remove ' + med.name + '? Past check-offs are kept in your history.', 'Remove'))) return;
+  ST.medications = ST.medications.filter(m => m.id !== id);
+  closeModal();
+  renderPage();
+  try { await saveMedicationsToProfile(); }
+  catch (e) { showBigToast('Removed on this device, but could not sync.', 'warn'); }
+}
+
+// ── Taken log (medication_logs) ───────────────────────────────────────────
+async function loadMedsTakenToday() {
+  const today = localDateStr(new Date());
+  ST.medsTakenDate = today;
+  ST.medsTakenToday = {};
+  if (!ST.user) return;
+  try {
+    const { data, error } = await SB.from('medication_logs').select('med_id,time')
+      .eq('user_id', ST.user.id).eq('date', today);
+    if (error) throw error;
+    (data || []).forEach(r => { ST.medsTakenToday[r.med_id + '|' + r.time] = true; });
+  } catch (e) { /* table missing or offline: check-offs just start empty */ }
+}
+
+async function toggleMedTaken(medId, time) {
+  const today = localDateStr(new Date());
+  if (ST.medsTakenDate !== today) { ST.medsTakenDate = today; ST.medsTakenToday = {}; }
+  const key = medId + '|' + time;
+  const nowTaken = !ST.medsTakenToday[key];
+  if (nowTaken) ST.medsTakenToday[key] = true; else delete ST.medsTakenToday[key];
+  haptic(nowTaken ? 'medium' : 'light');
+  renderPage();
+  if (!ST.user) return;
+  try {
+    if (nowTaken) {
+      const { error } = await SB.from('medication_logs').upsert(
+        { user_id: ST.user.id, med_id: medId, date: today, time, taken_at: new Date().toISOString() },
+        { onConflict: 'user_id,med_id,date,time' });
+      if (error) throw error;
+    } else {
+      const { error } = await SB.from('medication_logs').delete()
+        .eq('user_id', ST.user.id).eq('med_id', medId).eq('date', today).eq('time', time);
+      if (error) throw error;
+    }
+  } catch (e) {
+    // Roll back so the screen never claims a check-off the server rejected.
+    if (nowTaken) delete ST.medsTakenToday[key]; else ST.medsTakenToday[key] = true;
+    renderPage();
+    showBigToast('Could not save that check-off. Try again in a moment.', 'warn');
+  }
+}
+
+// ── Today card ────────────────────────────────────────────────────────────
+function buildMedsTodayHTML(ctx) {
+  const due = medsDueToday(ctx.now);
+  if (!due.length) return '';
+  const today = localDateStr(ctx.now);
+  // Day rolled over while the app stayed open: yesterday's check-offs
+  // must not carry into today. Clear now, refetch in the background.
+  if (ST.medsTakenDate !== today) { ST.medsTakenDate = today; ST.medsTakenToday = {}; loadMedsTakenToday().then(renderPage); }
+  const nowHM = String(ctx.now.getHours()).padStart(2,'0') + ':' + String(ctx.now.getMinutes()).padStart(2,'0');
+  const takenCount = due.filter(d => ST.medsTakenToday[d.key]).length;
+  const parts = [];
+  parts.push('<div class="section-label">MEDS &amp; SUPPLEMENTS <span style="margin-left:auto;font-family:var(--mono);letter-spacing:.06em">'+takenCount+'/'+due.length+'</span></div>');
+  parts.push('<div class="card mb12">');
+  due.forEach((d, i) => {
+    const taken = !!ST.medsTakenToday[d.key];
+    const overdue = !taken && d.time < nowHM;
+    const timeColor = taken ? 'var(--muted)' : overdue ? 'var(--amber)' : 'var(--text)';
+    const border = i < due.length - 1 ? 'border-bottom:1px solid var(--border);' : '';
+    parts.push('<div class="fb" style="padding:10px 0;'+border+'cursor:pointer;align-items:center;-webkit-tap-highlight-color:transparent" onclick="toggleMedTaken(\''+d.med.id+'\',\''+d.time+'\')">');
+    parts.push('<span style="font-family:var(--mono);font-size:12px;color:'+timeColor+';min-width:52px">'+d.time+'</span>');
+    parts.push('<span style="flex:1;font-size:14px;'+(taken?'color:var(--muted);text-decoration:line-through;':'')+'">'+d.med.name+(d.med.dose != null ? ' <span style="color:var(--muted);font-size:12px">'+medDoseLabel(d.med)+'</span>' : '')+'</span>');
+    parts.push('<span style="width:26px;height:26px;border-radius:50%;border:1.5px solid '+(taken?'var(--gold)':'var(--border)')+';background:'+(taken?'var(--gold)':'transparent')+';display:flex;align-items:center;justify-content:center;font-size:14px;color:#0b0f18;flex-shrink:0">'+(taken?'✓':'')+'</span>');
+    parts.push('</div>');
+  });
+  parts.push('</div>');
+  return parts.join('');
+}
+
+// What the native shell needs to schedule reminders: one entry per dose
+// that has reminders on. Capped so a long list can never crowd out the
+// other notification types under iOS's 64-pending limit.
+function medicationNotificationPrefs() {
+  const out = [];
+  (ST.medications || []).forEach(m => {
+    if (!m.remind) return;
+    m.times.forEach(t => {
+      const [h, mm] = t.split(':').map(n => parseInt(n));
+      if (isNaN(h) || isNaN(mm)) return;
+      out.push({
+        id: m.id, name: m.name, dose: medDoseLabel(m), hour: h, minute: mm,
+        // iOS weekday numbering: 1 = Sunday … 7 = Saturday.
+        weekdays: m.days ? m.days.map(d => d + 1) : null,
+      });
+    });
+  });
+  return out.slice(0, 20);
 }
 
 function showInfoModal(title, text) {
@@ -4803,6 +5130,7 @@ async function scheduleNotifications(justTrainedNow) {
     hrvBaseline:       hrvBaselineAvg,
     hrvToday:          hrvToday,
     layoverReminder,                                   // pro — null if no window right now
+    medications:       medicationNotificationPrefs(),  // free — user-set dose times
   };
   window.webkit?.messageHandlers?.notifications?.postMessage(prefs);
 }
@@ -9614,7 +9942,7 @@ async function exportCSV() {
   showBigToast('Building export...','info');
   let sessions = [];
   let biometrics = [];
-  let ouraRows = [], mealRows = [], dailyInputRows = [];
+  let ouraRows = [], mealRows = [], dailyInputRows = [], medLogRows = [];
   try {
     const sFilter = ST.user ? SB.from('workout_sessions').select('*').eq('user_id', ST.user.id) : SB.from('workout_sessions').select('*');
     const { data: sd } = await sFilter.order('started_at', { ascending: true });
@@ -9629,12 +9957,13 @@ async function exportCSV() {
     // whole export.
     const uid = ST.user?.id;
     if (uid) {
-      const [o, m, di] = await Promise.all([
+      const [o, m, di, ml] = await Promise.all([
         SB.from('oura_daily').select('*').eq('user_id', uid).order('date', { ascending: true }).then(r=>r.data).catch(()=>null),
         SB.from('meal_logs').select('*').eq('user_id', uid).order('logged_at', { ascending: true }).then(r=>r.data).catch(()=>null),
         SB.from('daily_inputs').select('*').eq('user_id', uid).order('date', { ascending: true }).then(r=>r.data).catch(()=>null),
+        SB.from('medication_logs').select('*').eq('user_id', uid).order('date', { ascending: true }).then(r=>r.data).catch(()=>null),
       ]);
-      ouraRows = o || []; mealRows = m || []; dailyInputRows = di || [];
+      ouraRows = o || []; mealRows = m || []; dailyInputRows = di || []; medLogRows = ml || [];
     }
   } catch(e) {
     sessions = JSON.parse(localStorage.getItem('fcf_sessions')||'[]');
@@ -9732,6 +10061,23 @@ async function exportCSV() {
     ];
   });
   section('FLIGHT SCHEDULE (scheduled, device-local times)', ['Date','Type','Summary','Airport','Start','End','Scheduled Hours'], sched);
+
+  // Medications and supplements: the current list, then every logged dose.
+  // The log references the medication by name as well as id so a renamed
+  // or removed entry still reads sensibly.
+  const medById = {};
+  (ST.medications || []).forEach(m => { medById[m.id] = m; });
+  section('MEDICATIONS & SUPPLEMENTS', ['Name','Dose','Unit','Times','Days','Reminder','Notes'],
+    (ST.medications || []).map(m => [m.name, m.dose ?? '', m.unit, m.times.join(' '),
+      m.days ? m.days.map(d => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d]).join(' ') : 'every day',
+      m.remind ? 'yes' : '', m.notes || '']));
+  section('MEDICATION LOG (doses checked off)', ['Date','Scheduled Time','Name','Dose','Taken At'],
+    medLogRows.map(r => {
+      const m = medById[r.med_id];
+      const at = r.taken_at ? new Date(r.taken_at) : null;
+      return [r.date || '', r.time || '', m ? m.name : '(removed)', m ? medDoseLabel(m) : '',
+        at ? at.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : ''];
+    }));
 
   const csv = rows.map(r => r.map(v => '"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
   const blob = new Blob([csv], {type:'text/csv'});
@@ -10724,6 +11070,8 @@ function renderProfile(p) {
     parts.push('<button class="btn-ghost" style="margin-top:8px" onclick="switchTab(\'fuelplan\')">Adjust Fuel Plan →</button>');
   }
   parts.push('</div>');
+
+  parts.push(renderMedicationsCard());
 
   // ── Tracking toggles (nutrition + hydration) ─────────────────────────────
   // Same control used on More — single source of truth via setTrackingPref.
@@ -12451,9 +12799,9 @@ function renderToday(p) {
   if (!hasAnySchedule) {
     const isNative = typeof FCFBridge !== 'undefined' && FCFBridge.isNative;
     if (isNative && !ST.calendarGranted) {
-      parts.push('<div class="card mb12"><div class="fb" style="align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:600;margin-bottom:4px">📅 Connect your calendar</div><div style="font-size:11px;color:var(--muted);line-height:1.5">Grant calendar access and FCF will automatically detect your flights, layovers, and free time — no manual upload needed.</div></div></div><button class="btn-outline mt8" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.requestCalendar(ST.baseTimezone)">Connect Calendar</button></div>');
+      parts.push('<div class="card mb12"><div style="font-size:17px;font-weight:600;letter-spacing:-.01em;margin-bottom:7px">📅 Connect your calendar</div><div style="font-size:13px;color:var(--muted);line-height:1.65;margin-bottom:14px">Grant calendar access and FCF will automatically detect your flights, layovers, and free time. No manual upload needed.</div><button class="btn btn-outline" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.requestCalendar(ST.baseTimezone)">Connect Calendar</button></div>');
     } else {
-      parts.push('<div class="card mb12"><div class="fb" style="align-items:center"><div style="flex:1"><div style="font-size:13px;font-weight:600;margin-bottom:4px">📅 No flight schedule</div><div style="font-size:11px;color:var(--muted);line-height:1.5">Upload your crew schedule and this briefing gets a lot more specific — layovers, duty-day length, real windows to train.</div></div></div><button class="btn-outline mt8" onclick="switchTab(\'data\')">Upload Schedule</button></div>');
+      parts.push('<div class="card mb12"><div style="font-size:17px;font-weight:600;letter-spacing:-.01em;margin-bottom:7px">📅 No flight schedule</div><div style="font-size:13px;color:var(--muted);line-height:1.65;margin-bottom:14px">Upload your crew schedule and this briefing gets a lot more specific: layovers, duty-day length, real windows to train.</div><button class="btn btn-outline" onclick="switchTab(\'data\')">Upload Schedule</button></div>');
     }
   }
 
@@ -12470,16 +12818,19 @@ function renderToday(p) {
       ? `${icon} Still want to track ${noun}?`
       : `${icon} Give ${noun} logging another shot?`;
     const body = nudge === 'disable'
-      ? `Looks like ${noun} logging has gone quiet the last week. No pressure — you can turn it off if it's not useful right now.`
+      ? `Looks like ${noun} logging has gone quiet the last week. No pressure. You can turn it off if it's not useful right now.`
       : `It's been a while since you turned off ${noun} tracking. Worth trying again, or happy to leave it off.`;
     const actionLabel = nudge === 'disable' ? 'Turn off tracking' : 'Try it again';
     const actionOnClick = `haptic('light');setTrackingPref('${trackKey}',${nudge === 'disable' ? 'false' : 'true'})`;
-    parts.push('<div class="card mb12"><div style="font-size:13px;font-weight:600;margin-bottom:4px">'+title+'</div>' +
-      '<div style="font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:10px">'+body+'</div>' +
-      '<div class="fb" style="gap:8px">' +
-      '<button class="btn-outline" style="flex:1" onclick="'+actionOnClick+'">'+actionLabel+'</button>' +
-      '<button class="btn-ghost" onclick="haptic(\'light\');dismissTrackingNudge(\''+type+'\')">Not now</button>' +
-      '</div></div>');
+    // Typography matches the briefing card above (17px headline, 13px
+    // body). The action button carries the base `btn` class: `btn-outline`
+    // alone is only a border and color, so without `btn` it rendered as a
+    // bare browser-default button, which is the mismatch that was reported.
+    parts.push('<div class="card mb12"><div style="font-size:17px;font-weight:600;letter-spacing:-.01em;margin-bottom:7px">'+title+'</div>' +
+      '<div style="font-size:13px;color:var(--muted);line-height:1.65;margin-bottom:14px">'+body+'</div>' +
+      '<button class="btn btn-outline" onclick="'+actionOnClick+'">'+actionLabel+'</button>' +
+      '<button class="btn-ghost" style="display:block;width:100%;text-align:center;margin-top:10px;font-size:13px" onclick="haptic(\'light\');dismissTrackingNudge(\''+type+'\')">Not now</button>' +
+      '</div>');
   });
 
   // BUG FIX (reported: two separate "TODAY'S SCHEDULE" cards appearing at
@@ -12543,6 +12894,8 @@ function renderToday(p) {
     });
     parts.push('</div>');
   }
+
+  parts.push(buildMedsTodayHTML(ctx));
 
   const n = ctx.nutrition;
   if (n.goals) {
@@ -14043,7 +14396,7 @@ function renderData(p) {
   // ── Export ────────────────────────────────────────────────────────────────
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">EXPORT DATA</div>');
-  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Exports everything the app holds, in one CSV with labelled sections: workouts (one row per set, biometrics joined by date), Oura daily metrics, every logged food item, hydration and flight hours, and your scheduled flights. Optimized for AI analysis.</div>');
+  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Exports everything the app holds, in one CSV with labelled sections: workouts (one row per set, biometrics joined by date), Oura daily metrics, every logged food item, hydration and flight hours, your scheduled flights, and your medication and supplement list with check-off history. Optimized for AI analysis.</div>');
   parts.push('<div style="font-size:11px;color:var(--gold);margin-bottom:10px;line-height:1.5">💡 Recommended: export and review weekly. Daily exports are too noisy to show real trends; monthly is often too late to catch a stall early.</div>');
   parts.push('<button class="btn btn-outline" onclick="exportCSV()">📊 Export CSV for AI Analysis</button>');
   parts.push('<button class="btn btn-outline mt8" onclick="showAIPromptModal()">📋 View & Copy AI Prompt</button>');

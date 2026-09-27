@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.42.4 / 20260916_4
+ * Version/build: fcf-v5.42.5 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.42.4';
+const FCF_VERSION = 'fcf-v5.42.5';
 const FCF_BUILD   = '20260916_4';
 
 
@@ -124,6 +124,7 @@ const ST = {
   nutritionGoals: null, goalDraft: 'maintain', trainDaysDraft: '3-4',
   manualTargetsOpen: false, manualCal: '', manualProtein: '', manualCarbs: '', manualFat: '', manualTargetsWarning: null,
   sleepBaselineScore: null,
+  sleepBaselineDate: null,
   healthkit: null,        // populated after iOS HealthKit permission granted
   calendarEvents: null,   // classified calendar events from Apple Calendar or ICS
   calendarGranted: false, // whether Apple Calendar permission was granted
@@ -11737,8 +11738,19 @@ function mergeAdjacentEvents(events, getLabel) {
 // that specific sequence — it needs the app to stay open (or come back to
 // the foreground) across the before/after.
 const NAP_SCORE_JUMP = 8; // meaningful enough to not be noise/rounding
-function checkForNapRecovery(currentSleepScore) {
+function checkForNapRecovery(currentSleepScore, ouraDate) {
   if (currentSleepScore === null || currentSleepScore === undefined) return null;
+  // BUG FIX (reported: "Nice nap" at 8 AM with no nap). At boot the app
+  // hydrates from the most recent oura_daily row, which before the morning
+  // sync is YESTERDAY's row. That score became the baseline, then the live
+  // sync brought in today's row, and a cross-midnight 78 -> 88 was read as
+  // a same-day nap. The baseline only means something within one Oura day,
+  // so it is keyed to the row's date and reset whenever the date changes.
+  if (ST.sleepBaselineDate !== ouraDate) {
+    ST.sleepBaselineDate = ouraDate;
+    ST.sleepBaselineScore = currentSleepScore;
+    return null;
+  }
   if (ST.sleepBaselineScore === null || ST.sleepBaselineScore === undefined) {
     ST.sleepBaselineScore = currentSleepScore;
     return null;
@@ -11775,7 +11787,7 @@ function getTodayContext() {
             // one source of truth rather than silently swapping between
             // them depending on which happened to sync most recently.
             steps: ST.ouraSteps ?? ST.healthkit?.stepsToday ?? null,
-            napDetected: checkForNapRecovery(sleepScore) },
+            napDetected: checkForNapRecovery(sleepScore, ST.ouraData?.date ?? null) },
     nutrition: { consumed, goals: g, mealCount: meals.length,
                  proteinPct: g && g.protein ? Math.round((consumed.protein / g.protein) * 100) : null,
                  caloriePct: g && g.calories ? Math.round((consumed.calories / g.calories) * 100) : null },

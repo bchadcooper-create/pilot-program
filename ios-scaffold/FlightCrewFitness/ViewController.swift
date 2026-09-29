@@ -68,6 +68,15 @@ class ViewController: UIViewController {
 
     private func setupWebView() {
         let config = WKWebViewConfiguration()
+        // Opts this web view into App-Bound Domains (flightcrew.fit, listed
+        // under WKAppBoundDomains in Info.plist). This is what lets the
+        // site's service worker run, which is the only way the app can open
+        // with no connection. Every link to another domain is already
+        // handed off to Safari in decidePolicyFor, so nothing that used to
+        // work in-app is lost. Script injection and message handlers only
+        // work on app-bound pages in this mode, which is why the offline
+        // page below is loaded with a flightcrew.fit base URL.
+        config.limitsNavigationsToAppBoundDomains = true
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
 
@@ -155,12 +164,20 @@ class ViewController: UIViewController {
         loadURL(targetURL)
     }
 
-    private func loadURL(_ url: URL) {
-        // reloadIgnoringLocalAndRemoteCacheData ensures WKWebView always fetches
-        // the latest index.html and app.js rather than serving a stale cached copy.
+    // True while the one offline retry (see didFailProvisionalNavigation)
+    // is in flight, so a second failure shows the offline page instead of
+    // retrying forever.
+    private var isOfflineRetry = false
+
+    private func loadURL(_ url: URL, offlineRetry: Bool = false) {
+        isOfflineRetry = offlineRetry
+        // Normal loads ignore the HTTP cache so a connected phone always
+        // gets the latest index.html and app.js. The offline retry uses the
+        // default policy instead, which lets the service worker (and any
+        // cached copy) answer when there's no network at all.
         let request = URLRequest(url: url,
-                                 cachePolicy: .reloadIgnoringLocalAndRemoteCacheData,
-                                 timeoutInterval: 30)
+                                 cachePolicy: offlineRetry ? .useProtocolCachePolicy : .reloadIgnoringLocalAndRemoteCacheData,
+                                 timeoutInterval: offlineRetry ? 10 : 30)
         webView.load(request)
     }
 
@@ -358,7 +375,15 @@ extension ViewController: WKNavigationDelegate {
         // BUG FIX: Don't show offline page for cancelled loads (e.g. redirect mid-load)
         let nsError = error as NSError
         if nsError.code == NSURLErrorCancelled { return }
-        showOfflinePage(failedURL: (nsError.userInfo[NSURLErrorFailingURLErrorKey] as? URL) ?? targetURL, error: nsError)
+        let failedURL = (nsError.userInfo[NSURLErrorFailingURLErrorKey] as? URL) ?? targetURL
+        // No signal (airplane mode): before giving up, try once more in a
+        // way the service worker can answer from its on-device copy. Only
+        // if that also fails is the native offline page shown.
+        if isConnectivityError(nsError) && !isOfflineRetry {
+            loadURL(failedURL, offlineRetry: true)
+            return
+        }
+        showOfflinePage(failedURL: failedURL, error: nsError)
     }
 
     // See the pendingPushTapData / webViewFinishedInitialLoad comment above
@@ -368,6 +393,7 @@ extension ViewController: WKNavigationDelegate {
     // deliver directly — it's nil (a harmless no-op) on every subsequent
     // navigation once that one delivery has happened.
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        isOfflineRetry = false
         webViewFinishedInitialLoad = true
         if let pending = pendingPushTapData {
             pendingPushTapData = nil
@@ -423,7 +449,10 @@ extension ViewController: WKNavigationDelegate {
         background:#58a6ff;color:#0d1117;border:none;border-radius:8px;font-size:1rem;cursor:pointer;">
         Retry</button></div></body></html>
         """
-        webView.loadHTMLString(html, baseURL: nil)
+        // The base URL must be the app-bound domain: with App-Bound Domains
+        // on, message handlers (the Retry button) only work on pages from
+        // that domain, and a nil base URL would leave Retry dead.
+        webView.loadHTMLString(html, baseURL: targetURL)
     }
 }
 

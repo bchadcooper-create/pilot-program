@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.43.3 / 20260916_4
+ * Version/build: fcf-v5.43.4 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.43.3';
+const FCF_VERSION = 'fcf-v5.43.4';
 const FCF_BUILD   = '20260916_4';
 
 

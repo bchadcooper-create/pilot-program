@@ -1,12 +1,22 @@
 // Flight Crew Fitness — Service Worker
-// Version: 5.43.3
-const CACHE = 'fcf-v5.43.3';
+// Version: 5.43.4
+const CACHE = 'fcf-v5.43.4';
 const CORE = [
   './',
   './index.html',
   './app.js',
   './manifest.json',
 ];
+// Third-party libraries index.html loads from jsDelivr. app.js calls
+// supabase.createClient on its first line, so if these can't load the
+// whole app fails to start. They have to be in the offline copy too.
+// Keep this list in sync with the <script src> tags in index.html.
+const CDN_LIBS = [
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
+  'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
+  'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js',
+];
+const isCdnLib = url => CDN_LIBS.includes(url.href);
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -14,7 +24,7 @@ self.addEventListener('install', e => {
       // cache:'reload' bypasses the HTTP cache — without it, a freshly
       // installing SW can populate its new cache with a STALE app.js served
       // from the browser/CDN HTTP cache (GitHub Pages max-age is 10 min).
-      .then(c => Promise.allSettled(CORE.map(url =>
+      .then(c => Promise.allSettled(CORE.concat(CDN_LIBS).map(url =>
         fetch(new Request(url, { cache: 'reload' })).then(res => {
           if (res.ok) return c.put(url, res);
         })
@@ -43,6 +53,24 @@ self.addEventListener('fetch', e => {
     url.hostname.includes('google.com')
   );
 
+  // The app's own libraries on jsDelivr: network first so updates arrive,
+  // cached copy when offline. Checked before the passthrough list, which
+  // matches jsdelivr.net for anything else loaded from there. The page
+  // requests these without CORS, so the live response can be opaque
+  // (status 0); that is still a valid copy to keep.
+  if (isCdnLib(url)) {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        if (res.ok || res.type === 'opaque') {
+          const resClone = res.clone();
+          caches.open(CACHE).then(c => c.put(url.href, resClone));
+        }
+        return res;
+      }).catch(() => caches.match(url.href))
+    );
+    return;
+  }
+
   if (isPassthrough) {
     e.respondWith(fetch(e.request));
     return;
@@ -65,7 +93,11 @@ self.addEventListener('fetch', e => {
           caches.open(CACHE).then(c => c.put(e.request, resClone));
         }
         return res;
-      }).catch(() => caches.match(e.request))
+      // ignoreSearch: index.html asks for app.js?v=<build>, but the install
+      // step saves plain app.js. An exact match would miss it offline and
+      // the app would never start. Navigations fall back to index.html.
+      }).catch(() => caches.match(e.request, { ignoreSearch: true })
+        .then(hit => hit || (e.request.mode === 'navigate' ? caches.match('./index.html') : undefined)))
     );
     return;
   }

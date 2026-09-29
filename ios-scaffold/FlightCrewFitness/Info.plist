@@ -60,6 +60,16 @@
     <string>UIInterfaceOrientationLandscapeRight</string>
   </array>
 
+  <!-- App-Bound Domains. Apple only enables service workers inside a
+       WKWebView for domains listed here, and the service worker is what
+       keeps an on-device copy of the app for offline launches (airplane
+       mode). Without this key the app could never open with no signal.
+       Pairs with limitsNavigationsToAppBoundDomains in ViewController. -->
+  <key>WKAppBoundDomains</key>
+  <array>
+    <string>flightcrew.fit</string>
+  </array>
+
   <!-- Scene-based lifecycle -->
   <key>UIApplicationSceneManifest</key>
   <dict>

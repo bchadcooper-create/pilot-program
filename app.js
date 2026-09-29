@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.43.4 / 20260916_4
+ * Version/build: fcf-v5.43.5 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.43.4';
+const FCF_VERSION = 'fcf-v5.43.5';
 const FCF_BUILD   = '20260916_4';
 
 
@@ -4385,7 +4385,7 @@ async function toggleMedTaken(medId, time) {
   const nowTaken = !ST.medsTakenToday[key];
   if (nowTaken) ST.medsTakenToday[key] = true; else delete ST.medsTakenToday[key];
   haptic(nowTaken ? 'medium' : 'light');
-  renderPage();
+  refreshMedsSection();
   if (!ST.user) return;
   _medToggleInFlight.add(key);
   try {
@@ -4408,7 +4408,7 @@ async function toggleMedTaken(medId, time) {
   } catch (e) {
     // Roll back so the screen never claims a check-off the server rejected.
     if (nowTaken) delete ST.medsTakenToday[key]; else ST.medsTakenToday[key] = true;
-    renderPage();
+    refreshMedsSection();
     showBigToast('Could not save that check-off. Try again in a moment.', 'warn');
   } finally {
     _medToggleInFlight.delete(key);
@@ -4416,13 +4416,28 @@ async function toggleMedTaken(medId, time) {
 }
 
 // ── Today card ────────────────────────────────────────────────────────────
+// The card lives in its own #medsTodaySection wrapper so a check-off can
+// redraw just this card. A full renderPage() on Today empties the whole
+// page and refetches meals before redrawing, which snapped the scroll
+// position back to the top after every tap (reported: checking off one
+// dose made you scroll back down to reach the next one).
 function buildMedsTodayHTML(ctx) {
+  return '<div id="medsTodaySection">' + buildMedsTodayInner(ctx) + '</div>';
+}
+
+function refreshMedsSection() {
+  const el = document.getElementById('medsTodaySection');
+  if (el) el.innerHTML = buildMedsTodayInner({ now: new Date() });
+  else if (ST.tab === 'today') renderPage(); // card not on screen yet
+}
+
+function buildMedsTodayInner(ctx) {
   const due = medsDueToday(ctx.now);
   if (!due.length) return '';
   const today = localDateStr(ctx.now);
   // Day rolled over while the app stayed open: yesterday's check-offs
   // must not carry into today. Clear now, refetch in the background.
-  if (ST.medsTakenDate !== today) { ST.medsTakenDate = today; ST.medsTakenToday = {}; loadMedsTakenToday().then(renderPage); }
+  if (ST.medsTakenDate !== today) { ST.medsTakenDate = today; ST.medsTakenToday = {}; loadMedsTakenToday().then(refreshMedsSection); }
   const nowHM = String(ctx.now.getHours()).padStart(2,'0') + ':' + String(ctx.now.getMinutes()).padStart(2,'0');
   const takenCount = due.filter(d => ST.medsTakenToday[d.key]).length;
   const parts = [];

@@ -58,7 +58,7 @@ const WEEKLY_SUMMARY_PROMPT_VERSION = 4; // v4: goal-aware weight framing, house
 // (added the same day this constant was) doesn't keep serving a
 // pre-fix response — that field didn't exist in the context sent to
 // earlier cached responses, so their advice can't reflect it either.
-const FATIGUE_CALIBRATION_PROMPT_VERSION = 6; // v6: plain-words opener, house style; // v5: bodyClock awareness (v4: Sonnet 5)
+const FATIGUE_CALIBRATION_PROMPT_VERSION = 7; // v7: workout-already-logged and legs-flown guidance; // v6: plain-words opener, house style; // v5: bodyClock awareness (v4: Sonnet 5)
 // BUG FIX (found while updating this prompt): fuel_logistics' cache key
 // (below) never had a prompt-version component at all, unlike the other
 // two cached modes — so a stale response from before this exact prompt
@@ -92,6 +92,19 @@ function localDateKeyFor(timezone) {
     } catch (e) { /* invalid/unknown zone — fall through to UTC below */ }
   }
   return new Date().toISOString().slice(0, 10);
+}
+
+// Coarse local time-of-day bucket for the fatigue_calibration cache key:
+// 'm' before noon, 'a' noon to 5pm, 'e' after. Same timezone handling as
+// localDateKeyFor, falls back to server UTC if the zone is missing.
+function localDayPartFor(timezone) {
+  let hour;
+  try {
+    const h = new Intl.DateTimeFormat('en-US', { timeZone: timezone || 'UTC',
+      hour: 'numeric', hour12: false }).format(new Date());
+    hour = parseInt(h, 10) % 24;
+  } catch (e) { hour = new Date().getUTCHours(); }
+  return hour < 12 ? 'm' : hour < 17 ? 'a' : 'e';
 }
 
 // Appended to every conversational mode. Real screenshots showed em dashes in
@@ -178,6 +191,13 @@ home-base time, so a local-morning session is effectively earlier on their body 
 says. adapting_to_local means a longer stay. Only mention it when it actually changes the call (for example, an
 early local session that lands in their body's early morning); never lecture about jet lag in general.
 
+The day moves on and this note is re-asked as it does, so answer for RIGHT NOW, not for the morning. Each
+flight carries alreadyFlown; if every flight today is flown, do not talk about getting to report or leaving
+for the airport, that is behind them. If workoutLoggedToday is true, the training call is already settled:
+say the work is done in a few words and give one useful note for the rest of the day instead (protect sleep,
+eat, an easy walk on a long layover, whatever fits), never a second workout unless readiness is high and
+there is a real reason.
+
 Tell them straight, like a coach would in person, and give the one reason why, not generic "listen to your
 body" filler. If everything looks fine, say so with confidence, don't manufacture caution just to sound
 thorough. If they're doing well on a hard trip day, say that.
@@ -185,7 +205,8 @@ thorough. If they're doing well on a hard trip day, say that.
 TWO SENTENCES MAXIMUM. One for the call, one for the reason, combine them into one sentence if you can. If
 your draft runs longer, you're including detail nobody asked for; cut it. Talk directly and warmly, no clinical
 tone, no restating the raw numbers back at them. Open with the call in plain words a reader can't misparse:
-"Full send today", "Dial it back", "Take the day", or "No time to train before report" and then the reason.` + HOUSE_STYLE,
+"Full send today", "Dial it back", "Take the day", "No time to train before report", or, once a workout is
+already logged, "Work's done" and then the reason.` + HOUSE_STYLE,
 
   fuel_logistics: `You're a coach passing a pilot or flight crew member one quick line about today's eating window
 ,  a text message, not a logistics report. Say which window today is worth using for real food and why the
@@ -400,10 +421,25 @@ Deno.serve(async (req) => {
       // key itself so that transition invalidates the old answer,
       // matching how the schedule and readiness-timing fixes above
       // handle their own respective triggers.
+      // BUG FIX (reported: opened the app at 6:30am and got "No time to
+      // train before report, just get ready and go". Flew two legs,
+      // finished a workout in the afternoon, and the card still said the
+      // same thing). The key had no dependency on anything that moves
+      // during the day: whether a workout has been logged, how many legs
+      // are already flown, or roughly what time it is. So the first
+      // answer of the morning was locked in until local midnight.
+      // Added all three. workoutLoggedToday and legsCompletedToday change
+      // exactly when the advice should change; the day-part bucket
+      // (morning / afternoon / evening) covers a day off with no flights,
+      // where nothing else in the key would ever move. Worst case is a
+      // handful of extra low-cost calls per user per day, not one per load.
       fatigueCacheKey = localDateKeyFor(context.timezone) + '_v' + FATIGUE_CALIBRATION_PROMPT_VERSION
         + '_f' + (context.todaysFlights?.length ?? 0) + '_t' + (context.tripDayNumber ?? 'null')
         + '_o' + (context.ouraConnected ? 1 : 0)
-        + '_b' + (context.bodyClock ? (context.bodyClock.hoursOffLocal + context.bodyClock.strategy.charAt(0)) : 0);
+        + '_b' + (context.bodyClock ? (context.bodyClock.hoursOffLocal + context.bodyClock.strategy.charAt(0)) : 0)
+        + '_w' + (context.workoutLoggedToday ? 1 : 0)
+        + '_l' + (context.legsCompletedToday ?? 0)
+        + '_p' + localDayPartFor(context.timezone);
       const { data: cached } = await supabase
         .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
       const cachedKey = cached?.profile_data?.fatigueCalibrationCacheKey;

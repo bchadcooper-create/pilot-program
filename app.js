@@ -36,17 +36,25 @@ const SB = supabase.createClient(
 // ─── SUBSCRIPTION TIERS ─────────────────────────────────────────────────
 const FREE_WEEKLY_PHOTOS = 3;
 const PRO_WEEKLY_PHOTOS = 0;        // 0 = unlimited
-// Aircraft marshaller giving the stop signal (arms up, orange wands crossed
-// overhead). Replaces the padlock on the "Set the Chocks" buttons: stopping
-// the aircraft is the gesture that matches chocking the wheels. Body uses
-// currentColor so it follows the button's text color.
-const MARSHALL_STOP_ICON = '<svg viewBox="0 0 24 24" width="1.45em" height="1.45em" style="vertical-align:-0.22em;margin-right:2px" aria-hidden="true">' +
-  '<line x1="9.5" y1="6.5" x2="16.5" y2="1.2" stroke="#f97316" stroke-width="1.8" stroke-linecap="round"/>' +
-  '<line x1="14.5" y1="6.5" x2="7.5" y2="1.2" stroke="#f97316" stroke-width="1.8" stroke-linecap="round"/>' +
-  '<path d="M8.6 12.6 L9.5 6.5 M15.4 12.6 L14.5 6.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" fill="none"/>' +
-  '<circle cx="12" cy="9.4" r="1.75" fill="currentColor"/>' +
-  '<path d="M8.9 12.1 H15.1 L14.6 17.6 H9.4 Z" fill="currentColor"/>' +
-  '<path d="M10.5 17.4 L10.1 22.7 M13.5 17.4 L13.9 22.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
+// Aircraft marshaller giving the stop signal: elbows out, wrists crossed
+// above the helmet, orange wands crossing at the hands. Blue helmet, green
+// headset, hi-vis orange vest. Replaces the padlock on the "Set the Chocks"
+// buttons, since stopping the aircraft is the gesture that matches chocking
+// the wheels. The negative vertical margin lets it sit large on the button
+// without making the button taller.
+const MARSHALL_STOP_ICON = '<svg viewBox="0 0 24 24" width="2.3em" height="2.3em" style="vertical-align:middle;margin:-10px 6px -8px 0" aria-hidden="true">' +
+  '<line x1="14.6" y1="7.8" x2="6.2" y2="1.3" stroke="#f97316" stroke-width="1.7" stroke-linecap="round"/>' +
+  '<line x1="9.4" y1="7.8" x2="17.8" y2="1.3" stroke="#f97316" stroke-width="1.7" stroke-linecap="round"/>' +
+  '<path d="M8.4 15.2 L5.4 10.6" stroke="#1e3a8a" stroke-width="2.3" stroke-linecap="round"/>' +
+  '<path d="M15.6 15.2 L18.6 10.6" stroke="#1e3a8a" stroke-width="2.3" stroke-linecap="round"/>' +
+  '<path d="M5.4 10.6 L13.4 6.6 M18.6 10.6 L10.6 6.6" stroke="#e0b48a" stroke-width="1.9" stroke-linecap="round"/>' +
+  '<circle cx="12" cy="7.3" r="1.2" fill="#1f2937"/>' +
+  '<path d="M7.6 15 Q12 13.6 16.4 15 L17 23 H7 Z" fill="#1e3a8a"/>' +
+  '<path d="M8.3 15.3 L11 14.6 L11.2 23 H7.8 Z M15.7 15.3 L13 14.6 L12.8 23 H16.2 Z" fill="#ff6a00" stroke="#0a0f1a" stroke-width=".35"/>' +
+  '<rect x="7.9" y="19" width="3.2" height=".9" fill="#e5e7eb"/><rect x="12.9" y="19" width="3.2" height=".9" fill="#e5e7eb"/>' +
+  '<circle cx="12" cy="11.9" r="2" fill="#e0b48a"/>' +
+  '<path d="M9.8 11.4 Q12 8.2 14.2 11.4 Z" fill="#2563eb"/>' +
+  '<rect x="9.1" y="11.2" width="1.3" height="2.1" rx=".55" fill="#15803d"/><rect x="13.6" y="11.2" width="1.3" height="2.1" rx=".55" fill="#15803d"/>' +
   '</svg>';
 const PRO_ANNUAL_PRICE = '$59.99';
 const PRO_MONTHLY_PRICE = '$7.99';
@@ -8184,7 +8192,7 @@ function renderFlight(p) {
   // Disabled while a save is in flight so the guard is visible rather than
   // a silent no-op — repeated tapping is what produced duplicates, and a
   // button that looks live invites exactly that.
-  parts.push('<button class="btn btn-green" '+(ST.chocksSaving?'disabled':'')+' onclick="confirmSetChocks()">'+(ST.chocksSaving?'⏳ SAVING…':MARSHALL_STOP_ICON+' SET THE CHOCKS · FINISH WORKOUT')+'</button>');
+  parts.push('<button class="btn btn-green" '+(ST.chocksSaving?'disabled':'')+' onclick="confirmSetChocks()">'+(ST.chocksSaving?'⏳ SAVING…':MARSHALL_STOP_ICON+'SET THE CHOCKS · FINISH WORKOUT')+'</button>');
 
   p.innerHTML = parts.join('');
 }
@@ -9295,7 +9303,7 @@ function confirmSetChocks() {
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">Finish this workout now?</div>' +
     '<div class="modal-body" style="margin-bottom:14px">You still have '+remaining+' exercise'+(remaining===1?'':'s')+' left ('+done+'/'+allEx.length+' done). Setting the chocks finishes and saves the workout as-is. Anything not logged won\'t be recorded.</div>' +
-    '<button class="btn btn-green" '+(ST.chocksSaving?'disabled':'')+' onclick="closeModal();setTheChocks()">'+(ST.chocksSaving?'⏳ Saving…':MARSHALL_STOP_ICON+' Finish Anyway')+'</button>' +
+    '<button class="btn btn-green" '+(ST.chocksSaving?'disabled':'')+' onclick="closeModal();setTheChocks()">'+(ST.chocksSaving?'⏳ Saving…':MARSHALL_STOP_ICON+'Finish Anyway')+'</button>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">Keep Training</button>' +
     '</div></div>';
 }

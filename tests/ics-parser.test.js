@@ -413,6 +413,46 @@ test('the two apostrophe exercises are covered by the sweep', () => {
   assertEqual(names.includes("Child's Pose"), true, 'Child\'s Pose present');
 });
 
+console.log('\nTonight\'s layover (AI coach said "sleep in SEA" while sitting in EUG):');
+// Chad's real Sep 30 day: woke in EUG, flew two legs, back in EUG at 13:07
+// for a layover that runs to 12:41 tomorrow. Tomorrow ends in SEA.
+function local(y, m, d, hh, mm) { return new Date(y, m - 1, d, hh, mm).toISOString(); }
+const tripFixture = [
+  { type: 'layover', airport: 'EUG', start: local(2026, 9, 29, 19, 17), end: local(2026, 9, 30, 5, 47) },
+  { type: 'flight',  title: 'FLT 3636', start: local(2026, 9, 30, 6, 47), end: local(2026, 9, 30, 9, 26) },
+  { type: 'flight',  title: 'FLT 4097', start: local(2026, 9, 30, 10, 21), end: local(2026, 9, 30, 13, 7) },
+  { type: 'layover', airport: 'EUG', start: local(2026, 9, 30, 13, 7), end: local(2026, 10, 1, 12, 41) },
+  { type: 'flight',  title: 'FLT 1234', start: local(2026, 10, 1, 13, 41), end: local(2026, 10, 1, 15, 30) },
+  { type: 'layover', airport: 'SEA', start: local(2026, 10, 1, 15, 30), end: local(2026, 10, 2, 9, 0) },
+];
+test('afternoon inside an overnight layover: tonight is here, not the next stop', () => {
+  const trip = ctx.currentTripContext(tripFixture, new Date(2026, 8, 30, 16, 14));
+  assertEqual(trip.tonightLayoverAirport, 'EUG', 'tonight');
+  assertEqual(trip.nextLayoverAirport, 'SEA', 'next rest after this one');
+});
+test('mid-duty with a layover starting this evening: tonight is that layover', () => {
+  const trip = ctx.currentTripContext(tripFixture, new Date(2026, 8, 30, 11, 0));
+  assertEqual(trip.tonightLayoverAirport, 'EUG', 'tonight');
+});
+test('a layover that starts tomorrow afternoon is not tonight', () => {
+  // Same day, but the calendar has no layover event for tonight (a sub-20h
+  // gap, so it is still one trip) and the SEA layover starts tomorrow
+  // afternoon. "Tonight" is unknown; the next rest is still SEA.
+  const noOvernight = [
+    tripFixture[0], tripFixture[1], tripFixture[2],
+    { type: 'flight',  title: 'FLT 1234', start: local(2026, 10, 1, 8, 0), end: local(2026, 10, 1, 10, 0) },
+    { type: 'flight',  title: 'FLT 1235', start: local(2026, 10, 1, 10, 30), end: local(2026, 10, 1, 12, 50) },
+    { type: 'layover', airport: 'SEA', start: local(2026, 10, 1, 13, 0), end: local(2026, 10, 2, 9, 0) },
+  ];
+  const trip = ctx.currentTripContext(noOvernight, new Date(2026, 8, 30, 14, 0));
+  assertEqual(trip.tonightLayoverAirport, null, 'tonight unknown');
+  assertEqual(trip.nextLayoverAirport, 'SEA', 'next rest is still SEA');
+});
+test('morning inside a layover that ends before noon: tonight is the next overnight', () => {
+  const trip = ctx.currentTripContext(tripFixture, new Date(2026, 8, 30, 5, 0));
+  assertEqual(trip.tonightLayoverAirport, 'EUG', 'tonight is the 13:07 EUG layover');
+});
+
 console.log('\n' + '─'.repeat(50));
 console.log(passed + ' passed, ' + failed + ' failed');
 if (failed > 0) process.exit(1);

@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.43.8 / 20260916_4
+ * Version/build: fcf-v5.43.9 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.43.8';
+const FCF_VERSION = 'fcf-v5.43.9';
 const FCF_BUILD   = '20260916_4';
 
 
@@ -5577,7 +5577,13 @@ async function loadFatigueCalibration(ctx) {
       todaysFlights,
       dutyEndsLocal: fmtLocalForAI(sched.dutyEndsToday),
       currentlyAtLayoverAirport: sched.layoverAirport || null,
-      tonightsLayoverAirport: sched.nextLayoverAirport || null,
+      // Where they actually sleep tonight (the layover covering midnight),
+      // which is the CURRENT layover when they are already in an overnight.
+      // The next rest after this one is sent under its own honest name so
+      // the model can't confuse tomorrow night with tonight.
+      tonightsLayoverAirport: sched.tonightLayoverAirport || null,
+      nextRestAfterTonightAirport: (sched.nextLayoverAirport && sched.nextLayoverAirport !== sched.tonightLayoverAirport)
+        ? sched.nextLayoverAirport : null,
       workoutLoggedToday: ctx.training?.workoutToday ?? false,
       // BUG FIX (reported: told to "get a solid workout in" with 45
       // minutes before needing to leave a hotel for a 9:05 departure).
@@ -12015,6 +12021,7 @@ function scheduleContextForToday(schedule, now) {
   ctx.tripTotalDays = trip.tripTotalDays ?? null;
   ctx.nextLayoverAirport = trip.nextLayoverAirport || null;
   ctx.nextLayoverStart = trip.nextLayoverStart || null;
+  ctx.tonightLayoverAirport = trip.tonightLayoverAirport || null;
   ctx.dutyEndsToday = trip.dutyEndsToday;
   ctx.currentType = trip.currentType;
   if (trip.current) ctx.current = trip.current;
@@ -12114,6 +12121,19 @@ function currentTripContext(schedule, now) {
   const tripEndDay = new Date(activeTrip[activeTrip.length-1].en); tripEndDay.setHours(0,0,0,0);
   const tripTotalDays = Math.floor((tripEndDay.getTime() - tripStartDay.getTime()) / 86400000) + 1;
 
+  // BUG FIX (reported: 4pm, sitting in the EUG layover that runs to noon
+  // tomorrow, and the AI coach said "protect sleep tonight in SEA". SEA is
+  // TOMORROW night). upcomingLayover is the next layover that has not
+  // started yet, which is the right answer for "where is my next rest"
+  // but the wrong answer for "where do I sleep tonight" whenever the
+  // person is already inside an overnight layover. Tonight's layover is
+  // whichever one covers local midnight tonight: it must start before
+  // tomorrow noon and still be running past midnight. The one they woke
+  // up in this morning ended before midnight, so it never qualifies.
+  const tomorrowNoonMs = todayStartMs + 36 * 3600000;
+  const tonightLayover = activeTrip.find(e =>
+    e.type === 'layover' && e.s < tomorrowNoonMs && e.en > todayEndMs);
+
   return { legsCompleted, legsRemaining, legsTodayCompleted, legsTodayRemaining,
            current, dutyEndsAt, dutyEndsToday,
            tripDayNumber, tripTotalDays,
@@ -12122,6 +12142,7 @@ function currentTripContext(schedule, now) {
            // used the current layover instead of the one coming up.
            nextLayoverAirport: upcomingLayover?.airport || null,
            nextLayoverStart: upcomingLayover?.s || null,
+           tonightLayoverAirport: tonightLayover?.airport || null,
            currentType: current ? current.type : null };
 }
 

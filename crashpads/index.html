@@ -128,7 +128,8 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { storage, 
 const S = { tab:'today', data:null, month:new Date().getDate()>=20 ? addMonths(firstOfMonth(new Date()),1) : firstOfMonth(new Date()), leadsFilter:'open', tenantsFilter:'current' };
 const $ = (id)=>document.getElementById(id);
 const esc = (s)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const money = (n)=>'$'+Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0});
+const money = (n)=>{ const v=Number(n||0); return (v<0?'-$':'$')+Math.abs(v).toLocaleString('en-US',{maximumFractionDigits:0}); };
+function daysSince(s){ if(!s) return 9999; return Math.floor((Date.now()-new Date(String(s).slice(0,10)+'T12:00:00'))/86400000); }
 function firstOfMonth(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
 function iso(d){ if(!d) return null; const x=new Date(d); return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'); }
 function today(){ return iso(new Date()); }
@@ -208,6 +209,18 @@ const statusPill = (s)=>({paid:'<span class="pill ok">Paid</span>',due:'<span cl
 const bedPill = (s)=>({Open:'<span class="pill ok">Open</span>',Reserved:'<span class="pill info">Reserved</span>',Occupied:'<span class="pill muted">Occupied</span>'}[s]||'');
 const contactRow = (t)=>`<div class="row small">${t.phone?`<a class="btn sm" href="tel:+${phoneDigits(t.phone)}">Call</a><a class="btn sm" href="sms:+${phoneDigits(t.phone)}">Text</a>`:''}${t.email?`<a class="btn sm" href="mailto:${esc(t.email)}">Email</a>`:''}<span class="muted mono">${esc(fmtPhone(t.phone))}</span></div>`;
 
+// What's still open after someone moves out. Drives the Today list and the tenant card.
+function moveoutTodo(t){
+  const todo=[];
+  if(t.fee_paid_on && !t.fee_refunded_on && !t.fee_kept)
+    todo.push({label:'Refund the $150 reservation fee', act:'feerefund', id:t.id, btn:'Refund', pri:true});
+  if(t.groupme_added)
+    todo.push({label:'Remove from the DFW CRASHPADS GroupMe', act:'clearflag', id:t.id+'|groupme_added', btn:'Done'});
+  if(t.ttlock_account)
+    todo.push({label:'Turn off their TTLock door key', act:'clearflag', id:t.id+'|ttlock_account', btn:'Done'});
+  return todo;
+}
+
 // ---------- Today ----------
 function vToday(){
   const d=S.data, td=today();
@@ -215,6 +228,9 @@ function vToday(){
   const late = cur.filter(r=>r.rent_status==='late'), due=cur.filter(r=>r.rent_status==='due'), paid=cur.filter(r=>r.rent_status==='paid');
   const reserved = d.tenants.filter(t=>t.status==='Reserved');
   const leaving = d.tenants.filter(t=>t.status==='Active' && t.move_out);
+  // An owed refund never ages off the list. The GroupMe/TTLock reminders stop nagging after 90 days.
+  const feeOwed = (t)=>t.fee_paid_on && !t.fee_refunded_on && !t.fee_kept;
+  const followups = d.tenants.filter(t=>t.status==='Moved Out' && moveoutTodo(t).length && (feeOwed(t) || daysSince(t.move_out)<=90));
   const cleaning = d.cleaning.filter(c=>!c.done);
   const newLeads = d.leads.filter(l=>['New','Contacted','Approved','Agreement sent'].includes(l.status));
   const occ = d.beds.filter(b=>b.status==='Occupied').length;
@@ -227,6 +243,7 @@ function vToday(){
     ${late.length||due.length?`<div><h3>Rent ${monthLabel(S.month)}</h3><div class="list">${[...late,...due].map(r=>`<div class="card tap row" data-tenant="${r.tenant_id}"><span class="grow"><b>${esc(r.name)}</b> <span class="mono muted small">${esc(r.bed_id||'')}</span><div class="small muted">Owes ${money(r.owed)} of ${money(r.rent)}</div></span>${statusPill(r.rent_status)}<button class="btn sm" data-act="pay" data-id="${r.tenant_id}">Paid</button></div>`).join('')}</div></div>`:''}
     ${reserved.length?`<div><h3>Reserved, not moved in</h3><div class="list">${reserved.map(t=>{const miss=[];if(!t.bed_id)miss.push('needs bed');if(!t.fee_paid_on)miss.push('needs $150 fee');if(!t.contract_signed)miss.push('needs signature');return `<div class="card tap row" data-tenant="${t.id}"><span class="grow"><b>${esc(t.name)}</b> <span class="mono muted small">${esc(t.bed_id||t.category_hold||'')}</span><div class="small muted">Move-in ${fmtD(t.move_in)||'TBD'}${miss.length?' · '+miss.join(', '):''}</div></span>${(t.move_in&&t.move_in<=td)?`<button class="btn sm pri" data-act="movein" data-id="${t.id}">Move in</button>`:''}</div>`;}).join('')}</div></div>`:''}
     ${leaving.length?`<div><h3>Moving out</h3><div class="list">${leaving.map(t=>`<div class="card tap row" data-tenant="${t.id}"><span class="grow"><b>${esc(t.name)}</b> <span class="mono muted small">${esc(t.bed_id||'')}</span><div class="small muted">Last night ${fmtD(t.move_out)}</div></span>${t.move_out<td?`<button class="btn sm" data-act="moveout" data-id="${t.id}">Moved out</button>`:''}</div>`).join('')}</div></div>`:''}
+    ${followups.length?`<div><h3>Move-out follow-ups</h3><div class="list">${followups.map(t=>`<div class="card"><div class="row tap" data-tenant="${t.id}"><span class="grow"><b>${esc(t.name)}</b> <span class="mono muted small">${esc(t.bed_id||'')}</span><div class="small muted">Left ${fmtD(t.move_out)}${daysSince(t.move_out)>0?' · '+daysSince(t.move_out)+' days ago':''}</div></span></div><div style="margin-top:6px">${moveoutTodo(t).map(i=>`<div class="row" style="padding:3px 0"><span class="grow small">${i.label}</span><button class="btn sm ${i.pri?'pri':''}" data-act="${i.act}" data-id="${i.id}">${i.btn}</button></div>`).join('')}</div></div>`).join('')}</div></div>`:''}
     ${cleaning.length?`<div><h3>For Will (cleaning)</h3><div class="card"><div class="list">${cleaning.map(c=>`<div class="row"><span class="mono">${esc(c.bed_id||'')}</span><span class="grow small">${esc(c.task)}${c.tenant_name?' · '+esc(c.tenant_name):''} · by ${fmtD(c.needed_on)}</span><button class="btn sm" data-act="cleandone" data-id="${c.id}">Done</button></div>`).join('')}</div><div class="row" style="margin-top:8px"><button class="btn sm" data-act="cleantext" data-id="x">Copy text for Will</button></div></div></div>`:''}
     ${newLeads.length?`<div><h3>Open leads</h3><div class="list">${newLeads.map(l=>leadCard(l)).join('')}</div></div>`:''}
     ${paid.length?`<div><h3>Paid ${monthLabel(S.month)}</h3><div class="card small muted">${paid.map(r=>esc(r.name)).join(', ')}</div></div>`:''}
@@ -341,10 +358,11 @@ function openTenant(id){
         ${t.status==='Active'&&!t.move_out?`<button class="btn" data-act="notice" data-id="${t.id}">Log notice</button>`:''}
         ${t.status==='Active'&&t.move_out?`<button class="btn" data-act="moveout" data-id="${t.id}">Moved out</button>`:''}
         ${!t.fee_paid_on&&t.status!=='Moved Out'?`<button class="btn" data-act="feepaid" data-id="${t.id}">$150 fee received</button>`:''}
-        ${t.status==='Moved Out'&&t.fee_paid_on&&!t.fee_refunded_on?`<button class="btn" data-act="feerefund" data-id="${t.id}">$150 refunded</button>`:''}
+        ${t.status==='Moved Out'&&t.fee_paid_on&&!t.fee_refunded_on&&!t.fee_kept?`<button class="btn" data-act="feerefund" data-id="${t.id}">Refund $150</button>`:''}
       </div>
+      ${moveoutTodo(t).length&&t.status==='Moved Out'?`<div class="card"><h3>Still to do</h3>${moveoutTodo(t).map(i=>`<div class="row" style="padding:3px 0"><span class="grow small">${i.label}</span><button class="btn sm ${i.pri?'pri':''}" data-act="${i.act}" data-id="${i.id}">${i.btn}</button></div>`).join('')}</div>`:''}
       <div class="card">${flags.map(([k,l])=>`<label class="chk"><input type="checkbox" data-act="flag" data-id="${t.id}|${k}" ${t[k]?'checked':''}> ${l}</label>`).join('')}
-        <div class="small muted">Fee: ${t.fee_paid_on?'paid '+fmtD(t.fee_paid_on):'not received'}${t.fee_refunded_on?', refunded '+fmtD(t.fee_refunded_on):''} · Code <span class="mono">${esc(t.payment_code||'')}</span>${t.notice_given_on?' · Notice given '+fmtD(t.notice_given_on):''}</div>
+        <div class="small muted">Fee: ${t.fee_paid_on?'paid '+fmtD(t.fee_paid_on):'not received'}${t.fee_refunded_on?', refunded '+fmtD(t.fee_refunded_on):''}${t.fee_kept?', kept <button class="btn sm" data-act="feeunkeep" data-id="'+t.id+'">Undo</button>':''} · Code <span class="mono">${esc(t.payment_code||'')}</span>${t.notice_given_on?' · Notice given '+fmtD(t.notice_given_on):''}</div>
         ${t.contract_url?`<div class="small"><a href="${esc(t.contract_url)}" target="_blank" rel="noopener">Signed agreement</a></div>`:''}
       </div>
       ${t.notes?`<div class="small muted">${esc(t.notes)}</div>`:''}
@@ -450,7 +468,21 @@ const ACT = {
   tenantnote:async(id)=>{ const txt=$('cl-text').value.trim(); if(!txt) return; const t=tenantById(id); await run(sb.from('cp_contact_log').insert({tenant_id:id,who:t.name,channel:'Text',summary:txt}),'Logged'); openTenant(id); },
   flag:async(arg,el)=>{ const [id,k]=arg.split('|'); await run(sb.from('cp_tenants').update({[k]:el.checked}).eq('id',id)); },
   feepaid:async(id)=>{ closeSheet(); const t=tenantById(id); await run(sb.from('cp_tenants').update({fee_paid_on:today()}).eq('id',id)); await run(sb.from('cp_payments').insert({tenant_id:id,tenant_name:t.name,amount:150,method:'Other',for_month:iso(firstOfMonth(t.move_in?new Date(t.move_in+'T12:00:00'):new Date())),type:'Reservation fee',note:'Marked from the app'}),'Fee recorded'); openTenant(id); },
-  feerefund:async(id)=>{ closeSheet(); const t=tenantById(id); await run(sb.from('cp_tenants').update({fee_refunded_on:today()}).eq('id',id)); await run(sb.from('cp_payments').insert({tenant_id:id,tenant_name:t.name,amount:-150,method:'Other',for_month:iso(firstOfMonth(new Date())),type:'Refund',note:'Reservation fee refunded'}),'Refund recorded'); },
+  feerefund:(id)=>{ const t=tenantById(id); sheet(`<h2>Refund ${esc(t.name)}</h2><div class="stack">
+      <div class="grid2"><label class="f">Amount $<input id="rf-amt" inputmode="decimal" value="150"></label><label class="f">Sent on<input id="rf-date" type="date" value="${today()}"></label></div>
+      <label class="f">How<select id="rf-method">${['Venmo','Zelle','Apple Pay','Cash App','PayPal','Cash','Other'].map(o=>`<option>${o}</option>`).join('')}</select></label>
+      <label class="f">Note<input id="rf-note" placeholder="Optional"></label>
+      <button class="btn pri" data-act="feerefundsave" data-id="${id}">Log the refund</button>
+      <hr class="hr">
+      <div class="small muted">Not refunding this one? Late notice, or they cancelled before staying.</div>
+      <button class="btn" data-act="feekeep" data-id="${id}">Keeping the fee</button>
+    </div>`); wire(); },
+  feerefundsave:async(id)=>{ const t=tenantById(id); const amt=Math.abs(Number($('rf-amt').value))||0; if(!amt) return toast('Amount?');
+    const on=$('rf-date').value||today(); const note=$('rf-note').value.trim()||null; closeSheet();
+    await run(sb.from('cp_payments').insert({tenant_id:id,tenant_name:t.name,amount:-amt,method:$('rf-method').value,for_month:null,type:'Refund',received_on:on,note:note||'Reservation fee refunded at move-out'}));
+    await run(sb.from('cp_tenants').update({fee_refunded_on:on}).eq('id',id),'Refund logged'); },
+  feeunkeep:async(id)=>{ closeSheet(); await run(sb.from('cp_tenants').update({fee_kept:false}).eq('id',id),'Back on the list'); openTenant(id); },
+  feekeep:(id)=>confirmSheet('Keep the $150 instead of refunding it? This just clears the reminder, no payment is logged.',async()=>{ closeSheet(); await run(sb.from('cp_tenants').update({fee_kept:true}).eq('id',id),'Fee kept'); }),
   movein:(id)=>{ const t=tenantById(id); sheet(`<h2>Move in ${esc(t.name)}</h2><div class="stack">
       <div class="small muted">Bed <span class="mono">${esc(t.bed_id||'none yet')}</span>. This sets them Active as of today.</div>
       ${!t.bed_id?`<div class="pill bad">Assign a bed first (Edit tenant)</div>`:''}
@@ -464,8 +496,9 @@ const ACT = {
     await sb.from('cp_cleaning').insert({needed_on:iso(next),bed_id:t.bed_id,task:'Strip after move-out',tenant_id:id,tenant_name:t.name,notes:`${t.name} leaves ${fmtD(out)}`});
     if(txt) await sb.from('cp_contact_log').insert({tenant_id:id,who:t.name,channel:'Text',summary:txt,tag:'notice',key_date:out});
     toast('Notice logged'); await load(); openTenant(id); },
-  moveout:(id)=>{ const t=tenantById(id); sheet(`<h2>Move out ${esc(t.name)}</h2><div class="stack"><div class="small">Sets them Moved Out and frees <span class="mono">${esc(t.bed_id||'')}</span>. Then by hand: remove from GroupMe, turn off their TTLock key, refund the $150 within 30 days if they gave notice by the 15th.</div><button class="btn pri" data-act="moveoutconfirm" data-id="${id}">Mark moved out</button></div>`); wire(); },
-  moveoutconfirm:async(id)=>{ const t=tenantById(id); closeSheet(); await run(sb.from('cp_tenants').update({status:'Moved Out',move_out:t.move_out||today(),groupme_added:false,ttlock_account:false}).eq('id',id),'Moved out'); },
+  moveout:(id)=>{ const t=tenantById(id); sheet(`<h2>Move out ${esc(t.name)}</h2><div class="stack"><div class="small">Sets them Moved Out and frees <span class="mono">${esc(t.bed_id||'')}</span>.</div><div class="card small">These stay on Today under <b>Move-out follow-ups</b> until you tick them off:${t.fee_paid_on&&!t.fee_refunded_on&&!t.fee_kept?'<br>· Refund the $150 (within 30 days if they gave notice by the 15th)':''}${t.groupme_added?'<br>· Remove from GroupMe':''}${t.ttlock_account?'<br>· Turn off their TTLock key':''}</div><button class="btn pri" data-act="moveoutconfirm" data-id="${id}">Mark moved out</button></div>`); wire(); },
+  moveoutconfirm:async(id)=>{ const t=tenantById(id); closeSheet(); await run(sb.from('cp_tenants').update({status:'Moved Out',move_out:t.move_out||today()}).eq('id',id),'Moved out'); },
+  clearflag:async(arg)=>{ const [id,k]=arg.split('|'); await run(sb.from('cp_tenants').update({[k]:false}).eq('id',id),'Checked off'); if($('sheet')&&S.detail===id) openTenant(id); },
   assign:(bedId)=>{ const cands=S.data.tenants.filter(t=>t.status!=='Moved Out'&&t.bed_id!==bedId); const b=S.data.beds.find(x=>x.id===bedId);
     sheet(`<h2>Assign ${bedId}</h2><div class="stack"><label class="f">Tenant<select id="as-t"><option value="">Choose…</option>${cands.map(t=>`<option value="${t.id}">${esc(t.name)} (${t.status}${t.bed_id?', now '+t.bed_id:''})</option>`).join('')}</select></label><label class="f">Rent $/mo<input id="as-rent" inputmode="numeric" value="${b.list_price}"></label><button class="btn pri" data-act="assignsave" data-id="${bedId}">Assign</button><button class="btn" data-act="addtenant" data-id="x">Or add a new tenant</button></div>`); wire(); },
   assignsave:async(bedId)=>{ const tid=$('as-t').value; if(!tid) return toast('Pick a tenant'); const rent=Number($('as-rent').value)||0; closeSheet(); await run(sb.from('cp_tenants').update({bed_id:bedId,rent,payment_code:bedId.replace('-',''),category_hold:null}).eq('id',tid),'Assigned'); },

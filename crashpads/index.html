@@ -124,7 +124,8 @@ catch(e){ storage = { getItem:k=>memStore[k]??null, setItem:(k,v)=>{memStore[k]=
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { storage, persistSession: true, autoRefreshToken: true } });
 
 // ---------- state ----------
-const S = { tab:'today', data:null, month:firstOfMonth(new Date()), leadsFilter:'open', tenantsFilter:'current' };
+// From the 20th on, the month that matters is the coming one (rent due the 1st).
+const S = { tab:'today', data:null, month:new Date().getDate()>=20 ? addMonths(firstOfMonth(new Date()),1) : firstOfMonth(new Date()), leadsFilter:'open', tenantsFilter:'current' };
 const $ = (id)=>document.getElementById(id);
 const esc = (s)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money = (n)=>'$'+Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0});

@@ -82,7 +82,7 @@ function loadAppJS() {
   // attach themselves automatically and are reachable as context.<name>;
   // this one extra statement is only needed to reach the `const ST` state
   // object itself from outside the sandbox for test setup/assertions.
-  vm.runInContext('this.ST = ST;', context);
+  vm.runInContext('this.ST = ST; this.WORKOUTS = WORKOUTS;', context);
   return context;
 }
 
@@ -366,6 +366,51 @@ test('applyProfileToState hydrates medications and drops malformed entries', () 
   assertEqual(ctx.ST.medications.length, 1, 'one valid entry survives');
   assertEqual(ctx.ST.medications[0].name, 'Zinc', 'name hydrated');
   ctx.ST.medications = [];
+});
+
+console.log('\nInline handler safety (Guide on "Child\'s Pose" threw SyntaxError):');
+// Decode an HTML attribute value the way the browser does before handing
+// it to the JS parser. Only the entities app.js actually emits matter.
+function decodeAttr(v) {
+  return v.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+}
+function everyExercise() {
+  // WORKOUTS is env -> muscle group -> phase -> [exercises]; walk any depth.
+  const out = [];
+  (function walk(v) {
+    if (Array.isArray(v)) v.forEach(x => (x && x.id && x.name) ? out.push(x) : walk(x));
+    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+  })(ctx.WORKOUTS);
+  return out;
+}
+test('jsArg output survives HTML attribute decoding and parses as JS', () => {
+  const nasty = 'Child\'s "Pose" <b>&amp;</b> \\ back';
+  const attr = decodeAttr("openExerciseGuide('" + ctx.jsArg(nasty) + "')");
+  let got;
+  new Function('openExerciseGuide', attr)(v => { got = v; });
+  assertEqual(got, nasty, 'round trip');
+});
+test('every exercise card compiles all of its inline handlers', () => {
+  ctx.ST.sets = {}; ctx.ST.expanded = {};
+  const bad = [];
+  everyExercise().forEach(ex => {
+    ctx.ST.expanded[ex.id] = true;   // expanded card renders Alternate/Remove too
+    const html = ctx.buildExCard(Object.assign({}, ex), 'landing');
+    const re = /on(?:click|change|input)="([^"]*)"/g;
+    let m;
+    while ((m = re.exec(html))) {
+      try { new Function(decodeAttr(m[1])); }
+      catch (e) { bad.push(ex.name + ': ' + e.message); }
+    }
+  });
+  ctx.ST.expanded = {};
+  assertEqual(bad.length, 0, 'broken handlers:\n' + bad.join('\n'));
+});
+test('the two apostrophe exercises are covered by the sweep', () => {
+  const names = everyExercise().map(e => e.name);
+  assertEqual(names.includes("Child's Pose + Reach"), true, 'Child\'s Pose + Reach present');
+  assertEqual(names.includes("Child's Pose"), true, 'Child\'s Pose present');
 });
 
 console.log('\n' + '─'.repeat(50));

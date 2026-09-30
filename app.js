@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.43.7 / 20260916_4
+ * Version/build: fcf-v5.43.8 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.43.7';
+const FCF_VERSION = 'fcf-v5.43.8';
 const FCF_BUILD   = '20260916_4';
 
 
@@ -8234,7 +8234,7 @@ function openExerciseGuide(exName) {
     }
     el.innerHTML = html;
     el.style.display = 'block';
-  }).catch(e => { const el = document.getElementById('guideContent'); if (el) el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">Failed to load.<br><button class="btn btn-blue mt12" onclick="openYouTubeSearch(\''+exName.replace(/'/g,'&#39;')+'\')">Open YouTube</button></div>'; });
+  }).catch(e => { const el = document.getElementById('guideContent'); if (el) el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">Failed to load.<br><button class="btn btn-blue mt12" onclick="openYouTubeSearch(\''+jsArg(exName)+'\')">Open YouTube</button></div>'; });
 }
 
 // BUG FIX (reported): coming back from the video landed on a blank
@@ -8253,7 +8253,7 @@ function openYouTubeSearch(exName) {
   root.innerHTML =
     '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet">' +
     '<div class="modal-handle"></div>' +
-    '<div class="modal-title">' + sanitizeUserText(exName) + '</div>' +
+    '<div class="modal-title">' + escapeUserProse(exName, 120) + '</div>' +
     '<div class="modal-body">No built-in form guide for this one yet. This opens a YouTube search in your browser.</div>' +
     '<a class="btn btn-gold mt12" style="display:block;text-align:center;text-decoration:none" href="' + url + '" ' + externalLinkAttrs() + ' onclick="closeModal()">▶ Watch on YouTube</a>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">Cancel</button>' +
@@ -8268,7 +8268,7 @@ function buildExCard(exItem, phaseKey) {
   const parts = [];
 
   parts.push('<div class="ex-card'+(exItem.custom?' custom-ex':'')+'" id="excard_'+exItem.id+'">');
-  parts.push('<div class="ex-hdr"><div style="flex:1;cursor:pointer" onclick="toggleEx(\''+exItem.id+'\')"><div class="ex-name">'+exItem.name+(exItem.custom?' <span style="font-size:9px;color:var(--gold)">CUSTOM</span>':'')+'</div><div class="ex-target">'+exItem.target+(exItem.timed?' · ⏱ TIMED':'')+'</div></div><div class="ex-right"><button class="btn-ghost" style="font-size:11px;padding:4px 8px;margin-right:4px;color:var(--blue)" onclick="event.stopPropagation();openExerciseGuide(\''+exItem.name.replace(/'/g,'&#39;')+'\')">ⓘ Guide</button><div class="ex-done '+(hasData?'ok':'')+'" id="exdone_'+exItem.id+'">'+(hasData?'✓':'')+'</div><div class="ex-caret '+(isOpen?'open':'')+'">⌄</div></div></div>');
+  parts.push('<div class="ex-hdr"><div style="flex:1;cursor:pointer" onclick="toggleEx(\''+exItem.id+'\')"><div class="ex-name">'+exItem.name+(exItem.custom?' <span style="font-size:9px;color:var(--gold)">CUSTOM</span>':'')+'</div><div class="ex-target">'+exItem.target+(exItem.timed?' · ⏱ TIMED':'')+'</div></div><div class="ex-right"><button class="btn-ghost" style="font-size:11px;padding:4px 8px;margin-right:4px;color:var(--blue)" onclick="event.stopPropagation();openExerciseGuide(\''+jsArg(exItem.name)+'\')">ⓘ Guide</button><div class="ex-done '+(hasData?'ok':'')+'" id="exdone_'+exItem.id+'">'+(hasData?'✓':'')+'</div><div class="ex-caret '+(isOpen?'open':'')+'">⌄</div></div></div>');
   if (exItem.swappedForInjury) {
     parts.push('<div style="padding:6px 14px;background:rgba(56,189,248,0.08);border-top:1px solid var(--border);font-size:10px;color:var(--blue)">🩹 Swapped from '+exItem.originalName+': '+exItem.flaggedRegion+' flagged</div>');
   } else if (exItem.injuryCaution) {
@@ -8424,11 +8424,11 @@ function buildExCard(exItem, phaseKey) {
 
     if (!exItem.custom) {
       parts.push('<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">');
-      parts.push('<button class="btn-info" style="border-color:rgba(167,139,250,0.4);color:#a78bfa" onclick="showAlternates(\''+exItem.id+'\',\''+exItem.name.replace(/'/g,"&#39;")+'\',\''+phaseKey+'\')">⇄ Alternate</button>');
-      parts.push('<button class="btn-info" style="color:#fca5a5;border-color:rgba(239,68,68,0.3)" onclick="confirmRemoveExercise(\''+exItem.id+'\',\''+exItem.name.replace(/'/g,"")+'\',false)">✕ Remove</button>');
+      parts.push('<button class="btn-info" style="border-color:rgba(167,139,250,0.4);color:#a78bfa" onclick="showAlternates(\''+exItem.id+'\',\''+jsArg(exItem.name)+'\',\''+phaseKey+'\')">⇄ Alternate</button>');
+      parts.push('<button class="btn-info" style="color:#fca5a5;border-color:rgba(239,68,68,0.3)" onclick="confirmRemoveExercise(\''+exItem.id+'\',\''+jsArg(exItem.name)+'\',false)">✕ Remove</button>');
       parts.push('</div>');
     } else {
-      parts.push('<div style="margin-top:10px"><button class="btn-info" style="color:#fca5a5;border-color:rgba(239,68,68,0.3)" onclick="confirmRemoveExercise(\''+exItem.id+'\',\''+exItem.name.replace(/'/g,"")+'\',true)">✕ Remove</button></div>');
+      parts.push('<div style="margin-top:10px"><button class="btn-info" style="color:#fca5a5;border-color:rgba(239,68,68,0.3)" onclick="confirmRemoveExercise(\''+exItem.id+'\',\''+jsArg(exItem.name)+'\',true)">✕ Remove</button></div>');
     }
     parts.push('</div>');
   }
@@ -8975,6 +8975,20 @@ function escapeUserProse(s, maxLen) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+// Make a string safe to drop inside a single-quoted JS literal that itself
+// sits inside a double-quoted onclick="..." attribute.
+//
+// BUG FIX (reported): tapping Guide on "Child's Pose + Reach" threw
+// SyntaxError: Unexpected identifier 's'. The name had been escaped as
+// &#39;, but the HTML parser decodes that entity back to a raw ' BEFORE the
+// JS parser ever sees the handler, so the string literal ended at "Child".
+// \uXXXX escapes survive HTML parsing untouched and decode only in JS, so
+// they work for every character that could break either layer.
+function jsArg(s) {
+  return String(s == null ? '' : s).replace(/[\\'"<>&\r\n\u2028\u2029]/g, c =>
+    '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
 }
 
 function sanitizeUserText(s) {

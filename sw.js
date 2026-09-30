@@ -46,6 +46,7 @@ self.addEventListener('fetch', e => {
 
   // Always pass these through to network directly — never cache or clone their responses
   const isPassthrough = (
+    url.pathname.startsWith('/crashpads/') ||   // separate app hosted under this site; never cache it
     url.hostname.includes('supabase.co') ||
     url.hostname.includes('jsdelivr.net') ||
     url.hostname.includes('googleapis.com') ||

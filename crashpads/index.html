@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1c1f22">
+<title>DFW Crashpads</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one-screen phone app. Sticky header, scrolling body, fixed bottom tab bar. Checklist feel: mono for bed IDs and money. */
+:root{
+  --bg:#f5f4f0; --panel:#ffffff; --fg:#1c1f22; --muted:#6b6f73; --line:#dedbd3;
+  --accent:#c2410c; --accent-fg:#ffffff;
+  --ok:#1a7f4b; --ok-bg:#e3f4ea; --warn:#a16207; --warn-bg:#fbf1d6; --bad:#b42318; --bad-bg:#fbe4e1; --info:#245c9c; --info-bg:#e3edf9;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15171a;--panel:#1f2226;--fg:#eceae4;--muted:#9aa0a6;--line:#33373d;--accent:#f97316;--accent-fg:#15171a;--ok:#4ade80;--ok-bg:#12321f;--warn:#fbbf24;--warn-bg:#3a2e0a;--bad:#f87171;--bad-bg:#3f1a17;--info:#7cb2f0;--info-bg:#15283d;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#15171a;--panel:#1f2226;--fg:#eceae4;--muted:#9aa0a6;--line:#33373d;--accent:#f97316;--accent-fg:#15171a;--ok:#4ade80;--ok-bg:#12321f;--warn:#fbbf24;--warn-bg:#3a2e0a;--bad:#f87171;--bad-bg:#3f1a17;--info:#7cb2f0;--info-bg:#15283d;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.45 var(--sans);-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3{margin:0;text-wrap:balance;font-weight:600}
+h2{font-size:17px}
+h3{font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:500}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+a{color:var(--accent)}
+[hidden]{display:none!important}
+
+#app{height:100%;display:flex;flex-direction:column}
+header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);padding:calc(10px + env(safe-area-inset-top,0px)) 16px 10px;display:flex;align-items:center;gap:10px}
+header h1{font-size:17px;flex:1}
+header .sub{font-size:12px;color:var(--muted)}
+main{flex:1;overflow-y:auto;padding:14px 16px calc(84px + env(safe-area-inset-bottom,0px))}
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);display:flex;padding:6px 0 calc(6px + env(safe-area-inset-bottom,0px))}
+nav button{flex:1;background:none;border:0;padding:6px 0 2px;font-size:11px;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer}
+nav button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+nav button.on{color:var(--accent)}
+nav button .badge{position:absolute;margin-left:22px;margin-top:-2px;background:var(--bad);color:#fff;font-size:10px;line-height:16px;min-width:16px;padding:0 4px;border-radius:8px;text-align:center}
+nav button{position:relative}
+
+.stack{display:flex;flex-direction:column;gap:12px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.row>*{min-width:0}
+.grow{flex:1}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
+.card.tap{cursor:pointer}
+.card.tap:active{opacity:.7}
+.list{display:flex;flex-direction:column;gap:8px}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px}
+.tile .n{font-family:var(--mono);font-size:22px;font-weight:500;line-height:1.1}
+.tile .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
+.pill{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.03em;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.pill.ok{background:var(--ok-bg);color:var(--ok)} .pill.warn{background:var(--warn-bg);color:var(--warn)} .pill.bad{background:var(--bad-bg);color:var(--bad)} .pill.info{background:var(--info-bg);color:var(--info)} .pill.muted{background:var(--line);color:var(--muted)}
+.muted{color:var(--muted)} .small{font-size:12.5px}
+.btn{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 12px;cursor:pointer;font-weight:500;white-space:nowrap}
+.btn:active{opacity:.7}
+.btn.pri{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn.sm{padding:5px 9px;font-size:13px}
+.btn.danger{color:var(--bad);border-color:var(--bad)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,nav button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted)}
+label.f>input,label.f>select,label.f>textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font-size:15px}
+label.f>textarea{min-height:64px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid2>*{min-width:0}
+.hr{border:0;border-top:1px solid var(--line);margin:4px 0}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(90px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:9px 14px;border-radius:8px;font-size:14px;z-index:20;max-width:90vw}
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10;display:flex;align-items:flex-end}
+.sheet>div{background:var(--panel);width:100%;max-height:88%;overflow-y:auto;border-radius:16px 16px 0 0;padding:16px 16px calc(20px + env(safe-area-inset-bottom,0px))}
+.sheet h2{margin-bottom:10px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+td,th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:500}
+td.r,th.r{text-align:right}
+.chk{display:flex;align-items:center;gap:8px;padding:6px 0}
+.chk input{width:20px;height:20px}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--accent)}
+#login{max-width:380px;margin:12vh auto 0;padding:0 16px}
+#login .card{padding:20px}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.tabs button{border-radius:999px}
+.tabs button.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+@media (prefers-reduced-motion:no-preference){.btn:active{transition:opacity .1s}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="login" hidden>
+    <div class="card stack">
+      <div><h1>DFW Crashpads</h1><div class="sub">Manager sign-in</div></div>
+      <label class="f">Email<input id="li-email" type="email" autocomplete="username" inputmode="email"></label>
+      <label class="f">Password<input id="li-pass" type="password" autocomplete="current-password"></label>
+      <button class="btn pri" id="li-go">Sign in</button>
+      <div id="li-msg" class="small muted"></div>
+    </div>
+  </div>
+
+  <div id="shell" hidden>
+    <header>
+      <div class="grow"><h1 id="hdr-title">Today</h1><div class="sub" id="hdr-sub"></div></div>
+      <button class="btn sm" id="refresh" title="Refresh">&#8635;</button>
+    </header>
+    <main id="main"></main>
+    <nav id="nav"></nav>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
+<script>
+// ---------- config ----------
+const SUPABASE_URL = location.origin.includes('supabase.co') ? location.origin : 'https://uvkkfkaqlhvmyacxwoey.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_FrD7kCH_qn6GBdojzBAEQg_Gx55fJ2B';
+// Safari blocks localStorage for files opened from the Files app; fall back to memory so sign-in still works.
+const memStore = {}; let storage;
+try { localStorage.setItem('__t','1'); localStorage.removeItem('__t'); storage = localStorage; }
+catch(e){ storage = { getItem:k=>memStore[k]??null, setItem:(k,v)=>{memStore[k]=v;}, removeItem:k=>{delete memStore[k];} }; }
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { storage, persistSession: true, autoRefreshToken: true } });
+
+// ---------- state ----------
+const S = { tab:'today', data:null, month:firstOfMonth(new Date()), leadsFilter:'open', tenantsFilter:'current' };
+const $ = (id)=>document.getElementById(id);
+const esc = (s)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money = (n)=>'$'+Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0});
+function firstOfMonth(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
+function iso(d){ if(!d) return null; const x=new Date(d); return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'); }
+function today(){ return iso(new Date()); }
+function fmtD(s){ if(!s) return ''; const [y,m,d]=String(s).slice(0,10).split('-'); return `${Number(m)}/${Number(d)}/${String(y).slice(2)}`; }
+function monthLabel(d){ return d.toLocaleString('en-US',{month:'short',year:'numeric'}); }
+function addMonths(d,n){ return new Date(d.getFullYear(), d.getMonth()+n, 1); }
+function phoneDigits(p){ const d=String(p||'').replace(/\D/g,''); return d.length===10?'1'+d:d; }
+function fmtPhone(p){ let d=String(p||'').replace(/\D/g,''); if(d.length===11&&d[0]==='1') d=d.slice(1); return d.length===10?`(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`:(p||''); }
+let toastT; function toast(m){ let t=document.querySelector('.toast'); if(!t){t=document.createElement('div');t.className='toast';document.body.appendChild(t);} t.textContent=m; clearTimeout(toastT); toastT=setTimeout(()=>t.remove(),2600); }
+function sheet(html){ closeSheet(); const s=document.createElement('div'); s.className='sheet'; s.id='sheet'; s.innerHTML='<div>'+html+'</div>'; s.addEventListener('click',e=>{ if(e.target===s) closeSheet(); }); document.body.appendChild(s); return s; }
+function closeSheet(){ const s=$('sheet'); if(s) s.remove(); }
+async function run(p, okMsg){ try{ const {error}=await p; if(error) throw error; if(okMsg) toast(okMsg); await load(); }catch(e){ toast('Error: '+(e.message||e)); console.error(e);} }
+
+// ---------- auth ----------
+$('li-go').onclick = async ()=>{
+  $('li-msg').textContent='Signing in…';
+  const {error} = await sb.auth.signInWithPassword({email:$('li-email').value.trim(), password:$('li-pass').value});
+  $('li-msg').textContent = error ? error.message : '';
+};
+$('li-pass').addEventListener('keydown',e=>{ if(e.key==='Enter') $('li-go').click(); });
+sb.auth.onAuthStateChange((_e, session)=>{ if(session){ $('login').hidden=true; $('shell').hidden=false; load(); } else { $('shell').hidden=true; $('login').hidden=false; } });
+$('refresh').onclick = ()=>load();
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden && S.data && Date.now()-S.data.at>60000) load(); });
+
+// ---------- data ----------
+async function load(){
+  const m = iso(S.month);
+  const [beds, tenants, payments, leads, cleaning, contacts, rent, settings] = await Promise.all([
+    sb.from('cp_bed_status').select('*'),
+    sb.from('cp_tenants').select('*').order('name'),
+    sb.from('cp_payments').select('*').order('received_on',{ascending:false}).order('created_at',{ascending:false}).limit(400),
+    sb.from('cp_leads').select('*').order('received_at',{ascending:false}),
+    sb.from('cp_cleaning').select('*').order('needed_on'),
+    sb.from('cp_contact_log').select('*').order('logged_at',{ascending:false}).limit(200),
+    sb.rpc('cp_rent_for_month',{p_month:m}),
+    sb.from('cp_settings').select('*'),
+  ]);
+  const err = [beds,tenants,payments,leads,cleaning,contacts,rent,settings].find(r=>r.error);
+  if(err){ toast('Load failed: '+err.error.message); if(/JWT|auth/i.test(err.error.message)) sb.auth.signOut(); return; }
+  S.data = { at:Date.now(), beds:beds.data, tenants:tenants.data, payments:payments.data, leads:leads.data, cleaning:cleaning.data, contacts:contacts.data, rent:rent.data, settings:Object.fromEntries(settings.data.map(s=>[s.key,s.value])) };
+  render();
+}
+const T = ()=>S.data.tenants.find(t=>t.id===S.detail);
+const tenantById = (id)=>S.data.tenants.find(t=>t.id===id);
+
+// ---------- nav ----------
+const TABS = [
+  ['today','Today','<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>'],
+  ['beds','Beds','<svg viewBox="0 0 24 24"><path d="M3 18V8M21 18v-6M3 12h18M3 12V9a2 2 0 0 1 2-2h6v5"/></svg>'],
+  ['leads','Leads','<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0M19 3l2 2-2 2"/></svg>'],
+  ['tenants','Tenants','<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><circle cx="17" cy="9" r="2.5"/><path d="M2 20a7 7 0 0 1 14 0M15 20a5 5 0 0 1 7-4.5"/></svg>'],
+  ['money','Money','<svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/></svg>'],
+  ['more','More','<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>'],
+];
+function renderNav(){
+  const d=S.data; const newLeads=d.leads.filter(l=>l.status==='New').length;
+  const late=d.rent.filter(r=>r.rent_status==='late').length;
+  $('nav').innerHTML = TABS.map(([k,l,svg])=>`<button data-tab="${k}" class="${S.tab===k?'on':''}">${svg}${l}${k==='leads'&&newLeads?`<span class="badge">${newLeads}</span>`:''}${k==='money'&&late?`<span class="badge">${late}</span>`:''}</button>`).join('');
+  $('nav').querySelectorAll('button').forEach(b=>b.onclick=()=>{ S.tab=b.dataset.tab; S.detail=null; render(); $('main').scrollTop=0; });
+}
+function render(){
+  if(!S.data) return;
+  renderNav();
+  const R = {today:vToday, beds:vBeds, leads:vLeads, tenants:vTenants, money:vMoney, more:vMore};
+  $('hdr-title').textContent = TABS.find(t=>t[0]===S.tab)[1];
+  $('hdr-sub').textContent = new Date().toLocaleString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  $('main').innerHTML = R[S.tab]();
+  wire();
+}
+function wire(){
+  document.querySelectorAll('[data-tenant]').forEach(el=>el.onclick=()=>openTenant(el.dataset.tenant));
+  document.querySelectorAll('[data-lead]').forEach(el=>el.onclick=()=>openLead(el.dataset.lead));
+  document.querySelectorAll('[data-bed]').forEach(el=>el.onclick=()=>openBed(el.dataset.bed));
+  document.querySelectorAll('[data-act]').forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); ACT[el.dataset.act](el.dataset.id, el); });
+}
+const statusPill = (s)=>({paid:'<span class="pill ok">Paid</span>',due:'<span class="pill warn">Due</span>',late:'<span class="pill bad">Late</span>','not started':'<span class="pill muted">Not started</span>','n/a':'<span class="pill muted">n/a</span>'}[s]||'');
+const bedPill = (s)=>({Open:'<span class="pill ok">Open</span>',Reserved:'<span class="pill info">Reserved</span>',Occupied:'<span class="pill muted">Occupied</span>'}[s]||'');
+const contactRow = (t)=>`<div class="row small">${t.phone?`<a class="btn sm" href="tel:+${phoneDigits(t.phone)}">Call</a><a class="btn sm" href="sms:+${phoneDigits(t.phone)}">Text</a>`:''}${t.email?`<a class="btn sm" href="mailto:${esc(t.email)}">Email</a>`:''}<span class="muted mono">${esc(fmtPhone(t.phone))}</span></div>`;
+
+// ---------- Today ----------
+function vToday(){
+  const d=S.data, td=today();
+  const cur = d.rent.filter(r=>r.rent_status!=='n/a');
+  const late = cur.filter(r=>r.rent_status==='late'), due=cur.filter(r=>r.rent_status==='due'), paid=cur.filter(r=>r.rent_status==='paid');
+  const reserved = d.tenants.filter(t=>t.status==='Reserved');
+  const leaving = d.tenants.filter(t=>t.status==='Active' && t.move_out);
+  const cleaning = d.cleaning.filter(c=>!c.done);
+  const newLeads = d.leads.filter(l=>['New','Contacted','Approved','Agreement sent'].includes(l.status));
+  const occ = d.beds.filter(b=>b.status==='Occupied').length;
+  return `<div class="stack">
+    <div class="tiles">
+      <div class="tile"><div class="n">${occ}/${d.beds.length}</div><div class="l">Occupied</div></div>
+      <div class="tile"><div class="n" style="color:var(--bad)">${late.length}</div><div class="l">Late</div></div>
+      <div class="tile"><div class="n">${money(cur.reduce((a,r)=>a+Number(r.paid),0))}</div><div class="l">${monthLabel(S.month)} in</div></div>
+    </div>
+    ${late.length||due.length?`<div><h3>Rent ${monthLabel(S.month)}</h3><div class="list">${[...late,...due].map(r=>`<div class="card tap row" data-tenant="${r.tenant_id}"><span class="grow"><b>${esc(r.name)}</b> <span class="mono muted small">${esc(r.bed_id||'')}</span><div class="small muted">Owes ${money(r.owed)} of ${money(r.rent)}</div></span>${statusPill(r.rent_status)}<button class="btn sm" data-act="pay" data-id="${r.tenant_id}">Paid</button></div>`).join('')}</div></div>`:''}
+    ${reserved.length?`<div><h3>Reserved, not moved in</h3><div class="list">${reserved.map(t=>{const miss=[];if(!t.bed_id)miss.push('needs bed');if(!t.fee_paid_on)miss.push('needs $150 fee');if(!t.contract_signed)miss.push('needs signature');return `<div class="card tap row" data-tenant="${t.id}"><span class="grow"><b>${esc(t.name)}</b> <span class="mono muted small">${esc(t.bed_id||t.category_hold||'')}</span><div class="small muted">Move-in ${fmtD(t.move_in)||'TBD'}${miss.length?' · '+miss.join(', '):''}</div></span>${(t.move_in&&t.move_in<=td)?`<button class="btn sm pri" data-act="movein" data-id="${t.id}">Move in</button>`:''}</div>`;}).join('')}</div></div>`:''}
+    ${leaving.length?`<div><h3>Moving out</h3><div class="list">${leaving.map(t=>`<div class="card tap row" data-tenant="${t.id}"><span class="grow"><b>${esc(t.name)}</b> <span class="mono muted small">${esc(t.bed_id||'')}</span><div class="small muted">Last night ${fmtD(t.move_out)}</div></span>${t.move_out<td?`<button class="btn sm" data-act="moveout" data-id="${t.id}">Moved out</button>`:''}</div>`).join('')}</div></div>`:''}
+    ${cleaning.length?`<div><h3>For Will (cleaning)</h3><div class="card"><div class="list">${cleaning.map(c=>`<div class="row"><span class="mono">${esc(c.bed_id||'')}</span><span class="grow small">${esc(c.task)}${c.tenant_name?' · '+esc(c.tenant_name):''} · by ${fmtD(c.needed_on)}</span><button class="btn sm" data-act="cleandone" data-id="${c.id}">Done</button></div>`).join('')}</div><div class="row" style="margin-top:8px"><button class="btn sm" data-act="cleantext" data-id="x">Copy text for Will</button></div></div></div>`:''}
+    ${newLeads.length?`<div><h3>Open leads</h3><div class="list">${newLeads.map(l=>leadCard(l)).join('')}</div></div>`:''}
+    ${paid.length?`<div><h3>Paid ${monthLabel(S.month)}</h3><div class="card small muted">${paid.map(r=>esc(r.name)).join(', ')}</div></div>`:''}
+  </div>`;
+}
+
+// ---------- Beds ----------
+function vBeds(){
+  const d=S.data; const rooms=[...new Set(d.beds.map(b=>b.room))];
+  return `<div class="stack">${rooms.map(r=>`<div><h3>${esc(r)}</h3><div class="list">${d.beds.filter(b=>b.room===r).map(b=>`<div class="card tap row" data-bed="${b.id}"><span class="mono">${b.id}</span><span class="grow small">${esc(b.category)} · ${money(b.list_price)}${b.tenant_name?`<div>${esc(b.tenant_name)}${b.rent&&b.rent!==b.list_price?` <span class="muted">(${money(b.rent)})</span>`:''}${b.reserved_move_in?` <span class="muted">from ${fmtD(b.reserved_move_in)}</span>`:''}${b.active_move_out?` <span class="muted">until ${fmtD(b.active_move_out)}</span>`:''}</div>`:''}</span>${bedPill(b.status)}</div>`).join('')}</div></div>`).join('')}</div>`;
+}
+function openBed(id){
+  const b=S.data.beds.find(x=>x.id===id);
+  const others=S.data.beds.filter(x=>x.status==='Open').length;
+  sheet(`<h2><span class="mono">${b.id}</span> ${bedPill(b.status)}</h2>
+    <div class="stack">
+      <div>${esc(b.room)} · ${esc(b.category)} · list ${money(b.list_price)}</div>
+      ${b.tenant_name?`<div class="card tap" data-tenant="${b.tenant_id}"><b>${esc(b.tenant_name)}</b> · ${money(b.rent)}/mo<div class="small muted">Tap for tenant</div></div>`:`<div class="muted">No one assigned. ${others} beds open in total.</div>`}
+      <button class="btn pri" data-act="assign" data-id="${b.id}">Assign a tenant to ${b.id}</button>
+      <label class="f">Notes<textarea id="bed-notes">${esc(b.notes||'')}</textarea></label>
+      <button class="btn" data-act="bednotes" data-id="${b.id}">Save notes</button>
+    </div>`);
+  wire();
+}
+
+// ---------- Leads ----------
+function leadCard(l){
+  const p={New:'bad',Contacted:'warn',Approved:'info','Agreement sent':'info',Signed:'ok','Not a fit':'muted'}[l.status]||'muted';
+  return `<div class="card tap" data-lead="${l.id}"><div class="row"><b class="grow">${esc(l.name)}</b><span class="pill ${p}">${esc(l.status)}</span></div><div class="small muted">${esc(l.position||'')}${l.airline?' · '+esc(l.airline):''}${l.bed_category?' · wants '+esc(l.bed_category):''}${l.desired_start?' · from '+fmtD(l.desired_start):''} · ${fmtD(l.received_at)}</div></div>`;
+}
+function vLeads(){
+  const d=S.data;
+  const f=S.leadsFilter;
+  const list=d.leads.filter(l=>f==='open'?!['Signed','Not a fit'].includes(l.status):f==='all'?true:l.status===f);
+  return `<div class="stack">
+    <div class="row"><div class="tabs grow">${[['open','Open'],['Signed','Signed'],['Not a fit','Not a fit'],['all','All']].map(([k,l])=>`<button class="btn sm ${f===k?'on':''}" data-act="leadsfilter" data-id="${k}">${l}</button>`).join('')}</div><button class="btn pri sm" data-act="addlead" data-id="x">+ Lead</button></div>
+    ${list.length?`<div class="list">${list.map(leadCard).join('')}</div>`:'<div class="muted">Nothing here.</div>'}
+  </div>`;
+}
+function leadForm(l={}){
+  return `<div class="stack">
+    <div class="grid2"><label class="f">Name<input id="lf-name" value="${esc(l.name||'')}"></label><label class="f">Phone<input id="lf-phone" inputmode="tel" value="${esc(l.phone||'')}"></label></div>
+    <div class="grid2"><label class="f">Email<input id="lf-email" inputmode="email" value="${esc(l.email||'')}"></label><label class="f">Airline<input id="lf-airline" value="${esc(l.airline||'')}"></label></div>
+    <div class="grid2"><label class="f">Position<select id="lf-position">${['Pilot','Flight attendant','Mechanic','Other'].map(o=>`<option ${(l.position||'Pilot')===o?'selected':''}>${o}</option>`).join('')}</select></label><label class="f">Wants<select id="lf-cat"><option value="">Any</option>${['Top bunk','Bottom bunk','Semi-private','Private'].map(o=>`<option ${l.bed_category===o?'selected':''}>${o}</option>`).join('')}</select></label></div>
+    <div class="grid2"><label class="f">Desired start<input id="lf-start" type="date" value="${esc(l.desired_start||'')}"></label><label class="f">Source<input id="lf-source" value="${esc(l.source||'')}" placeholder="Google, referral, text…"></label></div>
+    <label class="f">Notes<textarea id="lf-notes">${esc(l.notes||'')}</textarea></label>
+  </div>`;
+}
+function readLeadForm(){ return { name:$('lf-name').value.trim(), phone:fmtPhone($('lf-phone').value), email:$('lf-email').value.trim()||null, airline:$('lf-airline').value.trim()||null, position:$('lf-position').value, bed_category:$('lf-cat').value||null, desired_start:$('lf-start').value||null, source:$('lf-source').value.trim()||null, notes:$('lf-notes').value.trim()||null }; }
+function openLead(id){
+  const l=S.data.leads.find(x=>x.id===id); const t=l.tenant_id?tenantById(l.tenant_id):null;
+  const notes=S.data.contacts.filter(c=>c.lead_id===l.id);
+  sheet(`<h2>${esc(l.name)}</h2>
+    ${contactRow(l)}
+    <div class="stack" style="margin-top:10px">
+      <div class="row small">${['New','Contacted','Approved','Agreement sent','Not a fit'].map(s=>`<button class="btn sm ${l.status===s?'pri':''}" data-act="leadstatus" data-id="${l.id}|${s}">${s}</button>`).join('')}</div>
+      ${t?`<div class="card tap" data-tenant="${t.id}">Tenant record: <b>${esc(t.name)}</b> · ${esc(t.bed_id||t.category_hold||'no bed')} · ${t.status}</div>`:`<button class="btn pri" data-act="leadtotenant" data-id="${l.id}">Reserve a bed for ${esc(l.name.split(' ')[0])}</button>`}
+      <details><summary class="muted small">Edit details</summary><div style="margin-top:8px">${leadForm(l)}<div class="row" style="margin-top:8px"><button class="btn pri" data-act="leadsave" data-id="${l.id}">Save</button><button class="btn danger" data-act="leaddelete" data-id="${l.id}">Delete lead</button></div></div></details>
+      <div><h3>Contact log</h3><div class="row" style="margin:6px 0"><input id="cl-text" class="grow" placeholder="What they said…" style="padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)"><button class="btn sm" data-act="leadnote" data-id="${l.id}">Add</button></div>${notes.map(n=>`<div class="small" style="padding:4px 0;border-bottom:1px solid var(--line)"><span class="muted">${fmtD(n.logged_at)}</span> ${esc(n.summary)}</div>`).join('')}</div>
+    </div>`);
+  wire();
+}
+
+// ---------- Tenants ----------
+function vTenants(){
+  const d=S.data; const f=S.tenantsFilter;
+  const list=d.tenants.filter(t=>f==='current'?t.status!=='Moved Out':f==='all'?true:t.status===f).sort((a,b)=>(a.bed_id||'zz').localeCompare(b.bed_id||'zz'));
+  const rentOf=(id)=>d.rent.find(r=>r.tenant_id===id);
+  return `<div class="stack">
+    <div class="row"><div class="tabs grow">${[['current','Current'],['Reserved','Reserved'],['Moved Out','Past'],['all','All']].map(([k,l])=>`<button class="btn sm ${f===k?'on':''}" data-act="tenantsfilter" data-id="${k}">${l}</button>`).join('')}</div><button class="btn pri sm" data-act="addtenant" data-id="x">+ Tenant</button></div>
+    <div class="list">${list.map(t=>{const r=rentOf(t.id);return `<div class="card tap row" data-tenant="${t.id}"><span class="mono">${esc(t.bed_id||'—')}</span><span class="grow"><b>${esc(t.name)}</b><div class="small muted">${money(t.rent)}/mo${t.airline?' · '+esc(t.airline):''}${t.status==='Reserved'?' · arrives '+fmtD(t.move_in):''}${t.move_out?' · leaves '+fmtD(t.move_out):''}</div></span>${t.status==='Reserved'?'<span class="pill info">Reserved</span>':t.status==='Moved Out'?'<span class="pill muted">Past</span>':(r?statusPill(r.rent_status):'')}</div>`;}).join('')}</div>
+  </div>`;
+}
+function tenantForm(t={}){
+  const beds=S.data.beds;
+  return `<div class="stack">
+    <label class="f">Name<input id="tf-name" value="${esc(t.name||'')}"></label>
+    <div class="grid2">
+      <label class="f">Bed<select id="tf-bed"><option value="">No bed yet</option>${beds.map(b=>`<option value="${b.id}" ${t.bed_id===b.id?'selected':''} ${b.status!=='Open'&&b.tenant_id!==t.id?'disabled':''}>${b.id} ${b.category} ${money(b.list_price)}${b.status!=='Open'&&b.tenant_id!==t.id?' ('+b.status+')':''}</option>`).join('')}</select></label>
+      <label class="f">Rent $/mo<input id="tf-rent" inputmode="numeric" value="${esc(t.rent||'')}"></label>
+    </div>
+    <div class="grid2">
+      <label class="f">Status<select id="tf-status">${['Reserved','Active','Moved Out'].map(s=>`<option ${(t.status||'Reserved')===s?'selected':''}>${s}</option>`).join('')}</select></label>
+      <label class="f">Hold category (no bed yet)<select id="tf-hold"><option value="">None</option>${['Top bunk','Bottom bunk','Semi-private','Private'].map(o=>`<option ${t.category_hold===o?'selected':''}>${o}</option>`).join('')}</select></label>
+    </div>
+    <div class="grid2"><label class="f">Move-in<input id="tf-in" type="date" value="${esc(t.move_in||'')}"></label><label class="f">Move-out (last night)<input id="tf-out" type="date" value="${esc(t.move_out||'')}"></label></div>
+    <div class="grid2"><label class="f">Phone<input id="tf-phone" inputmode="tel" value="${esc(t.phone||'')}"></label><label class="f">Email<input id="tf-email" inputmode="email" value="${esc(t.email||'')}"></label></div>
+    <div class="grid2"><label class="f">Airline<input id="tf-airline" value="${esc(t.airline||'')}"></label><label class="f">Payment code<input id="tf-code" value="${esc(t.payment_code||'')}" placeholder="auto from bed"></label></div>
+    <div class="grid2"><label class="f">Fee paid on<input id="tf-fee" type="date" value="${esc(t.fee_paid_on||'')}"></label><label class="f">Fee refunded on<input id="tf-refund" type="date" value="${esc(t.fee_refunded_on||'')}"></label></div>
+    <label class="f">Contract link<input id="tf-contract" value="${esc(t.contract_url||'')}"></label>
+    <label class="f">Notes<textarea id="tf-notes">${esc(t.notes||'')}</textarea></label>
+  </div>`;
+}
+function readTenantForm(){
+  const bed=$('tf-bed').value||null;
+  return { name:$('tf-name').value.trim(), bed_id:bed, rent:Number($('tf-rent').value)||0, status:$('tf-status').value, category_hold:bed?null:($('tf-hold').value||null), move_in:$('tf-in').value||null, move_out:$('tf-out').value||null, phone:fmtPhone($('tf-phone').value)||null, email:$('tf-email').value.trim()||null, airline:$('tf-airline').value.trim()||null, payment_code:($('tf-code').value.trim()||(bed?bed.replace('-',''):null)), fee_paid_on:$('tf-fee').value||null, fee_refunded_on:$('tf-refund').value||null, contract_url:$('tf-contract').value.trim()||null, notes:$('tf-notes').value.trim()||null };
+}
+function openTenant(id){
+  S.detail=id; const t=T(); if(!t) return;
+  const d=S.data, td=today();
+  const pays=d.payments.filter(p=>p.tenant_id===t.id);
+  const r=d.rent.find(x=>x.tenant_id===t.id);
+  const notes=d.contacts.filter(c=>c.tenant_id===t.id);
+  const flags=[['contract_signed','Contract signed'],['groupme_added','In GroupMe'],['ttlock_account','TTLock set up'],['review_asked','Review asked']];
+  sheet(`<h2>${esc(t.name)} <span class="mono muted" style="font-weight:400">${esc(t.bed_id||t.category_hold||'')}</span></h2>
+    ${contactRow(t)}
+    <div class="stack" style="margin-top:10px">
+      <div class="row">${t.status==='Reserved'?`<span class="pill info">Reserved</span> <span class="small muted">arrives ${fmtD(t.move_in)||'TBD'}</span>`:t.status==='Active'?`<span class="pill ok">Active</span> <span class="small muted">since ${fmtD(t.move_in)}</span>`:`<span class="pill muted">Moved out ${fmtD(t.move_out)}</span>`}${r&&t.status!=='Moved Out'?`<span class="grow"></span>${statusPill(r.rent_status)} <span class="small">${money(r.paid)} / ${money(r.rent)} ${monthLabel(S.month)}</span>`:''}</div>
+      <div class="row">
+        <button class="btn pri" data-act="pay" data-id="${t.id}">Log payment</button>
+        ${t.status==='Reserved'?`<button class="btn" data-act="movein" data-id="${t.id}">Move in</button>`:''}
+        ${t.status==='Active'&&!t.move_out?`<button class="btn" data-act="notice" data-id="${t.id}">Log notice</button>`:''}
+        ${t.status==='Active'&&t.move_out?`<button class="btn" data-act="moveout" data-id="${t.id}">Moved out</button>`:''}
+        ${!t.fee_paid_on&&t.status!=='Moved Out'?`<button class="btn" data-act="feepaid" data-id="${t.id}">$150 fee received</button>`:''}
+        ${t.status==='Moved Out'&&t.fee_paid_on&&!t.fee_refunded_on?`<button class="btn" data-act="feerefund" data-id="${t.id}">$150 refunded</button>`:''}
+      </div>
+      <div class="card">${flags.map(([k,l])=>`<label class="chk"><input type="checkbox" data-act="flag" data-id="${t.id}|${k}" ${t[k]?'checked':''}> ${l}</label>`).join('')}
+        <div class="small muted">Fee: ${t.fee_paid_on?'paid '+fmtD(t.fee_paid_on):'not received'}${t.fee_refunded_on?', refunded '+fmtD(t.fee_refunded_on):''} · Code <span class="mono">${esc(t.payment_code||'')}</span>${t.notice_given_on?' · Notice given '+fmtD(t.notice_given_on):''}</div>
+        ${t.contract_url?`<div class="small"><a href="${esc(t.contract_url)}" target="_blank" rel="noopener">Signed agreement</a></div>`:''}
+      </div>
+      ${t.notes?`<div class="small muted">${esc(t.notes)}</div>`:''}
+      <div><h3>Payments</h3>${pays.length?`<table><tr><th>Date</th><th>For</th><th>Type</th><th class="r">Amount</th></tr>${pays.map(p=>`<tr><td>${fmtD(p.received_on)}</td><td>${p.for_month?monthLabel(new Date(p.for_month+'T12:00:00')):''}</td><td class="small">${esc(p.type)}${p.method&&p.method!=='Other'?' · '+esc(p.method):''}</td><td class="r mono">${money(p.amount)}</td></tr>`).join('')}</table>`:'<div class="muted small">None yet.</div>'}</div>
+      <div><h3>Contact log</h3><div class="row" style="margin:6px 0"><input id="cl-text" class="grow" placeholder="What they said…" style="padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)"><button class="btn sm" data-act="tenantnote" data-id="${t.id}">Add</button></div>${notes.map(n=>`<div class="small" style="padding:4px 0;border-bottom:1px solid var(--line)"><span class="muted">${fmtD(n.logged_at)}</span> ${esc(n.summary)}</div>`).join('')}</div>
+      <details><summary class="muted small">Edit tenant</summary><div style="margin-top:8px">${tenantForm(t)}<div class="row" style="margin-top:8px"><button class="btn pri" data-act="tenantsave" data-id="${t.id}">Save</button><button class="btn danger" data-act="tenantdelete" data-id="${t.id}">Delete</button></div></div></details>
+    </div>`);
+  wire();
+}
+
+// ---------- Money ----------
+function vMoney(){
+  const d=S.data; const cur=d.rent.filter(r=>r.rent_status!=='n/a');
+  const expected=cur.reduce((a,r)=>a+Number(r.rent),0), got=cur.reduce((a,r)=>a+Math.min(Number(r.paid),Number(r.rent)),0);
+  const mk=iso(S.month);
+  const monthPays=d.payments.filter(p=>p.for_month===mk);
+  const recent=d.payments.slice(0,40);
+  return `<div class="stack">
+    <div class="row"><button class="btn sm" data-act="month" data-id="-1">&larr;</button><b class="grow" style="text-align:center">${monthLabel(S.month)}</b><button class="btn sm" data-act="month" data-id="1">&rarr;</button><button class="btn pri sm" data-act="pay" data-id="">+ Payment</button></div>
+    <div class="card"><div class="row"><span class="grow">Rent collected</span><span class="mono">${money(got)} / ${money(expected)}</span></div><div class="bar" style="margin-top:6px"><i style="width:${expected?Math.min(100,100*got/expected):0}%"></i></div>
+      <div class="small muted" style="margin-top:6px">${cur.filter(r=>r.rent_status==='paid').length} paid · ${cur.filter(r=>r.rent_status==='due').length} due · ${cur.filter(r=>r.rent_status==='late').length} late · other money this month ${money(monthPays.filter(p=>p.type!=='Rent').reduce((a,p)=>a+Number(p.amount),0))}</div></div>
+    <table><tr><th>Tenant</th><th>Bed</th><th class="r">Paid</th><th></th></tr>${cur.map(r=>`<tr data-tenant="${r.tenant_id}" style="cursor:pointer"><td>${esc(r.name)}</td><td class="mono">${esc(r.bed_id||'')}</td><td class="r mono">${money(r.paid)}<span class="muted">/${money(r.rent)}</span></td><td class="r">${statusPill(r.rent_status)}</td></tr>`).join('')}</table>
+    <div><h3>Recent payments</h3><table><tr><th>Date</th><th>Who</th><th>For</th><th class="r">Amt</th></tr>${recent.map(p=>`<tr><td>${fmtD(p.received_on)}</td><td>${esc(p.tenant_name||'')}<div class="small muted">${esc(p.type)} · ${esc(p.method)}</div></td><td class="small">${p.for_month?monthLabel(new Date(p.for_month+'T12:00:00')):''}</td><td class="r mono">${money(p.amount)} <button class="btn sm" data-act="paydelete" data-id="${p.id}" title="Delete">&times;</button></td></tr>`).join('')}</table></div>
+  </div>`;
+}
+function payForm(tenantId){
+  const d=S.data; const t=tenantId?tenantById(tenantId):null;
+  const now=new Date(); const def = now.getDate()>=20 ? addMonths(firstOfMonth(now),1) : firstOfMonth(now);
+  const months=[-2,-1,0,1,2].map(n=>addMonths(firstOfMonth(now),n));
+  return `<h2>Log payment</h2><div class="stack">
+    <label class="f">Tenant<select id="pf-tenant">${d.tenants.filter(x=>x.status!=='Moved Out'||x.id===tenantId).map(x=>`<option value="${x.id}" ${x.id===tenantId?'selected':''}>${esc(x.name)}${x.bed_id?' · '+x.bed_id:''}</option>`).join('')}</select></label>
+    <div class="grid2"><label class="f">Amount $<input id="pf-amount" inputmode="decimal" value="${t?t.rent:''}"></label><label class="f">Received<input id="pf-date" type="date" value="${today()}"></label></div>
+    <div class="grid2"><label class="f">Type<select id="pf-type">${['Rent','Reservation fee','Late fee','Refund','Other'].map(o=>`<option>${o}</option>`).join('')}</select></label><label class="f">Method<select id="pf-method">${['Venmo','Zelle','Apple Pay','Cash App','PayPal','Cash','Other'].map(o=>`<option>${o}</option>`).join('')}</select></label></div>
+    <label class="f">For month<select id="pf-month">${months.map(m=>`<option value="${iso(m)}" ${iso(m)===iso(def)?'selected':''}>${monthLabel(m)}</option>`).join('')}</select></label>
+    <label class="f">Note<input id="pf-note"></label>
+    <button class="btn pri" data-act="paysave" data-id="x">Save payment</button>
+  </div>`;
+}
+
+// ---------- More (stats + settings) ----------
+function vMore(){
+  const d=S.data;
+  const total=d.beds.length, occ=d.beds.filter(b=>b.status==='Occupied').length, res=d.beds.filter(b=>b.status==='Reserved').length;
+  const now=firstOfMonth(new Date());
+  const months=[-5,-4,-3,-2,-1,0].map(n=>addMonths(now,n));
+  const income=months.map(m=>{const k=iso(m);return d.payments.filter(p=>p.for_month===k&&p.type!=='Refund').reduce((a,p)=>a+Number(p.amount),0);});
+  const max=Math.max(1,...income);
+  const since=iso(addMonths(now,-3));
+  const moveouts=d.tenants.filter(t=>t.status==='Moved Out'&&t.move_out&&t.move_out>=since).length;
+  const active=d.tenants.filter(t=>t.status==='Active').length;
+  const churn=active?Math.round(100*moveouts/(active+moveouts)):0;
+  const potential=d.beds.reduce((a,b)=>a+b.list_price,0);
+  const list=d.tenants.filter(t=>t.status==='Active');
+  const tenure=list.filter(t=>t.move_in).map(t=>(Date.now()-new Date(t.move_in))/2629800000);
+  const avgT=tenure.length?(tenure.reduce((a,b)=>a+b,0)/tenure.length):0;
+  return `<div class="stack">
+    <h3>Stats</h3>
+    <div class="tiles">
+      <div class="tile"><div class="n">${Math.round(100*occ/total)}%</div><div class="l">Occupancy</div></div>
+      <div class="tile"><div class="n">${churn}%</div><div class="l">Churn 90d</div></div>
+      <div class="tile"><div class="n">${avgT.toFixed(1)}</div><div class="l">Avg tenure mo</div></div>
+    </div>
+    <div class="card"><div class="small muted" style="margin-bottom:6px">Income by month (all payment types except refunds)</div>
+      ${months.map((m,i)=>`<div class="row small" style="margin:3px 0"><span style="width:56px">${monthLabel(m).replace(' 20',' ')}</span><div class="bar grow"><i style="width:${100*income[i]/max}%"></i></div><span class="mono" style="width:56px;text-align:right">${money(income[i])}</span></div>`).join('')}
+      <div class="small muted" style="margin-top:6px">${occ} occupied, ${res} reserved, ${total-occ-res} open. Full house at list price: ${money(potential)}/mo.</div></div>
+    <h3>Settings</h3>
+    <div class="card stack">
+      <label class="f">WordPress API key (for the website hookup)<input id="st-wp" value="${esc(d.settings.wp_api_key||'')}"></label>
+      <label class="f">Cleaner phone<input id="st-cphone" value="${esc(d.settings.cleaner_phone||'')}"></label>
+      <button class="btn" data-act="settingssave" data-id="x">Save settings</button>
+      <hr class="hr">
+      <label class="f">New password<input id="st-pass" type="password" autocomplete="new-password"></label>
+      <button class="btn" data-act="passchange" data-id="x">Change password</button>
+      <hr class="hr">
+      <button class="btn" data-act="signout" data-id="x">Sign out</button>
+      <div class="small muted">Payments come to Zelle ${esc(d.settings.zelle||'')} and Apple Pay ${esc(d.settings.apple_pay||'')}. Late fee: ${esc(d.settings.late_fee_rule||'')}.</div>
+    </div>
+  </div>`;
+}
+
+// ---------- actions ----------
+const ACT = {
+  leadsfilter:(k)=>{S.leadsFilter=k;render();},
+  tenantsfilter:(k)=>{S.tenantsFilter=k;render();},
+  month:(n)=>{S.month=addMonths(S.month,Number(n));load();},
+  addlead:()=>{ sheet(`<h2>New lead</h2>${leadForm()}<div class="row" style="margin-top:10px"><button class="btn pri" data-act="leadcreate" data-id="x">Add lead</button></div>`); wire(); $('lf-name').focus(); },
+  leadcreate:async()=>{ const v=readLeadForm(); if(!v.name) return toast('Name is required'); closeSheet(); await run(sb.from('cp_leads').insert({...v,status:'New'}),'Lead added'); },
+  leadsave:async(id)=>{ const v=readLeadForm(); closeSheet(); await run(sb.from('cp_leads').update(v).eq('id',id),'Saved'); },
+  leaddelete:(id)=>confirmSheet('Delete this lead?',async()=>{ closeSheet(); await run(sb.from('cp_leads').delete().eq('id',id),'Deleted'); }),
+  leadstatus:async(arg)=>{ const [id,s]=arg.split('|'); await run(sb.from('cp_leads').update({status:s}).eq('id',id)); openLead(id); },
+  leadnote:async(id)=>{ const txt=$('cl-text').value.trim(); if(!txt) return; const l=S.data.leads.find(x=>x.id===id); await run(sb.from('cp_contact_log').insert({lead_id:id,tenant_id:l.tenant_id,who:l.name,channel:'Text',summary:txt}),'Logged'); openLead(id); },
+  leadtotenant:(id)=>{ const l=S.data.leads.find(x=>x.id===id); const t={name:l.name,email:l.email,phone:l.phone,airline:l.airline,category_hold:l.bed_category,move_in:l.desired_start,status:'Reserved'}; sheet(`<h2>Reserve a bed</h2>${tenantForm(t)}<div class="row" style="margin-top:10px"><button class="btn pri" data-act="tenantcreate" data-id="${id}">Create reservation</button></div>`); wire(); },
+  addtenant:()=>{ sheet(`<h2>New tenant</h2>${tenantForm({})}<div class="row" style="margin-top:10px"><button class="btn pri" data-act="tenantcreate" data-id="">Add tenant</button></div>`); wire(); },
+  tenantcreate:async(leadId)=>{ const v=readTenantForm(); if(!v.name) return toast('Name is required'); if(!v.rent&&v.bed_id){v.rent=S.data.beds.find(b=>b.id===v.bed_id).list_price;} closeSheet();
+    try{ const {data,error}=await sb.from('cp_tenants').insert(v).select().single(); if(error) throw error;
+      if(leadId) await sb.from('cp_leads').update({status:'Approved',tenant_id:data.id}).eq('id',leadId);
+      if(v.bed_id&&v.move_in) await sb.from('cp_cleaning').insert({needed_on:v.move_in,bed_id:v.bed_id,task:'Make bed for move-in',tenant_id:data.id,tenant_name:v.name,notes:`${v.name} arrives ${fmtD(v.move_in)}`});
+      toast('Reserved'); await load(); openTenant(data.id);
+    }catch(e){ toast('Error: '+e.message); }
+  },
+  tenantsave:async(id)=>{ const v=readTenantForm(); closeSheet(); await run(sb.from('cp_tenants').update(v).eq('id',id),'Saved'); openTenant(id); },
+  tenantdelete:(id)=>confirmSheet('Delete this tenant and their payment links? Payments stay in the log under their name.',async()=>{ closeSheet(); await run(sb.from('cp_tenants').delete().eq('id',id),'Deleted'); }),
+  tenantnote:async(id)=>{ const txt=$('cl-text').value.trim(); if(!txt) return; const t=tenantById(id); await run(sb.from('cp_contact_log').insert({tenant_id:id,who:t.name,channel:'Text',summary:txt}),'Logged'); openTenant(id); },
+  flag:async(arg,el)=>{ const [id,k]=arg.split('|'); await run(sb.from('cp_tenants').update({[k]:el.checked}).eq('id',id)); },
+  feepaid:async(id)=>{ closeSheet(); const t=tenantById(id); await run(sb.from('cp_tenants').update({fee_paid_on:today()}).eq('id',id)); await run(sb.from('cp_payments').insert({tenant_id:id,tenant_name:t.name,amount:150,method:'Other',for_month:iso(firstOfMonth(t.move_in?new Date(t.move_in+'T12:00:00'):new Date())),type:'Reservation fee',note:'Marked from the app'}),'Fee recorded'); openTenant(id); },
+  feerefund:async(id)=>{ closeSheet(); const t=tenantById(id); await run(sb.from('cp_tenants').update({fee_refunded_on:today()}).eq('id',id)); await run(sb.from('cp_payments').insert({tenant_id:id,tenant_name:t.name,amount:-150,method:'Other',for_month:iso(firstOfMonth(new Date())),type:'Refund',note:'Reservation fee refunded'}),'Refund recorded'); },
+  movein:(id)=>{ const t=tenantById(id); sheet(`<h2>Move in ${esc(t.name)}</h2><div class="stack">
+      <div class="small muted">Bed <span class="mono">${esc(t.bed_id||'none yet')}</span>. This sets them Active as of today.</div>
+      ${!t.bed_id?`<div class="pill bad">Assign a bed first (Edit tenant)</div>`:''}
+      <div class="card small">Then, by hand:<br>1. Text them to install TTLock and make an account with ${esc(t.email||'their email')}, then send their eKey.<br>2. Add them to the DFW CRASHPADS GroupMe.<br>Tick the boxes on their card when done.</div>
+      <button class="btn pri" data-act="moveinconfirm" data-id="${id}" ${!t.bed_id?'disabled':''}>Mark moved in</button></div>`); wire(); },
+  moveinconfirm:async(id)=>{ closeSheet(); await run(sb.from('cp_tenants').update({status:'Active',move_in:tenantById(id).move_in||today()}).eq('id',id),'Moved in'); openTenant(id); },
+  notice:(id)=>{ const t=tenantById(id); const def=iso(new Date(new Date().getFullYear(),new Date().getMonth()+1,0)); sheet(`<h2>Log notice</h2><div class="stack"><label class="f">Last night<input id="nt-date" type="date" value="${def}"></label><label class="f">What they said<input id="nt-text" placeholder="Texted: moving out end of month"></label><button class="btn pri" data-act="noticesave" data-id="${id}">Save notice</button></div>`); wire(); },
+  noticesave:async(id)=>{ const t=tenantById(id); const out=$('nt-date').value; const txt=$('nt-text').value.trim(); closeSheet();
+    await run(sb.from('cp_tenants').update({move_out:out,notice_given_on:today()}).eq('id',id));
+    const next=new Date(out+'T12:00:00'); next.setDate(next.getDate()+1);
+    await sb.from('cp_cleaning').insert({needed_on:iso(next),bed_id:t.bed_id,task:'Strip after move-out',tenant_id:id,tenant_name:t.name,notes:`${t.name} leaves ${fmtD(out)}`});
+    if(txt) await sb.from('cp_contact_log').insert({tenant_id:id,who:t.name,channel:'Text',summary:txt,tag:'notice',key_date:out});
+    toast('Notice logged'); await load(); openTenant(id); },
+  moveout:(id)=>{ const t=tenantById(id); sheet(`<h2>Move out ${esc(t.name)}</h2><div class="stack"><div class="small">Sets them Moved Out and frees <span class="mono">${esc(t.bed_id||'')}</span>. Then by hand: remove from GroupMe, turn off their TTLock key, refund the $150 within 30 days if they gave notice by the 15th.</div><button class="btn pri" data-act="moveoutconfirm" data-id="${id}">Mark moved out</button></div>`); wire(); },
+  moveoutconfirm:async(id)=>{ const t=tenantById(id); closeSheet(); await run(sb.from('cp_tenants').update({status:'Moved Out',move_out:t.move_out||today(),groupme_added:false,ttlock_account:false}).eq('id',id),'Moved out'); },
+  assign:(bedId)=>{ const cands=S.data.tenants.filter(t=>t.status!=='Moved Out'&&t.bed_id!==bedId); const b=S.data.beds.find(x=>x.id===bedId);
+    sheet(`<h2>Assign ${bedId}</h2><div class="stack"><label class="f">Tenant<select id="as-t"><option value="">Choose…</option>${cands.map(t=>`<option value="${t.id}">${esc(t.name)} (${t.status}${t.bed_id?', now '+t.bed_id:''})</option>`).join('')}</select></label><label class="f">Rent $/mo<input id="as-rent" inputmode="numeric" value="${b.list_price}"></label><button class="btn pri" data-act="assignsave" data-id="${bedId}">Assign</button><button class="btn" data-act="addtenant" data-id="x">Or add a new tenant</button></div>`); wire(); },
+  assignsave:async(bedId)=>{ const tid=$('as-t').value; if(!tid) return toast('Pick a tenant'); const rent=Number($('as-rent').value)||0; closeSheet(); await run(sb.from('cp_tenants').update({bed_id:bedId,rent,payment_code:bedId.replace('-',''),category_hold:null}).eq('id',tid),'Assigned'); },
+  bednotes:async(id)=>{ closeSheet(); await run(sb.from('cp_beds').update({notes:$('bed-notes').value.trim()||null}).eq('id',id),'Saved'); },
+  pay:(id)=>{ sheet(payForm(id||null)); wire(); },
+  paysave:async()=>{ const tid=$('pf-tenant').value; const t=tenantById(tid); const amt=Number($('pf-amount').value); if(!amt) return toast('Amount?'); closeSheet();
+    await run(sb.from('cp_payments').insert({tenant_id:tid,tenant_name:t.name,amount:amt,method:$('pf-method').value,for_month:$('pf-month').value,type:$('pf-type').value,received_on:$('pf-date').value||today(),note:$('pf-note').value.trim()||null}),'Payment logged');
+    if($('pf-type').value==='Reservation fee'&&!t.fee_paid_on) await run(sb.from('cp_tenants').update({fee_paid_on:$('pf-date').value||today()}).eq('id',tid)); },
+  paydelete:(id)=>confirmSheet('Delete this payment?',async()=>{ closeSheet(); await run(sb.from('cp_payments').delete().eq('id',id),'Deleted'); }),
+  cleandone:async(id)=>{ await run(sb.from('cp_cleaning').update({done:true}).eq('id',id)); },
+  cleantext:async()=>{ const c=S.data.cleaning.filter(x=>!x.done); const lines=c.map(x=>`- ${x.bed_id}: ${x.task.toLowerCase()}${x.tenant_name?' ('+x.tenant_name+')':''}${x.needed_on?' by '+fmtD(x.needed_on):''}`);
+    const txt=`Hey Will, for this week:\n${lines.join('\n')}\nThanks!`; try{ await navigator.clipboard.writeText(txt); toast('Copied for Will'); }catch(e){ sheet(`<h2>Text for Will</h2><textarea style="width:100%;min-height:160px">${esc(txt)}</textarea>`); }
+    await sb.from('cp_cleaning').update({cleaners_notified:true}).in('id',c.map(x=>x.id)); },
+  settingssave:async()=>{ await run(sb.from('cp_settings').upsert([{key:'wp_api_key',value:$('st-wp').value.trim()},{key:'cleaner_phone',value:$('st-cphone').value.trim()}]),'Settings saved'); },
+  passchange:async()=>{ const p=$('st-pass').value; if(p.length<8) return toast('Use at least 8 characters'); const {error}=await sb.auth.updateUser({password:p}); toast(error?error.message:'Password changed'); $('st-pass').value=''; },
+  signout:()=>sb.auth.signOut(),
+};
+function confirmSheet(msg,fn){ sheet(`<h2>Confirm</h2><div class="stack"><div>${esc(msg)}</div><div class="row"><button class="btn danger" id="cf-yes">Yes, do it</button><button class="btn" id="cf-no">Cancel</button></div></div>`); $('cf-yes').onclick=fn; $('cf-no').onclick=closeSheet; }
+</script>
+</body>
+</html>

@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.43.5 / 20260916_4
+ * Version/build: fcf-v5.43.6 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.43.5';
+const FCF_VERSION = 'fcf-v5.43.6';
 const FCF_BUILD   = '20260916_4';
 
 
@@ -3310,6 +3310,10 @@ async function bootAppInner() {
     }
 
     if (typeof FCFBridge !== 'undefined' && FCFBridge.isNative) {
+      // Real App Store prices (localized currency) for the Pro buttons.
+      // Apple rejects subscription screens whose price doesn't match the
+      // store, and the hardcoded USD fallback is wrong outside the US.
+      FCFBridge.getProducts();
       setTimeout(() => FCFBridge.requestHealthKit(), 2000);
       setTimeout(() => FCFBridge.requestCalendar(ST.baseTimezone), 3500);
       setTimeout(() => scheduleNotifications(), 5000);
@@ -3707,9 +3711,11 @@ function showPaywall(reason) {
   });
   parts.push('</div>');
 
-  parts.push('<button class="btn btn-gold" onclick="startProPurchase(\''+PRO_PRODUCT_ANNUAL+'\')">'+PRO_ANNUAL_PRICE+' / year</button>');
-  parts.push('<div style="text-align:center;font-size:11px;color:var(--muted);margin:6px 0 10px">Works out at $5.00 a month</div>');
-  parts.push('<button class="btn btn-outline" onclick="startProPurchase(\''+PRO_PRODUCT_MONTHLY+'\')">'+PRO_MONTHLY_PRICE+' / month</button>');
+  parts.push('<button class="btn btn-gold" onclick="startProPurchase(\''+PRO_PRODUCT_ANNUAL+'\')">'+proPrice(PRO_PRODUCT_ANNUAL, PRO_ANNUAL_PRICE)+' / year</button>');
+  // Currency-neutral: a fixed "$5.00 a month" is wrong outside the US.
+  parts.push('<div style="text-align:center;font-size:11px;color:var(--muted);margin:6px 0 10px">Saves about 37% vs monthly</div>');
+  parts.push('<button class="btn btn-outline" onclick="startProPurchase(\''+PRO_PRODUCT_MONTHLY+'\')">'+proPrice(PRO_PRODUCT_MONTHLY, PRO_MONTHLY_PRICE)+' / month</button>');
+  parts.push(proDisclosureHTML());
 
   parts.push('<button class="btn-ghost" style="display:block;width:100%;text-align:center;margin-top:12px" onclick="restoreProPurchases()">Restore purchases</button>');
   parts.push('<button class="btn-ghost" style="display:block;width:100%;text-align:center;margin-top:10px" onclick="closeModal()">Not now</button>');
@@ -5013,11 +5019,35 @@ window.addEventListener('fcf:restore', async (e) => {
   showBigToast(isPro() ? '✓ Pro restored.' : 'No active subscription found for this Apple ID.', isPro() ? 'ok' : 'info');
 });
 
-// IAP: product list (for future use — price display)
+// IAP: product list. Supplies the real, localized App Store price for the
+// Pro buttons (see proPrice). Falls back to the USD constants on web and
+// until StoreKit answers.
 window.addEventListener('fcf:products', (e) => {
   const d = e.detail || {};
-  if (d.products) ST.skProducts = d.products;
+  if (Array.isArray(d.products)) {
+    ST.skProducts = d.products;
+    if (ST.tab === 'more') renderPage();
+  }
 });
+// Apple Guideline 3.1.2 requires the renewal terms and working Terms of
+// Use / Privacy Policy links right at every set of purchase buttons, not
+// only elsewhere on the screen. Shared so the More tab and the upgrade
+// popup can never drift apart.
+function proDisclosureHTML() {
+  const nativeIAP = !!storeKitBridge();
+  return '<div style="font-size:10px;color:var(--muted);text-align:center;line-height:1.55;margin:4px 0 10px">' +
+    'Flight Crew Fitness Pro, billed yearly or monthly. ' +
+    (nativeIAP
+      ? 'Payment is charged to your Apple ID at confirmation. The subscription renews automatically at the same price unless canceled at least 24 hours before the end of the current period. Manage or cancel anytime in your Apple ID account settings.'
+      : 'Renews automatically at the same price until canceled.') +
+    '<br><a class="modal-link" href="'+TERMS_URL+'" '+externalLinkAttrs()+'>Terms of Use</a> · ' +
+    '<a class="modal-link" href="'+PRIVACY_POLICY_URL+'" '+externalLinkAttrs()+'>Privacy Policy</a></div>';
+}
+
+function proPrice(productId, fallback) {
+  const p = (ST.skProducts || []).find(x => x.id === productId);
+  return (p && p.displayPrice) ? sanitizeUserText(p.displayPrice) : fallback;
+}
 
 // Sign In with Apple: success
 window.addEventListener('fcf:siwa:success', async (e) => {
@@ -11279,10 +11309,11 @@ function renderMore(p) {
     });
     parts.push('</div>');
     parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px">');
-    parts.push('<button class="btn btn-gold" onclick="haptic(\'medium\');startProPurchase(\''+PRO_PRODUCT_ANNUAL+'\')"><div style="font-size:13px;font-weight:700">❖ '+PRO_ANNUAL_PRICE+'</div><div style="font-size:10px;opacity:0.8;margin-top:2px">per year</div></button>');
-    parts.push('<button class="btn btn-outline" onclick="haptic(\'medium\');startProPurchase(\''+PRO_PRODUCT_MONTHLY+'\')"><div style="font-size:13px;font-weight:700">'+PRO_MONTHLY_PRICE+'</div><div style="font-size:10px;opacity:0.8;margin-top:2px">per month</div></button>');
+    parts.push('<button class="btn btn-gold" onclick="haptic(\'medium\');startProPurchase(\''+PRO_PRODUCT_ANNUAL+'\')"><div style="font-size:13px;font-weight:700">❖ '+proPrice(PRO_PRODUCT_ANNUAL, PRO_ANNUAL_PRICE)+'</div><div style="font-size:10px;opacity:0.8;margin-top:2px">per year</div></button>');
+    parts.push('<button class="btn btn-outline" onclick="haptic(\'medium\');startProPurchase(\''+PRO_PRODUCT_MONTHLY+'\')"><div style="font-size:13px;font-weight:700">'+proPrice(PRO_PRODUCT_MONTHLY, PRO_MONTHLY_PRICE)+'</div><div style="font-size:10px;opacity:0.8;margin-top:2px">per month</div></button>');
     parts.push('</div>');
     parts.push('<div style="font-size:10px;color:var(--muted);text-align:center;margin-bottom:8px">Annual saves ~37%</div>');
+    parts.push(proDisclosureHTML());
     parts.push('<button class="btn-ghost" style="display:block;width:100%;text-align:center" onclick="restoreProPurchases()">Restore purchases</button>');
   }
   parts.push('</div>');

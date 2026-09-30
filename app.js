@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.43.6 / 20260916_4
+ * Version/build: fcf-v5.43.7 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.43.6';
+const FCF_VERSION = 'fcf-v5.43.7';
 const FCF_BUILD   = '20260916_4';
 
 
@@ -36,6 +36,18 @@ const SB = supabase.createClient(
 // ─── SUBSCRIPTION TIERS ─────────────────────────────────────────────────
 const FREE_WEEKLY_PHOTOS = 3;
 const PRO_WEEKLY_PHOTOS = 0;        // 0 = unlimited
+// Aircraft marshaller giving the stop signal (arms up, orange wands crossed
+// overhead). Replaces the padlock on the "Set the Chocks" buttons: stopping
+// the aircraft is the gesture that matches chocking the wheels. Body uses
+// currentColor so it follows the button's text color.
+const MARSHALL_STOP_ICON = '<svg viewBox="0 0 24 24" width="1.45em" height="1.45em" style="vertical-align:-0.22em;margin-right:2px" aria-hidden="true">' +
+  '<line x1="9.5" y1="6.5" x2="16.5" y2="1.2" stroke="#f97316" stroke-width="1.8" stroke-linecap="round"/>' +
+  '<line x1="14.5" y1="6.5" x2="7.5" y2="1.2" stroke="#f97316" stroke-width="1.8" stroke-linecap="round"/>' +
+  '<path d="M8.6 12.6 L9.5 6.5 M15.4 12.6 L14.5 6.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" fill="none"/>' +
+  '<circle cx="12" cy="9.4" r="1.75" fill="currentColor"/>' +
+  '<path d="M8.9 12.1 H15.1 L14.6 17.6 H9.4 Z" fill="currentColor"/>' +
+  '<path d="M10.5 17.4 L10.1 22.7 M13.5 17.4 L13.9 22.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
+  '</svg>';
 const PRO_ANNUAL_PRICE = '$59.99';
 const PRO_MONTHLY_PRICE = '$7.99';
 const PRO_PRODUCT_ANNUAL = 'FCFProAnnual';
@@ -8172,7 +8184,7 @@ function renderFlight(p) {
   // Disabled while a save is in flight so the guard is visible rather than
   // a silent no-op — repeated tapping is what produced duplicates, and a
   // button that looks live invites exactly that.
-  parts.push('<button class="btn btn-green" '+(ST.chocksSaving?'disabled':'')+' onclick="confirmSetChocks()">'+(ST.chocksSaving?'⏳ SAVING…':'🔒 SET THE CHOCKS · FINISH WORKOUT')+'</button>');
+  parts.push('<button class="btn btn-green" '+(ST.chocksSaving?'disabled':'')+' onclick="confirmSetChocks()">'+(ST.chocksSaving?'⏳ SAVING…':MARSHALL_STOP_ICON+' SET THE CHOCKS · FINISH WORKOUT')+'</button>');
 
   p.innerHTML = parts.join('');
 }
@@ -9283,7 +9295,7 @@ function confirmSetChocks() {
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">Finish this workout now?</div>' +
     '<div class="modal-body" style="margin-bottom:14px">You still have '+remaining+' exercise'+(remaining===1?'':'s')+' left ('+done+'/'+allEx.length+' done). Setting the chocks finishes and saves the workout as-is. Anything not logged won\'t be recorded.</div>' +
-    '<button class="btn btn-green" '+(ST.chocksSaving?'disabled':'')+' onclick="closeModal();setTheChocks()">'+(ST.chocksSaving?'⏳ Saving…':'🔒 Finish Anyway')+'</button>' +
+    '<button class="btn btn-green" '+(ST.chocksSaving?'disabled':'')+' onclick="closeModal();setTheChocks()">'+(ST.chocksSaving?'⏳ Saving…':MARSHALL_STOP_ICON+' Finish Anyway')+'</button>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">Keep Training</button>' +
     '</div></div>';
 }

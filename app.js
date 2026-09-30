@@ -1,10 +1,41 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.43.9 / 20260916_4
+ * Version/build: fcf-v5.44.0 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.43.9';
+const FCF_VERSION = 'fcf-v5.44.0';
 const FCF_BUILD   = '20260916_4';
+
+// ─── TEXT SIZE ───────────────────────────────────────────────────────────────
+// Every font-size in index.html and app.js is in rem, so scaling the root
+// font size scales all of the app's text and nothing else (layout boxes
+// stay put, unitless line-heights follow the text). Four steps, like iOS
+// Dynamic Type. The choice is kept in localStorage so it applies before
+// the first paint with no flash, and mirrored to the profile so it follows
+// the person to a new device.
+const TEXT_SIZES = [
+  { key: 'default', label: 'Default', scale: 1 },
+  { key: 'large',   label: 'Large',   scale: 1.15 },
+  { key: 'larger',  label: 'Larger',  scale: 1.3 },
+  { key: 'largest', label: 'Largest', scale: 1.5 },
+];
+const TEXT_SIZE_LS_KEY = 'fcf_text_size';
+function textSizeEntry(key) {
+  return TEXT_SIZES.find(t => t.key === key) || TEXT_SIZES[0];
+}
+function applyTextSize(key) {
+  const entry = textSizeEntry(key);
+  if (typeof document !== 'undefined' && document.documentElement) {
+    document.documentElement.style.fontSize = (16 * entry.scale) + 'px';
+  }
+  return entry.key;
+}
+function currentTextSize() {
+  try { return textSizeEntry(localStorage.getItem(TEXT_SIZE_LS_KEY)).key; } catch (e) { return 'default'; }
+}
+// Runs at load, before anything renders. localStorage can throw in a
+// private window or with site data blocked; the app must still start.
+try { applyTextSize(localStorage.getItem(TEXT_SIZE_LS_KEY)); } catch (e) { /* default size */ }
 
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -1790,7 +1821,7 @@ function renderLanding(root) {
 
   parts.push('<div class="landing-hero">');
   parts.push('<div class="fb" style="align-items:flex-start"><div class="landing-logo">✈ FLIGHT CREW FITNESS</div>');
-  parts.push('<div id="zuluClock" style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.05em;white-space:nowrap"></div></div>');
+  parts.push('<div id="zuluClock" style="font-family:var(--mono);font-size:0.6875rem;color:var(--muted);letter-spacing:0.05em;white-space:nowrap"></div></div>');
   parts.push('<div class="landing-tag">BUILT FOR PILOTS, BY THE REALITIES OF FLYING</div>');
   parts.push('<div class="landing-h1">Train hard between <span class="accent">duty days</span>, not despite them.</div>');
   parts.push('<div class="landing-sub">A workout system that adapts to your gym access, your fatigue level, and your schedule, whether you\'re home, on layover, or stuck with nothing but a hotel room.</div>');
@@ -1841,7 +1872,7 @@ function renderLanding(root) {
 
   parts.push('<div class="landing-footer">');
   parts.push('<button class="btn btn-gold" onclick="ST.showLanding=false;ST.authMode=\'signup\';renderRoot()">Create Your Free Account</button>');
-  parts.push('<div style="font-size:10px;color:var(--muted);margin-top:14px;line-height:1.6">Flight Crew Fitness is a training tool, not medical advice.<br>Consult a physician before beginning any new exercise program.</div>');
+  parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-top:14px;line-height:1.6">Flight Crew Fitness is a training tool, not medical advice.<br>Consult a physician before beginning any new exercise program.</div>');
   parts.push('</div>');
 
   parts.push('</div>');
@@ -1884,12 +1915,12 @@ function renderAuth(root) {
   // provider is switched on in Supabase Auth (checked live, see
   // checkSiwaAvailability), so the button can't appear before it works.
   if (ST.siwaAvailable) {
-    parts.push('<div style="display:flex;align-items:center;gap:10px;margin:14px 0 4px;color:var(--muted);font-size:11px"><div style="flex:1;height:1px;background:var(--border)"></div>or<div style="flex:1;height:1px;background:var(--border)"></div></div>');
+    parts.push('<div style="display:flex;align-items:center;gap:10px;margin:14px 0 4px;color:var(--muted);font-size:0.6875rem"><div style="flex:1;height:1px;background:var(--border)"></div>or<div style="flex:1;height:1px;background:var(--border)"></div></div>');
     parts.push('<button class="btn mt8" style="background:#000;color:#fff;border:1px solid #333;font-weight:600" onclick="haptic(\'light\');FCFBridge.signInWithApple()">&#63743; Sign in with Apple</button>');
   } else if (ST.siwaAvailable === undefined) {
     checkSiwaAvailability();
   }
-  if (!isSignup) parts.push('<button class="btn-ghost mt8" style="display:block;width:100%;text-align:center;font-size:12px" onclick="ST.authView=\'forgot\';ST.authErr=\'\';ST.authInfo=\'\';renderRoot()">Forgot password?</button>');
+  if (!isSignup) parts.push('<button class="btn-ghost mt8" style="display:block;width:100%;text-align:center;font-size:0.75rem" onclick="ST.authView=\'forgot\';ST.authErr=\'\';ST.authInfo=\'\';renderRoot()">Forgot password?</button>');
   parts.push('<button class="btn-ghost mt12" style="display:block;width:100%;text-align:center" onclick="ST.showLanding=true;renderRoot()">← Back</button>');
   parts.push('</div></div>');
   root.innerHTML = parts.join('');
@@ -1900,8 +1931,8 @@ function renderForgotPassword(root) {
   parts.push('<div class="landing" style="display:flex;flex-direction:column;justify-content:center">');
   parts.push('<div class="auth-wrap">');
   parts.push('<div style="text-align:center;margin-bottom:24px"><div class="landing-logo">✈ FLIGHT CREW FITNESS</div></div>');
-  parts.push('<div style="font-size:14px;font-weight:700;margin-bottom:4px">Reset your password</div>');
-  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Enter the email you signed up with. We\'ll send a link to set a new password.</div>');
+  parts.push('<div style="font-size:0.875rem;font-weight:700;margin-bottom:4px">Reset your password</div>');
+  parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:14px;line-height:1.5">Enter the email you signed up with. We\'ll send a link to set a new password.</div>');
   if (ST.authInfo) parts.push('<div class="alert alert-ok mt8"><div class="alert-icon">✅</div><div>'+sanitizeUserTextLong(ST.authInfo)+'</div></div>');
   if (ST.authErr)  parts.push('<div class="alert alert-danger mt8"><div class="alert-icon">⚠️</div><div>'+sanitizeUserTextLong(ST.authErr)+'</div></div>');
   parts.push('<div class="field"><label>Email</label><input type="email" id="forgot_email" placeholder="you@example.com" autocomplete="email"></div>');
@@ -1935,7 +1966,7 @@ function renderPasswordRecovery(root) {
   parts.push('<div class="landing" style="display:flex;flex-direction:column;justify-content:center">');
   parts.push('<div class="auth-wrap">');
   parts.push('<div style="text-align:center;margin-bottom:24px"><div class="landing-logo">✈ FLIGHT CREW FITNESS</div></div>');
-  parts.push('<div style="font-size:14px;font-weight:700;margin-bottom:14px">Set a new password</div>');
+  parts.push('<div style="font-size:0.875rem;font-weight:700;margin-bottom:14px">Set a new password</div>');
   if (ST.authErr) parts.push('<div class="alert alert-danger mt8"><div class="alert-icon">⚠️</div><div>'+sanitizeUserTextLong(ST.authErr)+'</div></div>');
   parts.push('<div class="field"><label>New Password</label><input type="password" id="recovery_pass" placeholder="Min 6 characters" autocomplete="new-password"></div>');
   parts.push('<div class="field"><label>Confirm New Password</label><input type="password" id="recovery_pass2" placeholder="Re-enter your new password" autocomplete="new-password"></div>');
@@ -2000,7 +2031,7 @@ function renderDisclaimerGate(root) {
   parts.push('<div style="text-align:center;margin-bottom:20px"><div class="landing-logo">✈ FLIGHT CREW FITNESS</div></div>');
   parts.push('<div class="card">');
   parts.push('<div class="section-label" style="margin-top:0">SAFETY DISCLAIMER</div>');
-  parts.push('<div style="font-size:13px;line-height:1.7;color:#cbd5e1">');
+  parts.push('<div style="font-size:0.8125rem;line-height:1.7;color:#cbd5e1">');
   parts.push('Flight Crew Fitness is a training and tracking tool. It is not medical advice and does not replace consultation with a qualified physician.<br><br>');
   parts.push('Consult your doctor before beginning any new exercise program, especially if you have an existing medical condition, are taking medication, or have concerns about your fitness for activity.<br><br>');
   parts.push('Exercise carries inherent risk of injury. You are responsible for exercising within your own physical limits, using proper form, and stopping immediately if you experience pain, dizziness, chest discomfort, or shortness of breath beyond normal exertion.<br><br>');
@@ -2455,14 +2486,14 @@ async function loadLeaderboardGlance() {
       const isRunning = id === 'running';
       const name = isRunning ? 'Running' : (LEADERBOARD_EXERCISES.find(e => e.id === id)?.name || id);
       parts.push('<div class="card" style="padding:10px;cursor:pointer;touch-action:manipulation" onclick="haptic(\'light\');'+(isRunning ? "ST.lbCategory='running';renderPage()" : "ST.lbCategory='strength';ST.lbEx='"+id+"';localStorage.setItem('fcf_lb_ex','"+id+"');renderPage()")+'">');
-      parts.push('<div style="font-size:11px;font-weight:600;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+name+'</div>');
+      parts.push('<div style="font-size:0.6875rem;font-weight:600;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+name+'</div>');
       if (!rows.length) {
-        parts.push('<div style="font-size:10px;color:var(--muted)">No entries yet</div>');
+        parts.push('<div style="font-size:0.625rem;color:var(--muted)">No entries yet</div>');
       } else {
         rows.forEach((r, i) => {
           const medal = medalBadge(i);
           const val = isRunning ? formatMiPace(r.distance_mi, r.duration_sec) : Math.round(r.weight_lb)+' lb';
-          parts.push('<div class="fb" style="padding:2px 0"><span style="font-size:10px">'+medal+' '+sanitizeUserText(r.username)+'</span><span style="font-family:var(--mono);font-size:10px;color:var(--gold)">'+val+'</span></div>');
+          parts.push('<div class="fb" style="padding:2px 0"><span style="font-size:0.625rem">'+medal+' '+sanitizeUserText(r.username)+'</span><span style="font-family:var(--mono);font-size:0.625rem;color:var(--gold)">'+val+'</span></div>');
         });
       }
       parts.push('</div>');
@@ -2479,7 +2510,7 @@ function renderLeaderboard(p) {
   parts.push('<div class="section-label">RANKS</div>');
   if (!ST.username) {
     parts.push('<div class="card mb12" style="border-color:var(--gold)">');
-    parts.push('<div style="font-size:12px;line-height:1.6;margin-bottom:10px">🏆 <strong>Want on the boards?</strong> Set a call sign in More → Pilot Profile. No call sign = you\'re not listed. Your lifts and runs stay private.</div>');
+    parts.push('<div style="font-size:0.75rem;line-height:1.6;margin-bottom:10px">🏆 <strong>Want on the boards?</strong> Set a call sign in More → Pilot Profile. No call sign = you\'re not listed. Your lifts and runs stay private.</div>');
     parts.push('<button class="btn btn-outline" onclick="switchTab(\'profile\')">Set My Call Sign →</button>');
     parts.push('</div>');
   }
@@ -2487,7 +2518,7 @@ function renderLeaderboard(p) {
   // At-a-glance: several boards visible at once, tap any card to drill into
   // its full, filterable standings below.
   parts.push('<div class="section-label" style="margin-top:0">AT A GLANCE</div>');
-  parts.push('<div id="lbGlance" class="mb12"><div class="card" style="text-align:center;color:var(--muted);font-size:11px">Loading…</div></div>');
+  parts.push('<div id="lbGlance" class="mb12"><div class="card" style="text-align:center;color:var(--muted);font-size:0.6875rem">Loading…</div></div>');
 
   parts.push('<div class="section-label">BADGES</div>');
   parts.push('<div class="card mb12">');
@@ -2497,21 +2528,21 @@ function renderLeaderboard(p) {
   parts.push('<div class="section-label">FULL BOARD</div>');
 
   const segBtn = (key, val, label) =>
-    '<div class="env-btn" style="padding:8px 4px'+(ST[key]===val?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="ST.'+key+'=\''+val+'\';renderPage()"><div style="font-size:11px;font-weight:700">'+label+'</div></div>';
+    '<div class="env-btn" style="padding:8px 4px'+(ST[key]===val?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="ST.'+key+'=\''+val+'\';renderPage()"><div style="font-size:0.6875rem;font-weight:700">'+label+'</div></div>';
 
   const category = ST.lbCategory || 'strength';
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:12px">' +
-    '<div class="env-btn" style="padding:10px 4px'+(category==='strength'?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="ST.lbCategory=\'strength\';renderPage()"><div style="font-size:12px;font-weight:700">🏋️ STRENGTH</div></div>' +
-    '<div class="env-btn" style="padding:10px 4px'+(category==='running'?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="ST.lbCategory=\'running\';renderPage()"><div style="font-size:12px;font-weight:700">🏃 RUNNING</div></div>' +
+    '<div class="env-btn" style="padding:10px 4px'+(category==='strength'?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="ST.lbCategory=\'strength\';renderPage()"><div style="font-size:0.75rem;font-weight:700">🏋️ STRENGTH</div></div>' +
+    '<div class="env-btn" style="padding:10px 4px'+(category==='running'?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="ST.lbCategory=\'running\';renderPage()"><div style="font-size:0.75rem;font-weight:700">🏃 RUNNING</div></div>' +
     '</div>');
 
   if (category === 'running') {
     parts.push('<div class="card mb12">');
     parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px">'+segBtn('runBoard','longest','LONGEST RUN')+segBtn('runBoard','monthly','THIS MONTH')+'</div>');
     parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">'+segBtn('lbSex','all','ALL')+segBtn('lbSex','male','MEN')+segBtn('lbSex','female','WOMEN')+'</div>');
-    if (ST.runBoard === 'monthly') parts.push('<div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5">Total distance logged this calendar month. Resets on the 1st.</div>');
+    if (ST.runBoard === 'monthly') parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-top:6px;line-height:1.5">Total distance logged this calendar month. Resets on the 1st.</div>');
     parts.push('</div>');
-    parts.push('<div id="lbRows"><div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">Loading standings…</div></div>');
+    parts.push('<div id="lbRows"><div class="card mb12" style="text-align:center;color:var(--muted);font-size:0.75rem">Loading standings…</div></div>');
     p.innerHTML = parts.join('');
     loadRunningRows();
     loadLeaderboardGlance();
@@ -2526,9 +2557,9 @@ function renderLeaderboard(p) {
   parts.push('</select></div>');
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:8px">'+segBtn('lbSex','all','ALL')+segBtn('lbSex','male','MEN')+segBtn('lbSex','female','WOMEN')+'</div>');
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'+segBtn('lbMode','weight','TOP WEIGHT')+segBtn('lbMode','dots','DOTS SCORE')+'</div>');
-  if (ST.lbMode === 'dots') parts.push('<div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5">DOTS normalizes for bodyweight and sex: a fair strength score across sizes. Needs bodyweight + sex on file.</div>');
+  if (ST.lbMode === 'dots') parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-top:6px;line-height:1.5">DOTS normalizes for bodyweight and sex: a fair strength score across sizes. Needs bodyweight + sex on file.</div>');
   parts.push('</div>');
-  parts.push('<div id="lbRows"><div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">Loading standings…</div></div>');
+  parts.push('<div id="lbRows"><div class="card mb12" style="text-align:center;color:var(--muted);font-size:0.75rem">Loading standings…</div></div>');
   p.innerHTML = parts.join('');
   loadLeaderboardRows();
   loadLeaderboardGlance();
@@ -2545,7 +2576,7 @@ async function loadLeaderboardRows() {
     const { data, error } = await withTimeout(q.limit(50));
     if (error) throw error;
     if (!data || !data.length) {
-      el.innerHTML = '<div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">No entries yet for this lift. Be the first on the board.</div>';
+      el.innerHTML = '<div class="card mb12" style="text-align:center;color:var(--muted);font-size:0.75rem">No entries yet for this lift. Be the first on the board.</div>';
       return;
     }
     const admin = isLbAdmin();
@@ -2559,17 +2590,17 @@ async function loadLeaderboardRows() {
       const medal = medalBadge(i);
       parts.push('<div class="fb" style="padding:9px 14px'+(mine?';background:rgba(212,175,55,0.07)':'')+(i<data.length-1?';border-bottom:1px solid var(--border)':'')+'">');
       parts.push('<div style="display:flex;align-items:center;gap:10px;min-width:0"><div style="width:24px;text-align:center;flex-shrink:0">'+medal+'</div>');
-      parts.push('<div style="min-width:0"><div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+sanitizeUserText(r.username)+(mine?' <span style="color:var(--gold);font-size:10px">YOU</span>':'')+'</div>');
-      parts.push('<div style="font-size:10px;color:var(--muted)">'+sub.join(' · ')+'</div></div></div>');
-      parts.push('<div style="display:flex;align-items:center;gap:8px;flex-shrink:0"><span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--gold)">'+val+'</span>');
-      if (admin) parts.push('<button class="btn-ghost" style="font-size:12px;padding:4px 6px" onclick="adminDeleteLbEntry(\''+r.id+'\',\''+sanitizeUserText(r.username).replace(/\'/g,'')+'\')">🗑</button>');
+      parts.push('<div style="min-width:0"><div style="font-size:0.8125rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+sanitizeUserText(r.username)+(mine?' <span style="color:var(--gold);font-size:0.625rem">YOU</span>':'')+'</div>');
+      parts.push('<div style="font-size:0.625rem;color:var(--muted)">'+sub.join(' · ')+'</div></div></div>');
+      parts.push('<div style="display:flex;align-items:center;gap:8px;flex-shrink:0"><span style="font-family:var(--mono);font-size:0.875rem;font-weight:700;color:var(--gold)">'+val+'</span>');
+      if (admin) parts.push('<button class="btn-ghost" style="font-size:0.75rem;padding:4px 6px" onclick="adminDeleteLbEntry(\''+r.id+'\',\''+sanitizeUserText(r.username).replace(/\'/g,'')+'\')">🗑</button>');
       parts.push('</div></div>');
     });
     parts.push('</div>');
     el.innerHTML = parts.join('');
   } catch(e) {
     const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
-    el.innerHTML = '<div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">'+(offline
+    el.innerHTML = '<div class="card mb12" style="text-align:center;color:var(--muted);font-size:0.75rem">'+(offline
       ? '📡 Leaderboards need a connection. Reconnect to see standings.'
       : 'Couldn\'t load standings. If this persists, the leaderboard table may not be set up yet.')+'</div>';
   }
@@ -2621,7 +2652,7 @@ async function loadRunningRows() {
     }
   } catch(e) {
     const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
-    el.innerHTML = '<div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">'+(offline
+    el.innerHTML = '<div class="card mb12" style="text-align:center;color:var(--muted);font-size:0.75rem">'+(offline
       ? '📡 Leaderboards need a connection. Reconnect to see standings.'
       : 'Couldn\'t load standings. If this persists, the running_pr_entries / running_log tables may not be set up yet.')+'</div>';
   }
@@ -2629,7 +2660,7 @@ async function loadRunningRows() {
 
 function renderRunningRows(el, rows) {
   if (!rows.length) {
-    el.innerHTML = '<div class="card mb12" style="text-align:center;color:var(--muted);font-size:12px">No runs logged yet for this board. Be the first.</div>';
+    el.innerHTML = '<div class="card mb12" style="text-align:center;color:var(--muted);font-size:0.75rem">No runs logged yet for this board. Be the first.</div>';
     return;
   }
   const admin = isLbAdmin();
@@ -2639,9 +2670,9 @@ function renderRunningRows(el, rows) {
     const medal = medalBadge(i);
     parts.push('<div class="fb" style="padding:9px 14px'+(mine?';background:rgba(212,175,55,0.07)':'')+(i<rows.length-1?';border-bottom:1px solid var(--border)':'')+'">');
     parts.push('<div style="display:flex;align-items:center;gap:10px;min-width:0"><div style="width:24px;text-align:center;flex-shrink:0">'+medal+'</div>');
-    parts.push('<div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+sanitizeUserText(r.username)+(mine?' <span style="color:var(--gold);font-size:10px">YOU</span>':'')+'</div></div>');
-    parts.push('<div style="display:flex;align-items:center;gap:8px;flex-shrink:0"><span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--gold)">'+r.display+'</span>');
-    if (admin && r.table && r.id) parts.push('<button class="btn-ghost" style="font-size:12px;padding:4px 6px" onclick="adminDeleteRunEntry(\''+r.table+'\',\''+r.id+'\',\''+sanitizeUserText(r.username).replace(/\'/g,'')+'\')">🗑</button>');
+    parts.push('<div style="font-size:0.8125rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+sanitizeUserText(r.username)+(mine?' <span style="color:var(--gold);font-size:0.625rem">YOU</span>':'')+'</div></div>');
+    parts.push('<div style="display:flex;align-items:center;gap:8px;flex-shrink:0"><span style="font-family:var(--mono);font-size:0.875rem;font-weight:700;color:var(--gold)">'+r.display+'</span>');
+    if (admin && r.table && r.id) parts.push('<button class="btn-ghost" style="font-size:0.75rem;padding:4px 6px" onclick="adminDeleteRunEntry(\''+r.table+'\',\''+r.id+'\',\''+sanitizeUserText(r.username).replace(/\'/g,'')+'\')">🗑</button>');
     parts.push('</div></div>');
   });
   parts.push('</div>');
@@ -2870,7 +2901,7 @@ function renderPage() {
   if (ST.tab === 'preflight') {
     renderPreflight(p).catch(e => {
       p.innerHTML = '<div class="section-label">PREFLIGHT BRIEFING · '+FCF_VERSION+'</div>' +
-        '<div class="card mb12"><div style="font-size:13px;color:var(--muted);margin-bottom:10px">Couldn\'t load your calendar. This can happen with no signal.</div>' +
+        '<div class="card mb12"><div style="font-size:0.8125rem;color:var(--muted);margin-bottom:10px">Couldn\'t load your calendar. This can happen with no signal.</div>' +
         '<button class="btn btn-outline" onclick="renderPage()">↻ Retry</button></div>';
     });
   }
@@ -2979,6 +3010,12 @@ function applyProfileToState(profile) {
   if (profile.nutritionGoals)               ST.nutritionGoals = profile.nutritionGoals;
   ST.medications = Array.isArray(profile.medications) ? profile.medications.map(normalizeMedication).filter(Boolean) : [];
   if (profile.medsSkipped) ST.medsSkipped = true;
+  // Text size follows the account: a choice made on the phone shows up on
+  // the iPad. The local copy is only a pre-paint cache of this value.
+  if (typeof profile.textSize === 'string' && TEXT_SIZES.some(t => t.key === profile.textSize)) {
+    applyTextSize(profile.textSize);
+    try { localStorage.setItem(TEXT_SIZE_LS_KEY, profile.textSize); } catch (e) { /* fine */ }
+  }
   // Re-engagement / disengagement nudges for nutrition + hydration
   // tracking — see computeTrackingNudges().
   if (profile.nutritionTrackingDisabledAt)   ST.nutritionTrackingDisabledAt = profile.nutritionTrackingDisabledAt;
@@ -3198,7 +3235,7 @@ async function bootApp() {
     if (mainPage) {
       mainPage.innerHTML = '<div class="card mb12" style="border-color:var(--red)">' +
         '<div style="font-weight:700;color:var(--red);margin-bottom:8px">⚠ Load error</div>' +
-        '<div style="font-size:12px;color:var(--muted);font-family:var(--mono);word-break:break-word">' +
+        '<div style="font-size:0.75rem;color:var(--muted);font-family:var(--mono);word-break:break-word">' +
         sanitizeUserText(e?.message || String(e)) + '</div></div>' + (mainPage.innerHTML || '');
     }
     showBigToast('Something didn\'t load correctly. Pull to refresh or reopen the app.', 'warn');
@@ -3385,8 +3422,8 @@ function glowTile(label, value, colorKey, valueColor) {
   return (
     '<div style="position:relative;border-radius:16px;border:1px solid rgba(255,255,255,0.07);overflow:hidden;padding:12px 10px 10px;min-height:90px;background:#0f1623">' +
     '<div style="position:absolute;top:-28px;right:-28px;width:110px;height:110px;border-radius:50%;background:radial-gradient(circle,' + gs + ' 0%,' + gf + ' 50%,transparent 75%);pointer-events:none"></div>' +
-    '<div style="font-family:var(--mono);font-size:8px;letter-spacing:.12em;color:' + accent + ';opacity:0.9;position:relative;z-index:1">' + label + '</div>' +
-    '<div style="position:absolute;bottom:10px;left:10px;font-family:var(--mono);font-size:30px;font-weight:700;color:' + vc + ';line-height:1;z-index:1">' + (value ?? '–') + '</div>' +
+    '<div style="font-family:var(--mono);font-size:0.5rem;letter-spacing:.12em;color:' + accent + ';opacity:0.9;position:relative;z-index:1">' + label + '</div>' +
+    '<div style="position:absolute;bottom:10px;left:10px;font-family:var(--mono);font-size:1.875rem;font-weight:700;color:' + vc + ';line-height:1;z-index:1">' + (value ?? '–') + '</div>' +
     '</div>'
   );
 }
@@ -3413,10 +3450,10 @@ function aiCoachCard(id, textId, title, colorKey) {
     '<div style="position:absolute;top:-50px;right:-40px;width:180px;height:180px;border-radius:50%;' +
       'background:radial-gradient(circle,' + gs + ' 0%,' + gf + ' 55%,transparent 75%);pointer-events:none"></div>' +
     '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;position:relative;z-index:1">' +
-      '<span style="font-size:12px">✦</span>' +
-      '<span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:' + accent + '">' + title + '</span>' +
+      '<span style="font-size:0.75rem">✦</span>' +
+      '<span style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.1em;color:' + accent + '">' + title + '</span>' +
     '</div>' +
-    '<div id="' + textId + '" style="font-size:13.5px;color:var(--text);line-height:1.6;position:relative;z-index:1">' +
+    '<div id="' + textId + '" style="font-size:0.8438rem;color:var(--text);line-height:1.6;position:relative;z-index:1">' +
       '<span class="ai-thinking-dots" style="color:var(--muted);font-style:italic">Thinking<span class="ai-dot">.</span><span class="ai-dot">.</span><span class="ai-dot">.</span></span>' +
     '</div>' +
     '</div>'
@@ -3439,13 +3476,13 @@ function aiCoachTeaser(title, colorKey, blurb) {
     '<div style="position:absolute;top:-50px;right:-40px;width:180px;height:180px;border-radius:50%;' +
       'background:radial-gradient(circle,' + gs + ' 0%,' + gf + ' 55%,transparent 75%);pointer-events:none"></div>' +
     '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;position:relative;z-index:1">' +
-      '<span style="font-size:12px">✦</span>' +
-      '<span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:' + accent + '">' + title + '</span>' +
+      '<span style="font-size:0.75rem">✦</span>' +
+      '<span style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.1em;color:' + accent + '">' + title + '</span>' +
     '</div>' +
-    '<div style="font-size:13.5px;color:var(--text);line-height:1.6;position:relative;z-index:1;' +
+    '<div style="font-size:0.8438rem;color:var(--text);line-height:1.6;position:relative;z-index:1;' +
       'filter:blur(3.5px);user-select:none;pointer-events:none">' + blurb + '</div>' +
     '<div style="position:relative;z-index:1;margin-top:12px;display:flex;justify-content:center">' +
-      '<button class="btn btn-gold" style="width:auto;padding:8px 18px;font-size:11px" onclick="showPaywall(\'coach\')">🔒 UNLOCK WITH PRO</button>' +
+      '<button class="btn btn-gold" style="width:auto;padding:8px 18px;font-size:0.6875rem" onclick="showPaywall(\'coach\')">🔒 UNLOCK WITH PRO</button>' +
     '</div>' +
     '</div>'
   );
@@ -3469,7 +3506,7 @@ function showBigToast(msg, type) {
   const icon = '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="'+color+'" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">'+iconPath+'</svg>';
   const t = document.createElement('div');
   t.id = 'fcf-big-toast';
-  t.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#0f1623;border:2px solid '+color+';color:#e2e8f0;padding:28px 36px;border-radius:16px;font-size:18px;font-weight:700;z-index:9999;box-shadow:0 8px 48px rgba(0,0,0,0.7);text-align:center;min-width:200px;transition:opacity 0.4s';
+  t.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#0f1623;border:2px solid '+color+';color:#e2e8f0;padding:28px 36px;border-radius:16px;font-size:1.125rem;font-weight:700;z-index:9999;box-shadow:0 8px 48px rgba(0,0,0,0.7);text-align:center;min-width:200px;transition:opacity 0.4s';
   t.innerHTML = '<div style="display:flex;justify-content:center;margin-bottom:12px">'+icon+'</div><div>'+msg+'</div>';
   document.body.appendChild(t);
   const bg = document.createElement('div');
@@ -3525,7 +3562,7 @@ function showAIPromptModal() {
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">AI Analysis Prompt</div>' +
     '<div class="modal-body" style="margin-bottom:12px">Copy this, paste it into ChatGPT or Gemini, upload the exported CSV in the same message, and send. Best done weekly: frequent enough to catch a stall early, infrequent enough for the trend lines to mean something. If you also export your flight schedule as an .ics calendar file, upload that alongside the CSV. It gives the AI the full picture of how travel is affecting your training.</div>' +
-    '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:11px;line-height:1.6;color:var(--text);white-space:pre-wrap;max-height:40vh;overflow-y:auto;margin-bottom:12px">' + escaped + '</div>' +
+    '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:0.6875rem;line-height:1.6;color:var(--text);white-space:pre-wrap;max-height:40vh;overflow-y:auto;margin-bottom:12px">' + escaped + '</div>' +
     '<button class="btn btn-gold" onclick="copyAIPrompt()">📋 Copy Prompt</button>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">CLOSE</button>' +
     '</div></div>';
@@ -3549,7 +3586,7 @@ function showFeedbackModal() {
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">Send Feedback</div>' +
     '<div class="modal-body" style="margin-bottom:10px">Bugs, ideas, anything not working right: this goes straight to the person building the app.</div>' +
-    '<textarea id="feedbackText" rows="5" placeholder="What\'s on your mind?" style="width:100%;background:var(--bg3);border:1.5px solid var(--border);border-radius:8px;padding:12px;font-size:16px;color:var(--text);resize:vertical;margin-bottom:10px"></textarea>' +
+    '<textarea id="feedbackText" rows="5" placeholder="What\'s on your mind?" style="width:100%;background:var(--bg3);border:1.5px solid var(--border);border-radius:8px;padding:12px;font-size:1rem;color:var(--text);resize:vertical;margin-bottom:10px"></textarea>' +
     '<div class="field" style="margin-bottom:14px"><label>Your email (optional, only if you want a reply)</label>' +
     '<input id="feedbackEmail" type="email" placeholder="you@example.com"></div>' +
     '<button class="btn btn-gold" onclick="submitFeedback()">Send Feedback</button>' +
@@ -3632,8 +3669,8 @@ function shareApp() {
       : '') +
     '<div style="background:#fff;border-radius:12px;padding:12px;width:220px;height:220px;margin:16px auto 10px" ' +
       'role="img" aria-label="QR code for flightcrew.fit">' + SHARE_QR_SVG + '</div>' +
-    '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">Or point their camera here. Opens when they\'re back online.</div>' +
-    '<div style="font-family:var(--mono);font-size:22px;letter-spacing:.06em;color:var(--gold);margin:10px 0 14px">flightcrew.fit</div>' +
+    '<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:4px">Or point their camera here. Opens when they\'re back online.</div>' +
+    '<div style="font-family:var(--mono);font-size:1.375rem;letter-spacing:.06em;color:var(--gold);margin:10px 0 14px">flightcrew.fit</div>' +
     '<button class="btn btn-outline" onclick="copyShareLink()">Copy link</button>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">Done</button>' +
     '</div></div>';
@@ -3727,13 +3764,13 @@ function showPaywall(reason) {
    ['✦','AI Coach: pattern analysis, fatigue calibration, fueling logistics'],
    ['📅','Unlimited AI calendar classification'],
    ['📊','Full trend history and exports']].forEach(([icon,label]) => {
-    parts.push('<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px"><span>'+icon+'</span><span style="font-size:13px">'+label+'</span></div>');
+    parts.push('<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px"><span>'+icon+'</span><span style="font-size:0.8125rem">'+label+'</span></div>');
   });
   parts.push('</div>');
 
   parts.push('<button class="btn btn-gold" onclick="startProPurchase(\''+PRO_PRODUCT_ANNUAL+'\')">'+proPrice(PRO_PRODUCT_ANNUAL, PRO_ANNUAL_PRICE)+' / year</button>');
   // Currency-neutral: a fixed "$5.00 a month" is wrong outside the US.
-  parts.push('<div style="text-align:center;font-size:11px;color:var(--muted);margin:6px 0 10px">Saves about 37% vs monthly</div>');
+  parts.push('<div style="text-align:center;font-size:0.6875rem;color:var(--muted);margin:6px 0 10px">Saves about 37% vs monthly</div>');
   parts.push('<button class="btn btn-outline" onclick="startProPurchase(\''+PRO_PRODUCT_MONTHLY+'\')">'+proPrice(PRO_PRODUCT_MONTHLY, PRO_MONTHLY_PRICE)+' / month</button>');
   parts.push(proDisclosureHTML());
 
@@ -4091,8 +4128,8 @@ function hydrationRowHTML(ctx, standalone) {
   // Tappable — reading your hydration status and wanting to log water are
   // the same moment, so the number itself is the control.
   return '<div class="fb" style="'+(standalone?'':'margin-top:10px;padding-top:10px;border-top:1px solid var(--border);')+'cursor:pointer;padding-bottom:2px" onclick="haptic(\'light\');openQuickWaterLog()">' +
-    '<span style="font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--muted)">💧 HYDRATION</span>' +
-    '<span style="font-family:var(--mono);font-size:10px;color:'+hs.color+'">'+ST.waterIn.toFixed(1)+'/'+hydroTarget().toFixed(1)+'L · '+hs.label+' <span style="color:var(--gold)">+ LOG</span></span></div>';
+    '<span style="font-family:var(--mono);font-size:0.5625rem;letter-spacing:.1em;color:var(--muted)">💧 HYDRATION</span>' +
+    '<span style="font-family:var(--mono);font-size:0.625rem;color:'+hs.color+'">'+ST.waterIn.toFixed(1)+'/'+hydroTarget().toFixed(1)+'L · '+hs.label+' <span style="color:var(--gold)">+ LOG</span></span></div>';
 }
 
 function renderTrackingToggles() {
@@ -4103,8 +4140,8 @@ function renderTrackingToggles() {
     return (
       '<div class="fb" style="padding:12px 0;border-bottom:1px solid var(--border);align-items:center">' +
         '<div style="flex:1;padding-right:16px">' +
-          '<div style="font-size:14px">'+label+'</div>' +
-          '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+sub+'</div>' +
+          '<div style="font-size:0.875rem">'+label+'</div>' +
+          '<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">'+sub+'</div>' +
         '</div>' +
         // Button instead of div — gets immediate iOS touch response, no 300ms delay
         '<button onclick="haptic(\'selection\');setTrackingPref(\''+key+'\','+(!on)+')" style="' +
@@ -4121,8 +4158,45 @@ function renderTrackingToggles() {
     '<div class="card mb12">' +
       row('trackNutrition','Nutrition','Meals, macros and the Fuel card') +
       row('trackHydration','Hydration','Water logging and hydration status') +
-      '<div style="font-size:11px;color:var(--muted);margin-top:10px">Turning these off hides the screens and stops the reminders. Nothing you have already logged is deleted.</div>' +
+      '<div style="font-size:0.6875rem;color:var(--muted);margin-top:10px">Turning these off hides the screens and stops the reminders. Nothing you have already logged is deleted.</div>' +
     '</div>';
+}
+
+// Text size picker (More > Display). Four buttons, the active one in gold.
+// Each button's own label is drawn at that step's size so the choice can
+// be judged before tapping it.
+function renderTextSizeControl() {
+  const cur = currentTextSize();
+  // rem already includes the current step, so divide it back out: each
+  // label lands at its own true size no matter which step is active.
+  const curScale = textSizeEntry(cur).scale;
+  const btns = TEXT_SIZES.map(t => {
+    const on = t.key === cur;
+    return '<button onclick="haptic(\'selection\');setTextSize(\''+t.key+'\')" style="' +
+      'flex:1;min-width:0;padding:10px 2px;border-radius:10px;cursor:pointer;' +
+      'font-family:\'Inter\',sans-serif;font-weight:600;line-height:1.1;' +
+      'font-size:'+(0.7 * t.scale / curScale).toFixed(3)+'rem;' +
+      'border:1px solid '+(on ? 'var(--gold)' : 'var(--border)')+';' +
+      'background:'+(on ? 'rgba(212,175,55,0.15)' : 'transparent')+';' +
+      'color:'+(on ? 'var(--gold)' : 'var(--text)')+'">'+t.label+'</button>';
+  }).join('');
+  return '<div class="section-label" style="margin-top:20px">DISPLAY</div>' +
+    '<div class="card mb12">' +
+      '<div style="font-size:0.875rem">Text size</div>' +
+      '<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px;margin-bottom:10px">Makes all text in the app bigger. Layout stays the same.</div>' +
+      '<div style="display:flex;gap:6px;align-items:stretch">'+btns+'</div>' +
+    '</div>';
+}
+
+async function setTextSize(key) {
+  const applied = applyTextSize(key);
+  try { localStorage.setItem(TEXT_SIZE_LS_KEY, applied); } catch (e) { /* private mode */ }
+  renderPage(); // the picker highlights the new choice
+  try {
+    const profile = (await dbGetProfile()) || {};
+    profile.textSize = applied;
+    await dbSetProfile(profile);
+  } catch (e) { console.warn('setTextSize save error:', e); }
 }
 
 // ─── MEDICATIONS & SUPPLEMENTS ────────────────────────────────────────────
@@ -4215,22 +4289,22 @@ function renderMedicationsCard() {
   const parts = [];
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">MEDS &amp; SUPPLEMENTS</div>');
-  parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px">Track anything you take on a schedule. Due doses show on Today with a check-off, and the iOS app can remind you. This stays private to your account and is only shared if you export your data.</div>');
+  parts.push('<div style="font-size:0.75rem;color:var(--muted);line-height:1.6;margin-bottom:12px">Track anything you take on a schedule. Due doses show on Today with a check-off, and the iOS app can remind you. This stays private to your account and is only shared if you export your data.</div>');
   const meds = ST.medications || [];
   const plan = medReminderPlan();
   if (plan.overflow) {
     parts.push('<div class="alert alert-warn" style="margin-bottom:12px"><div class="alert-icon">🔔</div><div>iPhone limits how many reminders one app can hold. Some doses below won\'t ring; the ones without a bell. Turn reminders off for a few, or use every-day schedules instead of specific weekdays.</div></div>');
   }
   if (!meds.length) {
-    parts.push('<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px 0 12px">Nothing added yet.</div>');
+    parts.push('<div style="font-size:0.75rem;color:var(--muted);text-align:center;padding:6px 0 12px">Nothing added yet.</div>');
   } else {
     meds.forEach(m => {
       parts.push('<div class="fb" style="padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;align-items:center" onclick="haptic(\'light\');openMedicationEditor(\''+m.id+'\')">');
       parts.push('<div style="flex:1;padding-right:12px">');
-      parts.push('<div style="font-size:14px;font-weight:600">'+m.name+(m.dose != null ? ' <span style="font-weight:400;color:var(--muted)">'+medDoseLabel(m)+'</span>' : '')+'</div>');
+      parts.push('<div style="font-size:0.875rem;font-weight:600">'+m.name+(m.dose != null ? ' <span style="font-weight:400;color:var(--muted)">'+medDoseLabel(m)+'</span>' : '')+'</div>');
       const ringing = m.remind && m.times.every(t => plan.scheduled.has(m.id + '|' + t));
       const partial = m.remind && !ringing && m.times.some(t => plan.scheduled.has(m.id + '|' + t));
-      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:2px">'+medFrequencyLabel(m)+' · <span style="font-family:var(--mono)">'+m.times.join(', ')+'</span>'+(ringing ? ' · 🔔' : partial ? ' · 🔔 some times' : '')+'</div>');
+      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">'+medFrequencyLabel(m)+' · <span style="font-family:var(--mono)">'+m.times.join(', ')+'</span>'+(ringing ? ' · 🔔' : partial ? ' · 🔔 some times' : '')+'</div>');
       parts.push('</div>');
       parts.push('<div style="color:var(--muted)">›</div>');
       parts.push('</div>');
@@ -4311,8 +4385,8 @@ function renderMedicationEditor() {
   const knobLeft = d.remind ? '23px' : '3px';
   const knobBg   = d.remind ? 'var(--gold)' : 'rgba(255,255,255,0.12)';
   parts.push('<div class="fb" style="padding:10px 0 14px;align-items:center">' +
-    '<div style="flex:1;padding-right:16px"><div style="font-size:14px">Remind me</div>' +
-    '<div style="font-size:11px;color:var(--muted);margin-top:2px">Phone notification at each time above (iOS app)</div></div>' +
+    '<div style="flex:1;padding-right:16px"><div style="font-size:0.875rem">Remind me</div>' +
+    '<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">Phone notification at each time above (iOS app)</div></div>' +
     '<button type="button" onclick="haptic(\'selection\');syncMedDraftFromDOM();ST.medDraft.remind=!ST.medDraft.remind;renderMedicationEditor()" style="cursor:pointer;flex-shrink:0;width:46px;height:26px;border-radius:13px;background:'+knobBg+';position:relative;border:none;padding:0;transition:background 0.15s;-webkit-tap-highlight-color:transparent;touch-action:manipulation">' +
     '<div style="position:absolute;top:3px;left:'+knobLeft+';width:20px;height:20px;border-radius:50%;background:#fff;transition:left 0.15s;box-shadow:0 1px 3px rgba(0,0,0,0.4)"></div></button></div>');
 
@@ -4475,9 +4549,9 @@ function buildMedsTodayInner(ctx) {
     const timeColor = taken ? 'var(--muted)' : overdue ? 'var(--amber)' : 'var(--text)';
     const border = i < due.length - 1 ? 'border-bottom:1px solid var(--border);' : '';
     parts.push('<div class="fb" style="padding:10px 0;'+border+'cursor:pointer;align-items:center;-webkit-tap-highlight-color:transparent" onclick="toggleMedTaken(\''+d.med.id+'\',\''+d.time+'\')">');
-    parts.push('<span style="font-family:var(--mono);font-size:12px;color:'+timeColor+';min-width:52px">'+d.time+'</span>');
-    parts.push('<span style="flex:1;font-size:14px;'+(taken?'color:var(--muted);text-decoration:line-through;':'')+'">'+d.med.name+(d.med.dose != null ? ' <span style="color:var(--muted);font-size:12px">'+medDoseLabel(d.med)+'</span>' : '')+'</span>');
-    parts.push('<span style="width:26px;height:26px;border-radius:50%;border:1.5px solid '+(taken?'var(--gold)':'var(--border)')+';background:'+(taken?'var(--gold)':'transparent')+';display:flex;align-items:center;justify-content:center;font-size:14px;color:#0b0f18;flex-shrink:0">'+(taken?'✓':'')+'</span>');
+    parts.push('<span style="font-family:var(--mono);font-size:0.75rem;color:'+timeColor+';min-width:52px">'+d.time+'</span>');
+    parts.push('<span style="flex:1;font-size:0.875rem;'+(taken?'color:var(--muted);text-decoration:line-through;':'')+'">'+d.med.name+(d.med.dose != null ? ' <span style="color:var(--muted);font-size:0.75rem">'+medDoseLabel(d.med)+'</span>' : '')+'</span>');
+    parts.push('<span style="width:26px;height:26px;border-radius:50%;border:1.5px solid '+(taken?'var(--gold)':'var(--border)')+';background:'+(taken?'var(--gold)':'transparent')+';display:flex;align-items:center;justify-content:center;font-size:0.875rem;color:#0b0f18;flex-shrink:0">'+(taken?'✓':'')+'</span>');
     parts.push('</div>');
   });
   parts.push('</div>');
@@ -4827,12 +4901,12 @@ async function triggerInstall() {
 function renderInstallPrompt() {
   if (!ST.showInstallPrompt) return '';
   const parts = ['<div class="card mb12" style="border-color:var(--gold)">'];
-  parts.push('<div class="fb" style="align-items:flex-start;margin-bottom:8px"><div style="font-size:13px;font-weight:700">📲 Get the full-screen app experience</div><div class="btn-ghost" style="font-size:16px;padding:0 4px" onclick="dismissInstallPrompt()">✕</div></div>');
+  parts.push('<div class="fb" style="align-items:flex-start;margin-bottom:8px"><div style="font-size:0.8125rem;font-weight:700">📲 Get the full-screen app experience</div><div class="btn-ghost" style="font-size:1rem;padding:0 4px" onclick="dismissInstallPrompt()">✕</div></div>');
   if (deferredInstallPrompt) {
-    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">Install Flight Crew Fitness on your home screen: opens instantly, no browser bar, works offline.</div>');
+    parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;line-height:1.5">Install Flight Crew Fitness on your home screen: opens instantly, no browser bar, works offline.</div>');
     parts.push('<button class="btn btn-outline" onclick="triggerInstall()">Install App</button>');
   } else {
-    parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.6">Add this to your home screen so it opens like a real app (full screen, no browser bar, works offline):<br><br>1. Tap the <strong>Share</strong> icon <span style="font-family:var(--mono)">⬆️</span> at the bottom of Safari<br>2. Scroll down and tap <strong>Add to Home Screen</strong><br>3. Tap <strong>Add</strong></div>');
+    parts.push('<div style="font-size:0.75rem;color:var(--muted);line-height:1.6">Add this to your home screen so it opens like a real app (full screen, no browser bar, works offline):<br><br>1. Tap the <strong>Share</strong> icon <span style="font-family:var(--mono)">⬆️</span> at the bottom of Safari<br>2. Scroll down and tap <strong>Add to Home Screen</strong><br>3. Tap <strong>Add</strong></div>');
   }
   parts.push('</div>');
   return parts.join('');
@@ -5055,7 +5129,7 @@ window.addEventListener('fcf:products', (e) => {
 // popup can never drift apart.
 function proDisclosureHTML() {
   const nativeIAP = !!storeKitBridge();
-  return '<div style="font-size:10px;color:var(--muted);text-align:center;line-height:1.55;margin:4px 0 10px">' +
+  return '<div style="font-size:0.625rem;color:var(--muted);text-align:center;line-height:1.55;margin:4px 0 10px">' +
     'Flight Crew Fitness Pro, billed yearly or monthly. ' +
     (nativeIAP
       ? 'Payment is charged to your Apple ID at confirmation. The subscription renews automatically at the same price unless canceled at least 24 hours before the end of the current period. Manage or cancel anytime in your Apple ID account settings.'
@@ -5879,7 +5953,7 @@ function buildCalendarHTML(rangeData) {
   const parts = [];
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-bottom:8px">TRAINING CALENDAR</div>');
-  parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Tap a day to log, edit, or delete a workout.</div>');
+  parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:8px">Tap a day to log, edit, or delete a workout.</div>');
   parts.push('<div id="calScroll" style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;touch-action:pan-x;padding-bottom:2px;scrollbar-width:none">');
   days.forEach(day => {
     const isToday = day.date.toDateString() === new Date().toDateString();
@@ -5889,8 +5963,8 @@ function buildCalendarHTML(rangeData) {
     const cellStyle = isToday ? 'border-color:var(--gold)' : '';
     const bg = hasWorkout ? 'background:rgba(34,197,94,0.12);border-color:rgba(34,197,94,0.4)' : '';
     parts.push('<div style="flex:0 0 46px;min-height:64px;scroll-snap-align:center;text-align:center;border:1.5px solid var(--border);border-radius:8px;padding:7px 2px;cursor:pointer;'+cellStyle+';'+bg+'" onclick="'+(hasWorkout?'showCalendarDay(\''+localDateStr(day.date)+'\')':'openNewSessionEditor(\''+localDateStr(day.date)+'\')')+'">');
-    parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted)">'+dow+'</div>');
-    parts.push('<div style="font-size:13px;font-weight:600;margin-top:2px">'+dateNum+'</div>');
+    parts.push('<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted)">'+dow+'</div>');
+    parts.push('<div style="font-size:0.8125rem;font-weight:600;margin-top:2px">'+dateNum+'</div>');
     if (hasWorkout) {
       // One icon, as requested — but it represents the TRAINING session
       // where there is one, so a leg day isn't hidden behind a walk that
@@ -5899,11 +5973,11 @@ function buildCalendarHTML(rangeData) {
       const primary = day.sessions.find(isRotationStep) || day.sessions[0];
       const icon = ICONS[primary.muscle_group] || '✓';
       const extra = day.sessions.length > 1
-        ? '<span style="font-size:9px;font-family:var(--mono);color:var(--gold);vertical-align:super">'+day.sessions.length+'</span>'
+        ? '<span style="font-size:0.5625rem;font-family:var(--mono);color:var(--gold);vertical-align:super">'+day.sessions.length+'</span>'
         : '';
-      parts.push('<div style="font-size:14px;margin-top:3px">'+icon+extra+'</div>');
+      parts.push('<div style="font-size:0.875rem;margin-top:3px">'+icon+extra+'</div>');
     } else {
-      parts.push('<div style="font-size:16px;font-weight:700;color:var(--gold);margin-top:2px">+</div>');
+      parts.push('<div style="font-size:1rem;font-weight:700;color:var(--gold);margin-top:2px">+</div>');
     }
     parts.push('</div>');
   });
@@ -6002,7 +6076,7 @@ async function showCalendarDay(isoDate) {
     parts.push('<div class="modal-sheet">');
     parts.push('<div class="modal-handle"></div>');
     if (daySessions.length > 1) {
-      parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px">'+daySessions.length+' sessions logged this day</div>');
+      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:10px">'+daySessions.length+' sessions logged this day</div>');
     }
 
     daySessions.forEach((session, si) => {
@@ -6024,8 +6098,8 @@ async function showCalendarDay(isoDate) {
       .filter(Boolean);
 
     if (si > 0) parts.push('<div style="border-top:1px solid var(--border);margin:20px 0 14px"></div>');
-    parts.push('<div class="modal-title">'+(session.muscle_group||'Workout')+(session.importedFromOura ? ' <span style="font-size:11px;color:var(--blue);font-weight:400">📱 via Oura</span>' : '')+'</div>');
-    parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:14px">'+sessionDate.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+' at '+sessionDate.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})+'</div>');
+    parts.push('<div class="modal-title">'+(session.muscle_group||'Workout')+(session.importedFromOura ? ' <span style="font-size:0.6875rem;color:var(--blue);font-weight:400">📱 via Oura</span>' : '')+'</div>');
+    parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);margin-bottom:14px">'+sessionDate.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+' at '+sessionDate.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})+'</div>');
     parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">');
     parts.push(glowTile('MINUTES', summary.durationMinutes||'–', 'gold'));
     parts.push(glowTile('SETS', summary.totalSets, 'blue'));
@@ -6043,8 +6117,8 @@ async function showCalendarDay(isoDate) {
         const cls = 'fb' + (row.isPR ? ' pr-pop' : '');
         const style = 'padding:8px 0;border-bottom:1px solid var(--border)' + (row.isPR ? ';--pr-i:' + (prIndex++) : '');
         parts.push('<div class="'+cls+'" style="'+style+'">');
-        parts.push('<div style="font-size:13px">'+(row.isPR?'⭐ ':'')+row.name+'</div>');
-        parts.push('<div style="font-family:var(--mono);font-size:12px;color:'+(row.isPR?'var(--gold)':'var(--text)')+';font-weight:'+(row.isPR?'700':'400')+'">'+row.perf+'</div>');
+        parts.push('<div style="font-size:0.8125rem">'+(row.isPR?'⭐ ':'')+row.name+'</div>');
+        parts.push('<div style="font-family:var(--mono);font-size:0.75rem;color:'+(row.isPR?'var(--gold)':'var(--text)')+';font-weight:'+(row.isPR?'700':'400')+'">'+row.perf+'</div>');
         parts.push('</div>');
       });
     }
@@ -6407,7 +6481,7 @@ function renderSessionEditor() {
   parts.push('<div class="modal-sheet" style="max-height:85vh;overflow-y:auto">');
   parts.push('<div class="modal-handle"></div>');
   parts.push('<div class="modal-title">'+(ed.isNew ? 'Add Workout' : 'Edit Workout')+'</div>');
-  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:14px">'+dateLabel+'</div>');
+  parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);margin-bottom:14px">'+dateLabel+'</div>');
 
   parts.push('<div class="field"><label>Muscle Group</label><select onchange="ST.editSession.session.muscle_group=this.value">');
   MUSCLE_GROUPS.forEach(mg => parts.push('<option value="'+mg+'"'+(s.muscle_group===mg?' selected':'')+'>'+mg+'</option>'));
@@ -6417,11 +6491,11 @@ function renderSessionEditor() {
     const sets = s.sets[exDef.id] || [];
     const fields = edFieldsFor(exDef);
     parts.push('<div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px">');
-    parts.push('<div class="fb" style="margin-bottom:8px"><div style="font-size:13px;font-weight:600">'+exDef.name+'</div>');
-    parts.push('<button class="btn-ghost" style="font-size:11px;padding:4px 8px;color:var(--red)" onclick="edRemoveExercise(\''+exDef.id+'\')">✕ Remove</button></div>');
+    parts.push('<div class="fb" style="margin-bottom:8px"><div style="font-size:0.8125rem;font-weight:600">'+exDef.name+'</div>');
+    parts.push('<button class="btn-ghost" style="font-size:0.6875rem;padding:4px 8px;color:var(--red)" onclick="edRemoveExercise(\''+exDef.id+'\')">✕ Remove</button></div>');
     sets.forEach((set, i) => {
       parts.push('<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">');
-      parts.push('<span style="font-family:var(--mono);font-size:9px;color:var(--muted);flex:0 0 30px">SET '+(i+1)+'</span>');
+      parts.push('<span style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);flex:0 0 30px">SET '+(i+1)+'</span>');
       fields.forEach(([field, label, unit]) => {
         const raw = set[field];
         const shown = unit === 'min'
@@ -6429,12 +6503,12 @@ function renderSessionEditor() {
           : (raw || '');
         const handler = unit === 'min' ? 'edSetValMin' : 'edSetVal';
         parts.push('<div style="flex:1;min-width:0;display:flex;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:0 8px 0 0">');
-        parts.push('<input type="text" inputmode="decimal" placeholder="'+label+'" value="'+shown+'" style="flex:1;min-width:0;background:transparent;border:none;padding:8px;font-size:16px;color:var(--text);outline:none" oninput="'+handler+'(\''+exDef.id+'\','+i+',\''+field+'\',this.value)">');
-        parts.push('<span style="font-family:var(--mono);font-size:9px;color:var(--muted);flex-shrink:0">'+(unit||'')+'</span></div>');
+        parts.push('<input type="text" inputmode="decimal" placeholder="'+label+'" value="'+shown+'" style="flex:1;min-width:0;background:transparent;border:none;padding:8px;font-size:1rem;color:var(--text);outline:none" oninput="'+handler+'(\''+exDef.id+'\','+i+',\''+field+'\',this.value)">');
+        parts.push('<span style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);flex-shrink:0">'+(unit||'')+'</span></div>');
       });
       parts.push('</div>');
     });
-    parts.push('<button class="btn-ghost" style="font-size:11px" onclick="edAddSet(\''+exDef.id+'\')">+ Add Set</button>');
+    parts.push('<button class="btn-ghost" style="font-size:0.6875rem" onclick="edAddSet(\''+exDef.id+'\')">+ Add Set</button>');
     parts.push('</div>');
   });
 
@@ -6527,14 +6601,14 @@ function edFilterExercises(q) {
   const matches = rankedExerciseMatches(buildExerciseCatalog(), q, existing, 6);
   const parts = [];
   matches.forEach((e, i) => {
-    parts.push('<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:13px" onclick="edAddCatalogExercise('+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+(e.target||'')+'</span></div>');
+    parts.push('<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:0.8125rem" onclick="edAddCatalogExercise('+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:0.625rem;color:var(--muted)">'+(e.target||'')+'</span></div>');
   });
   const qSafe = q.replace(/[<>'"]/g,'');
-  if (matches.length) parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin:8px 0 6px">NOT LISTED? ADD IT AS CUSTOM:</div>');
-  else parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin:2px 0 6px">NO MATCH · ADD "'+qSafe.toUpperCase()+'" AS CUSTOM:</div>');
+  if (matches.length) parts.push('<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);letter-spacing:0.08em;margin:8px 0 6px">NOT LISTED? ADD IT AS CUSTOM:</div>');
+  else parts.push('<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);letter-spacing:0.08em;margin:2px 0 6px">NO MATCH · ADD "'+qSafe.toUpperCase()+'" AS CUSTOM:</div>');
   parts.push('<div style="display:flex;gap:8px;margin-bottom:6px">');
-  parts.push('<button class="btn btn-blue" style="flex:1;font-size:12px;padding:12px 8px" onclick="edAddCustomExercise(\''+qSafe+'\',\'timed\')">⏱ ADD AS TIMED</button>');
-  parts.push('<button class="btn btn-blue" style="flex:1;font-size:12px;padding:12px 8px" onclick="edAddCustomExercise(\''+qSafe+'\',\'reps_weight\')">🏋️ ADD AS REPS × WEIGHT</button>');
+  parts.push('<button class="btn btn-blue" style="flex:1;font-size:0.75rem;padding:12px 8px" onclick="edAddCustomExercise(\''+qSafe+'\',\'timed\')">⏱ ADD AS TIMED</button>');
+  parts.push('<button class="btn btn-blue" style="flex:1;font-size:0.75rem;padding:12px 8px" onclick="edAddCustomExercise(\''+qSafe+'\',\'reps_weight\')">🏋️ ADD AS REPS × WEIGHT</button>');
   parts.push('</div>');
   box.innerHTML = parts.join('');
 }
@@ -6701,11 +6775,11 @@ function renderProfileBuilder() {
 
   BP_SECTIONS.forEach(([section, label]) => {
     parts.push('<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">');
-    parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--gold);letter-spacing:0.08em;margin-bottom:8px">'+label+'</div>');
+    parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--gold);letter-spacing:0.08em;margin-bottom:8px">'+label+'</div>');
     (bp[section]||[]).forEach(e => {
       parts.push('<div class="fb" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:6px">');
-      parts.push('<div><span style="font-size:13px">'+e.name+'</span> <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+(e.target||'')+'</span></div>');
-      parts.push('<span style="color:var(--red);cursor:pointer;font-size:14px" onclick="bpRemove(\''+section+'\',\''+e.id+'\')">✕</span>');
+      parts.push('<div><span style="font-size:0.8125rem">'+e.name+'</span> <span style="font-family:var(--mono);font-size:0.625rem;color:var(--muted)">'+(e.target||'')+'</span></div>');
+      parts.push('<span style="color:var(--red);cursor:pointer;font-size:0.875rem" onclick="bpRemove(\''+section+'\',\''+e.id+'\')">✕</span>');
       parts.push('</div>');
     });
     parts.push('<input class="fcf-input" type="text" placeholder="Search to add…" oninput="bpFilter(\''+section+'\',this.value)" autocomplete="off" style="margin-bottom:6px">');
@@ -6744,11 +6818,11 @@ function bpFilter(section, q) {
   const matches = rankedExerciseMatches(bpSearchSource(), q, chosen, 5);
   const parts = [];
   matches.forEach((e, i) => {
-    parts.push('<div style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:5px;cursor:pointer;font-size:13px" onclick="bpAdd(\''+section+'\','+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+(e.target||'')+'</span></div>');
+    parts.push('<div style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:5px;cursor:pointer;font-size:0.8125rem" onclick="bpAdd(\''+section+'\','+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:0.625rem;color:var(--muted)">'+(e.target||'')+'</span></div>');
   });
   if (!matches.length) {
-    parts.push('<div style="font-size:11px;color:var(--muted);padding:4px 2px 8px">No catalog match for "'+sanitizeUserText(q)+'".</div>');
-    parts.push('<button class="btn btn-outline" style="font-size:12px" onclick="bpShowCreateForm(\''+section+'\',\''+q.replace(/\'/g,'')+'\')">+ Create "'+sanitizeUserText(q)+'" as a new exercise</button>');
+    parts.push('<div style="font-size:0.6875rem;color:var(--muted);padding:4px 2px 8px">No catalog match for "'+sanitizeUserText(q)+'".</div>');
+    parts.push('<button class="btn btn-outline" style="font-size:0.75rem" onclick="bpShowCreateForm(\''+section+'\',\''+q.replace(/\'/g,'')+'\')">+ Create "'+sanitizeUserText(q)+'" as a new exercise</button>');
   }
   box.innerHTML = parts.join('');
 }
@@ -6765,14 +6839,14 @@ function bpShowCreateForm(section, q) {
   const name = sanitizeUserText(q);
   box.innerHTML =
     '<div style="border:1px solid var(--gold);border-radius:8px;padding:10px;margin-top:4px">' +
-    '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">New exercise</div>' +
+    '<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:8px">New exercise</div>' +
     '<div class="field" style="margin-bottom:6px"><input type="text" id="bpNewName_'+section+'" value="'+name+'" placeholder="Exercise name"></div>' +
     '<div class="field-row" style="margin-bottom:8px">' +
     '<div class="field"><input type="text" id="bpNewTarget_'+section+'" placeholder="Target (e.g. 3\u00d712)"></div>' +
     '<div class="field"><select id="bpNewType_'+section+'"><option value="reps_weight">Reps + Weight</option><option value="reps_only">Reps Only</option><option value="timed">Timed (min)</option></select></div>' +
     '</div>' +
-    '<button class="btn btn-gold" style="font-size:12px" onclick="bpSaveCustomExercise(\''+section+'\')">Add to Routine</button>' +
-    '<button class="btn-ghost mt8" style="display:block;width:100%;text-align:center;font-size:12px" onclick="document.getElementById(\'bpResults_'+section+'\').innerHTML=\'\'">Cancel</button>' +
+    '<button class="btn btn-gold" style="font-size:0.75rem" onclick="bpSaveCustomExercise(\''+section+'\')">Add to Routine</button>' +
+    '<button class="btn-ghost mt8" style="display:block;width:100%;text-align:center;font-size:0.75rem" onclick="document.getElementById(\'bpResults_'+section+'\').innerHTML=\'\'">Cancel</button>' +
     '</div>';
 }
 
@@ -6848,10 +6922,10 @@ function openProfileManager() {
   ST.customProfiles.forEach(cp => {
     const count = cp.taxi.length + cp.takeoff.length + cp.enroute.length + cp.landing.length;
     parts.push('<div class="fb" style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px">');
-    parts.push('<div><div style="font-size:13px;font-weight:600">🛠 '+cp.name+'</div><div style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+count+' exercises · ~'+(count*MIN_PER_EXERCISE)+' min</div></div>');
+    parts.push('<div><div style="font-size:0.8125rem;font-weight:600">🛠 '+cp.name+'</div><div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted)">'+count+' exercises · ~'+(count*MIN_PER_EXERCISE)+' min</div></div>');
     parts.push('<div style="display:flex;gap:10px">');
-    parts.push('<span style="cursor:pointer;font-size:14px" onclick="openProfileBuilder(\''+cp.id+'\')">✎</span>');
-    parts.push('<span style="cursor:pointer;font-size:14px;color:var(--red)" onclick="confirmDeleteCustomProfile(\''+cp.id+'\')">🗑</span>');
+    parts.push('<span style="cursor:pointer;font-size:0.875rem" onclick="openProfileBuilder(\''+cp.id+'\')">✎</span>');
+    parts.push('<span style="cursor:pointer;font-size:0.875rem;color:var(--red)" onclick="confirmDeleteCustomProfile(\''+cp.id+'\')">🗑</span>');
     parts.push('</div></div>');
   });
   parts.push('<button class="btn btn-outline mt8" onclick="closeModal()">CLOSE</button>');
@@ -6915,14 +6989,14 @@ async function renderPreflight(p) {
   const isNewUser = !ST.sessionCache || ST.sessionCache.length === 0;
 
   const parts = [];
-  parts.push('<button class="btn-ghost" style="font-size:12px;margin-bottom:10px" onclick="switchTab(\'today\')">← Back to Today</button>');
+  parts.push('<button class="btn-ghost" style="font-size:0.75rem;margin-bottom:10px" onclick="switchTab(\'today\')">← Back to Today</button>');
   parts.push('<div class="section-label">PREFLIGHT BRIEFING · '+FCF_VERSION+'</div>');
   parts.push(installPromptHtml);
   if (profileIncomplete) {
     parts.push('<div class="card mb12" style="border-color:var(--gold);cursor:pointer" onclick="haptic(\'light\');switchTab(\'profile\')">');
-    parts.push('<div class="fb"><div><div style="font-size:13px;font-weight:600">👤 Complete your profile</div>');
-    parts.push('<div style="font-size:11px;color:var(--muted);margin-top:3px">Set sex and training objective to unlock personalized programming.</div></div>');
-    parts.push('<div style="font-size:18px;color:var(--gold)">→</div></div>');
+    parts.push('<div class="fb"><div><div style="font-size:0.8125rem;font-weight:600">👤 Complete your profile</div>');
+    parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:3px">Set sex and training objective to unlock personalized programming.</div></div>');
+    parts.push('<div style="font-size:1.125rem;color:var(--gold)">→</div></div>');
     parts.push('</div>');
   }
 
@@ -6935,9 +7009,9 @@ async function renderPreflight(p) {
 
   if (wk) {
     parts.push('<div class="card mb12" style="border-color:var(--gold);background:linear-gradient(160deg, rgba(201,168,76,0.08), var(--bg3))">');
-    parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--gold);letter-spacing:0.1em;margin-bottom:6px">TODAY\'S MISSION</div>');
-    parts.push('<div style="font-size:19px;font-weight:800;margin-bottom:4px">'+planName+'</div>');
-    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px">'+planSummary+(ST.activeCustomProfileId?'':' · '+levelLabel+(ST.fatigue!=='go'?' / '+fatigueLabel:''))+'</div>');
+    parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--gold);letter-spacing:0.1em;margin-bottom:6px">TODAY\'S MISSION</div>');
+    parts.push('<div style="font-size:1.1875rem;font-weight:800;margin-bottom:4px">'+planName+'</div>');
+    parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:14px">'+planSummary+(ST.activeCustomProfileId?'':' · '+levelLabel+(ST.fatigue!=='go'?' / '+fatigueLabel:''))+'</div>');
     parts.push('<button class="btn btn-gold" onclick="engageWorkout()">'+(ST.workout ? '↩ RETURN TO WORKOUT' : '⚡ ENGAGE WORKOUT')+'</button>');
     parts.push('</div>');
   } else {
@@ -6949,9 +7023,9 @@ async function renderPreflight(p) {
   // explicit way to open them. Auto-expanded for new users and for anyone
   // who hasn't picked anything yet (nothing to summarize otherwise).
   const showPlan = ST.showChangePlan || isNewUser || !wk;
-  parts.push('<div class="edit-row-fb" style="display:flex;justify-content:space-between;align-items:center;padding:8px 2px;font-size:12px;color:var(--muted)" onclick="ST.showChangePlan=!ST.showChangePlan;renderPage()">');
+  parts.push('<div class="edit-row-fb" style="display:flex;justify-content:space-between;align-items:center;padding:8px 2px;font-size:0.75rem;color:var(--muted)" onclick="ST.showChangePlan=!ST.showChangePlan;renderPage()">');
   parts.push('<span>'+(ST.scheduleEnvNote || (ST.activeCustomProfileId ? 'Custom routine, used as saved.' : 'Same as your usual plan.'))+'</span>');
-  parts.push('<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold);cursor:pointer;padding:8px 14px;border:1.5px solid var(--gold);border-radius:8px;background:rgba(201,168,76,0.1);white-space:nowrap">'+(showPlan?'HIDE ▴':'CHANGE PLAN ▾')+'</span>');
+  parts.push('<span style="font-family:var(--mono);font-size:0.75rem;font-weight:700;color:var(--gold);cursor:pointer;padding:8px 14px;border:1.5px solid var(--gold);border-radius:8px;background:rgba(201,168,76,0.1);white-space:nowrap">'+(showPlan?'HIDE ▴':'CHANGE PLAN ▾')+'</span>');
   parts.push('</div>');
 
   if (showPlan) {
@@ -6969,7 +7043,7 @@ async function renderPreflight(p) {
     parts.push('<div class="mg-pill" style="border-style:dashed;color:var(--gold)" onclick="openProfileBuilder()">＋ Build Your Own</div>');
     parts.push('</div>');
     if (ST.customProfiles.length) {
-      parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin:-6px 0 10px;cursor:pointer" onclick="haptic(\'light\');openProfileManager()">✎ MANAGE SAVED ROUTINES</div>');
+      parts.push('<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);margin:-6px 0 10px;cursor:pointer" onclick="haptic(\'light\');openProfileManager()">✎ MANAGE SAVED ROUTINES</div>');
     }
 
     parts.push('<div class="section-label">TIME AVAILABLE <span class="info-i" onclick="showBioInfo(\'timeAvail\')">i</span></div>');
@@ -6977,7 +7051,7 @@ async function renderPreflight(p) {
     parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">');
     [15,30,45,60,null].forEach(m => {
       const sel = ST.timeAvailMin === m;
-      parts.push('<div class="env-btn'+(sel?' sel':'')+'" style="padding:10px" onclick="ST.timeAvailMin='+(m===null?'null':m)+';persistDailyInputs();renderPage()"><div style="font-size:12px;font-weight:600">'+(m===null?'Full Session':m+' min')+'</div>'+(m===null?'<div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:2px">~'+fullSessionMin+' min</div>':'')+'</div>');
+      parts.push('<div class="env-btn'+(sel?' sel':'')+'" style="padding:10px" onclick="ST.timeAvailMin='+(m===null?'null':m)+';persistDailyInputs();renderPage()"><div style="font-size:0.75rem;font-weight:600">'+(m===null?'Full Session':m+' min')+'</div>'+(m===null?'<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);margin-top:2px">~'+fullSessionMin+' min</div>':'')+'</div>');
     });
     parts.push('</div>');
     parts.push('</div>');
@@ -6995,9 +7069,9 @@ async function renderPreflight(p) {
       parts.push('<div class="section-label">FLIGHT PLAN PREVIEW · '+totalEx+' EXERCISES ('+(ST.activeCustomProfileId?'CUSTOM · AS SAVED':levelLabel+(ST.fatigue!=='go'?' / '+fatigueLabel:'')+(ST.timeAvailMin?' / ⏱ '+ST.timeAvailMin+'min':''))+')</div>');
       parts.push('<div class="card card-dark mb12"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
       [['🚕 TAXI',wk.taxi],['🛫 TAKEOFF',wk.takeoff],['✈️ EN ROUTE',wk.enroute],['🛬 LANDING',wk.landing]].forEach(([label,exs]) => {
-        parts.push('<div style="background:var(--bg);border-radius:8px;padding:10px"><div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">'+label+'</div>');
-        if (!exs.length) parts.push('<div style="font-size:11px;color:var(--muted);font-style:italic">(skipped)</div>');
-        else exs.forEach(e => parts.push('<div style="font-size:11px;color:'+(e.swappedForInjury?'var(--blue)':e.injuryCaution?'var(--amber)':'var(--text)')+';margin-bottom:3px">· '+e.name+(e.swappedForInjury?' 🩹':e.injuryCaution?' ⚠️':'')+'</div>'));
+        parts.push('<div style="background:var(--bg);border-radius:8px;padding:10px"><div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">'+label+'</div>');
+        if (!exs.length) parts.push('<div style="font-size:0.6875rem;color:var(--muted);font-style:italic">(skipped)</div>');
+        else exs.forEach(e => parts.push('<div style="font-size:0.6875rem;color:'+(e.swappedForInjury?'var(--blue)':e.injuryCaution?'var(--amber)':'var(--text)')+';margin-bottom:3px">· '+e.name+(e.swappedForInjury?' 🩹':e.injuryCaution?' ⚠️':'')+'</div>'));
         parts.push('</div>');
       });
       parts.push('</div></div>');
@@ -7008,18 +7082,18 @@ async function renderPreflight(p) {
   const condMetaLine = {go:[statusDot('go'),'GO'], marginal:[statusDot('marginal'),'MARGINAL'], nogo:[statusDot('nogo'),'NO-GO']}[ST.fatigue];
   const showCond = ST.showConditionDetail || isNewUser;
   parts.push('<div class="card mb12" style="cursor:pointer" onclick="haptic(\'light\');ST.showConditionDetail=!ST.showConditionDetail;renderPage()">');
-  parts.push('<div class="fb"><div style="font-size:13px">'+condMetaLine[0]+' Pilot Condition: <strong>'+condMetaLine[1]+'</strong></div><div style="font-family:var(--mono);font-size:10px;color:var(--gold)">'+(showCond?'HIDE ▴':'ADJUST ▾')+'</div></div>');
+  parts.push('<div class="fb"><div style="font-size:0.8125rem">'+condMetaLine[0]+' Pilot Condition: <strong>'+condMetaLine[1]+'</strong></div><div style="font-family:var(--mono);font-size:0.625rem;color:var(--gold)">'+(showCond?'HIDE ▴':'ADJUST ▾')+'</div></div>');
   parts.push('</div>');
 
   if (showCond) {
     parts.push('<div class="card mb12">');
-    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">Your physical readiness today. This gates workout intensity: training through fatigue increases injury risk and impairs adaptation.</div>');
+    parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;line-height:1.5">Your physical readiness today. This gates workout intensity: training through fatigue increases injury risk and impairs adaptation.</div>');
 
     const condBtns =
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">' +
-      '<div class="env-btn '+(ST.fatigue==='go'?'sel':'')+'" onclick="ST.fatigue=\'go\';renderPage()"><div class="ei">'+statusDot('go', 18)+'</div><div class="el">GO</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Full protocol</div></div>' +
-      '<div class="env-btn '+(ST.fatigue==='marginal'?'sel':'')+'" onclick="ST.fatigue=\'marginal\';renderPage()"><div class="ei">'+statusDot('marginal', 18)+'</div><div class="el">MARGINAL</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Light only</div></div>' +
-      '<div class="env-btn '+(ST.fatigue==='nogo'?'sel':'')+'" onclick="ST.fatigue=\'nogo\';renderPage()"><div class="ei">'+statusDot('nogo', 18)+'</div><div class="el">NO-GO</div><div style="font-size:9px;color:var(--muted);margin-top:2px">Mobility only</div></div>' +
+      '<div class="env-btn '+(ST.fatigue==='go'?'sel':'')+'" onclick="ST.fatigue=\'go\';renderPage()"><div class="ei">'+statusDot('go', 18)+'</div><div class="el">GO</div><div style="font-size:0.5625rem;color:var(--muted);margin-top:2px">Full protocol</div></div>' +
+      '<div class="env-btn '+(ST.fatigue==='marginal'?'sel':'')+'" onclick="ST.fatigue=\'marginal\';renderPage()"><div class="ei">'+statusDot('marginal', 18)+'</div><div class="el">MARGINAL</div><div style="font-size:0.5625rem;color:var(--muted);margin-top:2px">Light only</div></div>' +
+      '<div class="env-btn '+(ST.fatigue==='nogo'?'sel':'')+'" onclick="ST.fatigue=\'nogo\';renderPage()"><div class="ei">'+statusDot('nogo', 18)+'</div><div class="el">NO-GO</div><div style="font-size:0.5625rem;color:var(--muted);margin-top:2px">Mobility only</div></div>' +
       '</div>';
 
     if (ST.ouraConnected) {
@@ -7031,20 +7105,20 @@ async function renderPreflight(p) {
       // control, not two redundant ones.
       parts.push('<div class="field" style="margin-bottom:10px"><label>Sleep Last Night (hours) <span class="info-i" onclick="showBioInfo(\'sleepHours\')">i</span></label>');
       parts.push('<input type="text" inputmode="decimal" placeholder="e.g. 6.5" value="'+(ST.sleepHours||'')+'" oninput="ST.sleepHours=parseFloat(this.value)||null;persistDailyInputs()"></div>');
-      parts.push('<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">How recovered do you feel today? <span class="info-i" onclick="showBioInfo(\'readiness\')">i</span></label>');
-      parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.05em;margin-bottom:6px">1 = BARELY RECOVERED · 5 = FULLY RECOVERED</div>');
+      parts.push('<label style="font-size:0.6875rem;color:var(--muted);display:block;margin-bottom:4px">How recovered do you feel today? <span class="info-i" onclick="showBioInfo(\'readiness\')">i</span></label>');
+      parts.push('<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);letter-spacing:0.05em;margin-bottom:6px">1 = BARELY RECOVERED · 5 = FULLY RECOVERED</div>');
       parts.push('<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:8px">');
       for (let i=1;i<=5;i++) {
-        parts.push('<div class="env-btn" style="padding:8px 2px'+(ST.readiness===i?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="setReadiness('+i+')"><div style="font-size:15px;font-weight:700">'+i+'</div></div>');
+        parts.push('<div class="env-btn" style="padding:8px 2px'+(ST.readiness===i?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="setReadiness('+i+')"><div style="font-size:0.9375rem;font-weight:700">'+i+'</div></div>');
       }
       parts.push('</div>');
       const condMeta = {go:[statusDot('go'),'GO: full protocol'], marginal:[statusDot('marginal'),'MARGINAL: light only'], nogo:[statusDot('nogo'),'NO-GO: mobility only']}[ST.fatigue];
       parts.push('<div class="fb" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">');
-      parts.push('<div style="font-size:12px">Pilot Condition: <strong>'+condMeta[0]+' '+condMeta[1]+'</strong></div>');
-      parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);cursor:pointer" onclick="haptic(\'light\');ST.showCondOverride=!ST.showCondOverride;renderPage()">'+(ST.showCondOverride?'HIDE':'OVERRIDE')+'</div>');
+      parts.push('<div style="font-size:0.75rem">Pilot Condition: <strong>'+condMeta[0]+' '+condMeta[1]+'</strong></div>');
+      parts.push('<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);cursor:pointer" onclick="haptic(\'light\');ST.showCondOverride=!ST.showCondOverride;renderPage()">'+(ST.showCondOverride?'HIDE':'OVERRIDE')+'</div>');
       parts.push('</div>');
       if (ST.showCondOverride) parts.push(condBtns);
-      parts.push('<div style="font-size:10px;color:var(--muted);line-height:1.5">Connect your Oura Ring in Profile and this is set automatically from your readiness score each morning.</div>');
+      parts.push('<div style="font-size:0.625rem;color:var(--muted);line-height:1.5">Connect your Oura Ring in Profile and this is set automatically from your readiness score each morning.</div>');
     }
 
     if (ST.fatigue === 'marginal') {
@@ -7059,9 +7133,9 @@ async function renderPreflight(p) {
   const showInjury = ST.showInjuryDetail || isNewUser;
   parts.push('<div class="card mb12" style="cursor:pointer" onclick="haptic(\'light\');ST.showInjuryDetail=!ST.showInjuryDetail;renderPage()">');
   if (ST.injuries.length) {
-    parts.push('<div class="fb"><div style="font-size:13px">🩹 '+ST.injuries.map(r=>INJURY_REGIONS[r].label).join(', ')+'</div><div style="font-family:var(--mono);font-size:10px;color:var(--gold)">'+(showInjury?'HIDE ▴':'EDIT ▾')+'</div></div>');
+    parts.push('<div class="fb"><div style="font-size:0.8125rem">🩹 '+ST.injuries.map(r=>INJURY_REGIONS[r].label).join(', ')+'</div><div style="font-family:var(--mono);font-size:0.625rem;color:var(--gold)">'+(showInjury?'HIDE ▴':'EDIT ▾')+'</div></div>');
   } else {
-    parts.push('<div class="fb"><div style="font-size:13px;color:var(--muted)">🩹 No injuries flagged</div><div style="font-family:var(--mono);font-size:10px;color:var(--gold)">'+(showInjury?'HIDE ▴':'FLAG ▾')+'</div></div>');
+    parts.push('<div class="fb"><div style="font-size:0.8125rem;color:var(--muted)">🩹 No injuries flagged</div><div style="font-family:var(--mono);font-size:0.625rem;color:var(--gold)">'+(showInjury?'HIDE ▴':'FLAG ▾')+'</div></div>');
   }
   parts.push('</div>');
 
@@ -7071,16 +7145,16 @@ async function renderPreflight(p) {
     if (ST.injuries.length) {
       parts.push('<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">');
       ST.injuries.forEach(r => {
-        parts.push('<div style="display:flex;align-items:center;gap:6px;background:rgba(245,158,11,0.1);border:1px solid var(--amber);border-radius:16px;padding:4px 10px;font-size:11px;color:var(--amber)">'+INJURY_REGIONS[r].label+' <span style="cursor:pointer" onclick="toggleInjury(\''+r+'\')">✕</span></div>');
+        parts.push('<div style="display:flex;align-items:center;gap:6px;background:rgba(245,158,11,0.1);border:1px solid var(--amber);border-radius:16px;padding:4px 10px;font-size:0.6875rem;color:var(--amber)">'+INJURY_REGIONS[r].label+' <span style="cursor:pointer" onclick="toggleInjury(\''+r+'\')">✕</span></div>');
       });
       parts.push('</div>');
     } else {
-      parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px">No regions flagged. Tap a region below if something\'s bothering you today.</div>');
+      parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px">No regions flagged. Tap a region below if something\'s bothering you today.</div>');
     }
     parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">');
     Object.keys(INJURY_REGIONS).forEach(r => {
       const on = ST.injuries.includes(r);
-      parts.push('<div class="env-btn" style="padding:8px'+(on?';border-color:var(--amber);background:rgba(245,158,11,0.08)':'')+'" onclick="toggleInjury(\''+r+'\')"><div style="font-size:11px">'+INJURY_REGIONS[r].label+'</div></div>');
+      parts.push('<div class="env-btn" style="padding:8px'+(on?';border-color:var(--amber);background:rgba(245,158,11,0.08)':'')+'" onclick="toggleInjury(\''+r+'\')"><div style="font-size:0.6875rem">'+INJURY_REGIONS[r].label+'</div></div>');
     });
     parts.push('</div>');
     parts.push('</div>');
@@ -7094,7 +7168,7 @@ async function renderPreflight(p) {
   parts.push('<div class="section-label">HYDRATION PAYLOAD</div>');
   parts.push('<div class="card mb12">');
   if (!ST.flightHrsTouched && ST.flightSchedule && computeTodaysFlightHours(ST.flightSchedule) !== null) {
-    parts.push('<div style="font-size:10px;color:var(--muted);margin-bottom:6px">📅 Flight hours auto-filled from your schedule. Edit if it\'s off.</div>');
+    parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-bottom:6px">📅 Flight hours auto-filled from your schedule. Edit if it\'s off.</div>');
   }
   parts.push('<div class="field-row" style="margin-bottom:10px">');
   parts.push('<div class="field" style="margin-bottom:0"><label>Flight Hours Today</label>');
@@ -7103,9 +7177,9 @@ async function renderPreflight(p) {
   parts.push('<input type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="'+ST.waterInRaw+'" placeholder="e.g. 1.2 or .5" oninput="ST.waterInRaw=this.value;ST.waterIn=parseFloat(this.value)||0;updateHydrationUI()"></div>');
   parts.push('</div>');
   parts.push('<div id="noFlyBox">'+(ST.flightHrsTouched && ST.flightHrs === 0 ? '<div class="alert alert-info" style="margin-bottom:8px"><div class="alert-icon">ℹ️</div><div>No-fly day: minimum 1.0L hydration target still applies. Your body needs baseline water regardless of duty status.</div></div>' : '')+'</div>');
-  parts.push('<div class="fb" style="margin-bottom:6px"><span style="font-family:var(--mono);font-size:11px;color:var(--muted)">TARGET: <span id="hydroTargetVal" style="color:var(--text)">'+hydroTarget().toFixed(1)+'L</span></span><span id="hydroStatusLbl" style="font-family:var(--mono);font-size:11px;color:'+hs.color+'">'+hs.label+'</span></div>');
+  parts.push('<div class="fb" style="margin-bottom:6px"><span style="font-family:var(--mono);font-size:0.6875rem;color:var(--muted)">TARGET: <span id="hydroTargetVal" style="color:var(--text)">'+hydroTarget().toFixed(1)+'L</span></span><span id="hydroStatusLbl" style="font-family:var(--mono);font-size:0.6875rem;color:'+hs.color+'">'+hs.label+'</span></div>');
   parts.push('<div class="hydro-bar-wrap"><div id="hydroBar" class="hydro-bar '+(pct>=1?'hydro-ok':'hydro-warn')+'" style="width:'+Math.round(pct*100)+'%"></div></div>');
-  parts.push('<div id="hydroPctText" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px;text-align:right">'+Math.round(pct*100)+'% of target</div>');
+  parts.push('<div id="hydroPctText" style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);margin-top:4px;text-align:right">'+Math.round(pct*100)+'% of target</div>');
   parts.push('<div id="hydroAdviceBox">'+(adv ? '<div class="alert alert-warn mt8"><div class="alert-icon">💧</div><div>'+adv+'</div></div>' : '<div class="alert alert-ok mt8"><div class="alert-icon">✅</div><div>Hydration nominal. Cleared for workout operations.</div></div>')+'</div>');
   parts.push('</div>');
   } // end hydration tracking block
@@ -7115,8 +7189,8 @@ async function renderPreflight(p) {
     const lastDate = new Date(ST.lastSession.date).toLocaleDateString('en-US',{month:'short',day:'numeric'});
     parts.push('<div class="section-label">LAST MISSION</div>');
     parts.push('<div class="card card-dark mb12">');
-    parts.push('<div class="fb"><div style="font-size:13px;font-weight:600">'+(ST.lastSession.muscle_group||'–')+'</div><div style="font-family:var(--mono);font-size:11px;color:var(--muted)">'+lastDate+'</div></div>');
-    parts.push('<div style="font-size:11px;color:var(--green);margin-top:6px">→ Recommended next: <strong>'+recommended+'</strong></div>');
+    parts.push('<div class="fb"><div style="font-size:0.8125rem;font-weight:600">'+(ST.lastSession.muscle_group||'–')+'</div><div style="font-family:var(--mono);font-size:0.6875rem;color:var(--muted)">'+lastDate+'</div></div>');
+    parts.push('<div style="font-size:0.6875rem;color:var(--green);margin-top:6px">→ Recommended next: <strong>'+recommended+'</strong></div>');
     parts.push('</div>');
   }
 
@@ -7936,17 +8010,17 @@ function showAlternates(exId, exName, phaseKey) {
   parts.push('<div class="modal-handle"></div>');
   parts.push('<div class="modal-title">Alternate Exercises</div>');
   if (alts.length) {
-    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Same muscle group, different movement. Tap to swap in.</div>');
+    parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:14px">Same muscle group, different movement. Tap to swap in.</div>');
     alts.forEach(alt => {
       parts.push('<div style="background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">');
-      parts.push('<div style="font-weight:700;font-size:14px;margin-bottom:3px">'+alt.name+'</div>');
-      parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--gold);margin-bottom:6px">'+alt.target+'</div>');
-      parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px">'+alt.note+'</div>');
+      parts.push('<div style="font-weight:700;font-size:0.875rem;margin-bottom:3px">'+alt.name+'</div>');
+      parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--gold);margin-bottom:6px">'+alt.target+'</div>');
+      parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px">'+alt.note+'</div>');
       parts.push('<button class="btn btn-gold btn-sm" onclick=\'swapExercise("'+exId+'",'+JSON.stringify(alt)+');closeModal()\'>Swap In</button>');
       parts.push('</div>');
     });
   } else {
-    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px">No alternates specifically curated for this exercise yet. Search the catalog or create your own below.</div>');
+    parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:14px">No alternates specifically curated for this exercise yet. Search the catalog or create your own below.</div>');
   }
 
   parts.push('<div style="border-top:1px solid var(--border);margin-top:6px;padding-top:14px">');
@@ -7965,9 +8039,9 @@ function showAlternates(exId, exName, phaseKey) {
     const exItem = (ST.workout?.[phaseKey] || []).find(e => e.id === exId);
     parts.push('<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">');
     parts.push('<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">');
-    parts.push('<span style="font-size:12px">✦</span><span style="font-size:12px;font-weight:600">AI Coach: Don\'t have any of this?</span>');
+    parts.push('<span style="font-size:0.75rem">✦</span><span style="font-size:0.75rem;font-weight:600">AI Coach: Don\'t have any of this?</span>');
     parts.push('</div>');
-    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Describe what you actually have access to and the AI will pick a substitute that trains the same thing.</div>');
+    parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:10px">Describe what you actually have access to and the AI will pick a substitute that trains the same thing.</div>');
     parts.push('<div class="field"><input type="text" id="aiSubExplain" placeholder="e.g. hotel room, no equipment, carpeted floor" autocomplete="off"></div>');
     parts.push('<div id="aiSubResult"></div>');
     parts.push('<button class="btn btn-outline" onclick=\'requestAISubstitute("'+exId+'","'+phaseKey+'",'+JSON.stringify(exItem)+')\'>Ask AI Coach</button>');
@@ -7975,7 +8049,7 @@ function showAlternates(exId, exName, phaseKey) {
   }
 
   parts.push('<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">');
-  parts.push('<div style="font-size:12px;font-weight:600;margin-bottom:10px">✏️ Or Create Your Own</div>');
+  parts.push('<div style="font-size:0.75rem;font-weight:600;margin-bottom:10px">✏️ Or Create Your Own</div>');
   parts.push('<div class="field"><label>Exercise Name</label><input id="altName" type="text" placeholder="e.g. Cable Squat"></div>');
   parts.push('<div class="field"><label>Target (e.g. 3x10, 45s, 3x12/side)</label><input id="altTarget" type="text" placeholder="3x10"></div>');
   parts.push('<div class="field"><label>Type</label><select id="altType"><option value="reps_weight">Reps + Weight</option><option value="reps_only">Reps Only</option><option value="timed">Timed</option></select></div>');
@@ -8037,9 +8111,9 @@ function swapFilterExercises(exId, q) {
   const matches = rankedSwapMatches(exId, q, 6);
   const parts = [];
   matches.forEach((e, i) => {
-    parts.push('<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:13px" onclick="swapAddCatalogExercise(\''+exId+'\','+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+(e.target||'')+'</span></div>');
+    parts.push('<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:0.8125rem" onclick="swapAddCatalogExercise(\''+exId+'\','+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:0.625rem;color:var(--muted)">'+(e.target||'')+'</span></div>');
   });
-  if (matches.length) parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin:8px 0 2px">TAP TO SWAP IN, OR USE "CREATE YOUR OWN" BELOW</div>');
+  if (matches.length) parts.push('<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);letter-spacing:0.08em;margin:8px 0 2px">TAP TO SWAP IN, OR USE "CREATE YOUR OWN" BELOW</div>');
   box.innerHTML = parts.join('');
 }
 function swapAddCatalogExercise(exId, matchIdx, q) {
@@ -8060,7 +8134,7 @@ async function requestAISubstitute(exId, phaseKey, exItem) {
   if (!available) { showBigToast('Describe what you have access to first.', 'warn'); return; }
   if (!exItem) { showBigToast('Could not read the current exercise. Try closing and reopening this sheet.', 'warn'); return; }
 
-  if (resultBox) resultBox.innerHTML = '<div style="font-size:11px;color:var(--muted);margin:8px 0">Asking the AI coach…</div>';
+  if (resultBox) resultBox.innerHTML = '<div style="font-size:0.6875rem;color:var(--muted);margin:8px 0">Asking the AI coach…</div>';
 
   const context = {
     exerciseName: exItem.name,
@@ -8075,7 +8149,7 @@ async function requestAISubstitute(exId, phaseKey, exItem) {
   if (!resultBox) return; // sheet closed while waiting
 
   if (result.error) {
-    resultBox.innerHTML = '<div style="font-size:11px;color:var(--amber);margin:8px 0">Couldn\'t get a suggestion. Try describing it differently, or use catalog search above.</div>';
+    resultBox.innerHTML = '<div style="font-size:0.6875rem;color:var(--amber);margin:8px 0">Couldn\'t get a suggestion. Try describing it differently, or use catalog search above.</div>';
     return;
   }
 
@@ -8083,19 +8157,19 @@ async function requestAISubstitute(exId, phaseKey, exItem) {
   try {
     alt = JSON.parse(result.text.replace(/```json|```/g, '').trim());
   } catch (e) {
-    resultBox.innerHTML = '<div style="font-size:11px;color:var(--amber);margin:8px 0">Got an unreadable response. Try again.</div>';
+    resultBox.innerHTML = '<div style="font-size:0.6875rem;color:var(--amber);margin:8px 0">Got an unreadable response. Try again.</div>';
     return;
   }
   if (alt.error || !alt.name) {
-    resultBox.innerHTML = '<div style="font-size:11px;color:var(--muted);margin:8px 0">No good substitute found for that. Try catalog search above, or describe what you have differently.</div>';
+    resultBox.innerHTML = '<div style="font-size:0.6875rem;color:var(--muted);margin:8px 0">No good substitute found for that. Try catalog search above, or describe what you have differently.</div>';
     return;
   }
 
   resultBox.innerHTML =
     '<div style="background:var(--bg3);border:1.5px solid var(--gold);border-radius:10px;padding:14px;margin:10px 0">' +
-    '<div style="font-weight:700;font-size:14px;margin-bottom:3px">'+sanitizeUserText(alt.name)+'</div>' +
-    '<div style="font-family:var(--mono);font-size:10px;color:var(--gold);margin-bottom:6px">'+sanitizeUserText(alt.target||'')+'</div>' +
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">'+sanitizeUserText(alt.note||'')+'</div>' +
+    '<div style="font-weight:700;font-size:0.875rem;margin-bottom:3px">'+sanitizeUserText(alt.name)+'</div>' +
+    '<div style="font-family:var(--mono);font-size:0.625rem;color:var(--gold);margin-bottom:6px">'+sanitizeUserText(alt.target||'')+'</div>' +
+    '<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px">'+sanitizeUserText(alt.note||'')+'</div>' +
     '<button class="btn btn-gold btn-sm" onclick=\'swapExercise("'+exId+'",'+JSON.stringify(alt)+');closeModal()\'>Swap In</button>' +
     '</div>';
 }
@@ -8170,12 +8244,12 @@ function renderFlight(p) {
   const pct = Math.round(done / Math.max(allEx.length,1) * 100);
 
   const parts = [];
-  parts.push('<button class="btn-ghost" style="font-size:12px;margin-bottom:6px" onclick="switchTab(\'today\')">← Back to Today</button>');
+  parts.push('<button class="btn-ghost" style="font-size:0.75rem;margin-bottom:6px" onclick="switchTab(\'today\')">← Back to Today</button>');
   parts.push('<div class="section-label">ACTIVE FLIGHT · '+ST.muscleGroup.toUpperCase()+'</div>');
   parts.push('<div class="card card-dark mb12">');
-  parts.push('<div class="fb mb8"><span style="font-family:var(--mono);font-size:11px;color:var(--muted)">MISSION PROGRESS</span><span style="font-family:var(--mono);font-size:11px;color:var(--gold)" id="missionProgCount">'+done+'/'+allEx.length+' EXERCISES</span></div>');
+  parts.push('<div class="fb mb8"><span style="font-family:var(--mono);font-size:0.6875rem;color:var(--muted)">MISSION PROGRESS</span><span style="font-family:var(--mono);font-size:0.6875rem;color:var(--gold)" id="missionProgCount">'+done+'/'+allEx.length+' EXERCISES</span></div>');
   parts.push('<div class="prog-wrap"><div class="prog-fill" id="missionProgFill" style="width:'+pct+'%"></div></div>');
-  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px;text-align:right" id="missionProgPct">'+pct+'% complete</div>');
+  parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);margin-top:4px;text-align:right" id="missionProgPct">'+pct+'% complete</div>');
   parts.push('</div>');
 
   PHASES_META.forEach(phase => {
@@ -8225,7 +8299,7 @@ function openExerciseGuide(exName) {
   
   const guideURL = GUIDE_BASE_URL + guideFile;
   const root = document.getElementById('modalRoot');
-  root.innerHTML = '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet" style="max-height:95vh;width:95vw;max-width:90vh;padding:0;border-radius:12px;overflow:hidden;display:flex;flex-direction:column"><div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0"><div style="font-weight:600">'+exName+' Form Guide</div><button class="btn-ghost" style="font-size:20px;padding:0;width:32px;height:32px" onclick="closeModal()">✕</button></div><div id="guideContent" style="flex:1;overflow-y:auto;background:#000;display:flex;align-items:center;justify-content:center;color:#ccc">Loading...</div></div></div>';
+  root.innerHTML = '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet" style="max-height:95vh;width:95vw;max-width:90vh;padding:0;border-radius:12px;overflow:hidden;display:flex;flex-direction:column"><div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0"><div style="font-weight:600">'+exName+' Form Guide</div><button class="btn-ghost" style="font-size:1.25rem;padding:0;width:32px;height:32px" onclick="closeModal()">✕</button></div><div id="guideContent" style="flex:1;overflow-y:auto;background:#000;display:flex;align-items:center;justify-content:center;color:#ccc">Loading...</div></div></div>';
   fetch(guideURL, { cache: 'reload' }).then(r => r.text()).then(html => {
     const el = document.getElementById('guideContent');
     if (!el) return;
@@ -8274,11 +8348,11 @@ function buildExCard(exItem, phaseKey) {
   const parts = [];
 
   parts.push('<div class="ex-card'+(exItem.custom?' custom-ex':'')+'" id="excard_'+exItem.id+'">');
-  parts.push('<div class="ex-hdr"><div style="flex:1;cursor:pointer" onclick="toggleEx(\''+exItem.id+'\')"><div class="ex-name">'+exItem.name+(exItem.custom?' <span style="font-size:9px;color:var(--gold)">CUSTOM</span>':'')+'</div><div class="ex-target">'+exItem.target+(exItem.timed?' · ⏱ TIMED':'')+'</div></div><div class="ex-right"><button class="btn-ghost" style="font-size:11px;padding:4px 8px;margin-right:4px;color:var(--blue)" onclick="event.stopPropagation();openExerciseGuide(\''+jsArg(exItem.name)+'\')">ⓘ Guide</button><div class="ex-done '+(hasData?'ok':'')+'" id="exdone_'+exItem.id+'">'+(hasData?'✓':'')+'</div><div class="ex-caret '+(isOpen?'open':'')+'">⌄</div></div></div>');
+  parts.push('<div class="ex-hdr"><div style="flex:1;cursor:pointer" onclick="toggleEx(\''+exItem.id+'\')"><div class="ex-name">'+exItem.name+(exItem.custom?' <span style="font-size:0.5625rem;color:var(--gold)">CUSTOM</span>':'')+'</div><div class="ex-target">'+exItem.target+(exItem.timed?' · ⏱ TIMED':'')+'</div></div><div class="ex-right"><button class="btn-ghost" style="font-size:0.6875rem;padding:4px 8px;margin-right:4px;color:var(--blue)" onclick="event.stopPropagation();openExerciseGuide(\''+jsArg(exItem.name)+'\')">ⓘ Guide</button><div class="ex-done '+(hasData?'ok':'')+'" id="exdone_'+exItem.id+'">'+(hasData?'✓':'')+'</div><div class="ex-caret '+(isOpen?'open':'')+'">⌄</div></div></div>');
   if (exItem.swappedForInjury) {
-    parts.push('<div style="padding:6px 14px;background:rgba(56,189,248,0.08);border-top:1px solid var(--border);font-size:10px;color:var(--blue)">🩹 Swapped from '+exItem.originalName+': '+exItem.flaggedRegion+' flagged</div>');
+    parts.push('<div style="padding:6px 14px;background:rgba(56,189,248,0.08);border-top:1px solid var(--border);font-size:0.625rem;color:var(--blue)">🩹 Swapped from '+exItem.originalName+': '+exItem.flaggedRegion+' flagged</div>');
   } else if (exItem.injuryCaution) {
-    parts.push('<div style="padding:6px 14px;background:rgba(245,158,11,0.08);border-top:1px solid var(--border);font-size:10px;color:var(--amber)">⚠️ May stress your flagged '+exItem.flaggedRegion+'; consider Alternate below</div>');
+    parts.push('<div style="padding:6px 14px;background:rgba(245,158,11,0.08);border-top:1px solid var(--border);font-size:0.625rem;color:var(--amber)">⚠️ May stress your flagged '+exItem.flaggedRegion+'; consider Alternate below</div>');
   }
 
   if (isOpen) {
@@ -8293,8 +8367,8 @@ function buildExCard(exItem, phaseKey) {
         parts.push('<div class="stat-banner">');
         parts.push('<div class="stat-banner-label">PROGRESSIVE OVERLOAD</div>');
         parts.push('<div style="display:flex;justify-content:space-between;align-items:center">');
-        parts.push('<span style="font-size:12px">Last: <strong style="color:var(--text)">'+lastW+' lb'+(lastR?' × '+lastR+' reps':'')+'</strong></span>');
-        parts.push('<span style="color:var(--gold);font-weight:700;font-size:12px">Target → '+suggested+' lb</span>');
+        parts.push('<span style="font-size:0.75rem">Last: <strong style="color:var(--text)">'+lastW+' lb'+(lastR?' × '+lastR+' reps':'')+'</strong></span>');
+        parts.push('<span style="color:var(--gold);font-weight:700;font-size:0.75rem">Target → '+suggested+' lb</span>');
         parts.push('</div></div>');
       } else {
         const variant = lastLoggedFamilyVariant(exItem.id, exItem.name);
@@ -8313,7 +8387,7 @@ function buildExCard(exItem, phaseKey) {
       if (lastBest !== null) {
         parts.push('<div class="stat-banner">');
         parts.push('<div class="stat-banner-label">PERSONAL BEST</div>');
-        parts.push('<span style="font-size:12px">Best '+label+': <strong style="color:var(--teal)">'+lastBest+' in</strong></span>');
+        parts.push('<span style="font-size:0.75rem">Best '+label+': <strong style="color:var(--teal)">'+lastBest+' in</strong></span>');
         parts.push('</div>');
       } else {
         parts.push('<div class="stat-banner-empty">First time logging. Record your '+label+' in inches to start tracking progress.</div>');
@@ -8328,15 +8402,15 @@ function buildExCard(exItem, phaseKey) {
       const valR = sets[0]?.seconds_right || '';
       parts.push('<div style="display:flex;gap:8px">');
       parts.push('<div class="timed-box" style="flex:1" id="tb_'+exItem.id+'_left">');
-      parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">LEFT SIDE</div>');
+      parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">LEFT SIDE</div>');
       parts.push('<input class="timed-inp" type="number" inputmode="numeric" placeholder="0" value="'+valL+'" oninput="ensureSetEntry(\''+exItem.id+'\',0);ST.sets[\''+exItem.id+'\'][0].seconds_left=this.value;persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
-      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">seconds</div>');
+      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">seconds</div>');
       parts.push(buildStopwatchWidget(exItem.id, 'left', exItem.target));
       parts.push('</div>');
       parts.push('<div class="timed-box" style="flex:1" id="tb_'+exItem.id+'_right">');
-      parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">RIGHT SIDE</div>');
+      parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">RIGHT SIDE</div>');
       parts.push('<input class="timed-inp" type="number" inputmode="numeric" placeholder="0" value="'+valR+'" oninput="ensureSetEntry(\''+exItem.id+'\',0);ST.sets[\''+exItem.id+'\'][0].seconds_right=this.value;persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
-      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">seconds</div>');
+      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">seconds</div>');
       parts.push(buildStopwatchWidget(exItem.id, 'right', exItem.target));
       parts.push('</div>');
       parts.push('</div>');
@@ -8348,12 +8422,12 @@ function buildExCard(exItem, phaseKey) {
       const valMi = sets[0]?.miles || '';
       parts.push('<div class="timed-box '+(valMin?'ok':'')+'" id="tb_'+exItem.id+'">');
       parts.push('<div style="display:flex;gap:8px">');
-      parts.push('<div style="flex:1"><div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">TIME</div>');
+      parts.push('<div style="flex:1"><div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">TIME</div>');
       parts.push('<input class="timed-inp" type="text" inputmode="decimal" placeholder="0" value="'+valMin+'" oninput="liveSetValMin(\''+exItem.id+'\',0,\'seconds\',this.value);document.getElementById(\'tb_'+exItem.id+'\').className=\'timed-box\'+(this.value?\' ok\':\'\');">');
-      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">min</div></div>');
-      parts.push('<div style="flex:1"><div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">DISTANCE</div>');
+      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">min</div></div>');
+      parts.push('<div style="flex:1"><div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">DISTANCE</div>');
       parts.push('<input class="timed-inp" type="text" inputmode="decimal" placeholder="0" value="'+valMi+'" oninput="ensureSetEntry(\''+exItem.id+'\',0);ST.sets[\''+exItem.id+'\'][0].miles=this.value;persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
-      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">mi</div></div>');
+      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">mi</div></div>');
       parts.push('</div></div>');
     } else if (exItem.timed && isMinuteScale(exItem)) {
       // Reported bug: Walking, Treadmill, and similar 20-45 min activities
@@ -8363,17 +8437,17 @@ function buildExCard(exItem, phaseKey) {
       // blanket change, so short holds/stretches correctly keep seconds.
       const valMin = sets[0]?.seconds ? Math.round((parseFloat(sets[0].seconds)/60)*10)/10 : '';
       parts.push('<div class="timed-box '+(valMin?'ok':'')+'" id="tb_'+exItem.id+'">');
-      parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">TOTAL TIME</div>');
+      parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">TOTAL TIME</div>');
       parts.push('<input class="timed-inp" type="text" inputmode="decimal" placeholder="0" value="'+valMin+'" oninput="liveSetValMin(\''+exItem.id+'\',0,\'seconds\',this.value);document.getElementById(\'tb_'+exItem.id+'\').className=\'timed-box\'+(this.value?\' ok\':\'\');">');
-      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">min</div>');
+      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">min</div>');
       parts.push('</div>');
       parts.push(buildStopwatchWidget(exItem.id, null, exItem.target));
     } else if (exItem.timed) {
       const val = sets[0]?.seconds || '';
       parts.push('<div class="timed-box '+(val?'ok':'')+'" id="tb_'+exItem.id+'">');
-      parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">TOTAL TIME</div>');
+      parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">TOTAL TIME</div>');
       parts.push('<input class="timed-inp" type="number" inputmode="numeric" placeholder="0" value="'+val+'" oninput="ensureSetEntry(\''+exItem.id+'\',0);ST.sets[\''+exItem.id+'\'][0].seconds=this.value;document.getElementById(\'tb_'+exItem.id+'\').className=\'timed-box\'+(this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
-      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">seconds</div>');
+      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">seconds</div>');
       parts.push('</div>');
       parts.push(buildStopwatchWidget(exItem.id, null, exItem.target));
     } else if (exItem.inputType === 'reps_height') {
@@ -8384,7 +8458,7 @@ function buildExCard(exItem, phaseKey) {
         parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="Height" value="'+(s.height||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].height=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
         parts.push('<div class="set-hint">reps / height (in)</div></div>');
       });
-      parts.push('</div></div>'+(sets.length>2?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<div class="fb" style="margin-top:6px;justify-content:space-between"><button class="btn-ghost" style="font-size:11px" onclick="removeLiveSet(\''+exItem.id+'\')">− Remove Set</button><button class="btn-ghost" style="font-size:11px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button></div>');
+      parts.push('</div></div>'+(sets.length>2?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<div class="fb" style="margin-top:6px;justify-content:space-between"><button class="btn-ghost" style="font-size:0.6875rem" onclick="removeLiveSet(\''+exItem.id+'\')">− Remove Set</button><button class="btn-ghost" style="font-size:0.6875rem" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button></div>');
       if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
         parts.push(buildRestTimerWidget(exItem.id, phaseKey, exItem.target));
       }
@@ -8396,7 +8470,7 @@ function buildExCard(exItem, phaseKey) {
         parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="Distance" value="'+(s.distance||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].distance=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
         parts.push('<div class="set-hint">reps / distance (in)</div></div>');
       });
-      parts.push('</div></div>'+(sets.length>2?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<div class="fb" style="margin-top:6px;justify-content:space-between"><button class="btn-ghost" style="font-size:11px" onclick="removeLiveSet(\''+exItem.id+'\')">− Remove Set</button><button class="btn-ghost" style="font-size:11px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button></div>');
+      parts.push('</div></div>'+(sets.length>2?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<div class="fb" style="margin-top:6px;justify-content:space-between"><button class="btn-ghost" style="font-size:0.6875rem" onclick="removeLiveSet(\''+exItem.id+'\')">− Remove Set</button><button class="btn-ghost" style="font-size:0.6875rem" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button></div>');
       if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
         parts.push(buildRestTimerWidget(exItem.id, phaseKey, exItem.target));
       }
@@ -8407,7 +8481,7 @@ function buildExCard(exItem, phaseKey) {
         parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
         parts.push('<div class="set-hint">reps only</div></div>');
       });
-      parts.push('</div></div>'+(sets.length>3?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<div class="fb" style="margin-top:6px;justify-content:space-between"><button class="btn-ghost" style="font-size:11px" onclick="removeLiveSet(\''+exItem.id+'\')">− Remove Set</button><button class="btn-ghost" style="font-size:11px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button></div>');
+      parts.push('</div></div>'+(sets.length>3?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<div class="fb" style="margin-top:6px;justify-content:space-between"><button class="btn-ghost" style="font-size:0.6875rem" onclick="removeLiveSet(\''+exItem.id+'\')">− Remove Set</button><button class="btn-ghost" style="font-size:0.6875rem" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button></div>');
     } else {
       parts.push('<div class="sets-wrap"><div class="sets-scroll">');
       sets.forEach((s,i) => {
@@ -8416,12 +8490,12 @@ function buildExCard(exItem, phaseKey) {
         parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="lb" value="'+(s.weight||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].weight=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
         parts.push('<div class="set-hint">reps / lb</div></div>');
       });
-      parts.push('</div></div>'+(sets.length>2?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<div class="fb" style="margin-top:6px;justify-content:space-between"><button class="btn-ghost" style="font-size:11px" onclick="removeLiveSet(\''+exItem.id+'\')">− Remove Set</button><button class="btn-ghost" style="font-size:11px" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button></div>');
+      parts.push('</div></div>'+(sets.length>2?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<div class="fb" style="margin-top:6px;justify-content:space-between"><button class="btn-ghost" style="font-size:0.6875rem" onclick="removeLiveSet(\''+exItem.id+'\')">− Remove Set</button><button class="btn-ghost" style="font-size:0.6875rem" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button></div>');
       const autoreg = autoregSuggestion(exItem, sets);
       if (autoreg) {
         const boxColor = autoreg.tone === 'positive' ? 'var(--green)' : autoreg.tone === 'major' ? 'var(--amber)' : 'var(--blue)';
         const icon = autoreg.tone === 'positive' ? '💪' : '🎯';
-        parts.push('<div class="fb" style="background:var(--bg3);border:1px solid '+boxColor+';border-radius:8px;padding:9px 12px;margin-top:8px;align-items:flex-start"><div style="font-size:12px;line-height:1.5;color:var(--text)">'+icon+' '+autoreg.text+'</div></div>');
+        parts.push('<div class="fb" style="background:var(--bg3);border:1px solid '+boxColor+';border-radius:8px;padding:9px 12px;margin-top:8px;align-items:flex-start"><div style="font-size:0.75rem;line-height:1.5;color:var(--text)">'+icon+' '+autoreg.text+'</div></div>');
       }
       if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
         parts.push(buildRestTimerWidget(exItem.id, phaseKey, exItem.target));
@@ -8558,8 +8632,8 @@ function buildRestTimerWidget(exId, phaseKey, target) {
   const parts = [];
   parts.push('<div class="rest-timer-box" id="rest_'+exId+'">');
   parts.push('<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">');
-  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em">REST TIMER · '+label+'</div>');
-  parts.push('<button onclick="showRestTimerInfo()" style="background:none;border:1px solid var(--muted);border-radius:50%;width:15px;height:15px;color:var(--muted);font-size:9px;line-height:1;cursor:pointer;flex-shrink:0;padding:0">i</button>');
+  parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);letter-spacing:0.08em">REST TIMER · '+label+'</div>');
+  parts.push('<button onclick="showRestTimerInfo()" style="background:none;border:1px solid var(--muted);border-radius:50%;width:15px;height:15px;color:var(--muted);font-size:0.5625rem;line-height:1;cursor:pointer;flex-shrink:0;padding:0">i</button>');
   parts.push('</div>');
   parts.push('<div class="rest-timer-display" id="rest_disp_'+exId+'">'+display+'</div>');
   if (!isActive) {
@@ -8680,7 +8754,7 @@ function buildStopwatchWidget(exId, side, targetLabel) {
   const targetSec = parseTargetSeconds(targetLabel);
   const parts = [];
   parts.push('<div class="timed-box" style="margin-top:8px" id="sw_'+domId+'">');
-  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">STOPWATCH'+(targetSec?' · CHIMES AT '+formatStopwatch(targetSec):'')+'</div>');
+  parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">STOPWATCH'+(targetSec?' · CHIMES AT '+formatStopwatch(targetSec):'')+'</div>');
   parts.push('<div class="stopwatch-display" id="sw_disp_'+domId+'">'+formatStopwatch(isActive?ST.stopwatch.seconds:0)+'</div>');
   if (!isActive) {
     parts.push('<button class="stopwatch-btn btn-blue" onclick="startStopwatch(\''+exId+'\','+(side?"'"+side+"'":'null')+','+(targetSec||'null')+')">START</button>');
@@ -8815,7 +8889,7 @@ function buildNSDRWidget(exId, currentVal) {
   const isActive = ST.nsdrTimer.active;
   const parts = [];
   parts.push('<div class="timed-box '+(currentVal?'ok':'')+'" id="nsdr_'+exId+'">');
-  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">NSDR TIMER · CHIMES AT 5:00</div>');
+  parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">NSDR TIMER · CHIMES AT 5:00</div>');
   parts.push('<div class="stopwatch-display" id="nsdr_disp">'+formatStopwatch(isActive?ST.nsdrTimer.seconds:(parseInt(currentVal)||0))+'</div>');
   if (!isActive) {
     parts.push('<button class="stopwatch-btn btn-blue" onclick="startNSDR(\''+exId+'\')">START NSDR</button>');
@@ -8896,7 +8970,7 @@ function buildAddExerciseCard() {
     parts.push('<div class="field"><label>Search the exercise catalog first</label>');
     parts.push('<input type="text" id="addExCatalogSearch" placeholder="e.g. wall slide, row, curl…" oninput="filterAddExerciseCatalog(this.value)" autocomplete="off"></div>');
     parts.push('<div id="addExCatalogResults"></div>');
-    parts.push('<div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin:12px 0 10px;text-align:center">OR CREATE YOUR OWN BELOW</div>');
+    parts.push('<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);letter-spacing:0.08em;margin:12px 0 10px;text-align:center">OR CREATE YOUR OWN BELOW</div>');
     parts.push('<div class="field"><label>Exercise Name</label><input type="text" id="custom_ex_name" placeholder="e.g. Cable Woodchopper"></div>');
     parts.push('<div class="field-row">');
     parts.push('<div class="field"><label>Target (sets×reps)</label><input type="text" id="custom_ex_target" placeholder="e.g. 3×12"></div>');
@@ -8934,10 +9008,10 @@ function filterAddExerciseCatalog(q) {
     .slice(0, 6);
   const parts = [];
   matches.forEach((e, i) => {
-    parts.push('<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:13px" onclick="addExistingCatalogExercise('+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+(e.target||'')+'</span></div>');
+    parts.push('<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:0.8125rem" onclick="addExistingCatalogExercise('+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:0.625rem;color:var(--muted)">'+(e.target||'')+'</span></div>');
   });
   if (!matches.length) {
-    parts.push('<div style="font-size:11px;color:var(--muted);padding:6px 2px">No catalog match. Create it below.</div>');
+    parts.push('<div style="font-size:0.6875rem;color:var(--muted);padding:6px 2px">No catalog match. Create it below.</div>');
   }
   box.innerHTML = parts.join('');
 }
@@ -9116,7 +9190,7 @@ function showGuide(exId) {
     '<div class="modal-sheet">' +
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">' + e.name + '</div>' +
-    '<div style="font-family:var(--mono);font-size:10px;color:var(--gold);margin-bottom:12px;letter-spacing:0.08em">' + e.target + '</div>' +
+    '<div style="font-family:var(--mono);font-size:0.625rem;color:var(--gold);margin-bottom:12px;letter-spacing:0.08em">' + e.target + '</div>' +
     '<div class="modal-body">' + e.note + '</div>' +
     linkHTML +
     '<button class="btn btn-outline mt12" onclick="closeModal()">CLOSE</button>' +
@@ -9610,7 +9684,7 @@ async function renderTrends(p) {
 
   // Shown only when free-tier trimming actually hid data (set in loadAndDrawCharts)
   parts.push('<div id="trendsProNote" class="card mb12" style="display:none;border-left:3px solid var(--gold);padding:12px 14px">' +
-    '<div style="font-size:12px;color:var(--muted);line-height:1.6">Showing the last 30 days. ' +
+    '<div style="font-size:0.75rem;color:var(--muted);line-height:1.6">Showing the last 30 days. ' +
     '<span style="color:var(--gold);cursor:pointer;font-weight:600" onclick="showPaywall(\'trends\')">Upgrade to Pro</span> for your full history.</div></div>');
 
   // Training calendar — moved here from Preflight. Trends is the review
@@ -9650,14 +9724,14 @@ async function renderTrends(p) {
     if (fuelTrend.trend) {
       const statusMeta2 = { improving: ['↑','var(--green)'], flat: ['→','var(--muted)'], declining: ['↓','var(--amber)'] };
       const [arrow2, color2] = statusMeta2[fuelTrend.trend.status];
-      parts.push('<div class="fb mb8"><div style="font-size:13px">🥩 Protein adherence</div><div style="font-size:12px;text-align:right"><span style="color:'+color2+'">'+arrow2+' '+fuelTrend.avgProteinPct+'% of target</span><div style="font-family:var(--mono);font-size:9px;color:var(--muted)">'+fuelTrend.daysLogged+' days logged</div></div></div>');
-      parts.push('<div class="fb"><div style="font-size:13px">🔥 Avg calories/day</div><div style="font-family:var(--mono);font-size:12px">'+fuelTrend.avgCalories.toLocaleString()+'</div></div>');
+      parts.push('<div class="fb mb8"><div style="font-size:0.8125rem">🥩 Protein adherence</div><div style="font-size:0.75rem;text-align:right"><span style="color:'+color2+'">'+arrow2+' '+fuelTrend.avgProteinPct+'% of target</span><div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted)">'+fuelTrend.daysLogged+' days logged</div></div></div>');
+      parts.push('<div class="fb"><div style="font-size:0.8125rem">🔥 Avg calories/day</div><div style="font-family:var(--mono);font-size:0.75rem">'+fuelTrend.avgCalories.toLocaleString()+'</div></div>');
     } else {
       const remaining = 4 - fuelTrend.daysLogged;
       const msg = fuelTrend.daysLogged === 0
         ? 'Log meals for 4 days to unlock your fuel trend.'
         : 'Log meals for ' + remaining + ' more day' + (remaining === 1 ? '' : 's') + ' to unlock your fuel trend.';
-      parts.push('<div style="font-size:12px;color:var(--muted)">'+msg+'</div>');
+      parts.push('<div style="font-size:0.75rem;color:var(--muted)">'+msg+'</div>');
     }
     parts.push('</div>');
   }
@@ -9674,11 +9748,11 @@ async function renderTrends(p) {
     const statusMeta = { improving: ['↑','var(--green)'], flat: ['→','var(--muted)'], declining: ['↓','var(--amber)'] };
     liftTrends.forEach(lt => {
       const [arrow, color] = statusMeta[lt.trend.status];
-      parts.push('<div class="fb mb8"><div style="font-size:13px">🏋️ '+lt.name+'</div><div style="font-size:12px;text-align:right"><span style="color:'+color+'">'+arrow+' '+lt.current+' lb</span><div style="font-family:var(--mono);font-size:9px;color:var(--muted)">'+lt.sessionsCount+' sessions'+(lt.trend.status!=='flat'?' · '+(lt.trend.changePct>0?'+':'')+lt.trend.changePct+'%':'')+'</div></div></div>');
+      parts.push('<div class="fb mb8"><div style="font-size:0.8125rem">🏋️ '+lt.name+'</div><div style="font-size:0.75rem;text-align:right"><span style="color:'+color+'">'+arrow+' '+lt.current+' lb</span><div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted)">'+lt.sessionsCount+' sessions'+(lt.trend.status!=='flat'?' · '+(lt.trend.changePct>0?'+':'')+lt.trend.changePct+'%':'')+'</div></div></div>');
     });
     if (runTrend) {
       const [arrow, color] = statusMeta[runTrend.trend.status];
-      parts.push('<div class="fb mb8"><div style="font-size:13px">🏃 Running Pace</div><div style="font-size:12px;text-align:right"><span style="color:'+color+'">'+arrow+' '+formatPace(runTrend.current)+'</span><div style="font-family:var(--mono);font-size:9px;color:var(--muted)">'+runTrend.sessionsCount+' runs'+(runTrend.trend.status!=='flat'?' · '+(runTrend.trend.changePct>0?'+':'')+runTrend.trend.changePct+'%':'')+'</div></div></div>');
+      parts.push('<div class="fb mb8"><div style="font-size:0.8125rem">🏃 Running Pace</div><div style="font-size:0.75rem;text-align:right"><span style="color:'+color+'">'+arrow+' '+formatPace(runTrend.current)+'</span><div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted)">'+runTrend.sessionsCount+' runs'+(runTrend.trend.status!=='flat'?' · '+(runTrend.trend.changePct>0?'+':'')+runTrend.trend.changePct+'%':'')+'</div></div></div>');
     }
     parts.push('</div>');
   } else {
@@ -9686,14 +9760,14 @@ async function renderTrends(p) {
   }
 
   [['chartWt','BODY WEIGHT (lb)'],['chartWaist','WAIST (in)'],['chartBP','BLOOD PRESSURE (mmHg)'],['chartGluc','FASTING GLUCOSE (mg/dL)']].forEach(([id,label]) => {
-    parts.push('<div class="card mb8"><div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:6px">'+label+'</div><div class="chart-wrap"><canvas id="'+id+'"></canvas></div></div>');
+    parts.push('<div class="card mb8"><div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);margin-bottom:6px">'+label+'</div><div class="chart-wrap"><canvas id="'+id+'"></canvas></div></div>');
   });
 
   // Oura Ring trend charts
   if (ST.ouraConnected) {
     parts.push('<div id="ouraTrendsSection"><div class="section-label">OURA RING TRENDS</div>');
     [['chartOuraReadiness','READINESS SCORE (0-100)',null],['chartOuraSleep','SLEEP SCORE + HRV BALANCE (0-100)','hrv']].forEach(([id,label,infoKey]) => {
-      parts.push('<div class="card mb8"><div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:6px">'+label+(infoKey?' <span class="info-i" onclick="showBioInfo(\''+infoKey+'\')">i</span>':'')+'</div><div class="chart-wrap"><canvas id="'+id+'"></canvas></div></div>');
+      parts.push('<div class="card mb8"><div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);margin-bottom:6px">'+label+(infoKey?' <span class="info-i" onclick="showBioInfo(\''+infoKey+'\')">i</span>':'')+'</div><div class="chart-wrap"><canvas id="'+id+'"></canvas></div></div>');
     });
     parts.push('</div>');
   }
@@ -10013,9 +10087,9 @@ function renderWisdom(p) {
   const parts = [];
   parts.push('<div class="section-label">FLIGHT DECK WISDOM'+(isAutoRotated?' · TODAY\'S BRIEFING':'')+'</div>');
   parts.push('<div class="wisdom-card"><div>');
-  parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--gold);letter-spacing:0.1em;margin-bottom:12px">BRIEFING '+num+' / '+WISDOM.length+'</div>');
-  parts.push('<div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:14px">'+card.title+'</div>');
-  parts.push('<div style="font-size:13px;line-height:1.8;color:#94a3b8">'+card.text+'</div>');
+  parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--gold);letter-spacing:0.1em;margin-bottom:12px">BRIEFING '+num+' / '+WISDOM.length+'</div>');
+  parts.push('<div style="font-size:1.125rem;font-weight:700;color:var(--text);margin-bottom:14px">'+card.title+'</div>');
+  parts.push('<div style="font-size:0.8125rem;line-height:1.8;color:#94a3b8">'+card.text+'</div>');
   parts.push('</div><div><a class="modal-link" href="'+card.link+'" '+externalLinkAttrs()+'>📖 Read more →</a></div></div>');
   parts.push('<div class="wisdom-counter">'+(activeIdx+1)+' of '+WISDOM.length+(isAutoRotated?' · rotates daily':'')+'</div>');
   parts.push('<div class="wisdom-nav"><button class="btn btn-outline" onclick="prevWisdom()">← PREV</button><button class="btn btn-outline" onclick="nextWisdom()">NEXT →</button></div>');
@@ -10024,7 +10098,7 @@ function renderWisdom(p) {
   }
   parts.push('<div style="margin-top:16px"><div class="section-label">JUMP TO TOPIC</div><div class="mg-wrap">');
   WISDOM.forEach((w,i) => {
-    parts.push('<div class="'+(i===activeIdx?'mg-pill sel':'mg-pill')+'" onclick="jumpWisdom('+i+')" style="font-size:11px">'+w.title+'</div>');
+    parts.push('<div class="'+(i===activeIdx?'mg-pill sel':'mg-pill')+'" onclick="jumpWisdom('+i+')" style="font-size:0.6875rem">'+w.title+'</div>');
   });
   parts.push('</div></div>');
   p.innerHTML = parts.join('');
@@ -10057,9 +10131,9 @@ function renderDebrief(p) {
   const parts = [];
   parts.push('<div class="section-label">POST-FLIGHT DEBRIEF</div>');
   parts.push('<div class="card card-dark mb12" style="text-align:center;padding:24px 16px">');
-  parts.push('<div style="font-size:36px;margin-bottom:8px">'+(s.completionPct===100?'🎯':'✈️')+'</div>');
-  parts.push('<div style="font-family:var(--mono);font-size:18px;color:var(--gold);letter-spacing:0.04em">'+session.muscle_group.toUpperCase()+' COMPLETE</div>');
-  parts.push('<div style="font-size:11px;color:var(--muted);margin-top:4px">'+new Date(session.date).toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+'</div>');
+  parts.push('<div style="font-size:2.25rem;margin-bottom:8px">'+(s.completionPct===100?'🎯':'✈️')+'</div>');
+  parts.push('<div style="font-family:var(--mono);font-size:1.125rem;color:var(--gold);letter-spacing:0.04em">'+session.muscle_group.toUpperCase()+' COMPLETE</div>');
+  parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:4px">'+new Date(session.date).toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+'</div>');
   parts.push('</div>');
 
   parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">');
@@ -11109,9 +11183,9 @@ function buildPhotoTimelineHTML() {
   parts.push('<button class="btn btn-outline" style="flex:1;min-width:100px" onclick="loadPhotoTimeline()">↻ Refresh</button>');
   parts.push('</div>');
   if (!ST.user) {
-    parts.push('<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px">Sign in to save and view progress photos.</div>');
+    parts.push('<div style="font-size:0.75rem;color:var(--muted);text-align:center;padding:16px">Sign in to save and view progress photos.</div>');
   } else if (!photos.length) {
-    parts.push('<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px">No photos yet. Tap Camera or Library to add your first progress photo.</div>');
+    parts.push('<div style="font-size:0.75rem;color:var(--muted);text-align:center;padding:16px">No photos yet. Tap Camera or Library to add your first progress photo.</div>');
   } else {
     parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
     photos.forEach((p, i) => {
@@ -11119,8 +11193,8 @@ function buildPhotoTimelineHTML() {
       parts.push('<div style="border-radius:8px;overflow:hidden;position:relative;background:var(--bg3)">');
       parts.push('<img src="'+p.url+'" style="width:100%;aspect-ratio:3/4;object-fit:cover;display:block">');
       parts.push('<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.65);display:flex;justify-content:space-between;align-items:center;padding:4px 6px">');
-      parts.push('<span style="font-family:var(--mono);font-size:9px;color:#fff">'+p.date+'</span>');
-      parts.push('<button onclick="deleteProgressPhoto('+photoIdx+')" aria-label="Delete photo from '+p.date+'" style="background:rgba(239,68,68,0.8);border:none;color:white;font-size:14px;min-width:36px;min-height:36px;margin:-4px -2px;border-radius:6px;cursor:pointer">✕</button>');
+      parts.push('<span style="font-family:var(--mono);font-size:0.5625rem;color:#fff">'+p.date+'</span>');
+      parts.push('<button onclick="deleteProgressPhoto('+photoIdx+')" aria-label="Delete photo from '+p.date+'" style="background:rgba(239,68,68,0.8);border:none;color:white;font-size:0.875rem;min-width:36px;min-height:36px;margin:-4px -2px;border-radius:6px;cursor:pointer">✕</button>');
       parts.push('</div>');
       parts.push('</div>');
     });
@@ -11140,8 +11214,8 @@ function renderProfile(p) {
 
   // Account card
   parts.push('<div class="card mb12">');
-  parts.push('<div class="fb"><div style="font-size:14px;font-weight:600">'+(ST.user?.email||'Local user')+'</div><div class="status-dot ok"></div></div>');
-  parts.push('<div style="font-size:11px;color:var(--muted);margin-top:4px">'+FCF_VERSION+' · Build '+FCF_BUILD+'</div>');
+  parts.push('<div class="fb"><div style="font-size:0.875rem;font-weight:600">'+(ST.user?.email||'Local user')+'</div><div class="status-dot ok"></div></div>');
+  parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:4px">'+FCF_VERSION+' · Build '+FCF_BUILD+'</div>');
   parts.push('</div>');
 
   // Body metrics (sex, height, BMI)
@@ -11172,14 +11246,14 @@ function renderProfile(p) {
   parts.push('<input id="bmAge" type="text" inputmode="numeric" placeholder="e.g. 42" value="'+(ST.age||'')+'"></div>');
   parts.push('<div class="field"><label>Call Sign (Leaderboard Name)</label>');
   parts.push('<input id="bmUsername" type="text" maxlength="20" placeholder="e.g. MaverickPHX" value="'+(ST.username||'')+'">');
-  parts.push('<div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.5">Shown publicly on the leaderboards. Leave blank to stay off the boards. Your lifts stay private either way until you set one.</div></div>');
+  parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-top:4px;line-height:1.5">Shown publicly on the leaderboards. Leave blank to stay off the boards. Your lifts stay private either way until you set one.</div></div>');
   parts.push('<button class="btn btn-outline" onclick="saveBodyMetrics()">💾 Save Body Metrics</button>');
   parts.push('</div>');
 
   // Mission objective (goal)
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">MISSION OBJECTIVE</div>');
-  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Your overall training goal. This determines which mission profile gets recommended next.</div>');
+  parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px">Your overall training goal. This determines which mission profile gets recommended next.</div>');
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
   Object.keys(GOALS).forEach(gid => {
     const g = GOALS[gid];
@@ -11187,9 +11261,9 @@ function renderProfile(p) {
     if (g.suggestFor && g.suggestFor !== ST.sex && ST.goal !== gid) return;
     const suggested = g.suggestFor && g.suggestFor === ST.sex;
     parts.push('<div class="env-btn '+(ST.goal===gid?'sel':'')+'" style="position:relative" onclick="syncBodyMetricsFieldsToState();ST.goal=\''+gid+'\';ST.muscleGroup=getRecommendedNext();saveGoalLevel();renderPage()">');
-    if (suggested) parts.push('<div style="position:absolute;top:4px;right:4px;font-family:var(--mono);font-size:7px;letter-spacing:0.06em;color:var(--gold);border:1px solid var(--gold);border-radius:4px;padding:1px 4px">SUGGESTED</div>');
+    if (suggested) parts.push('<div style="position:absolute;top:4px;right:4px;font-family:var(--mono);font-size:0.4375rem;letter-spacing:0.06em;color:var(--gold);border:1px solid var(--gold);border-radius:4px;padding:1px 4px">SUGGESTED</div>');
     parts.push('<div class="ei">'+g.icon+'</div><div class="el">'+g.label+'</div>');
-    parts.push('<div style="font-size:9px;color:var(--muted);margin-top:3px;line-height:1.3">'+g.desc+'</div>');
+    parts.push('<div style="font-size:0.5625rem;color:var(--muted);margin-top:3px;line-height:1.3">'+g.desc+'</div>');
     parts.push('</div>');
   });
   parts.push('</div>');
@@ -11205,7 +11279,7 @@ function renderProfile(p) {
   parts.push('</div>');
   const freq = FREQUENCY_GUIDE[ST.level];
   parts.push('<div class="divider"></div>');
-  parts.push('<div style="font-size:11px;color:var(--muted);line-height:1.6"><strong style="color:var(--text)">'+freq.days+' days/week</strong> recommended: '+freq.split+'. '+freq.note+'</div>');
+  parts.push('<div style="font-size:0.6875rem;color:var(--muted);line-height:1.6"><strong style="color:var(--text)">'+freq.days+' days/week</strong> recommended: '+freq.split+'. '+freq.note+'</div>');
   parts.push('</div>');
 
   // ── Fuel plan ────────────────────────────────────────────────────────────
@@ -11217,7 +11291,7 @@ function renderProfile(p) {
   parts.push('<div class="section-label" style="margin-top:0">FUEL PLAN</div>');
   const g = ST.nutritionGoals;
   if (!g || g.mode === 'none') {
-    parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px">' +
+    parts.push('<div style="font-size:0.75rem;color:var(--muted);line-height:1.6;margin-bottom:12px">' +
       (g && g.mode === 'none'
         ? 'Tracking without calorie or macro targets.'
         : 'No fuel plan set yet. Targets are built from your body metrics so the numbers actually mean something.') +
@@ -11227,13 +11301,13 @@ function renderProfile(p) {
       '</button>');
   } else {
     const modeLabel = { maintain: 'Maintain & fuel training', muscle: 'Build muscle', fatloss: 'Lose fat gradually' }[g.mode] || g.mode;
-    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px">'+modeLabel+(g.trainingDays ? ' · '+g.trainingDays+' training days/week' : '')+'</div>');
+    parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px">'+modeLabel+(g.trainingDays ? ' · '+g.trainingDays+' training days/week' : '')+'</div>');
     parts.push('<div class="fb" style="align-items:baseline;margin-bottom:8px">');
-    parts.push('<span style="font-family:var(--mono);font-size:28px;color:var(--gold)">'+(g.calories||0).toLocaleString()+'</span>');
-    parts.push('<span style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.12em">CAL / DAY</span>');
+    parts.push('<span style="font-family:var(--mono);font-size:1.75rem;color:var(--gold)">'+(g.calories||0).toLocaleString()+'</span>');
+    parts.push('<span style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);letter-spacing:.12em">CAL / DAY</span>');
     parts.push('</div>');
     [['P', g.protein, 'var(--gold)'], ['C', g.carbs, 'var(--blue)'], ['F', g.fat, 'var(--teal)']].forEach(([l,v,c]) => {
-      parts.push('<div class="fb" style="margin-bottom:4px"><span style="font-family:var(--mono);font-size:10px;color:var(--muted)">'+l+'</span><span style="font-family:var(--mono);font-size:12px;color:'+c+'">'+(v||0)+'g</span></div>');
+      parts.push('<div class="fb" style="margin-bottom:4px"><span style="font-family:var(--mono);font-size:0.625rem;color:var(--muted)">'+l+'</span><span style="font-family:var(--mono);font-size:0.75rem;color:'+c+'">'+(v||0)+'g</span></div>');
     });
     parts.push('<button class="btn-ghost" style="margin-top:8px" onclick="switchTab(\'fuelplan\')">Adjust Fuel Plan →</button>');
   }
@@ -11251,7 +11325,7 @@ function renderProfile(p) {
 
 // ─── MORE MENU + SUB-VIEWS ───────────────────────────────────────────────────
 function moreBackLink() {
-  return '<button class="btn-ghost" style="font-size:12px;padding:6px 0;margin-bottom:8px" onclick="switchTab(\'more\')">← Menu</button>';
+  return '<button class="btn-ghost" style="font-size:0.75rem;padding:6px 0;margin-bottom:8px" onclick="switchTab(\'more\')">← Menu</button>';
 }
 
 function renderMore(p) {
@@ -11259,9 +11333,9 @@ function renderMore(p) {
   parts.push('<div class="section-label">MISSION SYSTEMS</div>');
   const item = (icon, title, sub, onclick) =>
     '<div class="card mb12" style="cursor:pointer" onclick="'+onclick+'"><div class="fb">' +
-    '<div style="display:flex;align-items:center;gap:12px"><div style="font-size:22px">'+icon+'</div>' +
-    '<div><div style="font-size:14px;font-weight:600">'+title+'</div>' +
-    '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+sub+'</div></div></div>' +
+    '<div style="display:flex;align-items:center;gap:12px"><div style="font-size:1.375rem">'+icon+'</div>' +
+    '<div><div style="font-size:0.875rem;font-weight:600">'+title+'</div>' +
+    '<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">'+sub+'</div></div></div>' +
     '<div style="color:var(--muted)">→</div></div></div>';
   const earnedCount = BADGES.filter(b => ST.badges[b.id]).length;
   parts.push(item('👤','Pilot Profile','Identity, metrics &amp; mission objectives',"switchTab('profile')"));
@@ -11282,6 +11356,7 @@ function renderMore(p) {
   parts.push('<div class="card mb12"><div class="disclaimer-banner">Flight Crew Fitness is a training tool, not medical advice. Consult a physician before beginning any new exercise program. Exercise at your own risk and within your own physical limits.</div></div>');
   parts.push('<button class="btn btn-red-outline" onclick="doSignOut()">Sign Out</button>');
 
+  parts.push(renderTextSizeControl());
   // Subscription status, and the legal links Apple requires to be reachable
   // from inside the app rather than only on the store listing.
   parts.push(renderTrackingToggles());
@@ -11291,14 +11366,14 @@ function renderMore(p) {
   if (isPro()) {
     const until = ST.subscription?.current_period_end
       ? new Date(ST.subscription.current_period_end).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : null;
-    parts.push('<div class="fb"><span style="font-size:13px;font-weight:600;color:var(--gold)">❖ Pro: all features unlocked</span></div>');
+    parts.push('<div class="fb"><span style="font-size:0.8125rem;font-weight:600;color:var(--gold)">❖ Pro: all features unlocked</span></div>');
     if (until) {
       // "Renews" implies auto-billing, which a promo grant doesn't have —
       // it just runs out. Saying "Renews" for a comped account would be
       // actively misleading about what happens when the date arrives.
       const isPromo = ST.subscription?.platform === 'promo';
       const label = isPromo ? 'Pro (promo): expires ' : (ST.subscription?.status==='grace'?'Renewal pending: ':'Renews ');
-      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:4px">'+label+until+'</div>');
+      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:4px">'+label+until+'</div>');
     }
     // BUG FIX (reported: a web/Stripe subscriber saw "Manage or cancel in
     // your Apple ID subscription settings" — wrong instructions for a
@@ -11314,7 +11389,7 @@ function renderMore(p) {
     const manageCopy = ST.subscription?.platform === 'promo' ? 'Comp/promo access: no billing, nothing to manage.'
       : ST.subscription?.platform === 'web' ? 'Manage or cancel by contacting support.'
       : 'Manage or cancel in your Apple ID subscription settings.';
-    parts.push('<div style="font-size:11px;color:var(--muted);margin-top:8px">'+manageCopy+'</div>');
+    parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:8px">'+manageCopy+'</div>');
   } else {
     const rows = [
       ['Workout logging',             '✓',       '✓'],
@@ -11335,24 +11410,24 @@ function renderMore(p) {
     ];
     parts.push('<div style="display:grid;grid-template-columns:1fr auto auto;gap:0;margin-bottom:14px;position:relative">');
     parts.push('<div style="position:absolute;top:0;bottom:0;right:0;width:33%;background:linear-gradient(180deg,rgba(201,168,76,0.08),rgba(201,168,76,0.03));border-radius:8px;pointer-events:none"></div>');
-    parts.push('<div style="font-size:10px;color:var(--muted);letter-spacing:.06em;padding:0 0 6px 0;position:relative">');
+    parts.push('<div style="font-size:0.625rem;color:var(--muted);letter-spacing:.06em;padding:0 0 6px 0;position:relative">');
     parts.push('</div>');
-    parts.push('<div style="font-size:10px;color:var(--muted);letter-spacing:.06em;padding:0 10px 6px;text-align:center;position:relative">FREE</div>');
-    parts.push('<div style="font-size:10px;color:var(--gold);letter-spacing:.06em;padding:0 0 6px 8px;text-align:center;font-weight:700;position:relative">PRO</div>');
+    parts.push('<div style="font-size:0.625rem;color:var(--muted);letter-spacing:.06em;padding:0 10px 6px;text-align:center;position:relative">FREE</div>');
+    parts.push('<div style="font-size:0.625rem;color:var(--gold);letter-spacing:.06em;padding:0 0 6px 8px;text-align:center;font-weight:700;position:relative">PRO</div>');
     rows.forEach(([label, free, pro], i) => {
       const border = i < rows.length - 1 ? 'border-bottom:1px solid var(--border)' : '';
       const proColor = pro === '–' ? 'var(--muted)' : pro === '✓' ? 'var(--green)' : 'var(--gold)';
       const freeColor = free === '–' ? 'var(--muted)' : free === '✓' ? 'var(--green)' : 'var(--muted)';
-      parts.push('<div style="font-size:12px;padding:8px 0;'+border+';position:relative">'+label+'</div>');
-      parts.push('<div style="font-size:11px;color:'+freeColor+';padding:8px 10px;'+border+';text-align:center;position:relative">'+free+'</div>');
-      parts.push('<div style="font-size:11px;color:'+proColor+';padding:8px 0 8px 8px;'+border+';text-align:center;font-weight:'+(pro!=='–'?'600':'400')+';position:relative">'+pro+'</div>');
+      parts.push('<div style="font-size:0.75rem;padding:8px 0;'+border+';position:relative">'+label+'</div>');
+      parts.push('<div style="font-size:0.6875rem;color:'+freeColor+';padding:8px 10px;'+border+';text-align:center;position:relative">'+free+'</div>');
+      parts.push('<div style="font-size:0.6875rem;color:'+proColor+';padding:8px 0 8px 8px;'+border+';text-align:center;font-weight:'+(pro!=='–'?'600':'400')+';position:relative">'+pro+'</div>');
     });
     parts.push('</div>');
     parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px">');
-    parts.push('<button class="btn btn-gold" onclick="haptic(\'medium\');startProPurchase(\''+PRO_PRODUCT_ANNUAL+'\')"><div style="font-size:13px;font-weight:700">❖ '+proPrice(PRO_PRODUCT_ANNUAL, PRO_ANNUAL_PRICE)+'</div><div style="font-size:10px;opacity:0.8;margin-top:2px">per year</div></button>');
-    parts.push('<button class="btn btn-outline" onclick="haptic(\'medium\');startProPurchase(\''+PRO_PRODUCT_MONTHLY+'\')"><div style="font-size:13px;font-weight:700">'+proPrice(PRO_PRODUCT_MONTHLY, PRO_MONTHLY_PRICE)+'</div><div style="font-size:10px;opacity:0.8;margin-top:2px">per month</div></button>');
+    parts.push('<button class="btn btn-gold" onclick="haptic(\'medium\');startProPurchase(\''+PRO_PRODUCT_ANNUAL+'\')"><div style="font-size:0.8125rem;font-weight:700">❖ '+proPrice(PRO_PRODUCT_ANNUAL, PRO_ANNUAL_PRICE)+'</div><div style="font-size:0.625rem;opacity:0.8;margin-top:2px">per year</div></button>');
+    parts.push('<button class="btn btn-outline" onclick="haptic(\'medium\');startProPurchase(\''+PRO_PRODUCT_MONTHLY+'\')"><div style="font-size:0.8125rem;font-weight:700">'+proPrice(PRO_PRODUCT_MONTHLY, PRO_MONTHLY_PRICE)+'</div><div style="font-size:0.625rem;opacity:0.8;margin-top:2px">per month</div></button>');
     parts.push('</div>');
-    parts.push('<div style="font-size:10px;color:var(--muted);text-align:center;margin-bottom:8px">Annual saves ~37%</div>');
+    parts.push('<div style="font-size:0.625rem;color:var(--muted);text-align:center;margin-bottom:8px">Annual saves ~37%</div>');
     parts.push(proDisclosureHTML());
     parts.push('<button class="btn-ghost" style="display:block;width:100%;text-align:center" onclick="restoreProPurchases()">Restore purchases</button>');
   }
@@ -11361,12 +11436,12 @@ function renderMore(p) {
   // Promo/comp code redemption — separate small card, visible regardless
   // of current tier (a Pro user can still redeem to extend further).
   parts.push('<div class="card mb12">');
-  parts.push('<div style="font-size:12px;font-weight:600;margin-bottom:8px">Have a promo code?</div>');
+  parts.push('<div style="font-size:0.75rem;font-weight:600;margin-bottom:8px">Have a promo code?</div>');
   parts.push('<div style="display:flex;gap:8px">');
-  parts.push('<input id="promoCodeInput" type="text" placeholder="ENTER CODE" autocapitalize="characters" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:var(--mono);font-size:13px;letter-spacing:0.05em" onkeydown="if(event.key===\'Enter\')redeemPromoCode()">');
+  parts.push('<input id="promoCodeInput" type="text" placeholder="ENTER CODE" autocapitalize="characters" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:var(--mono);font-size:0.8125rem;letter-spacing:0.05em" onkeydown="if(event.key===\'Enter\')redeemPromoCode()">');
   parts.push('<button class="btn btn-outline" style="width:auto;padding:0 18px" onclick="redeemPromoCode()">Redeem</button>');
   parts.push('</div>');
-  parts.push('<div id="promoCodeResult" style="font-size:11px;margin-top:8px"></div>');
+  parts.push('<div id="promoCodeResult" style="font-size:0.6875rem;margin-top:8px"></div>');
   parts.push('</div>');
 
   parts.push('<div class="card mb12" style="padding:0">');
@@ -11378,7 +11453,7 @@ function renderMore(p) {
   // supports account creation — its absence is an automatic rejection.
   parts.push('<div class="section-label" style="margin-top:20px;color:var(--red)">DANGER ZONE</div>');
   parts.push('<div class="card mb12">');
-  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Permanently deletes your account and every workout, meal, biometric and schedule stored with it. This cannot be undone.</div>');
+  parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px">Permanently deletes your account and every workout, meal, biometric and schedule stored with it. This cannot be undone.</div>');
   parts.push('<button class="btn btn-outline" style="color:var(--red);border-color:var(--red)" onclick="confirmDeleteAccount()">Delete Account</button>');
   parts.push('</div>');
 
@@ -11394,11 +11469,11 @@ function renderDevices(p) {
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">APPLE HEALTH</div>');
   if (!isNative) {
-    parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.65">Apple Health syncs automatically when you use the Flight Crew Fitness iOS app. Download it from the App Store and health data will appear here after your first login.</div>');
+    parts.push('<div style="font-size:0.75rem;color:var(--muted);line-height:1.65">Apple Health syncs automatically when you use the Flight Crew Fitness iOS app. Download it from the App Store and health data will appear here after your first login.</div>');
   } else if (!hk) {
-    parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.65;margin-bottom:12px">Requesting access to Apple Health…</div>');
+    parts.push('<div style="font-size:0.75rem;color:var(--muted);line-height:1.65;margin-bottom:12px">Requesting access to Apple Health…</div>');
   } else if (!hk.granted) {
-    parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.65;margin-bottom:12px">Health access was not granted. You can change this in Settings → Privacy & Security → Health → Flight Crew Fitness.</div>');
+    parts.push('<div style="font-size:0.75rem;color:var(--muted);line-height:1.65;margin-bottom:12px">Health access was not granted. You can change this in Settings → Privacy & Security → Health → Flight Crew Fitness.</div>');
   } else {
     // Connected — show detected devices
     const devices = hk.detectedDevices || [];
@@ -11406,13 +11481,13 @@ function renderDevices(p) {
     const appleWatch = devices.find(d => d.kind === 'appleWatch');
     const ouraHK = devices.find(d => d.kind === 'oura');
 
-    parts.push('<div style="font-size:11px;color:var(--green);margin-bottom:10px">✓ Connected via HealthKit</div>');
+    parts.push('<div style="font-size:0.6875rem;color:var(--green);margin-bottom:10px">✓ Connected via HealthKit</div>');
 
     if (devices.length > 0) {
-      parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:6px;letter-spacing:.05em">DETECTED SOURCES</div>');
+      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:6px;letter-spacing:.05em">DETECTED SOURCES</div>');
       devices.forEach(d => {
         const icon = deviceIcons[d.kind] || '📡';
-        parts.push('<div style="font-size:13px;padding:6px 0;border-bottom:1px solid var(--border)">'+icon+' '+d.name+'</div>');
+        parts.push('<div style="font-size:0.8125rem;padding:6px 0;border-bottom:1px solid var(--border)">'+icon+' '+d.name+'</div>');
       });
       parts.push('<div style="margin-top:8px"></div>');
     }
@@ -11439,10 +11514,10 @@ function renderDevices(p) {
 
     // If Oura is detected via HealthKit, note that direct Oura OAuth gives richer data
     if (ouraHK) {
-      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5">Oura data detected via Apple Health. Connect directly below for full readiness scores.</div>');
+      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:10px;line-height:1.5">Oura data detected via Apple Health. Connect directly below for full readiness scores.</div>');
     }
     if (appleWatch) {
-      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5">Apple Watch detected: workouts, HR, and HRV sync automatically.</div>');
+      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px;line-height:1.5">Apple Watch detected: workouts, HR, and HRV sync automatically.</div>');
     }
   }
   parts.push('</div>');
@@ -11455,9 +11530,9 @@ function renderDevices(p) {
     const scoreCondition = ST.ouraScore >= 70 ? 'go' : ST.ouraScore >= 60 ? 'marginal' : 'nogo';
     const scoreLabel = statusDot(scoreCondition)+' '+(scoreCondition==='go'?'GO':scoreCondition==='marginal'?'MARGINAL':'NO-GO');
     parts.push('<div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:8px;padding:12px;margin-bottom:12px">');
-    parts.push('<div class="fb"><span style="font-size:12px;color:var(--muted)">Connected ✓</span><button class="btn-ghost" style="font-size:11px;padding:4px 8px" onclick="disconnectOura()">Disconnect</button></div>');
-    parts.push('<div class="fb mt8"><span style="font-size:13px">Today\'s Readiness</span><span style="font-family:var(--mono);font-size:18px;font-weight:700;color:'+scoreColor+'">'+ST.ouraScore+'</span></div>');
-    parts.push('<div style="font-size:12px;color:'+scoreColor+';font-weight:600;margin-top:2px">Pilot Condition → '+scoreLabel+'</div>');
+    parts.push('<div class="fb"><span style="font-size:0.75rem;color:var(--muted)">Connected ✓</span><button class="btn-ghost" style="font-size:0.6875rem;padding:4px 8px" onclick="disconnectOura()">Disconnect</button></div>');
+    parts.push('<div class="fb mt8"><span style="font-size:0.8125rem">Today\'s Readiness</span><span style="font-family:var(--mono);font-size:1.125rem;font-weight:700;color:'+scoreColor+'">'+ST.ouraScore+'</span></div>');
+    parts.push('<div style="font-size:0.75rem;color:'+scoreColor+';font-weight:600;margin-top:2px">Pilot Condition → '+scoreLabel+'</div>');
     if (ST.ouraData) {
       const hrv = ST.ouraData.hrv_balance || '–';
       parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px">');
@@ -11470,7 +11545,7 @@ function renderDevices(p) {
     parts.push('<button class="btn btn-outline" onclick="syncOuraData(true)">↻ Sync Now</button>');
     parts.push('<button class="btn btn-outline mt8" onclick="importHistoricalOura(180)">📥 Import Last 6 Months</button>');
   } else {
-    parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.65">Optional: connect directly to Oura for full readiness scores used to auto-set your Pilot Condition. Readiness 70+ = GO, 60–69 = MARGINAL, below 60 = NO-GO.</div>');
+    parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:14px;line-height:1.65">Optional: connect directly to Oura for full readiness scores used to auto-set your Pilot Condition. Readiness 70+ = GO, 60–69 = MARGINAL, below 60 = NO-GO.</div>');
     parts.push('<button class="btn btn-outline" onclick="connectOura()">Connect Oura Directly →</button>');
   }
   parts.push('</div>');
@@ -11506,7 +11581,7 @@ async function loadSuperUserStats() {
       '</div>';
   } catch(e) {
     const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
-    el.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px">'+(offline
+    el.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:0.75rem">'+(offline
       ? '📡 Needs a connection to load.'
       : 'Couldn\'t load. The admin read policy on workout_sessions may not be set up yet.')+'</div>';
   }
@@ -11517,14 +11592,14 @@ function renderSuperUser(p) {
   const parts = [moreBackLink()];
   parts.push('<div class="section-label" style="margin-top:0">SUPER USER · ACTIVITY REPORT</div>');
   parts.push('<div class="card mb12">');
-  parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">"Active" means a real logged workout, not just an account existing (a truer signal than raw signups, which aren\'t readable from the app at all).</div>');
-  parts.push('<div id="suStats" style="text-align:center;color:var(--muted);font-size:12px">Loading…</div>');
+  parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:10px;line-height:1.5">"Active" means a real logged workout, not just an account existing (a truer signal than raw signups, which aren\'t readable from the app at all).</div>');
+  parts.push('<div id="suStats" style="text-align:center;color:var(--muted);font-size:0.75rem">Loading…</div>');
   parts.push('</div>');
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">TEMP: RAW OURA WORKOUT DUMP</div>');
-  parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">One-time diagnostic: an auto-detected treadmill run imported with no duration. Dumps the raw Oura workout data for the last 3 days to see exactly what fields an auto-detected session actually has, compared to a manually-confirmed one.</div>');
+  parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:10px;line-height:1.5">One-time diagnostic: an auto-detected treadmill run imported with no duration. Dumps the raw Oura workout data for the last 3 days to see exactly what fields an auto-detected session actually has, compared to a manually-confirmed one.</div>');
   parts.push('<button class="btn btn-outline" onclick="dumpRawOuraWorkouts()">🔬 Dump Raw Workout Data</button>');
-  parts.push('<div id="ouraDumpResults" style="margin-top:10px;font-family:var(--mono);font-size:9px;color:var(--muted);word-break:break-all;white-space:pre-wrap"></div>');
+  parts.push('<div id="ouraDumpResults" style="margin-top:10px;font-family:var(--mono);font-size:0.5625rem;color:var(--muted);word-break:break-all;white-space:pre-wrap"></div>');
   parts.push('</div>');
   p.innerHTML = parts.join('');
   loadSuperUserStats();
@@ -11704,7 +11779,7 @@ const FOOD_EMOJI_PATTERNS = [
 function loadingCardHTML(label) {
   return '<div class="card mt8" style="border-color:var(--gold);text-align:center;padding:20px 16px">' +
     '<span class="fcf-spinner"></span>' +
-    '<span style="font-size:14px;font-weight:600">' + sanitizeUserText(label) + '</span>' +
+    '<span style="font-size:0.875rem;font-weight:600">' + sanitizeUserText(label) + '</span>' +
     '</div>';
 }
 
@@ -12677,8 +12752,8 @@ function buildOuraTopSectionHTML(ctx) {
   const parts = [];
 
   parts.push('<div class="fb" style="align-items:baseline;margin-bottom:14px">');
-  parts.push('<span style="font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--muted)">'+ctx.now.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'}).toUpperCase()+'</span>');
-  if (ctx.oura.steps !== null) parts.push('<span style="font-family:var(--mono);font-size:12px;color:var(--text)">'+ctx.oura.steps.toLocaleString()+' <span style="font-size:9px;color:var(--muted);letter-spacing:.1em">STEPS</span></span>');
+  parts.push('<span style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.14em;color:var(--muted)">'+ctx.now.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'}).toUpperCase()+'</span>');
+  if (ctx.oura.steps !== null) parts.push('<span style="font-family:var(--mono);font-size:0.75rem;color:var(--text)">'+ctx.oura.steps.toLocaleString()+' <span style="font-size:0.5625rem;color:var(--muted);letter-spacing:.1em">STEPS</span></span>');
   parts.push('</div>');
 
   if (ST.ouraConnected && ctx.oura.readiness !== null) {
@@ -12691,8 +12766,8 @@ function buildOuraTopSectionHTML(ctx) {
   }
 
   parts.push('<div class="card mb12" style="border-left:3px solid '+toneColor+'">');
-  parts.push('<div style="font-size:17px;font-weight:600;letter-spacing:-.01em;margin-bottom:7px">'+brief.headline+'</div>');
-  parts.push('<div style="font-size:13px;color:var(--muted);line-height:1.65">'+brief.body+'</div>');
+  parts.push('<div style="font-size:1.0625rem;font-weight:600;letter-spacing:-.01em;margin-bottom:7px">'+brief.headline+'</div>');
+  parts.push('<div style="font-size:0.8125rem;color:var(--muted);line-height:1.65">'+brief.body+'</div>');
   if (brief.action) parts.push('<button class="btn btn-gold" style="margin-top:14px" onclick="'+brief.action.fn+'">'+brief.action.label+'</button>');
   parts.push('</div>');
 
@@ -12883,11 +12958,11 @@ function buildBodyClockHTML() {
   return '<div class="card mb12">' +
     '<div class="section-label" style="margin-top:0">🕐 BODY CLOCK</div>' +
     (bc.returnsHomeSoon
-      ? '<div style="font-size:15px;font-weight:700;margin-bottom:2px">Holding ' + homeCity + ' time: ' + bodyNow + ' there</div>' +
-        '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">' + hrs + ' hr' + (hrs === 1 ? '' : 's') + ' ' + (behind ? 'behind' : 'ahead of') + ' local. Home within 3 days, so no need to adapt.</div>'
-      : '<div style="font-size:15px;font-weight:700;margin-bottom:2px">Your body thinks it\'s ' + bodyNow + '</div>' +
-        '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">About ' + hrs + ' hr' + (hrs === 1 ? '' : 's') + ' ' + (behind ? 'behind' : 'ahead of') + ' local time (estimate from your schedule)</div>') +
-    '<div style="font-size:12px;line-height:1.65">' +
+      ? '<div style="font-size:0.9375rem;font-weight:700;margin-bottom:2px">Holding ' + homeCity + ' time: ' + bodyNow + ' there</div>' +
+        '<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:10px">' + hrs + ' hr' + (hrs === 1 ? '' : 's') + ' ' + (behind ? 'behind' : 'ahead of') + ' local. Home within 3 days, so no need to adapt.</div>'
+      : '<div style="font-size:0.9375rem;font-weight:700;margin-bottom:2px">Your body thinks it\'s ' + bodyNow + '</div>' +
+        '<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:10px">About ' + hrs + ' hr' + (hrs === 1 ? '' : 's') + ' ' + (behind ? 'behind' : 'ahead of') + ' local time (estimate from your schedule)</div>') +
+    '<div style="font-size:0.75rem;line-height:1.65">' +
       '💪 Strongest window: <b>' + trainWin + '</b> local<br>' +
       '☕ Last caffeine by <b>' + caffeineCut + '</b> local<br>' +
       '☀️ ' + strategy +
@@ -12952,19 +13027,19 @@ function buildSetupChecklistHTML() {
   const parts = [];
   parts.push('<div class="card mb12">');
   parts.push('<div class="fb" style="align-items:center;margin-bottom:8px"><div class="section-label" style="margin:0">PREFLIGHT CHECKLIST</div>' +
-    '<div style="font-size:11px;color:var(--muted)">'+doneCount+' of '+items.length+'</div></div>');
+    '<div style="font-size:0.6875rem;color:var(--muted)">'+doneCount+' of '+items.length+'</div></div>');
   parts.push('<div style="height:4px;background:var(--border);border-radius:2px;margin-bottom:12px"><div style="height:4px;width:'+Math.round(doneCount/items.length*100)+'%;background:var(--gold);border-radius:2px"></div></div>');
   items.forEach(i => {
     parts.push('<div class="fb" style="align-items:center;padding:8px 0;border-bottom:1px solid var(--border)" ' +
       (i.done ? '' : 'onclick="haptic(\'light\');'+i.go+'"') + '>' +
-      '<div style="width:22px;font-size:14px;text-align:center;color:'+(i.done?'var(--green)':'var(--muted)')+'">'+(i.done?'✓':'○')+'</div>' +
-      '<div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600;'+(i.done?'color:var(--muted);text-decoration:line-through':'')+'">'+i.icon+' '+i.label+'</div>' +
-      (i.done ? '' : '<div style="font-size:11px;color:var(--muted)">'+i.hint+'</div>') + '</div>' +
+      '<div style="width:22px;font-size:0.875rem;text-align:center;color:'+(i.done?'var(--green)':'var(--muted)')+'">'+(i.done?'✓':'○')+'</div>' +
+      '<div style="flex:1;margin-left:8px"><div style="font-size:0.8125rem;font-weight:600;'+(i.done?'color:var(--muted);text-decoration:line-through':'')+'">'+i.icon+' '+i.label+'</div>' +
+      (i.done ? '' : '<div style="font-size:0.6875rem;color:var(--muted)">'+i.hint+'</div>') + '</div>' +
       (i.done ? '' : i.skip
-        ? '<button class="btn-ghost" style="font-size:12px;padding:6px 4px 6px 10px;text-decoration:none;color:var(--muted)" onclick="event.stopPropagation();haptic(\'light\');'+i.skip+'">None</button>'
-        : '<div style="color:var(--muted);font-size:16px">›</div>') + '</div>');
+        ? '<button class="btn-ghost" style="font-size:0.75rem;padding:6px 4px 6px 10px;text-decoration:none;color:var(--muted)" onclick="event.stopPropagation();haptic(\'light\');'+i.skip+'">None</button>'
+        : '<div style="color:var(--muted);font-size:1rem">›</div>') + '</div>');
   });
-  parts.push('<button class="btn-ghost mt8" style="display:block;width:100%;text-align:center;font-size:12px" onclick="haptic(\'light\');localStorage.setItem(SETUP_DISMISS_KEY,\'1\');renderPage()">I\'ll finish this later</button>');
+  parts.push('<button class="btn-ghost mt8" style="display:block;width:100%;text-align:center;font-size:0.75rem" onclick="haptic(\'light\');localStorage.setItem(SETUP_DISMISS_KEY,\'1\');renderPage()">I\'ll finish this later</button>');
   parts.push('</div>');
   return parts.join('');
 }
@@ -13001,9 +13076,9 @@ function renderToday(p) {
   if (!hasAnySchedule) {
     const isNative = typeof FCFBridge !== 'undefined' && FCFBridge.isNative;
     if (isNative && !ST.calendarGranted) {
-      parts.push('<div class="card mb12"><div style="font-size:17px;font-weight:600;letter-spacing:-.01em;margin-bottom:7px">📅 Connect your calendar</div><div style="font-size:13px;color:var(--muted);line-height:1.65;margin-bottom:14px">Grant calendar access and FCF will automatically detect your flights, layovers, and free time. No manual upload needed.</div><button class="btn btn-outline" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.requestCalendar(ST.baseTimezone)">Connect Calendar</button></div>');
+      parts.push('<div class="card mb12"><div style="font-size:1.0625rem;font-weight:600;letter-spacing:-.01em;margin-bottom:7px">📅 Connect your calendar</div><div style="font-size:0.8125rem;color:var(--muted);line-height:1.65;margin-bottom:14px">Grant calendar access and FCF will automatically detect your flights, layovers, and free time. No manual upload needed.</div><button class="btn btn-outline" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.requestCalendar(ST.baseTimezone)">Connect Calendar</button></div>');
     } else {
-      parts.push('<div class="card mb12"><div style="font-size:17px;font-weight:600;letter-spacing:-.01em;margin-bottom:7px">📅 No flight schedule</div><div style="font-size:13px;color:var(--muted);line-height:1.65;margin-bottom:14px">Upload your crew schedule and this briefing gets a lot more specific: layovers, duty-day length, real windows to train.</div><button class="btn btn-outline" onclick="switchTab(\'data\')">Upload Schedule</button></div>');
+      parts.push('<div class="card mb12"><div style="font-size:1.0625rem;font-weight:600;letter-spacing:-.01em;margin-bottom:7px">📅 No flight schedule</div><div style="font-size:0.8125rem;color:var(--muted);line-height:1.65;margin-bottom:14px">Upload your crew schedule and this briefing gets a lot more specific: layovers, duty-day length, real windows to train.</div><button class="btn btn-outline" onclick="switchTab(\'data\')">Upload Schedule</button></div>');
     }
   }
 
@@ -13028,10 +13103,10 @@ function renderToday(p) {
     // body). The action button carries the base `btn` class: `btn-outline`
     // alone is only a border and color, so without `btn` it rendered as a
     // bare browser-default button, which is the mismatch that was reported.
-    parts.push('<div class="card mb12"><div style="font-size:17px;font-weight:600;letter-spacing:-.01em;margin-bottom:7px">'+title+'</div>' +
-      '<div style="font-size:13px;color:var(--muted);line-height:1.65;margin-bottom:14px">'+body+'</div>' +
+    parts.push('<div class="card mb12"><div style="font-size:1.0625rem;font-weight:600;letter-spacing:-.01em;margin-bottom:7px">'+title+'</div>' +
+      '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.65;margin-bottom:14px">'+body+'</div>' +
       '<button class="btn btn-outline" onclick="'+actionOnClick+'">'+actionLabel+'</button>' +
-      '<button class="btn-ghost" style="display:block;width:100%;text-align:center;margin-top:10px;font-size:13px" onclick="haptic(\'light\');dismissTrackingNudge(\''+type+'\')">Not now</button>' +
+      '<button class="btn-ghost" style="display:block;width:100%;text-align:center;margin-top:10px;font-size:0.8125rem" onclick="haptic(\'light\');dismissTrackingNudge(\''+type+'\')">Not now</button>' +
       '</div>');
   });
 
@@ -13077,8 +13152,8 @@ function renderToday(p) {
           en.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
         const label = e.origin && e.destination ? e.origin + ' → ' + e.destination : e.title;
         parts.push('<div class="fb" style="padding:7px 0;border-bottom:1px solid var(--border)">');
-        parts.push('<span style="font-family:var(--mono);font-size:11px;color:var(--muted);min-width:90px">'+timeStr+'</span>');
-        parts.push('<span style="font-size:12px;flex:1;text-align:right">'+icon+' '+label+'</span>');
+        parts.push('<span style="font-family:var(--mono);font-size:0.6875rem;color:var(--muted);min-width:90px">'+timeStr+'</span>');
+        parts.push('<span style="font-size:0.75rem;flex:1;text-align:right">'+icon+' '+label+'</span>');
         parts.push('</div>');
       });
       parts.push('</div>');
@@ -13090,8 +13165,8 @@ function renderToday(p) {
       const s = new Date(e.start), en = new Date(e.end);
       const isNow = ctx.sched.current && e.uids.includes(ctx.sched.current.uid);
       parts.push('<div class="fb" style="padding:7px 0;'+(isNow?'':'opacity:.72')+'">');
-      parts.push('<span style="font-family:var(--mono);font-size:11px;color:'+(isNow?'var(--gold)':'var(--muted)')+'">'+s.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false})+'–'+en.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false})+'</span>');
-      parts.push('<span style="font-size:12px;text-align:right">'+e.summary+'</span>');
+      parts.push('<span style="font-family:var(--mono);font-size:0.6875rem;color:'+(isNow?'var(--gold)':'var(--muted)')+'">'+s.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false})+'–'+en.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false})+'</span>');
+      parts.push('<span style="font-size:0.75rem;text-align:right">'+e.summary+'</span>');
       parts.push('</div>');
     });
     parts.push('</div>');
@@ -13104,10 +13179,10 @@ function renderToday(p) {
     if (ST.trackNutrition) {
     parts.push('<div class="section-label">FUEL</div>');
     parts.push('<div class="card mb12">');
-    parts.push('<div class="fb" style="align-items:baseline;margin-bottom:10px"><span style="font-family:var(--mono);font-size:22px">'+Math.round(n.consumed.calories).toLocaleString()+'</span><span style="font-family:var(--mono);font-size:10px;color:var(--muted)">OF '+n.goals.calories.toLocaleString()+' CAL</span></div>');
+    parts.push('<div class="fb" style="align-items:baseline;margin-bottom:10px"><span style="font-family:var(--mono);font-size:1.375rem">'+Math.round(n.consumed.calories).toLocaleString()+'</span><span style="font-family:var(--mono);font-size:0.625rem;color:var(--muted)">OF '+n.goals.calories.toLocaleString()+' CAL</span></div>');
     [['PROTEIN',n.consumed.protein,n.goals.protein,'var(--gold)'],['CARBS',n.consumed.carbs,n.goals.carbs,'var(--blue)'],['FAT',n.consumed.fat,n.goals.fat,'var(--teal)']].forEach(([lbl,have,goal,col]) => {
       const pct = goal > 0 ? Math.min(100,(have/goal)*100) : 0;
-      parts.push('<div style="margin-bottom:8px"><div class="fb" style="margin-bottom:3px"><span style="font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--muted)">'+lbl+'</span><span style="font-family:var(--mono);font-size:10px">'+Math.round(have)+'<span style="color:var(--muted)">/'+goal+'g</span></span></div>');
+      parts.push('<div style="margin-bottom:8px"><div class="fb" style="margin-bottom:3px"><span style="font-family:var(--mono);font-size:0.5625rem;letter-spacing:.1em;color:var(--muted)">'+lbl+'</span><span style="font-family:var(--mono);font-size:0.625rem">'+Math.round(have)+'<span style="color:var(--muted)">/'+goal+'g</span></span></div>');
       parts.push('<div style="height:3px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+col+';border-radius:2px"></div></div></div>');
     });
 
@@ -13132,7 +13207,7 @@ function renderToday(p) {
     parts.push('<div class="section-label">STILL OPEN</div>');
     parts.push('<div class="card mb12">');
     gaps.forEach(g => {
-      parts.push('<div class="fb" style="padding:9px 0;cursor:pointer" onclick="'+g.fn+'"><span style="font-size:13px">'+g.icon+' '+g.text+'</span><span style="color:var(--muted);font-size:14px">›</span></div>');
+      parts.push('<div class="fb" style="padding:9px 0;cursor:pointer" onclick="'+g.fn+'"><span style="font-size:0.8125rem">'+g.icon+' '+g.text+'</span><span style="color:var(--muted);font-size:0.875rem">›</span></div>');
     });
     parts.push('</div>');
   }
@@ -13200,7 +13275,7 @@ function renderNutritionGoalsSetup(p) {
 
   const bmr = calculateBMR(ST.sex, ST.lastWeight, ST.heightIn, ST.age);
   parts.push('<div class="card mb12">');
-  parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:4px">At rest your body uses about <strong style="color:var(--text)">'+bmr+' calories</strong> a day. Everything below builds from that.</div>');
+  parts.push('<div style="font-size:0.75rem;color:var(--muted);line-height:1.6;margin-bottom:4px">At rest your body uses about <strong style="color:var(--text)">'+bmr+' calories</strong> a day. Everything below builds from that.</div>');
   parts.push('</div>');
 
   parts.push('<div class="section-label">WHAT ARE YOU TRAINING FOR?</div>');
@@ -13214,8 +13289,8 @@ function renderNutritionGoalsSetup(p) {
   goalOpts.forEach(([val,label,desc]) => {
     const on = (ST.goalDraft || 'maintain') === val;
     parts.push('<div onclick="haptic(\'light\');ST.goalDraft=\''+val+'\';renderPage()" style="padding:12px;border:1px solid '+(on?'var(--gold)':'var(--border)')+';border-radius:9px;margin-bottom:8px;cursor:pointer;background:'+(on?'rgba(201,168,76,0.07)':'transparent')+'">');
-    parts.push('<div style="font-size:14px;font-weight:600;color:'+(on?'var(--gold)':'var(--text)')+'">'+label+'</div>');
-    parts.push('<div style="font-size:11px;color:var(--muted);margin-top:3px">'+desc+'</div>');
+    parts.push('<div style="font-size:0.875rem;font-weight:600;color:'+(on?'var(--gold)':'var(--text)')+'">'+label+'</div>');
+    parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:3px">'+desc+'</div>');
     parts.push('</div>');
   });
   parts.push('</div>');
@@ -13233,17 +13308,17 @@ function renderNutritionGoalsSetup(p) {
     if (t) {
       parts.push('<div class="section-label">YOUR STARTING TARGETS</div>');
       parts.push('<div class="card mb12">');
-      parts.push('<div style="text-align:center;padding:6px 0 14px"><div style="font-family:var(--mono);font-size:38px;color:var(--gold);line-height:1">'+t.calories.toLocaleString()+'</div><div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.18em;margin-top:5px">CALORIES / DAY</div></div>');
+      parts.push('<div style="text-align:center;padding:6px 0 14px"><div style="font-family:var(--mono);font-size:2.375rem;color:var(--gold);line-height:1">'+t.calories.toLocaleString()+'</div><div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);letter-spacing:.18em;margin-top:5px">CALORIES / DAY</div></div>');
       [['PROTEIN',t.protein,'var(--gold)'],['CARBS',t.carbs,'var(--blue)'],['FAT',t.fat,'var(--teal)']].forEach(([n,v,c]) => {
-        parts.push('<div class="fb" style="margin-bottom:7px"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--muted)">'+n+'</span><span style="font-family:var(--mono);font-size:13px;color:'+c+'">'+v+'g</span></div>');
+        parts.push('<div class="fb" style="margin-bottom:7px"><span style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.1em;color:var(--muted)">'+n+'</span><span style="font-family:var(--mono);font-size:0.8125rem;color:'+c+'">'+v+'g</span></div>');
       });
-      parts.push('<div style="font-size:11px;color:var(--muted);line-height:1.65;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">');
+      parts.push('<div style="font-size:0.6875rem;color:var(--muted);line-height:1.65;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">');
       if (t.mode === 'fatloss') parts.push('A '+MAX_DAILY_DEFICIT+'-calorie deficit, which is roughly a pound a week. Protein stays high on purpose. That\'s what protects the strength you\'re building while you lose fat.');
       else if (t.mode === 'muscle') parts.push('A '+MAX_DAILY_SURPLUS+'-calorie surplus: enough to build, small enough that most of it isn\'t fat. Protein is set to support recovery between sessions.');
       else parts.push('Matched to what you\'re burning, so you\'re fueling your training rather than running it on empty.');
       parts.push('</div>');
       if (t.flooredAtBMR) {
-        parts.push('<div style="font-size:11px;color:var(--amber);line-height:1.6;margin-top:10px">Held at your resting metabolic rate. The deficit math would have gone lower, but eating below what your body uses at rest isn\'t a faster plan, just a worse one.</div>');
+        parts.push('<div style="font-size:0.6875rem;color:var(--amber);line-height:1.6;margin-top:10px">Held at your resting metabolic rate. The deficit math would have gone lower, but eating below what your body uses at rest isn\'t a faster plan, just a worse one.</div>');
       }
       parts.push('</div>');
 
@@ -13252,14 +13327,14 @@ function renderNutritionGoalsSetup(p) {
       } else {
         parts.push('<div class="card mb12">');
         parts.push('<div class="section-label" style="margin-top:0">CUSTOM TARGETS</div>');
-        parts.push('<div style="font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:12px">Starting from the calculated numbers above, adjust anything you want. The same safety limits still apply: calories can\'t go below what your body burns at rest, and fat can\'t go below '+MIN_DAILY_FAT_G+'g regardless of the goal.</div>');
+        parts.push('<div style="font-size:0.6875rem;color:var(--muted);line-height:1.6;margin-bottom:12px">Starting from the calculated numbers above, adjust anything you want. The same safety limits still apply: calories can\'t go below what your body burns at rest, and fat can\'t go below '+MIN_DAILY_FAT_G+'g regardless of the goal.</div>');
         parts.push('<div class="field"><label>Calories / day</label><input type="text" inputmode="numeric" value="'+ST.manualCal+'" oninput="ST.manualCal=this.value"></div>');
         parts.push('<div class="field-row">');
         parts.push('<div class="field"><label>Protein (g)</label><input type="text" inputmode="numeric" value="'+ST.manualProtein+'" oninput="ST.manualProtein=this.value"></div>');
         parts.push('<div class="field"><label>Carbs (g)</label><input type="text" inputmode="numeric" value="'+ST.manualCarbs+'" oninput="ST.manualCarbs=this.value"></div>');
         parts.push('</div>');
         parts.push('<div class="field"><label>Fat (g)</label><input type="text" inputmode="numeric" value="'+ST.manualFat+'" oninput="ST.manualFat=this.value"></div>');
-        parts.push('<div id="manualTargetsWarning" style="font-size:11px;color:var(--amber);line-height:1.6;margin-top:4px">'+(ST.manualTargetsWarning||'')+'</div>');
+        parts.push('<div id="manualTargetsWarning" style="font-size:0.6875rem;color:var(--amber);line-height:1.6;margin-top:4px">'+(ST.manualTargetsWarning||'')+'</div>');
         parts.push('<button class="btn btn-gold mt8" onclick="saveManualTargets('+bmr+',\''+(ST.goalDraft||'maintain')+'\',\''+(ST.trainDaysDraft||'3-4')+'\',\''+tdee+'\')">Save Custom Targets</button>');
         parts.push('<button class="btn-ghost" onclick="ST.manualTargetsOpen=false;renderPage()">Cancel</button>');
         parts.push('</div>');
@@ -13272,7 +13347,7 @@ function renderNutritionGoalsSetup(p) {
     parts.push('<button class="btn btn-gold" onclick="saveNutritionGoals(null).then(()=>{switchTab(\'nutrition\')})">Log Without Targets</button>');
   }
 
-  parts.push('<div style="font-size:10px;color:var(--muted);line-height:1.6;margin-top:14px;text-align:center">A starting point, not a prescription. Adjust anytime, and talk to a doctor or dietitian for anything specific to you.</div>');
+  parts.push('<div style="font-size:0.625rem;color:var(--muted);line-height:1.6;margin-top:14px;text-align:center">A starting point, not a prescription. Adjust anytime, and talk to a doctor or dietitian for anything specific to you.</div>');
   p.innerHTML = parts.join('');
 }
 
@@ -13286,7 +13361,7 @@ async function renderNutrition(p) {
   const dayTotals = sumMealNutrients(meals.flatMap(m => m.meal_data.items));
 
   if (!g) {
-    parts.push('<div class="card mb12"><div style="font-size:13px;font-weight:600;margin-bottom:6px">Set up your fuel plan</div><div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px">Calorie and macro targets built from your own biometrics, or skip targets entirely and just log what you eat.</div><button class="btn btn-gold" onclick="switchTab(\'fuelplan\')">Set Up Fuel Plan</button></div>');
+    parts.push('<div class="card mb12"><div style="font-size:0.8125rem;font-weight:600;margin-bottom:6px">Set up your fuel plan</div><div style="font-size:0.75rem;color:var(--muted);line-height:1.6;margin-bottom:12px">Calorie and macro targets built from your own biometrics, or skip targets entirely and just log what you eat.</div><button class="btn btn-gold" onclick="switchTab(\'fuelplan\')">Set Up Fuel Plan</button></div>');
   } else if (g.mode !== 'none') {
     // One consolidated card — ring plus macro bars — replacing what used to
     // be two separate totals displays (a goals-progress card, then a second
@@ -13300,20 +13375,20 @@ async function renderNutrition(p) {
     parts.push('<circle cx="52" cy="52" r="45" fill="none" stroke="var(--bg3)" stroke-width="9"/>');
     parts.push('<circle cx="52" cy="52" r="45" fill="none" stroke="var(--gold)" stroke-width="9" stroke-linecap="round" stroke-dasharray="'+circumference.toFixed(1)+'" stroke-dashoffset="'+dashOffset.toFixed(1)+'"/>');
     parts.push('</svg>');
-    parts.push('<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-family:var(--mono);font-size:20px">'+Math.round(dayTotals.calories).toLocaleString()+'</div><div style="font-family:var(--mono);font-size:8px;color:var(--muted);letter-spacing:.1em;margin-top:2px">OF '+g.calories.toLocaleString()+'</div></div>');
+    parts.push('<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-family:var(--mono);font-size:1.25rem">'+Math.round(dayTotals.calories).toLocaleString()+'</div><div style="font-family:var(--mono);font-size:0.5rem;color:var(--muted);letter-spacing:.1em;margin-top:2px">OF '+g.calories.toLocaleString()+'</div></div>');
     parts.push('</div>');
     parts.push('<div style="flex:1;min-width:0">');
     [['PROTEIN',dayTotals.protein,g.protein,'var(--gold)'],['CARBS',dayTotals.carbs,g.carbs,'var(--blue)'],['FAT',dayTotals.fat,g.fat,'var(--teal)']].forEach(([n,have,goal,col]) => {
       const mpct = goal > 0 ? Math.min(100, (have/goal)*100) : 0;
-      parts.push('<div style="margin-bottom:9px"><div class="fb" style="margin-bottom:3px"><span style="font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--muted)">'+n+'</span><span style="font-family:var(--mono);font-size:10px">'+Math.round(have)+'<span style="color:var(--muted)">/'+goal+'g</span></span></div>');
+      parts.push('<div style="margin-bottom:9px"><div class="fb" style="margin-bottom:3px"><span style="font-family:var(--mono);font-size:0.5625rem;letter-spacing:.1em;color:var(--muted)">'+n+'</span><span style="font-family:var(--mono);font-size:0.625rem">'+Math.round(have)+'<span style="color:var(--muted)">/'+goal+'g</span></span></div>');
       parts.push('<div style="height:3px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+mpct+'%;background:'+col+';border-radius:2px"></div></div></div>');
     });
     parts.push('</div></div>');
-    parts.push('<button class="btn-ghost" style="font-size:11px;margin-top:2px" onclick="switchTab(\'fuelplan\')">Adjust targets</button>');
+    parts.push('<button class="btn-ghost" style="font-size:0.6875rem;margin-top:2px" onclick="switchTab(\'fuelplan\')">Adjust targets</button>');
     parts.push('</div>');
   } else {
     // "Just track" mode still gets a real number, no targets to compare against
-    parts.push('<div class="card mb12"><div class="fb" style="align-items:baseline"><span style="font-family:var(--mono);font-size:26px">'+Math.round(dayTotals.calories).toLocaleString()+'</span><span style="font-family:var(--mono);font-size:11px;color:var(--muted)">CAL TODAY · P'+Math.round(dayTotals.protein)+'g · C'+Math.round(dayTotals.carbs)+'g · F'+Math.round(dayTotals.fat)+'g</span></div></div>');
+    parts.push('<div class="card mb12"><div class="fb" style="align-items:baseline"><span style="font-family:var(--mono);font-size:1.625rem">'+Math.round(dayTotals.calories).toLocaleString()+'</span><span style="font-family:var(--mono);font-size:0.6875rem;color:var(--muted)">CAL TODAY · P'+Math.round(dayTotals.protein)+'g · C'+Math.round(dayTotals.carbs)+'g · F'+Math.round(dayTotals.fat)+'g</span></div></div>');
   }
 
   // AI Tactical Fueling Logistics — Pro only, and only useful when there's
@@ -13331,7 +13406,7 @@ async function renderNutrition(p) {
   // someone could scan 3 times, get blocked, and only then learn a limit
   // existed at all. This surfaces it up front instead.
   if (!isPro()) {
-    parts.push('<div style="font-size:10px;color:var(--muted);text-align:center;margin-top:-8px;margin-bottom:12px">📷 AI photo scans: '+FREE_WEEKLY_PHOTOS+'/week free; manual entry and barcode scan are unlimited</div>');
+    parts.push('<div style="font-size:0.625rem;color:var(--muted);text-align:center;margin-top:-8px;margin-bottom:12px">📷 AI photo scans: '+FREE_WEEKLY_PHOTOS+'/week free; manual entry and barcode scan are unlimited</div>');
   }
   parts.push('<div id="mealBuilderRoot"></div>');
 
@@ -13347,18 +13422,18 @@ async function renderNutrition(p) {
       typeMeals.forEach(m => {
         const t = m.meal_data.totals;
         const timeStr = m.logged_at ? new Date(m.logged_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : '';
-        parts.push('<div class="fb" style="margin:14px 0 6px"><span style="font-family:var(--mono);font-size:10px;letter-spacing:.13em;color:var(--muted)">'+type.toUpperCase()+'</span>'+(timeStr?'<span style="font-family:var(--mono);font-size:10px;color:var(--gold)">'+timeStr+'</span>':'')+'</div>');
+        parts.push('<div class="fb" style="margin:14px 0 6px"><span style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.13em;color:var(--muted)">'+type.toUpperCase()+'</span>'+(timeStr?'<span style="font-family:var(--mono);font-size:0.625rem;color:var(--gold)">'+timeStr+'</span>':'')+'</div>');
         parts.push('<div class="card" style="padding:12px 16px">');
         m.meal_data.items.forEach(item => {
           parts.push('<div style="padding:6px 0;border-bottom:1px solid var(--border)">');
-          parts.push('<div class="fb"><span style="font-size:13px">'+foodEmoji(item.description)+' '+item.description+'</span><span style="font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0;padding-left:10px">'+item.nutrients.calories+' cal</span></div>');
-          parts.push('<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">P'+item.nutrients.protein+'g · C'+item.nutrients.carbs+'g · F'+item.nutrients.fat+'g</div>');
+          parts.push('<div class="fb"><span style="font-size:0.8125rem">'+foodEmoji(item.description)+' '+item.description+'</span><span style="font-family:var(--mono);font-size:0.6875rem;color:var(--muted);flex-shrink:0;padding-left:10px">'+item.nutrients.calories+' cal</span></div>');
+          parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);margin-top:2px">P'+item.nutrients.protein+'g · C'+item.nutrients.carbs+'g · F'+item.nutrients.fat+'g</div>');
           parts.push('</div>');
         });
-        parts.push('<div class="fb" style="padding-top:8px;font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.05em"><span>SUBTOTAL</span><span>'+t.calories+' CAL · P'+t.protein+'g · C'+t.carbs+'g · F'+t.fat+'g</span></div>');
+        parts.push('<div class="fb" style="padding-top:8px;font-family:var(--mono);font-size:0.625rem;color:var(--muted);letter-spacing:.05em"><span>SUBTOTAL</span><span>'+t.calories+' CAL · P'+t.protein+'g · C'+t.carbs+'g · F'+t.fat+'g</span></div>');
         parts.push('<div class="fb" style="margin-top:8px;gap:16px;justify-content:flex-start">');
-        parts.push('<button class="btn-ghost" style="font-size:11px" onclick="editMealLog(\''+m.id+'\')">✏️ Edit</button>');
-        parts.push('<button class="btn-ghost" style="font-size:11px;color:var(--red)" onclick="deleteMealLog(\''+m.id+'\')">🗑️ Remove</button>');
+        parts.push('<button class="btn-ghost" style="font-size:0.6875rem" onclick="editMealLog(\''+m.id+'\')">✏️ Edit</button>');
+        parts.push('<button class="btn-ghost" style="font-size:0.6875rem;color:var(--red)" onclick="deleteMealLog(\''+m.id+'\')">🗑️ Remove</button>');
         parts.push('</div>');
         parts.push('</div>');
       });
@@ -13437,10 +13512,10 @@ function openQuickWaterLog(mode) {
   // Always show where today actually stands, so it's never ambiguous what
   // a number typed below is going to do to it.
   parts.push('<div class="card" style="margin-bottom:12px;padding:12px">');
-  parts.push('<div class="fb"><span style="font-size:12px;color:var(--muted)">Logged so far today</span>' +
-             '<span style="font-family:var(--mono);font-size:16px;font-weight:700">'+current.toFixed(2).replace(/\.?0+$/,'')+' L</span></div>');
-  parts.push('<div class="fb" style="margin-top:4px"><span style="font-size:11px;color:var(--muted)">Target '+target.toFixed(1)+' L</span>' +
-             '<span style="font-family:var(--mono);font-size:11px;color:'+hs.color+'">'+hs.label+'</span></div>');
+  parts.push('<div class="fb"><span style="font-size:0.75rem;color:var(--muted)">Logged so far today</span>' +
+             '<span style="font-family:var(--mono);font-size:1rem;font-weight:700">'+current.toFixed(2).replace(/\.?0+$/,'')+' L</span></div>');
+  parts.push('<div class="fb" style="margin-top:4px"><span style="font-size:0.6875rem;color:var(--muted)">Target '+target.toFixed(1)+' L</span>' +
+             '<span style="font-family:var(--mono);font-size:0.6875rem;color:'+hs.color+'">'+hs.label+'</span></div>');
   parts.push('</div>');
 
   if (setMode) {
@@ -13598,17 +13673,17 @@ function renderMealBuilder() {
     parts.push('<div class="section-label" style="margin-top:12px">MEAL ITEMS</div>');
     mb.items.forEach((item, i) => {
       parts.push('<div style="margin-bottom:8px">');
-      parts.push('<div class="fb"><span style="font-size:17px;font-weight:700">'+foodEmoji(item.description)+' '+item.description+'</span><button class="btn-ghost" style="font-size:11px" onclick="ST.mealBuilder.items.splice('+i+',1);renderMealBuilder()">✕</button></div>');
+      parts.push('<div class="fb"><span style="font-size:1.0625rem;font-weight:700">'+foodEmoji(item.description)+' '+item.description+'</span><button class="btn-ghost" style="font-size:0.6875rem" onclick="ST.mealBuilder.items.splice('+i+',1);renderMealBuilder()">✕</button></div>');
       // Serving and macros per row — without this there was no way to tell
       // whether a logged food meant one unit or several.
       const rowBits = [];
       if (item.servingDescription) rowBits.push(sanitizeUserText(item.servingDescription));
       rowBits.push(Math.round(item.nutrients?.calories || 0)+' cal');
-      parts.push('<div style="font-size:11px;color:var(--muted);margin-top:2px">'+rowBits.join(' · ')+'</div>');
+      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">'+rowBits.join(' · ')+'</div>');
       parts.push('</div>');
     });
     const runningTotals = sumMealNutrients(mb.items);
-    parts.push('<div style="font-size:11px;color:var(--muted);margin-top:6px">Running total: '+runningTotals.calories+' cal · P'+runningTotals.protein+'g · C'+runningTotals.carbs+'g · F'+runningTotals.fat+'g</div>');
+    parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">Running total: '+runningTotals.calories+' cal · P'+runningTotals.protein+'g · C'+runningTotals.carbs+'g · F'+runningTotals.fat+'g</div>');
   }
 
   // Meal Type and (implicitly) time are auto-set when the builder opens —
@@ -13629,7 +13704,7 @@ function renderMealBuilder() {
     parts.push('<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">');
     mb.frequentFoods.forEach((food, i) => {
       const srv = food.servingDescription ? sanitizeUserText(food.servingDescription)+' · ' : '';
-      parts.push('<button class="btn-outline" style="font-size:12px;padding:6px 10px;border-radius:20px" onclick="addFrequentFoodToMeal('+i+')">'+foodEmoji(food.description)+' '+sanitizeUserText(food.description)+' <span style="color:var(--muted)">· '+srv+food.nutrients.calories+' cal</span></button>');
+      parts.push('<button class="btn-outline" style="font-size:0.75rem;padding:6px 10px;border-radius:20px" onclick="addFrequentFoodToMeal('+i+')">'+foodEmoji(food.description)+' '+sanitizeUserText(food.description)+' <span style="color:var(--muted)">· '+srv+food.nutrients.calories+' cal</span></button>');
     });
     parts.push('</div>');
   }
@@ -13708,13 +13783,13 @@ function filterUSDASearch(query) {
   const box = document.getElementById('usdaSearchResults');
   if (!box) return;
   if (!query || query.trim().length < 2) { box.innerHTML = ''; return; }
-  box.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-top:6px">Searching…</div>';
+  box.innerHTML = '<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">Searching…</div>';
   usdaSearchDebounce = setTimeout(async () => {
     const results = await searchUSDAFoods(query);
     if (!document.getElementById('usdaSearchResults')) return; // builder closed mid-search
-    if (!results.length) { box.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-top:6px">No matches. Try manual entry below.</div>'; return; }
+    if (!results.length) { box.innerHTML = '<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">No matches. Try manual entry below.</div>'; return; }
     box.innerHTML = results.map((f,i) =>
-      '<div class="card" style="padding:8px;margin-top:6px;cursor:pointer" onclick="selectUSDAFood('+i+')"><div style="font-size:13px">'+foodEmoji(f.description)+' '+f.description+(f.brandName?' <span style="color:var(--muted);font-size:11px">('+f.brandName+')</span>':'')+'</div><div style="font-size:11px;color:var(--muted)">'+f.nutrients.calories+' cal per '+usdaReferenceLabel(f)+'</div></div>'
+      '<div class="card" style="padding:8px;margin-top:6px;cursor:pointer" onclick="selectUSDAFood('+i+')"><div style="font-size:0.8125rem">'+foodEmoji(f.description)+' '+f.description+(f.brandName?' <span style="color:var(--muted);font-size:0.6875rem">('+f.brandName+')</span>':'')+'</div><div style="font-size:0.6875rem;color:var(--muted)">'+f.nutrients.calories+' cal per '+usdaReferenceLabel(f)+'</div></div>'
     ).join('');
     window._usdaLastResults = results;
   }, 350);
@@ -13724,14 +13799,14 @@ async function selectUSDAFood(idx) {
   const picked = window._usdaLastResults?.[idx];
   if (!picked) return;
   const box = document.getElementById('usdaSearchResults');
-  if (box) box.innerHTML = '<div style="font-size:11px;color:var(--muted)">Loading full details…</div>';
+  if (box) box.innerHTML = '<div style="font-size:0.6875rem;color:var(--muted)">Loading full details…</div>';
   const detail = await getUSDAFoodDetail(picked.fdcId) || picked;
   window._usdaPendingFood = detail;
   if (box) box.innerHTML =
-    '<div class="card mt8"><div style="font-size:13px;margin-bottom:6px">'+detail.description+'</div>' +
+    '<div class="card mt8"><div style="font-size:0.8125rem;margin-bottom:6px">'+detail.description+'</div>' +
     '<div class="field"><label>Servings (1 = '+usdaReferenceLabel(detail)+')</label>' +
     '<input type="text" inputmode="decimal" id="usdaServingMult" value="1" oninput="updateUSDAPreview()"></div>' +
-    '<div id="usdaPreviewNutrients" style="font-size:11px;color:var(--muted);margin:6px 0"></div>' +
+    '<div id="usdaPreviewNutrients" style="font-size:0.6875rem;color:var(--muted);margin:6px 0"></div>' +
     '<button class="btn btn-outline" onclick="addUSDAFoodToMeal()">Add to Meal</button></div>';
   updateUSDAPreview();
 }
@@ -13921,17 +13996,17 @@ const FCFCamera = (() => {
             <button onclick="FCFCamera.close()" style="
               width:44px;height:44px;border-radius:50%;
               background:rgba(0,0,0,0.55);border:none;color:#fff;
-              font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
+              font-size:1.125rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
             <!-- Flash + Flip -->
             <div style="display:flex;flex-direction:column;gap:10px;">
               <button id="fcfCamFlash" onclick="FCFCamera.toggleFlash()" style="
                 width:44px;height:44px;border-radius:50%;
                 background:rgba(0,0,0,0.55);border:none;color:#fff;
-                font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;">⚡</button>
+                font-size:1.25rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">⚡</button>
               <button onclick="FCFCamera.flipCamera()" style="
                 width:44px;height:44px;border-radius:50%;
                 background:rgba(0,0,0,0.55);border:none;color:#fff;
-                font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;">🔄</button>
+                font-size:1.25rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">🔄</button>
             </div>
           </div>
 
@@ -13939,8 +14014,8 @@ const FCFCamera = (() => {
           <div style="
             position:absolute;bottom:24px;left:0;right:0;
             text-align:center;pointer-events:none;">
-            <div style="font-size:22px;font-weight:300;color:#fff;letter-spacing:.02em">Take a photo</div>
-            <div style="font-size:14px;color:rgba(255,255,255,0.75);margin-top:4px">Your meal items will be analyzed.</div>
+            <div style="font-size:1.375rem;font-weight:300;color:#fff;letter-spacing:.02em">Take a photo</div>
+            <div style="font-size:0.875rem;color:rgba(255,255,255,0.75);margin-top:4px">Your meal items will be analyzed.</div>
           </div>
         </div>
 
@@ -13965,13 +14040,13 @@ const FCFCamera = (() => {
           <div style="display:flex;gap:0;width:100%;padding:0 8px;">
             <button onclick="FCFCamera._tabTextInput()" style="
               flex:1;background:none;border:none;color:rgba(255,255,255,0.65);
-              font-size:14px;padding:8px 4px;cursor:pointer;letter-spacing:.03em;">Text input</button>
+              font-size:0.875rem;padding:8px 4px;cursor:pointer;letter-spacing:.03em;">Text input</button>
             <button onclick="FCFCamera._tabRecentMeals()" style="
               flex:1;background:none;border:none;color:rgba(255,255,255,0.65);
-              font-size:14px;padding:8px 4px;cursor:pointer;letter-spacing:.03em;">Recent meals</button>
+              font-size:0.875rem;padding:8px 4px;cursor:pointer;letter-spacing:.03em;">Recent meals</button>
             <button onclick="FCFCamera._tabLibrary()" style="
               flex:1;background:none;border:none;color:rgba(255,255,255,0.65);
-              font-size:14px;padding:8px 4px;cursor:pointer;letter-spacing:.03em;">Library</button>
+              font-size:0.875rem;padding:8px 4px;cursor:pointer;letter-spacing:.03em;">Library</button>
           </div>
         </div>
       </div>
@@ -14164,7 +14239,7 @@ function handleFoodRecognitionResult(result) {
     return;
   }
   if (result.error) {
-    box.innerHTML = '<div class="card mt8" style="font-size:12px;color:var(--amber)">Analysis failed: ' + (result.message || result.error) + '. Try again or enter it manually below.</div>';
+    box.innerHTML = '<div class="card mt8" style="font-size:0.75rem;color:var(--amber)">Analysis failed: ' + (result.message || result.error) + '. Try again or enter it manually below.</div>';
     return;
   }
   if (!ST.mealBuilder) return;
@@ -14226,7 +14301,7 @@ function buildQualitySliderHTML(qualityRating) {
   parts.push('</div>');
   parts.push('<div style="display:flex;justify-content:space-between">');
   QUALITY_RATINGS.forEach((q, i) => {
-    parts.push('<span style="font-size:10px;'+(i===idx?'color:'+q.color+';font-weight:700':'color:var(--muted)')+'">'+q.label+'</span>');
+    parts.push('<span style="font-size:0.625rem;'+(i===idx?'color:'+q.color+';font-weight:700':'color:var(--muted)')+'">'+q.label+'</span>');
   });
   parts.push('</div></div>');
   return parts.join('');
@@ -14242,18 +14317,18 @@ function buildItemReviewCardHTML(index) {
   const lowConfidence = meta.source === 'photo' && meta.confidence < 0.8;
   const parts = [];
   parts.push('<div class="card mt8" style="border-color:var(--gold)">');
-  parts.push('<div style="font-size:11px;color:var(--gold);font-weight:700;margin-bottom:8px">✓ ADDED: review or correct below</div>');
+  parts.push('<div style="font-size:0.6875rem;color:var(--gold);font-weight:700;margin-bottom:8px">✓ ADDED: review or correct below</div>');
 
   if (meta.source === 'photo' && meta.imageUrl) {
     parts.push('<img src="' + meta.imageUrl + '" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;margin-bottom:10px">');
   }
 
   if (lowConfidence) {
-    parts.push('<div style="font-size:12px;color:var(--amber);margin-bottom:8px">⚠ Best guess only (' + Math.round(meta.confidence * 100) + '% confidence). Is this right? Edit anything below if not.</div>');
+    parts.push('<div style="font-size:0.75rem;color:var(--amber);margin-bottom:8px">⚠ Best guess only (' + Math.round(meta.confidence * 100) + '% confidence). Is this right? Edit anything below if not.</div>');
   } else if (meta.source === 'photo') {
-    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + Math.round(meta.confidence * 100) + '% confidence</div>');
+    parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:8px">' + Math.round(meta.confidence * 100) + '% confidence</div>');
   } else if (meta.brandName) {
-    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + sanitizeUserText(meta.brandName) + '</div>');
+    parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:8px">' + sanitizeUserText(meta.brandName) + '</div>');
   }
   parts.push('<div class="field"><label>' + foodEmoji(item.description) + ' Description</label><textarea id="foodRecDescription" rows="4" style="resize:vertical;overflow:hidden;box-sizing:border-box;font-family:inherit;font-size:inherit;line-height:1.4" oninput="autoGrowTextarea(this);updateReviewedItemField(\'description\', this.value)" onkeyup="autoGrowTextarea(this)">' + sanitizeUserTextLong(item.description) + '</textarea></div>');
   // Fixed rows="2" clipped anything longer (e.g. "...with granola" losing
@@ -14262,7 +14337,7 @@ function buildItemReviewCardHTML(index) {
   // 3 lines long is fully visible the moment the card appears.
   setTimeout(() => { const ta = document.getElementById('foodRecDescription'); if (ta) autoGrowTextarea(ta); }, 0);
   if (meta.servingDescription) {
-    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:6px">Estimated portion: ' + sanitizeUserText(meta.servingDescription) + '</div>');
+    parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:6px">Estimated portion: ' + sanitizeUserText(meta.servingDescription) + '</div>');
   }
 
   // Advisor — the qualitative read Oura leads with, alongside (not instead
@@ -14271,10 +14346,10 @@ function buildItemReviewCardHTML(index) {
   // or a subjective call the model didn't return doesn't get a fake one.
   if (meta.source === 'photo' && meta.qualityRating && meta.advisorNote) {
     parts.push('<div style="background:var(--bg3);border-radius:10px;padding:10px;margin-bottom:10px">');
-    parts.push('<div style="font-size:11px;color:var(--gold);margin-bottom:4px">✦ Advisor</div>');
+    parts.push('<div style="font-size:0.6875rem;color:var(--gold);margin-bottom:4px">✦ Advisor</div>');
     // No height cap or clamp — the block grows to whatever the Advisor
     // actually wrote rather than cutting it off.
-    parts.push('<div style="font-size:13px;color:var(--text);margin-bottom:2px;line-height:1.45">' + escapeUserProse(meta.advisorNote) + '</div>');
+    parts.push('<div style="font-size:0.8125rem;color:var(--text);margin-bottom:2px;line-height:1.45">' + escapeUserProse(meta.advisorNote) + '</div>');
     parts.push(buildQualitySliderHTML(meta.qualityRating));
     parts.push('</div>');
   }
@@ -14294,7 +14369,7 @@ function buildItemReviewCardHTML(index) {
   parts.push('<div class="field"><label>Fat (g)</label><input type="text" inputmode="decimal" id="foodRecFat" value="' + n.fat + '" oninput="updateReviewedItemField(\'fat\', this.value)"></div>');
   parts.push('</div>');
   if (meta.quota && !meta.quota.unlimited) {
-    parts.push('<div style="font-size:10px;color:var(--muted);margin:6px 0">' + meta.quota.used + ' of ' + meta.quota.limit + ' photo analyses used today</div>');
+    parts.push('<div style="font-size:0.625rem;color:var(--muted);margin:6px 0">' + meta.quota.used + ' of ' + meta.quota.limit + ' photo analyses used today</div>');
   }
   // The two actions that actually matter once something's been added:
   // add another item, or you're done. No separate "confirm the add"
@@ -14368,7 +14443,7 @@ function scanFoodBarcode() {
     '<div class="modal-bg"><div class="modal-sheet">' +
     '<div class="modal-title">SCAN BARCODE</div>' +
     '<div id="barcodeScannerBox" style="border-radius:12px;overflow:hidden;min-height:250px;background:#000"></div>' +
-    '<div id="barcodeScannerStatus" style="font-size:12px;color:var(--muted);margin-top:8px">Point your camera at the barcode.</div>' +
+    '<div id="barcodeScannerStatus" style="font-size:0.75rem;color:var(--muted);margin-top:8px">Point your camera at the barcode.</div>' +
     '<button class="btn btn-outline mt12" onclick="stopFoodBarcodeScanner()">CANCEL</button>' +
     '</div></div>';
 
@@ -14400,7 +14475,7 @@ async function handleFoodBarcodeDecoded(barcode) {
   if (box) box.innerHTML = loadingCardHTML('Looking up ' + sanitizeUserText(barcode) + '…');
   const result = await callFoodRecognitionEdge({ action: 'barcode', barcode });
   if (result && result.error === 'not_found') {
-    if (box) box.innerHTML = '<div class="card mt8" style="font-size:12px;color:var(--amber)">No product found for that barcode. Try search or manual entry below.</div>';
+    if (box) box.innerHTML = '<div class="card mt8" style="font-size:0.75rem;color:var(--amber)">No product found for that barcode. Try search or manual entry below.</div>';
     return;
   }
   handleFoodRecognitionResult(result);
@@ -14442,24 +14517,24 @@ function addManualFoodToMeal() {
 function buildBadgesGridHTML() {
   const parts = [];
   const earnedCount = BADGES.filter(b => ST.badges[b.id]).length;
-  parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px">'+earnedCount+' of '+BADGES.length+' earned</div>');
+  parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:10px">'+earnedCount+' of '+BADGES.length+' earned</div>');
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
   BADGES.forEach(b => {
     const earned = ST.badges[b.id];
     parts.push('<div style="border:1px solid '+(earned?'var(--gold)':'var(--border)')+';border-radius:8px;padding:10px;text-align:center;position:relative'+(earned?'':';background:rgba(255,255,255,0.015)')+'">');
     if (earned) {
-      parts.push('<div style="font-size:22px">'+b.icon+'</div>');
+      parts.push('<div style="font-size:1.375rem">'+b.icon+'</div>');
     } else {
       // Desaturated real icon rather than a plain lock — reads as
       // "this badge exists and you're working toward it" instead of
       // "blocked." Small lock badge overlays the corner instead of
       // replacing the icon entirely.
-      parts.push('<div style="font-size:22px;filter:grayscale(1);opacity:0.35">'+b.icon+'</div>');
-      parts.push('<div style="position:absolute;top:6px;right:6px;font-size:10px;opacity:0.5">🔒</div>');
+      parts.push('<div style="font-size:1.375rem;filter:grayscale(1);opacity:0.35">'+b.icon+'</div>');
+      parts.push('<div style="position:absolute;top:6px;right:6px;font-size:0.625rem;opacity:0.5">🔒</div>');
     }
-    parts.push('<div style="font-size:11px;font-weight:700;margin-top:4px'+(earned?'':';color:var(--muted)')+'">'+b.title+'</div>');
-    parts.push('<div style="font-size:9px;color:var(--muted);margin-top:2px;line-height:1.4'+(earned?'':';opacity:0.7')+'">'+b.desc+'</div>');
-    if (earned) parts.push('<div style="font-family:var(--mono);font-size:8px;color:var(--gold);margin-top:4px">'+new Date(earned).toLocaleDateString()+'</div>');
+    parts.push('<div style="font-size:0.6875rem;font-weight:700;margin-top:4px'+(earned?'':';color:var(--muted)')+'">'+b.title+'</div>');
+    parts.push('<div style="font-size:0.5625rem;color:var(--muted);margin-top:2px;line-height:1.4'+(earned?'':';opacity:0.7')+'">'+b.desc+'</div>');
+    if (earned) parts.push('<div style="font-family:var(--mono);font-size:0.5rem;color:var(--gold);margin-top:4px">'+new Date(earned).toLocaleDateString()+'</div>');
     parts.push('</div>');
   });
   parts.push('</div>');
@@ -14483,8 +14558,8 @@ function renderData(p) {
   if (!isNative) {
     // Web/PWA users — explain that iOS gets this automatically
     parts.push('<div class="card mb12" style="border-left:3px solid var(--gold)">');
-    parts.push('<div style="font-size:13px;font-weight:600;margin-bottom:6px">📅 Schedule Import</div>');
-    parts.push('<div style="font-size:12px;color:var(--muted);line-height:1.65">');
+    parts.push('<div style="font-size:0.8125rem;font-weight:600;margin-bottom:6px">📅 Schedule Import</div>');
+    parts.push('<div style="font-size:0.75rem;color:var(--muted);line-height:1.65">');
     parts.push('On the <strong style="color:var(--text)">iOS app</strong>, your flights sync automatically from Apple Calendar, no upload needed. ');
     parts.push('If you\'re using the web version, or your airline gives you a schedule export, upload it as an <strong style="color:var(--text)">.ics file</strong> below. ');
     parts.push('Most crew scheduling systems (Crew Web, PBS, Google Calendar) can export .ics. ');
@@ -14508,9 +14583,9 @@ function renderData(p) {
   if (showSourceToggle) {
     const sourceOpt = (val, label) => {
       const on = ST.scheduleSource === val;
-      return '<button onclick="haptic(\'selection\');setScheduleSource(\''+val+'\')" style="flex:1;padding:9px 4px;border-radius:8px;border:none;font-size:11.5px;font-weight:'+(on?'700':'400')+';background:'+(on?'var(--gold)':'var(--bg3)')+';color:'+(on?'#1a1400':'var(--muted)')+';cursor:pointer;-webkit-tap-highlight-color:transparent">'+label+'</button>';
+      return '<button onclick="haptic(\'selection\');setScheduleSource(\''+val+'\')" style="flex:1;padding:9px 4px;border-radius:8px;border:none;font-size:0.7188rem;font-weight:'+(on?'700':'400')+';background:'+(on?'var(--gold)':'var(--bg3)')+';color:'+(on?'#1a1400':'var(--muted)')+';cursor:pointer;-webkit-tap-highlight-color:transparent">'+label+'</button>';
     };
-    parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5">Which schedule to use when more than one source is available.</div>');
+    parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:8px;line-height:1.5">Which schedule to use when more than one source is available.</div>');
     parts.push('<div style="display:flex;gap:6px;margin-bottom:16px">');
     parts.push(sourceOpt('auto', 'Auto'));
     parts.push(sourceOpt('calendar', 'Apple Calendar'));
@@ -14542,9 +14617,9 @@ function renderData(p) {
     ['America/Anchorage', 'Alaska'],
     ['Pacific/Honolulu', 'Hawaii'],
   ];
-  parts.push('<div style="font-size:11px;font-weight:700;color:var(--text);letter-spacing:0.04em;margin-bottom:8px">HOME BASE TIMEZONE</div>');
-  parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.5">Your crew-scheduling export (Apple Calendar sync or an uploaded .ics) stamps every flight/layover time using this timezone, whatever timezone your device currently thinks it\'s in. Set it once to your actual home base \u2014 most pilots should pick this over &quot;Auto,&quot; since &quot;Auto&quot; silently switches to wherever your device physically is, which is wrong the moment you\'re away from base. If AI-reported times ever look off by a few hours, this is almost always why.</div>');
-  parts.push('<select onchange="haptic(\'selection\');setBaseTimezone(this.value)" style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:13px;margin-bottom:16px">');
+  parts.push('<div style="font-size:0.6875rem;font-weight:700;color:var(--text);letter-spacing:0.04em;margin-bottom:8px">HOME BASE TIMEZONE</div>');
+  parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:6px;line-height:1.5">Your crew-scheduling export (Apple Calendar sync or an uploaded .ics) stamps every flight/layover time using this timezone, whatever timezone your device currently thinks it\'s in. Set it once to your actual home base \u2014 most pilots should pick this over &quot;Auto,&quot; since &quot;Auto&quot; silently switches to wherever your device physically is, which is wrong the moment you\'re away from base. If AI-reported times ever look off by a few hours, this is almost always why.</div>');
+  parts.push('<select onchange="haptic(\'selection\');setBaseTimezone(this.value)" style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:0.8125rem;margin-bottom:16px">');
   TZ_OPTIONS.forEach(([val, label]) => {
     parts.push('<option value="'+val+'"'+(ST.baseTimezone===val?' selected':'')+'>'+label+'</option>');
   });
@@ -14552,7 +14627,7 @@ function renderData(p) {
 
   // ── Apple Calendar sub-section ──────────────────────────────────────────
   if (isNative) {
-    parts.push('<div style="font-size:11px;font-weight:700;color:var(--text);letter-spacing:0.04em;margin-bottom:8px">APPLE CALENDAR</div>');
+    parts.push('<div style="font-size:0.6875rem;font-weight:700;color:var(--text);letter-spacing:0.04em;margin-bottom:8px">APPLE CALENDAR</div>');
     // BUG FIX: ST.calendarEvents now always reflects the true raw event
     // count (see classifyCalendarEvents in app.js) even when AI
     // classification specifically failed — so this length check alone is
@@ -14562,33 +14637,33 @@ function renderData(p) {
     if (ST.calendarGranted && ST.calendarEvents?.length) {
       const flights = ST.calendarEvents.filter(e => e.type === 'flight').length;
       const total   = ST.calendarEvents.length;
-      parts.push('<div style="font-size:11px;color:var(--green);margin-bottom:8px">✅ Connected: '+total+' events classified ('+flights+' flights)</div>');
+      parts.push('<div style="font-size:0.6875rem;color:var(--green);margin-bottom:8px">✅ Connected: '+total+' events classified ('+flights+' flights)</div>');
       if (ST.calendarDuplicatesRemoved > 0) {
-        parts.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">ℹ️ '+ST.calendarDuplicatesRemoved+' duplicate calendar entries were automatically filtered out.</div>');
+        parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:8px">ℹ️ '+ST.calendarDuplicatesRemoved+' duplicate calendar entries were automatically filtered out.</div>');
       }
       if (ST.calendarSyncError) {
-        parts.push('<div style="font-size:11px;color:var(--amber);margin-bottom:8px">⚠️ '+ST.calendarSyncError+'</div>');
+        parts.push('<div style="font-size:0.6875rem;color:var(--amber);margin-bottom:8px">⚠️ '+ST.calendarSyncError+'</div>');
       }
       parts.push('<button class="btn btn-outline" onclick="haptic(\'light\');showToast(\'Syncing calendar\u2026\');if(typeof FCFBridge!==\'undefined\')FCFBridge.syncCalendar(ST.baseTimezone)">↻ Sync Now</button>');
     } else if (ST.calendarGranted && !ST.calendarEvents?.length) {
       const msg = ST.calendarSyncError || 'Calendar access granted but no events found in the next 60 days.';
-      parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">'+msg+'</div>');
+      parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;line-height:1.6">'+msg+'</div>');
       parts.push('<button class="btn btn-outline" onclick="haptic(\'light\');showToast(\'Syncing calendar\u2026\');if(typeof FCFBridge!==\'undefined\')FCFBridge.syncCalendar(ST.baseTimezone)">↻ Sync Now</button>');
     } else {
-      parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Grant access to your Apple Calendar and FCF will automatically detect your flights, layovers, and personal commitments, no manual upload needed.</div>');
+      parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;line-height:1.6">Grant access to your Apple Calendar and FCF will automatically detect your flights, layovers, and personal commitments, no manual upload needed.</div>');
       parts.push('<button class="btn btn-outline" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.requestCalendar(ST.baseTimezone)">Connect Apple Calendar</button>');
     }
     parts.push('<div style="height:1px;background:var(--border);margin:16px 0"></div>');
   }
 
   // ── Uploaded File sub-section ───────────────────────────────────────────
-  parts.push('<div style="font-size:11px;font-weight:700;color:var(--text);letter-spacing:0.04em;margin-bottom:8px">'+(isNative ? 'UPLOADED FILE (.ICS)' : 'FLIGHT SCHEDULE')+'</div>');
-  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">'+(isNative ? 'If your airline gives you a .ics export from their crew scheduling app, you can upload it here as an alternative or supplement to Apple Calendar.' : 'Upload your crew schedule as an .ics file. Preflight will automatically default your Mission Environment based on whether you\'re on a layover or at home today.')+'</div>');
+  parts.push('<div style="font-size:0.6875rem;font-weight:700;color:var(--text);letter-spacing:0.04em;margin-bottom:8px">'+(isNative ? 'UPLOADED FILE (.ICS)' : 'FLIGHT SCHEDULE')+'</div>');
+  parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;line-height:1.6">'+(isNative ? 'If your airline gives you a .ics export from their crew scheduling app, you can upload it here as an alternative or supplement to Apple Calendar.' : 'Upload your crew schedule as an .ics file. Preflight will automatically default your Mission Environment based on whether you\'re on a layover or at home today.')+'</div>');
   if (ST.flightSchedule && ST.flightSchedule.length) {
     const dates = ST.flightSchedule.map(e => new Date(e.start)).sort((a,b)=>a-b);
     const first = dates[0].toLocaleDateString('en-US',{month:'short',day:'numeric'});
     const last  = dates[dates.length-1].toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-    parts.push('<div style="font-size:11px;color:var(--green);margin-bottom:8px">✅ Schedule loaded: covers '+first+' to '+last+' ('+ST.flightSchedule.length+' events)</div>');
+    parts.push('<div style="font-size:0.6875rem;color:var(--green);margin-bottom:8px">✅ Schedule loaded: covers '+first+' to '+last+' ('+ST.flightSchedule.length+' events)</div>');
     parts.push('<button class="btn btn-outline" onclick="downloadFlightScheduleICS()">📅 Download My Uploaded Schedule</button>');
   }
   parts.push('<input type="file" id="icsFileInput" accept=".ics" style="display:none" onchange="handleICSUpload(this.files[0])">');
@@ -14598,8 +14673,8 @@ function renderData(p) {
   // ── Export ────────────────────────────────────────────────────────────────
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">EXPORT DATA</div>');
-  parts.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Exports everything the app holds, in one CSV with labelled sections: workouts (one row per set, biometrics joined by date), Oura daily metrics, every logged food item, hydration and flight hours, your scheduled flights, and your medication and supplement list with check-off history. Optimized for AI analysis.</div>');
-  parts.push('<div style="font-size:11px;color:var(--gold);margin-bottom:10px;line-height:1.5">💡 Recommended: export and review weekly. Daily exports are too noisy to show real trends; monthly is often too late to catch a stall early.</div>');
+  parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;line-height:1.6">Exports everything the app holds, in one CSV with labelled sections: workouts (one row per set, biometrics joined by date), Oura daily metrics, every logged food item, hydration and flight hours, your scheduled flights, and your medication and supplement list with check-off history. Optimized for AI analysis.</div>');
+  parts.push('<div style="font-size:0.6875rem;color:var(--gold);margin-bottom:10px;line-height:1.5">💡 Recommended: export and review weekly. Daily exports are too noisy to show real trends; monthly is often too late to catch a stall early.</div>');
   parts.push('<button class="btn btn-outline" onclick="exportCSV()">📊 Export CSV for AI Analysis</button>');
   parts.push('<button class="btn btn-outline mt8" onclick="showAIPromptModal()">📋 View & Copy AI Prompt</button>');
   parts.push('</div>');

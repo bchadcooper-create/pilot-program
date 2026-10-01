@@ -250,15 +250,48 @@ async function createOneUser(u: SeedUser) {
 // plateau. Once every tracked exercise for a user hits its cap, that user
 // still gets a new workout session logged (so their activity stays
 // current) but no further PRs, which is itself realistic.
+// Only accounts this function created are seeded accounts. They all live
+// on the @flightcrew.fit domain (see SEED_USERS); real users never do.
+const SEED_EMAIL_DOMAIN = '@flightcrew.fit';
+async function seededUserIds(): Promise<Set<string>> {
+  const ids = new Set<string>();
+  let page = 1;
+  while (page < 50) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    if (error || !data?.users?.length) break;
+    for (const u of data.users) {
+      if ((u.email || '').toLowerCase().endsWith(SEED_EMAIL_DOMAIN)) ids.add(u.id);
+    }
+    if (data.users.length < 200) break;
+    page++;
+  }
+  return ids;
+}
+
 async function refreshExistingSeeds() {
-  const { data: allEntries, error: fetchErr } = await admin
+  const { data: entries, error: fetchErr } = await admin
     .from('leaderboard_entries')
     .select('user_id, exercise_id, exercise_name, weight_lb, reps, bodyweight_lb, sex, username, achieved_at')
     .order('achieved_at', { ascending: true });
 
-  if (fetchErr || !allEntries) {
+  if (fetchErr || !entries) {
     return { error: fetchErr?.message || 'failed to fetch existing entries' };
   }
+
+  // BUG FIX (reported: the owner's Today page said "Work's done" at 9am
+  // with nothing trained; a fake 50-minute "Full Body" gym session had
+  // appeared at 8:00am sharp, and the same thing every third day for two
+  // weeks). This loop used to treat EVERY user with a leaderboard row as
+  // a seeded account. The moment a real person posted a PR, this job
+  // started logging workouts on their behalf: three real accounts picked
+  // up 20 fake sessions between them. Restrict it to accounts this
+  // function created, identified by the seed email domain. If the lookup
+  // comes back empty, skip the refresh entirely rather than guess.
+  const seeded = await seededUserIds();
+  if (seeded.size === 0) {
+    return { usersRefreshed: 0, details: [], skipped: 'no seeded accounts found' };
+  }
+  const allEntries = entries.filter(row => seeded.has(row.user_id));
 
   // Group by user_id.
   const byUser = new Map<string, typeof allEntries>();

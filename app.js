@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.3 / 20260916_4
+ * Version/build: fcf-v5.44.4 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.3';
+const FCF_VERSION = 'fcf-v5.44.4';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -2481,11 +2481,16 @@ async function loadLeaderboardGlance() {
       .then(r => ({ id: 'running', rows: r.data || [] })).catch(() => ({ id: 'running', rows: [] }));
     const results = await Promise.all([...liftQueries, runQuery]);
 
-    const parts = ['<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'];
+    // minmax(0,1fr): a grid track's default minimum is the content's own
+    // width, so a long exercise name at the largest text size pushed the
+    // right-hand card off the screen (found by the e2e crawler). With a
+    // zero minimum the columns stay inside the viewport and the name
+    // ellipsizes as intended.
+    const parts = ['<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px">'];
     results.forEach(({ id, rows }) => {
       const isRunning = id === 'running';
       const name = isRunning ? 'Running' : (LEADERBOARD_EXERCISES.find(e => e.id === id)?.name || id);
-      parts.push('<div class="card" style="padding:10px;cursor:pointer;touch-action:manipulation" onclick="haptic(\'light\');'+(isRunning ? "ST.lbCategory='running';renderPage()" : "ST.lbCategory='strength';ST.lbEx='"+id+"';localStorage.setItem('fcf_lb_ex','"+id+"');renderPage()")+'">');
+      parts.push('<div class="card" style="padding:10px;cursor:pointer;touch-action:manipulation;min-width:0" onclick="haptic(\'light\');'+(isRunning ? "ST.lbCategory='running';renderPage()" : "ST.lbCategory='strength';ST.lbEx='"+id+"';localStorage.setItem('fcf_lb_ex','"+id+"');renderPage()")+'">');
       parts.push('<div style="font-size:0.6875rem;font-weight:600;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+name+'</div>');
       if (!rows.length) {
         parts.push('<div style="font-size:0.625rem;color:var(--muted)">No entries yet</div>');
@@ -2493,7 +2498,7 @@ async function loadLeaderboardGlance() {
         rows.forEach((r, i) => {
           const medal = medalBadge(i);
           const val = isRunning ? formatMiPace(r.distance_mi, r.duration_sec) : Math.round(r.weight_lb)+' lb';
-          parts.push('<div class="fb" style="padding:2px 0"><span style="font-size:0.625rem">'+medal+' '+sanitizeUserText(r.username)+'</span><span style="font-family:var(--mono);font-size:0.625rem;color:var(--gold)">'+val+'</span></div>');
+          parts.push('<div class="fb" style="padding:2px 0;gap:6px"><span style="font-size:0.625rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+medal+' '+sanitizeUserText(r.username)+'</span><span style="font-family:var(--mono);font-size:0.625rem;color:var(--gold);flex-shrink:0">'+val+'</span></div>');
         });
       }
       parts.push('</div>');
@@ -6774,9 +6779,11 @@ function selectCustomProfile(id) {
 }
 
 async function saveCustomProfilesToDb() {
-  const profile = (await dbGetProfile()) || {};
-  profile.customProfiles = ST.customProfiles;
-  await dbSetProfile(profile);
+  try {
+    const profile = (await dbGetProfile()) || {};
+    profile.customProfiles = ST.customProfiles;
+    await dbSetProfile(profile);
+  } catch (e) { showBigToast('Saved on this device, but could not sync.', 'warn'); }
 }
 
 const BP_SECTIONS = [
@@ -7330,21 +7337,31 @@ function setReadiness(n) {
   renderPage();
 }
 
+// BUG FIX (found by the e2e crawler on the Profile page): these saves
+// ran with no catch. dbSetProfile rethrows after its 6s timeout, so on a
+// slow connection a tap here surfaced as an uncaught "timeout" and the
+// red JS ERROR banner, for a save that was already applied on the device.
+// Same treatment as setTrackingPref: apply locally first, then sync, and
+// say so plainly if the sync fails.
 async function toggleInjury(region) {
   const i = ST.injuries.indexOf(region);
   if (i === -1) ST.injuries.push(region); else ST.injuries.splice(i, 1);
-  const profile = (await dbGetProfile()) || {};
-  profile.injuries = ST.injuries;
-  await dbSetProfile(profile);
   renderPage();
+  try {
+    const profile = (await dbGetProfile()) || {};
+    profile.injuries = ST.injuries;
+    await dbSetProfile(profile);
+  } catch (e) { showBigToast('Saved on this device, but could not sync.', 'warn'); }
 }
 
 async function saveGoalLevel() {
-  const profile = (await dbGetProfile()) || {};
-  profile.goal = ST.goal;
-  profile.level = ST.level;
-  profile.customExercises = ST.customExercises;
-  await dbSetProfile(profile);
+  try {
+    const profile = (await dbGetProfile()) || {};
+    profile.goal = ST.goal;
+    profile.level = ST.level;
+    profile.customExercises = ST.customExercises;
+    await dbSetProfile(profile);
+  } catch (e) { showBigToast('Saved on this device, but could not sync.', 'warn'); }
 }
 
 // Merge built-in + custom exercises for a given env/muscleGroup
@@ -9981,10 +9998,12 @@ async function saveBio() {
   }
 
   if (wt) {
-    const profile = (await dbGetProfile()) || {};
-    profile.lastWeight = wt;
     ST.lastWeight = wt;
-    await dbSetProfile(profile);
+    try {
+      const profile = (await dbGetProfile()) || {};
+      profile.lastWeight = wt;
+      await dbSetProfile(profile);
+    } catch (e) { showBigToast('Weight saved on this device, but could not sync.', 'warn'); }
   }
   setTimeout(() => loadAndDrawCharts(), 100);
 }
@@ -11551,8 +11570,10 @@ function renderMore(p) {
   parts.push('<div class="card mb12">');
   parts.push('<div style="font-size:0.75rem;font-weight:600;margin-bottom:8px">Have a promo code?</div>');
   parts.push('<div style="display:flex;gap:8px">');
-  parts.push('<input id="promoCodeInput" type="text" placeholder="ENTER CODE" autocapitalize="characters" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:var(--mono);font-size:0.8125rem;letter-spacing:0.05em" onkeydown="if(event.key===\'Enter\')redeemPromoCode()">');
-  parts.push('<button class="btn btn-outline" style="width:auto;padding:0 18px" onclick="redeemPromoCode()">Redeem</button>');
+  parts.push('<input id="promoCodeInput" type="text" placeholder="ENTER CODE" autocapitalize="characters" style="flex:1;min-width:0;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:var(--mono);font-size:0.8125rem;letter-spacing:0.05em" onkeydown="if(event.key===\'Enter\')redeemPromoCode()">');
+  // flex-shrink:0 plus min-width:0 on the input: at the largest text size
+  // the input's own intrinsic width was pushing this button off screen.
+  parts.push('<button class="btn btn-outline" style="width:auto;flex-shrink:0;padding:0 18px" onclick="redeemPromoCode()">Redeem</button>');
   parts.push('</div>');
   parts.push('<div id="promoCodeResult" style="font-size:0.6875rem;margin-top:8px"></div>');
   parts.push('</div>');

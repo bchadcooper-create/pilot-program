@@ -267,7 +267,10 @@ Respond with ONLY a JSON object, no markdown fences, no explanation before or af
 inputType must be "timed" or "timed_bilateral" if the original exercise was timed, matching its bilateral-ness.
 Otherwise pick "reps_weight" if the substitute still uses external load (dumbbell, band with real resistance),
 or "reps_only" for pure bodyweight. If you cannot find a reasonable substitute given what's available, respond
-with {"error": "no_good_substitute"} instead, do not force a bad pick.`,
+with {"error": "no_good_substitute"} instead, do not force a bad pick.
+
+The note is shown to a tired pilot in the gym. Plain spoken English, one sentence, and never an em dash or
+en dash anywhere in it; use a comma or a period instead.`,
 };
 
 // BUG FIX (independent review finding, confirmed real): std/http/server.ts's

@@ -208,7 +208,10 @@ function wire(){
   document.querySelectorAll('[data-tenant]').forEach(el=>el.onclick=()=>openTenant(el.dataset.tenant));
   document.querySelectorAll('[data-lead]').forEach(el=>el.onclick=()=>openLead(el.dataset.lead));
   document.querySelectorAll('[data-bed]').forEach(el=>el.onclick=()=>openBed(el.dataset.bed));
-  document.querySelectorAll('[data-act]').forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); ACT[el.dataset.act](el.dataset.id, el); });
+  // Never let a handler fail silently: a button that errors must say so, not look like it saved.
+  document.querySelectorAll('[data-act]').forEach(el=>el.onclick=async(e)=>{ e.stopPropagation();
+    try{ await ACT[el.dataset.act](el.dataset.id, el); }
+    catch(err){ console.error(el.dataset.act, err); toast('Did not save: '+(err&&err.message||err)); } });
 }
 const statusPill = (s)=>({paid:'<span class="pill ok">Paid</span>',due:'<span class="pill warn">Due</span>',late:'<span class="pill bad">Late</span>','not started':'<span class="pill muted">Not started</span>','n/a':'<span class="pill muted">n/a</span>'}[s]||'');
 const bedPill = (s)=>({Open:'<span class="pill ok">Open</span>',Reserved:'<span class="pill info">Reserved</span>',Occupied:'<span class="pill muted">Occupied</span>'}[s]||'');
@@ -488,8 +491,8 @@ const ACT = {
       <button class="btn" data-act="feekeep" data-id="${id}">Keeping the fee</button>
     </div>`); wire(); },
   feerefundsave:async(id)=>{ const t=tenantById(id); const amt=Math.abs(Number($('rf-amt').value))||0; if(!amt) return toast('Amount?');
-    const on=$('rf-date').value||today(); const note=$('rf-note').value.trim()||null; closeSheet();
-    await run(sb.from('cp_payments').insert({tenant_id:id,tenant_name:t.name,amount:-amt,method:$('rf-method').value,for_month:null,type:'Refund',received_on:on,note:note||'Reservation fee refunded at move-out'}));
+    const on=$('rf-date').value||today(); const note=$('rf-note').value.trim()||null; const method=$('rf-method').value; closeSheet();
+    await run(sb.from('cp_payments').insert({tenant_id:id,tenant_name:t.name,amount:-amt,method,for_month:null,type:'Refund',received_on:on,note:note||'Reservation fee refunded at move-out'}));
     await run(sb.from('cp_tenants').update({fee_refunded_on:on}).eq('id',id),'Refund logged'); },
   feeunkeep:async(id)=>{ closeSheet(); await run(sb.from('cp_tenants').update({fee_kept:false}).eq('id',id),'Back on the list'); openTenant(id); },
   feekeep:(id)=>confirmSheet('Keep the $150 instead of refunding it? This just clears the reminder, no payment is logged.',async()=>{ closeSheet(); await run(sb.from('cp_tenants').update({fee_kept:true}).eq('id',id),'Fee kept'); }),
@@ -512,11 +515,17 @@ const ACT = {
   assign:(bedId)=>{ const cands=S.data.tenants.filter(t=>t.status!=='Moved Out'&&t.bed_id!==bedId); const b=S.data.beds.find(x=>x.id===bedId);
     sheet(`<h2>Assign ${bedId}</h2><div class="stack"><label class="f">Tenant<select id="as-t"><option value="">Choose…</option>${cands.map(t=>`<option value="${t.id}">${esc(t.name)} (${t.status}${t.bed_id?', now '+t.bed_id:''})</option>`).join('')}</select></label><label class="f">Rent $/mo<input id="as-rent" inputmode="numeric" value="${b.list_price}"></label><button class="btn pri" data-act="assignsave" data-id="${bedId}">Assign</button><button class="btn" data-act="addtenant" data-id="x">Or add a new tenant</button></div>`); wire(); },
   assignsave:async(bedId)=>{ const tid=$('as-t').value; if(!tid) return toast('Pick a tenant'); const rent=Number($('as-rent').value)||0; closeSheet(); await run(sb.from('cp_tenants').update({bed_id:bedId,rent,payment_code:bedId.replace('-',''),category_hold:null}).eq('id',tid),'Assigned'); },
-  bednotes:async(id)=>{ closeSheet(); await run(sb.from('cp_beds').update({notes:$('bed-notes').value.trim()||null}).eq('id',id),'Saved'); },
+  bednotes:async(id)=>{ const v=$('bed-notes').value.trim()||null; closeSheet(); await run(sb.from('cp_beds').update({notes:v}).eq('id',id),'Saved'); },
   pay:(id)=>{ sheet(payForm(id||null)); wire(); },
-  paysave:async()=>{ const tid=$('pf-tenant').value; const t=tenantById(tid); const amt=Number($('pf-amount').value); if(!amt) return toast('Amount?'); closeSheet();
-    await run(sb.from('cp_payments').insert({tenant_id:tid,tenant_name:t.name,amount:amt,method:$('pf-method').value,for_month:$('pf-month').value,type:$('pf-type').value,received_on:$('pf-date').value||today(),note:$('pf-note').value.trim()||null}),'Payment logged');
-    if($('pf-type').value==='Reservation fee'&&!t.fee_paid_on) await run(sb.from('cp_tenants').update({fee_paid_on:$('pf-date').value||today()}).eq('id',tid)); },
+  // Read every field BEFORE closeSheet(): it removes the inputs from the page.
+  paysave:async()=>{ const tid=$('pf-tenant').value; const t=tenantById(tid); const amt=Number($('pf-amount').value);
+    const method=$('pf-method').value, forMonth=$('pf-month').value, type=$('pf-type').value,
+          on=$('pf-date').value||today(), note=$('pf-note').value.trim()||null;
+    if(!amt) return toast('Amount?');
+    if(!t) return toast('Pick a tenant');
+    closeSheet();
+    await run(sb.from('cp_payments').insert({tenant_id:tid,tenant_name:t.name,amount:amt,method,for_month:forMonth,type,received_on:on,note}),'Payment logged');
+    if(type==='Reservation fee'&&!t.fee_paid_on) await run(sb.from('cp_tenants').update({fee_paid_on:on}).eq('id',tid)); },
   paydelete:(id)=>confirmSheet('Delete this payment?',async()=>{ closeSheet(); await run(sb.from('cp_payments').delete().eq('id',id),'Deleted'); }),
   copy:async(txt)=>{ try{ await navigator.clipboard.writeText(txt); toast('Copied '+txt); }
     catch(e){ sheet(`<h2>Copy</h2><div class="stack"><textarea id="cp-t" style="width:100%;min-height:60px" readonly>${esc(txt)}</textarea><div class="small muted">Tap and hold to copy.</div></div>`); const el=$('cp-t'); if(el){ el.focus(); el.setSelectionRange(0,el.value.length); } } },

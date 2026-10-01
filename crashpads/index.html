@@ -207,7 +207,12 @@ function wire(){
 }
 const statusPill = (s)=>({paid:'<span class="pill ok">Paid</span>',due:'<span class="pill warn">Due</span>',late:'<span class="pill bad">Late</span>','not started':'<span class="pill muted">Not started</span>','n/a':'<span class="pill muted">n/a</span>'}[s]||'');
 const bedPill = (s)=>({Open:'<span class="pill ok">Open</span>',Reserved:'<span class="pill info">Reserved</span>',Occupied:'<span class="pill muted">Occupied</span>'}[s]||'');
-const contactRow = (t)=>`<div class="row small">${t.phone?`<a class="btn sm" href="tel:+${phoneDigits(t.phone)}">Call</a><a class="btn sm" href="sms:+${phoneDigits(t.phone)}">Text</a>`:''}${t.email?`<a class="btn sm" href="mailto:${esc(t.email)}">Email</a>`:''}<span class="muted mono">${esc(fmtPhone(t.phone))}</span></div>`;
+// Phone and email each get a Copy button; the email goes into GroupMe and TTLock by hand.
+const contactRow = (t)=>`<div class="stack" style="gap:6px">
+  <div class="row small">${t.phone?`<a class="btn sm" href="tel:+${phoneDigits(t.phone)}">Call</a><a class="btn sm" href="sms:+${phoneDigits(t.phone)}">Text</a>`:''}${t.email?`<a class="btn sm" href="mailto:${esc(t.email)}">Email</a>`:''}</div>
+  ${t.phone?`<div class="row small"><span class="mono muted grow" style="overflow-wrap:anywhere">${esc(fmtPhone(t.phone))}</span><button class="btn sm" data-act="copy" data-id="${esc(fmtPhone(t.phone))}">Copy</button></div>`:''}
+  ${t.email?`<div class="row small"><span class="mono muted grow" style="overflow-wrap:anywhere">${esc(t.email)}</span><button class="btn sm" data-act="copy" data-id="${esc(t.email)}">Copy</button></div>`:'<div class="small muted">No email on file.</div>'}
+</div>`;
 
 // What's still open after someone moves out. Drives the Today list and the tenant card.
 function moveoutTodo(t){
@@ -508,6 +513,8 @@ const ACT = {
     await run(sb.from('cp_payments').insert({tenant_id:tid,tenant_name:t.name,amount:amt,method:$('pf-method').value,for_month:$('pf-month').value,type:$('pf-type').value,received_on:$('pf-date').value||today(),note:$('pf-note').value.trim()||null}),'Payment logged');
     if($('pf-type').value==='Reservation fee'&&!t.fee_paid_on) await run(sb.from('cp_tenants').update({fee_paid_on:$('pf-date').value||today()}).eq('id',tid)); },
   paydelete:(id)=>confirmSheet('Delete this payment?',async()=>{ closeSheet(); await run(sb.from('cp_payments').delete().eq('id',id),'Deleted'); }),
+  copy:async(txt)=>{ try{ await navigator.clipboard.writeText(txt); toast('Copied '+txt); }
+    catch(e){ sheet(`<h2>Copy</h2><div class="stack"><textarea id="cp-t" style="width:100%;min-height:60px" readonly>${esc(txt)}</textarea><div class="small muted">Tap and hold to copy.</div></div>`); const el=$('cp-t'); if(el){ el.focus(); el.setSelectionRange(0,el.value.length); } } },
   cleandone:async(id)=>{ await run(sb.from('cp_cleaning').update({done:true}).eq('id',id)); },
   cleantext:async()=>{ const c=S.data.cleaning.filter(x=>!x.done); const lines=c.map(x=>`- ${x.bed_id}: ${x.task.toLowerCase()}${x.tenant_name?' ('+x.tenant_name+')':''}${x.needed_on?' by '+fmtD(x.needed_on):''}`);
     const txt=`Hey Will, for this week:\n${lines.join('\n')}\nThanks!`; try{ await navigator.clipboard.writeText(txt); toast('Copied for Will'); }catch(e){ sheet(`<h2>Text for Will</h2><textarea style="width:100%;min-height:160px">${esc(txt)}</textarea>`); }

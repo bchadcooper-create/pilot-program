@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.0 / 20260916_4
+ * Version/build: fcf-v5.44.1 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.0';
+const FCF_VERSION = 'fcf-v5.44.1';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -5394,21 +5394,38 @@ async function callAICoach(mode, context) {
     // never resolves. 20s is generous for what should be a 2-4s response;
     // past that, treat it as failed so the card can hide instead of
     // showing "Thinking..." indefinitely.
-    const controller = new AbortController();
     // 35s (was 20s): the AI coach now reasons before answering on the weekly
     // review and trip plan (Sonnet 5, medium effort). Those load async into
     // their own cards, so a longer ceiling never blocks the UI.
-    const timeoutId = setTimeout(() => controller.abort(), 35000);
+    const attempt = async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 35000);
+      try {
+        return await fetch(AI_COACH_EDGE_FN, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+          body: JSON.stringify({ mode, context }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    };
+    // BUG FIX (reported: "Ask AI Coach" came back with "Couldn't get a
+    // suggestion" on a layover; the function logs show the browser's
+    // preflight arrived and the POST itself never did). A request that
+    // dies on the wire between the phone and Supabase, a cell handoff or
+    // hotel wifi dropping a packet, is the normal failure on the road and
+    // is worth one quick retry before giving up. An HTTP error response is
+    // a real answer and is never retried.
     let res;
     try {
-      res = await fetch(AI_COACH_EDGE_FN, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
-        body: JSON.stringify({ mode, context }),
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeoutId);
+      res = await attempt();
+    } catch (e) {
+      if (e.name === 'AbortError') throw e;      // 35s already spent, do not double it
+      console.warn('callAICoach: network failure, retrying once:', e);
+      await new Promise(r => setTimeout(r, 1500));
+      res = await attempt();
     }
     const data = await res.json();
     if (!res.ok) return { error: data.error || 'ai_failed' };
@@ -6399,9 +6416,35 @@ function exerciseMatchesQuery(canonicalName, rawQuery) {
   );
 }
 
+// Movements people search for in the swap sheet that no program uses.
+// Catalog-only: they never appear in a generated workout, only as swap
+// and custom-exercise matches. (Reported: "Shrugs not in the catalog".)
+const CATALOG_EXTRAS = [
+  ex('x_shrug_bb',  'Barbell Shrug',            '3×12', 3, 'Shoulders straight up toward the ears, pause at the top. No rolling.'),
+  ex('x_shrug_db',  'Dumbbell Shrug',           '3×15', 3, 'Heavy dumbbells at the sides, shrug straight up and hold a beat.'),
+  ex('x_chinup',    'Chin-Up',                  '3×8',  3, 'Underhand grip, chest to the bar. More biceps than a pullup.', false, 'reps_only'),
+  ex('x_skull',     'Skull Crusher',            '3×10', 3, 'EZ bar or dumbbells, lower to the forehead, elbows stay pointed up.'),
+  ex('x_pushpress', 'Push Press',               '4×5',  4, 'Dip the knees, drive the bar overhead with the legs, lock out.'),
+  ex('x_revfly',    'Dumbbell Reverse Fly',     '3×15', 3, 'Hinge forward, light weight, squeeze the rear delts at the top.'),
+  ex('x_hack',      'Hack Squat (Machine)',     '3×10', 3, 'Feet mid-platform, full depth, drive through the whole foot.'),
+  ex('x_goodmorn',  'Good Morning',             '3×10', 3, 'Bar on the back, hinge at the hips with a flat back, light load.'),
+  ex('x_sumo',      'Sumo Deadlift',            '4×5',  4, 'Wide stance, toes out, hips close to the bar, push the floor away.'),
+  ex('x_rackpull',  'Rack Pull',                '4×5',  4, 'Bar at knee height in the rack, heavy lockouts for the upper back.'),
+  ex('x_landmine',  'Landmine Press',           '3×10', 3, 'One arm, bar end at the shoulder, press up and forward.'),
+  ex('x_hipthrust', 'Barbell Hip Thrust',       '3×10', 3, 'Shoulders on a bench, drive the hips up, squeeze the glutes at the top.'),
+  ex('x_cablefly',  'Cable Fly',                '3×12', 3, 'Slight bend in the elbows, bring the handles together in front of the chest.'),
+  ex('x_dbfly',     'Dumbbell Fly',             '3×12', 3, 'Flat or incline bench, wide arc, stretch at the bottom.'),
+  ex('x_wristcurl', 'Wrist Curl',               '3×15', 3, 'Forearms on the thighs, curl the wrists only. Light weight.'),
+  ex('x_ellip',     'Elliptical Intervals',     '20 min', 1, 'Alternate 1 min hard and 2 min easy.', true, 'timed'),
+];
+
 function buildExerciseCatalog() {
   const seen = {};
   const catalog = [];
+  CATALOG_EXTRAS.forEach(e => {
+    seen[e.name] = true;
+    catalog.push({ id: e.id, name: e.name, target: e.target, sets: e.sets, note: e.note, timed: e.timed, inputType: e.inputType, phase: 'enroute' });
+  });
   Object.values(WORKOUTS).forEach(envW => {
     Object.values(envW).forEach(mgW => {
       ['taxi','takeoff','enroute','landing'].forEach(ph => {
@@ -8149,7 +8192,13 @@ async function requestAISubstitute(exId, phaseKey, exItem) {
   if (!resultBox) return; // sheet closed while waiting
 
   if (result.error) {
-    resultBox.innerHTML = '<div style="font-size:0.6875rem;color:var(--amber);margin:8px 0">Couldn\'t get a suggestion. Try describing it differently, or use catalog search above.</div>';
+    // Say what actually went wrong. A dropped connection and "the model
+    // had no answer" need different responses from the person.
+    const msg = result.error === 'network_error' ? 'Lost the connection while asking. Check your signal and tap Ask AI Coach again.'
+      : result.error === 'timeout' ? 'The coach took too long to answer. Tap Ask AI Coach to try again.'
+      : result.error === 'pro_required' ? 'AI substitutes are a Pro feature.'
+      : 'Couldn\'t get a suggestion. Try describing it differently, or use catalog search above.';
+    resultBox.innerHTML = '<div style="font-size:0.6875rem;color:var(--amber);margin:8px 0">'+msg+'</div>';
     return;
   }
 

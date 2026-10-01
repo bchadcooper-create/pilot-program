@@ -82,7 +82,7 @@ function loadAppJS() {
   // attach themselves automatically and are reachable as context.<name>;
   // this one extra statement is only needed to reach the `const ST` state
   // object itself from outside the sandbox for test setup/assertions.
-  vm.runInContext('this.ST = ST; this.WORKOUTS = WORKOUTS;', context);
+  vm.runInContext('this.ST = ST; this.WORKOUTS = WORKOUTS; this.CATALOG_EXTRAS = CATALOG_EXTRAS;', context);
   return context;
 }
 
@@ -451,6 +451,22 @@ test('a layover that starts tomorrow afternoon is not tonight', () => {
 test('morning inside a layover that ends before noon: tonight is the next overnight', () => {
   const trip = ctx.currentTripContext(tripFixture, new Date(2026, 8, 30, 5, 0));
   assertEqual(trip.tonightLayoverAirport, 'EUG', 'tonight is the 13:07 EUG layover');
+});
+
+console.log('\nSwap catalog (reported: "Shrugs not in the catalog"):');
+test('catalog search finds shrugs and the other added staples', () => {
+  const names = ctx.buildExerciseCatalog().map(e => e.name.toLowerCase());
+  ['shrug', 'chin-up', 'skull crusher', 'push press', 'hip thrust', 'elliptical'].forEach(q =>
+    assertEqual(names.some(n => n.includes(q)), true, q + ' present'));
+});
+test('catalog-only extras never appear in a generated program', () => {
+  const extraIds = new Set(ctx.CATALOG_EXTRAS.map(e => e.id));
+  let leaked = 0;
+  (function walk(v) {
+    if (Array.isArray(v)) v.forEach(x => { if (x && x.id) { if (extraIds.has(x.id)) leaked++; } else walk(x); });
+    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+  })(ctx.WORKOUTS);
+  assertEqual(leaked, 0, 'extras inside WORKOUTS');
 });
 
 console.log('\n' + '─'.repeat(50));

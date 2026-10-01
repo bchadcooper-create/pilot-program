@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.4 / 20260916_4
+ * Version/build: fcf-v5.44.5 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.4';
+const FCF_VERSION = 'fcf-v5.44.5';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -5739,8 +5739,15 @@ async function loadTripPlan() {
     // a legitimate "there's nothing to show here" case that never told the
     // card to hide itself. Card is looked up once at the top now so every
     // exit path (no calendar, short trip, API error) can hide it.
-    if (!ST.calendarEvents?.length) { if (card) card.style.display = 'none'; console.log('[tripPlan] no calendar events synced'); return; }
-    const bounds = getTripBounds(ST.calendarEvents, new Date());
+    // BUG FIX (found by the e2e crawler after uploading a 4-day pairing):
+    // this only ever read ST.calendarEvents, which is the Apple Calendar
+    // sync. An uploaded .ics lives in ST.flightSchedule, so web users and
+    // anyone who uploads a file never got a trip plan at all, while the
+    // fuel card right next to it (loadFuelLogistics) already fell back to
+    // the upload. Same fallback here.
+    const schedule = ST.calendarEvents?.length ? ST.calendarEvents : (ST.flightSchedule || []);
+    if (!schedule.length) { if (card) card.style.display = 'none'; console.log('[tripPlan] no schedule'); return; }
+    const bounds = getTripBounds(schedule, new Date());
     if (!bounds || bounds.totalDays < 2) { if (card) card.style.display = 'none'; console.log('[tripPlan] no multi-day trip found', {bounds}); return; }
 
     // How many sessions have already been logged since this trip started —

@@ -22,6 +22,7 @@
 const { chromium, devices } = require('playwright');
 const fs = require('fs');
 const path = require('path');
+const { buildTrip, toICS } = require('./fixtures/schedule');
 
 const ROOT = path.join(__dirname, '..', '..');
 const REPORT_DIR = path.join(__dirname, 'report');
@@ -167,9 +168,33 @@ async function signIn(page) {
   await settle(page, 2500);
   // First session on a device shows the safety disclaimer; accept it the
   // way a person would, through its button.
-  const ok = page.getByText(/I UNDERSTAND/i).first();
+  // Every crawl is a fresh browser profile, so the per-device safety
+  // disclaimer always appears, sometimes a beat after sign-in resolves.
+  // Wait for either the disclaimer button or the app's tab bar.
+  await page.waitForFunction(() => document.querySelector('[onclick*="acceptDisclaimer"]') || (typeof ST !== 'undefined' && ST.disclaimerAccepted), null, { timeout: 15000 }).catch(() => {});
+  const ok = page.locator('[onclick*="acceptDisclaimer"]').first();
   if (await ok.count()) { await shot(page, 'safety disclaimer'); await ok.click(); await settle(page, 1200); }
+  const accepted = await page.evaluate(() => typeof ST !== 'undefined' && !!ST.disclaimerAccepted);
+  if (!accepted) finding('sign-in', 'disclaimer', 'safety disclaimer still blocking after accept');
   await shot(page, 'signed in, Today');
+}
+
+// A believable pilot, set once through the app's own save paths so the
+// bot is never a blank account: call sign, body stats, goal, Pro, both
+// trackers on. Idempotent.
+async function makeRealistic(page) {
+  await page.evaluate(async () => {
+    const profile = (await dbGetProfile()) || {};
+    Object.assign(profile, {
+      username: profile.username || 'E2E Bot', age: 44, sex: 'male', heightIn: 71, lastWeight: 188,
+      goal: 'muscle', level: 'intermediate', trackNutrition: true, trackHydration: true,
+      nutritionGoals: profile.nutritionGoals && profile.nutritionGoals.mode !== 'none' ? profile.nutritionGoals
+        : { mode: 'maintain', calories: 2600, protein: 180, carbs: 280, fat: 85, setAt: new Date().toISOString() },
+    });
+    await dbSetProfile(profile);
+    applyProfileToState(profile);
+  }).catch(e => finding('setup', 'realistic profile', e.message));
+  await goTab(page, 'today');
 }
 
 async function visitAllScreens(page) {
@@ -404,6 +429,169 @@ async function textSizeCheck(page) {
   await page.evaluate(() => setTextSize('default'));
 }
 
+// A real pairing, uploaded through the real file input. Day 2 of 4: woke
+// in EUG, two legs this afternoon, overnight SEA. Then check that the
+// screens that read the schedule reach the right conclusions.
+async function scheduleFlow(page) {
+  const trip = buildTrip(new Date());
+  const ics = toICS(trip);
+  fs.writeFileSync(path.join(REPORT_DIR, 'trip.ics'), ics);
+  await goTab(page, 'data');
+  const input = await page.$('#icsFileInput');
+  if (!input) { finding('schedule', 'data', 'no .ics file input on the Data screen'); return; }
+  await input.setInputFiles({ name: 'trip.ics', mimeType: 'text/calendar', buffer: Buffer.from(ics) });
+  await settle(page, 2500);
+  await shot(page, 'schedule uploaded');
+  const n = await page.evaluate(() => (ST.flightSchedule || []).length);
+  if (n !== trip.length) finding('schedule', 'upload', 'expected ' + trip.length + ' events, app has ' + n);
+
+  // What the app concluded, straight from the same functions Today uses.
+  const ctx = await page.evaluate(() => {
+    const sched = scheduleContextForToday(ST.flightSchedule, new Date());
+    return { legsRemaining: sched.legsTodayRemaining, legsCompleted: sched.legsTodayCompleted,
+             tripDay: sched.tripDayNumber, tripDays: sched.tripTotalDays,
+             tonight: sched.tonightLayoverAirport, flightsToday: sched.flightsToday };
+  });
+  console.log('    app reads: ' + JSON.stringify(ctx));
+  const hour = new Date().getHours();
+  const expectRemaining = hour < 14 ? 2 : hour < 17 ? 1 : 0;
+  if (ctx.tripDay !== 2 || ctx.tripDays !== 4) finding('schedule', 'trip context', 'expected day 2 of 4, got ' + ctx.tripDay + ' of ' + ctx.tripDays);
+  if (ctx.tonight !== 'SEA') finding('schedule', 'trip context', 'tonight should be SEA, got ' + ctx.tonight);
+  if (ctx.legsRemaining !== expectRemaining) finding('schedule', 'trip context', 'legs remaining today: expected ' + expectRemaining + ', got ' + ctx.legsRemaining);
+
+  // Today should now show the schedule card with both flights and SEA.
+  await goTab(page, 'today');
+  await settle(page, 2000);
+  const text = await page.evaluate(() => document.getElementById('mainPage').innerText);
+  if (!/3747/.test(text) || !/3902/.test(text)) finding('schedule', 'today', "today's flights 3747/3902 not on the Today screen");
+  if (!/Layover in SEA/i.test(text)) finding('schedule', 'today', 'tonight (Layover in SEA) not on the Today screen');
+  await sniffText(page, 'today with schedule');
+  await shot(page, 'Today with schedule');
+
+  // The AI cards now have real trip context; they must settle and must
+  // talk about the right night. Trip plan should appear for a 4-day trip.
+  if (!SKIP_AI) {
+    await aiCards(page);
+    const fat = await page.evaluate(() => document.getElementById('aiFatigueCard')?.innerText || '');
+    if (/\bEUG\b/.test(fat) && /tonight/i.test(fat)) finding('ai-content', 'aiFatigueCard', 'says tonight is EUG; it is SEA: ' + fat.slice(0, 160));
+    const plan = await page.evaluate(() => { const el = document.getElementById('aiTripPlanCard'); return el && el.style.display !== 'none' ? el.innerText : ''; });
+    if (!/Day 1/.test(plan)) finding('ai-content', 'aiTripPlanCard', 'no day-by-day plan shown for a 4-day trip: "' + plan.slice(0, 80) + '"');
+    // The fueling note lives on the Nutrition screen, checked in foodFlow.
+  }
+}
+
+async function waterFlow(page) {
+  await goTab(page, 'today');
+  const before = await page.evaluate(() => ST.waterIn || 0);
+  const open = page.locator('[onclick*="openQuickWaterLog"]').first();
+  if (!(await open.count())) { finding('water', 'today', 'no hydration control on Today (is tracking on?)'); return; }
+  await open.scrollIntoViewIfNeeded().catch(() => {});
+  await open.click();
+  await page.waitForTimeout(400);
+  await shot(page, 'water sheet');
+  // Quick-add button first (the one-tap path), then a typed amount.
+  const quick = page.locator('#modalRoot [onclick*="addQuickWater"]').first();
+  if (await quick.count()) { await quick.click(); await settle(page); }
+  const mid = await page.evaluate(() => ST.waterIn || 0);
+  if (mid <= before) finding('water', 'quick add', 'water did not increase after quick add (' + before + ' -> ' + mid + ')');
+  await open.scrollIntoViewIfNeeded().catch(() => {});
+  await open.click().catch(() => {});
+  await page.waitForTimeout(400);
+  const inp = await page.$('#quickWaterInput');
+  if (inp) {
+    await inp.fill('0.5');
+    const save = page.locator('#modalRoot [onclick*="saveQuickWater"]').first();
+    if (await save.count()) await save.click();
+    await settle(page);
+  } else finding('water', 'sheet', 'no amount input in the water sheet');
+  const after = await page.evaluate(() => ST.waterIn || 0);
+  if (after < mid + 0.49) finding('water', 'typed add', 'adding 0.5 L did not stick (' + mid + ' -> ' + after + ')');
+  const shown = await page.evaluate(() => document.getElementById('mainPage').innerText);
+  if (!new RegExp(after.toFixed(1).replace('.', '\\.')).test(shown)) finding('water', 'today', 'Today does not show the new total ' + after.toFixed(1));
+  await closeAnyModal(page);
+  await shot(page, 'water logged');
+  // Reload and make sure it survived a round trip to the server.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => typeof ST !== 'undefined' && !!ST.user, null, { timeout: 25000 });
+  await settle(page, 3000);
+  const persisted = await page.evaluate(() => ST.waterIn || 0);
+  if (Math.abs(persisted - after) > 0.01) finding('water', 'persistence', 'after reload water is ' + persisted + ', was ' + after);
+}
+
+async function foodFlow(page) {
+  await goTab(page, 'nutrition');
+  await settle(page, 1500);
+  const open = page.locator('[onclick*="openMealBuilder"]').first();
+  if (!(await open.count())) { finding('food', 'nutrition', 'no Log a meal control'); return; }
+  await open.click();
+  await page.waitForTimeout(800);
+  await shot(page, 'meal builder');
+  // Manual entry path: search USDA, pick the first hit, add it, save.
+  const manual = page.locator('#modalRoot [onclick*="showManualFoodEntry"]').first();
+  if (await manual.count()) { await manual.click(); await page.waitForTimeout(300); }
+  const search = await page.$('#foodSearchInput');
+  if (!search) { finding('food', 'builder', 'no food search box'); await closeAnyModal(page); return; }
+  await search.fill('chicken breast');
+  const t0 = Date.now();
+  let hits = 0;
+  while (Date.now() - t0 < 15000) {
+    await page.waitForTimeout(500);
+    hits = await page.$$eval('#usdaSearchResults [onclick*="selectUSDAFood"]', d => d.length);
+    if (hits) break;
+  }
+  if (!hits) { finding('food', 'usda search', '"chicken breast" returned no results in 15s'); await closeAnyModal(page); return; }
+  await page.locator('#usdaSearchResults [onclick*="selectUSDAFood"]').first().click();
+  // Picking a food fetches its full nutrient detail before the Add button
+  // appears; give that round trip the same patience a person would.
+  const addBtn = page.locator('#modalRoot [onclick*="addUSDAFoodToMeal"]').first();
+  await addBtn.waitFor({ timeout: 15000 }).catch(() => {});
+  if (!(await addBtn.count())) { finding('food', 'builder', 'no Add button 15s after picking a food'); await closeAnyModal(page); return; }
+  await addBtn.click();
+  await page.waitForTimeout(400);
+  const items = await page.evaluate(() => (ST.mealBuilder?.items || []).length);
+  if (items !== 1) finding('food', 'builder', 'expected 1 item in the meal, have ' + items);
+  await shot(page, 'meal with one item');
+  const mealsBefore = await page.evaluate(() => (ST.todaysMeals || []).length);
+  const finish = page.locator('#modalRoot [onclick*="finishMealBuilder"]').first();
+  if (!(await finish.count())) { finding('food', 'builder', 'no Save/Finish button'); await closeAnyModal(page); return; }
+  await finish.click();
+  await settle(page, 2500);
+  const mealsAfter = await page.evaluate(() => (ST.todaysMeals || []).length);
+  if (mealsAfter !== mealsBefore + 1) finding('food', 'save', 'meal count ' + mealsBefore + ' -> ' + mealsAfter);
+  const text = await page.evaluate(() => document.getElementById('mainPage').innerText);
+  if (!/chicken/i.test(text)) finding('food', 'nutrition', 'saved meal not visible on the Nutrition screen');
+  if (!/\d+\s*(kcal|cal)/i.test(text)) finding('food', 'nutrition', 'no calorie total shown after logging');
+  await sniffText(page, 'nutrition after meal');
+  await shot(page, 'meal logged');
+  if (!SKIP_AI) {
+    // Fueling note: two legs on the schedule and a meal logged, so it must appear.
+    const t1 = Date.now();
+    let fuel = '';
+    while (Date.now() - t1 < 45000) {
+      fuel = await page.evaluate(() => { const el = document.getElementById('aiFuelCard'); return !el ? 'absent' : el.style.display === 'none' ? 'hidden' : el.innerText; });
+      if (fuel !== 'absent' && fuel !== 'hidden' && !/Thinking/i.test(fuel)) break;
+      await page.waitForTimeout(1500);
+    }
+    console.log('    aiFuelCard: ' + fuel.replace(/\s+/g, ' ').slice(0, 90));
+    if (fuel === 'absent' || fuel === 'hidden' || /Thinking/i.test(fuel)) finding('ai-content', 'aiFuelCard', 'no fueling note on Nutrition with a schedule and a logged meal: ' + fuel);
+    if (/—|–/.test(fuel)) finding('ai-style', 'aiFuelCard', 'em/en dash: ' + fuel.slice(0, 120));
+  }
+  // Fuel card on Today should reflect a logged meal.
+  await goTab(page, 'today');
+  await settle(page, 1500);
+  const today = await page.evaluate(() => document.getElementById('mainPage').innerText);
+  if (!/chicken|kcal|cal\b/i.test(today)) finding('food', 'today', 'Today shows nothing from the logged meal');
+  // Remove the bot's meal so the next run starts clean.
+  await page.evaluate(async () => {
+    const m = (ST.todaysMeals || []).find(x => JSON.stringify(x).toLowerCase().includes('chicken'));
+    if (m && typeof deleteMealLog === 'function') { try { await deleteMealLog(m.id, true); } catch (e) {} }
+  });
+  await page.waitForTimeout(400);
+  const confirm = page.locator('#modalRoot .modal-sheet .btn').first();
+  if (await confirm.count()) await confirm.click().catch(() => {});
+  await settle(page);
+}
+
 function writeReport(startedAt) {
   const lines = [];
   lines.push('# FCF end-to-end crawl');
@@ -453,8 +641,11 @@ function writeReport(startedAt) {
 
   const phases = [
     ['sign in', signIn],
+    ['realistic profile', makeRealistic],
+    ['flight schedule upload', scheduleFlow],
     ['every screen + click sweep', visitAllScreens],
-    ['AI coach cards', aiCards],
+    ['water logging', waterFlow],
+    ['food logging', foodFlow],
     ['workout end to end', runWorkout],
     ['medications', medsFlow],
     ['largest text size', textSizeCheck],

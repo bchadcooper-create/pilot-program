@@ -469,6 +469,40 @@ test('catalog-only extras never appear in a generated program', () => {
   assertEqual(leaked, 0, 'extras inside WORKOUTS');
 });
 
+console.log('\nSet tiles (reported: "No place to record sets, Add Set does nothing"):');
+// No DOM in this sandbox: the state change is what is under test, not the
+// toast or the re-render that follow it.
+const _renderFlight = ctx.renderFlight, _toast = ctx.showBigToast;
+ctx.renderFlight = () => {}; ctx.showBigToast = () => {};
+function fakeWorkoutWith(exItem) {
+  ctx.ST.workout = { taxi: [], takeoff: [Object.assign({}, exItem)], enroute: [], landing: [] };
+  ctx.ST.sets = {}; ctx.ST.expanded = { [exItem.id]: true };
+}
+const dbRow = everyExercise().find(e => e.name === 'DB Row');
+test('swapping an exercise for itself keeps a full set list', () => {
+  fakeWorkoutWith(dbRow);
+  ctx.ST.sets[dbRow.id] = [{ reps: '', weight: '' }];
+  ctx.swapExercise(dbRow.id, { name: dbRow.name, target: dbRow.target, note: dbRow.note, inputType: dbRow.inputType });
+  assertEqual((ctx.ST.sets[dbRow.id] || []).length, 4, 'DB Row 4x10 has four sets');
+});
+test('a card with an empty set list heals itself and renders tiles', () => {
+  fakeWorkoutWith(dbRow);
+  ctx.ST.sets[dbRow.id] = [];
+  const html = ctx.buildExCard(Object.assign({}, dbRow), 'takeoff');
+  assertEqual((html.match(/class="set-tile/g) || []).length, 4, 'four tiles rendered');
+  assertEqual(ctx.ST.sets[dbRow.id].length, 4, 'state repaired');
+});
+test('Add Set on an exercise with no sets creates them instead of doing nothing', () => {
+  fakeWorkoutWith(dbRow);
+  delete ctx.ST.sets[dbRow.id];
+  ctx.addLiveSet(dbRow.id);
+  assertEqual((ctx.ST.sets[dbRow.id] || []).length, 4, 'sets created');
+  ctx.addLiveSet(dbRow.id);
+  assertEqual(ctx.ST.sets[dbRow.id].length, 5, 'then one more added');
+});
+ctx.ST.workout = null; ctx.ST.sets = {}; ctx.ST.expanded = {};
+ctx.renderFlight = _renderFlight; ctx.showBigToast = _toast;
+
 console.log('\n' + '─'.repeat(50));
 console.log(passed + ' passed, ' + failed + ' failed');
 if (failed > 0) process.exit(1);

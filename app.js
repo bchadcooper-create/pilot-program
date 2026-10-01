@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.1 / 20260916_4
+ * Version/build: fcf-v5.44.2 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.1';
+const FCF_VERSION = 'fcf-v5.44.2';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -8254,15 +8254,15 @@ function swapExercise(exId, alt) {
     const newId = catalogMatch ? catalogMatch.id : 'swap_' + slugify(alt.name);
     const newEx = ex(newId, alt.name, alt.target, setsCount, alt.note||'Alternate exercise.', isTimed, iType);
     ST.workout[phase][idx] = newEx;
-    ST.sets[newEx.id] =
-      iType==='timed_bilateral' ? [{seconds_left:'',seconds_right:''}] :
-      iType==='timed_distance'  ? [{seconds:'',miles:''}] :
-      iType==='timed'           ? [{seconds:''}] :
-      iType==='reps_only'       ? Array.from({length:setsCount},()=>({reps:''})) :
-      iType==='reps_height'     ? Array.from({length:setsCount},()=>({reps:'',height:''})) :
-      iType==='reps_distance'   ? Array.from({length:setsCount},()=>({reps:'',distance:''})) :
-                                   Array.from({length:setsCount},()=>({reps:'',weight:''}));
+    // BUG FIX (reported: "No place to record sets! Clicking add set does
+    // nothing"). The old exercise's sets were deleted AFTER the new ones
+    // were created. When the swap resolves to the same id as the exercise
+    // being replaced (swapping something for itself, or for the catalog
+    // entry it already is), that delete wiped the fresh sets, the card
+    // rendered with no tiles, and addLiveSet refused to touch an empty
+    // list. Delete first, then create.
     delete ST.sets[exId];
+    ST.sets[newEx.id] = blankSetsFor(newEx);
     persistWorkoutState();
     showBigToast(alt.name+' swapped in.','ok');
     renderFlight(document.getElementById('mainPage'));
@@ -8390,9 +8390,29 @@ function openYouTubeSearch(exName) {
 }
 
 
+// The empty set list an exercise starts with, by input type. One place
+// for the shape so swapExercise, the card, and Add Set can never disagree.
+function blankSetsFor(exItem) {
+  const n = Math.max(1, parseInt(exItem.sets, 10) || 3);
+  const t = exItem.inputType || (exItem.timed ? 'timed' : 'reps_weight');
+  if (t === 'timed_bilateral') return [{ seconds_left: '', seconds_right: '' }];
+  if (t === 'timed_distance')  return [{ seconds: '', miles: '' }];
+  if (t === 'timed' || t === 'nsdr' || exItem.timed) return [{ seconds: '' }];
+  if (t === 'reps_only')     return Array.from({ length: n }, () => ({ reps: '' }));
+  if (t === 'reps_height')   return Array.from({ length: n }, () => ({ reps: '', height: '' }));
+  if (t === 'reps_distance') return Array.from({ length: n }, () => ({ reps: '', distance: '' }));
+  return Array.from({ length: n }, () => ({ reps: '', weight: '' }));
+}
+
 function buildExCard(exItem, phaseKey) {
   const isOpen = !!ST.expanded[exItem.id];
-  const sets = ST.sets[exItem.id] || [];
+  // Self-healing: an exercise with no set list (a swap that went wrong, a
+  // restored workout from an older build, anything) gets its blanks here
+  // so the card always has somewhere to type.
+  if (!Array.isArray(ST.sets[exItem.id]) || ST.sets[exItem.id].length === 0) {
+    ST.sets[exItem.id] = blankSetsFor(exItem);
+  }
+  const sets = ST.sets[exItem.id];
   const hasData = sets.some(s => s.reps || s.weight || s.seconds || s.height || s.distance || s.seconds_left || s.seconds_right);
   const parts = [];
 
@@ -8764,13 +8784,21 @@ function tickRestTimer(exId) {
   }
 }
 function addLiveSet(exId) {
-  const sets = ST.sets[exId];
-  if (!sets || !sets.length) return;
-  // Clone the shape of the last set (whatever fields it has) so this works
-  // generically across reps/weight, reps-only, reps/height, reps/distance.
-  const blank = {};
-  Object.keys(sets[sets.length-1]).forEach(k => { blank[k] = ''; });
-  sets.push(blank);
+  let sets = ST.sets[exId];
+  if (!sets || !sets.length) {
+    // Nothing to clone from: build the first set from the exercise itself
+    // rather than silently doing nothing (that silence was the report).
+    const allEx = ST.workout ? [...ST.workout.taxi,...ST.workout.takeoff,...ST.workout.enroute,...ST.workout.landing] : [];
+    const exItem = allEx.find(e => e.id === exId);
+    if (!exItem) return;
+    sets = ST.sets[exId] = blankSetsFor(exItem);
+  } else {
+    // Clone the shape of the last set (whatever fields it has) so this works
+    // generically across reps/weight, reps-only, reps/height, reps/distance.
+    const blank = {};
+    Object.keys(sets[sets.length-1]).forEach(k => { blank[k] = ''; });
+    sets.push(blank);
+  }
   persistWorkoutState();
   renderFlight(document.getElementById('mainPage'));
 }

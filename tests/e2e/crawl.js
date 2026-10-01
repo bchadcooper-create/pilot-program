@@ -188,8 +188,7 @@ async function makeRealistic(page) {
     Object.assign(profile, {
       username: profile.username || 'E2E Bot', age: 44, sex: 'male', heightIn: 71, lastWeight: 188,
       goal: 'muscle', level: 'intermediate', trackNutrition: true, trackHydration: true,
-      nutritionGoals: profile.nutritionGoals && profile.nutritionGoals.mode !== 'none' ? profile.nutritionGoals
-        : { mode: 'maintain', calories: 2600, protein: 180, carbs: 280, fat: 85, setAt: new Date().toISOString() },
+      nutritionGoals: { mode: 'maintain', calories: 2600, protein: 180, carbs: 280, fat: 85, setAt: new Date().toISOString() },
     });
     await dbSetProfile(profile);
     applyProfileToState(profile);
@@ -527,10 +526,12 @@ async function foodFlow(page) {
   await page.waitForTimeout(800);
   await shot(page, 'meal builder');
   // Manual entry path: search USDA, pick the first hit, add it, save.
-  const manual = page.locator('#modalRoot [onclick*="showManualFoodEntry"]').first();
+  const mb = '#mealBuilderRoot ';
+  await page.waitForSelector('#mealBuilderRoot .card', { timeout: 8000 }).catch(() => {});
+  const manual = page.locator(mb + '[onclick*="showManualFoodEntry"]').first();
   if (await manual.count()) { await manual.click(); await page.waitForTimeout(300); }
   const search = await page.$('#foodSearchInput');
-  if (!search) { finding('food', 'builder', 'no food search box'); await closeAnyModal(page); return; }
+  if (!search) { finding('food', 'builder', 'no food search box in the meal builder'); return; }
   await search.fill('chicken breast');
   const t0 = Date.now();
   let hits = 0;
@@ -539,21 +540,21 @@ async function foodFlow(page) {
     hits = await page.$$eval('#usdaSearchResults [onclick*="selectUSDAFood"]', d => d.length);
     if (hits) break;
   }
-  if (!hits) { finding('food', 'usda search', '"chicken breast" returned no results in 15s'); await closeAnyModal(page); return; }
+  if (!hits) { finding('food', 'usda search', '"chicken breast" returned no results in 15s'); return; }
   await page.locator('#usdaSearchResults [onclick*="selectUSDAFood"]').first().click();
   // Picking a food fetches its full nutrient detail before the Add button
   // appears; give that round trip the same patience a person would.
-  const addBtn = page.locator('#modalRoot [onclick*="addUSDAFoodToMeal"]').first();
+  const addBtn = page.locator(mb + '[onclick*="addUSDAFoodToMeal"]').first();
   await addBtn.waitFor({ timeout: 15000 }).catch(() => {});
-  if (!(await addBtn.count())) { finding('food', 'builder', 'no Add button 15s after picking a food'); await closeAnyModal(page); return; }
+  if (!(await addBtn.count())) { finding('food', 'builder', 'no Add button 15s after picking a food'); return; }
   await addBtn.click();
   await page.waitForTimeout(400);
   const items = await page.evaluate(() => (ST.mealBuilder?.items || []).length);
   if (items !== 1) finding('food', 'builder', 'expected 1 item in the meal, have ' + items);
   await shot(page, 'meal with one item');
   const mealsBefore = await page.evaluate(() => (ST.todaysMeals || []).length);
-  const finish = page.locator('#modalRoot [onclick*="finishMealBuilder"]').first();
-  if (!(await finish.count())) { finding('food', 'builder', 'no Save/Finish button'); await closeAnyModal(page); return; }
+  const finish = page.locator(mb + '[onclick*="finishMealBuilder"]').first();
+  if (!(await finish.count())) { finding('food', 'builder', 'no Save/Finish button'); return; }
   await finish.click();
   await settle(page, 2500);
   const mealsAfter = await page.evaluate(() => (ST.todaysMeals || []).length);
@@ -632,6 +633,9 @@ function writeReport(startedAt) {
   });
   page.on('requestfailed', r => {
     if (/favicon|\.png|\.ico/.test(r.url())) return;
+    // A deliberate reload cancels whatever was in flight; that is the
+    // harness, not the app.
+    if (r.failure()?.errorText === 'net::ERR_ABORTED') return;
     finding('request-failed', r.url().replace(/\?.*/, ''), r.failure()?.errorText || 'failed');
   });
   page.on('response', r => {
@@ -644,6 +648,7 @@ function writeReport(startedAt) {
     ['realistic profile', makeRealistic],
     ['flight schedule upload', scheduleFlow],
     ['every screen + click sweep', visitAllScreens],
+    ['realistic profile again (sweep may have changed settings)', makeRealistic],
     ['water logging', waterFlow],
     ['food logging', foodFlow],
     ['workout end to end', runWorkout],

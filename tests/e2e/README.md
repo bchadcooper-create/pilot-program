@@ -10,13 +10,24 @@ It signs in as the bot account (credentials in `tests/e2e/.env`, which is
 gitignored; copy from the team password note), accepts the safety
 disclaimer, then:
 
-1. Visits every screen and clicks every safe control on each one.
-2. Waits for the AI Coach cards on Today to settle.
-3. Generates a workout and, on every exercise card: types into every set
+1. Gives the bot a believable profile (call sign, 44, 188 lb, muscle
+   goal, nutrition targets, both trackers on).
+2. Builds a four-day MobileCCI-shaped pairing anchored to today (woke in
+   EUG, two legs this afternoon, overnight SEA, home day 4, then days
+   off) and uploads it through the real .ics file input. Asserts the app
+   reads day 2 of 4, tonight SEA, the right number of legs left, and that
+   Today shows both flights. Waits on the fatigue note and the trip plan.
+   The fixture is `tests/e2e/fixtures/schedule.js`.
+3. Visits every screen and clicks every safe control on each one.
+4. Logs water two ways (quick add, typed amount), checks the Today total,
+   reloads, and checks it persisted.
+5. Logs a meal: USDA search for chicken breast, adds it, saves, checks the
+   Nutrition totals, the Today screen, and the AI fueling note.
+6. Generates a workout and, on every exercise card: types into every set
    field, taps Add Set and Remove Set, opens Guide, opens Alternate and
    searches the catalog. Asks the AI for one substitute. Sets the Chocks.
-4. Adds a medication, checks it off on Today, removes it.
-5. Switches text size to Largest and checks nothing runs off the screen.
+7. Adds a medication, checks it off on Today, removes it.
+8. Switches text size to Largest and checks nothing runs off the screen.
 
 Anything that throws a JavaScript error, logs a console error, fails a
 network request, leaks `undefined` / `NaN` / `[object Object]` into the

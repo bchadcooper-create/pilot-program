@@ -1,6 +1,6 @@
 {
   "name": "flight-crew-fitness",
-  "version": "5.44.2",
+  "version": "5.44.3",
   "private": true,
   "description": "Training and nutrition built around a crew schedule.",
   "scripts": {

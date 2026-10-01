@@ -503,6 +503,34 @@ test('Add Set on an exercise with no sets creates them instead of doing nothing'
 ctx.ST.workout = null; ctx.ST.sets = {}; ctx.ST.expanded = {};
 ctx.renderFlight = _renderFlight; ctx.showBigToast = _toast;
 
+console.log('\nSet feedback (reported: "more rest before the next set" on the LAST set):');
+const row4x10 = { target: '4×10/side' };
+test('final set 2 short after strong early sets: praise, no next-set advice', () => {
+  const r = ctx.autoregSuggestion(row4x10, [
+    { reps: '12', weight: '50' }, { reps: '12', weight: '50' }, { reps: '10', weight: '50' }, { reps: '8', weight: '50' }]);
+  assertEqual(r.tone, 'positive', 'tone');
+  assertEqual(/next set/i.test(r.text), false, 'no "next set" on the last set');
+  assertEqual(/8 of 10/.test(r.text), true, 'says 8 of 10, not 8/10');
+  assertEqual(/42 total reps against 40/.test(r.text), true, 'credits total volume');
+});
+test('same shortfall mid-exercise still gives between-set advice', () => {
+  const r = ctx.autoregSuggestion(row4x10, [
+    { reps: '12', weight: '50' }, { reps: '8', weight: '50' }, { reps: '', weight: '' }, { reps: '', weight: '' }]);
+  assertEqual(r.tone, 'minor', 'tone');
+  assertEqual(/next set/i.test(r.text), true, 'next-set advice');
+});
+test('big miss on the final set points to next session, not the next set', () => {
+  const r = ctx.autoregSuggestion(row4x10, [
+    { reps: '10', weight: '60' }, { reps: '8', weight: '60' }, { reps: '6', weight: '60' }, { reps: '5', weight: '60' }]);
+  assertEqual(r.tone, 'major', 'tone');
+  assertEqual(/next set/i.test(r.text), false, 'no next-set advice');
+  assertEqual(/next session/i.test(r.text), true, 'next-session advice');
+});
+test('hitting target on the final set stays quiet', () => {
+  const r = ctx.autoregSuggestion(row4x10, [{ reps: '10', weight: '50' }, { reps: '10', weight: '50' }]);
+  assertEqual(r, null, 'no message');
+});
+
 console.log('\n' + '─'.repeat(50));
 console.log(passed + ' passed, ' + failed + ' failed');
 if (failed > 0) process.exit(1);

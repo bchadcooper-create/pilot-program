@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.2 / 20260916_4
+ * Version/build: fcf-v5.44.3 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.2';
+const FCF_VERSION = 'fcf-v5.44.3';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -8901,16 +8901,52 @@ function autoregSuggestion(exItem, sets) {
   }
   const wentUpInWeight = !isNaN(lastWeight) && priorWeight !== null && lastWeight > priorWeight;
 
+  // BUG FIX (reported: 12, 10, 8 reps at 50 lb on a 4x10, and the final
+  // set got "Came in at 8/10, close. Hold the same weight and take a bit
+  // more rest before the next set." There was no next set). Two problems:
+  //   1. It never checked whether this was the LAST planned set, so it
+  //      gave between-set advice after the exercise was over.
+  //   2. It judged the last set alone. Reps falling across sets at the
+  //      same load is expected fatigue, not a miss: Ratamess et al. 2007
+  //      found volume drops every set at 1 min rest and holds only about
+  //      two sets at 2 min. Finishing 2 short after beating target early
+  //      is a full, productive session.
+  // "8/10" also read like an effort rating, so the copy now says "8 of 10".
+  const isFinalSet = lastIdx === sets.length - 1;
+  const repsLabel = actual + ' of ' + target;
+  const wt = !isNaN(lastWeight) && lastWeight > 0 ? ' at ' + lastWeight + ' lb' : '';
   const missedPct = missedBy / target;
+
   if (wentUpInWeight && missedPct <= 0.25) {
     // A near-miss immediately after adding weight is the expected, GOOD
     // outcome of testing a heavier load — not something to correct.
-    return { tone: 'positive', text: 'Came in at '+actual+'/'+target+' at a heavier weight than last set. That\'s a strong effort, not a miss. That\'s roughly where a top set on a weight increase should land.' };
+    return { tone: 'positive', text: repsLabel + ' reps at a heavier weight than the set before. That\'s a strong effort, not a miss, and roughly where a top set on a weight increase should land.' };
   }
+
+  if (isFinalSet) {
+    // Whole-exercise picture: total reps against the planned total.
+    let doneReps = 0, doneSets = 0;
+    for (let i = 0; i <= lastIdx; i++) {
+      const r = parseInt(sets[i].reps);
+      if (!isNaN(r)) { doneReps += r; doneSets++; }
+    }
+    const plannedReps = target * doneSets;
+    const volumeNote = doneReps >= plannedReps
+      ? ' ' + doneReps + ' total reps against ' + plannedReps + ' planned, so the work got done.'
+      : '';
+    // Progression rule from the ACSM 2009 position stand: add load once
+    // the target is beaten on every set, not after one strong set.
+    const nextTime = ' Keep this weight next session and add more once every set reaches ' + target + '.';
+    if (missedPct <= 0.25) {
+      return { tone: 'positive', text: 'Strong finish: ' + repsLabel + ' on the last set' + wt + '. Losing a couple of reps by the final set is normal fatigue.' + volumeNote + nextTime };
+    }
+    return { tone: 'major', text: 'Last set came in at ' + repsLabel + wt + '. Next session, keep the weight or drop about 5% so every set can reach ' + target + '.' };
+  }
+
   if (missedPct <= 0.2) {
-    return { tone: 'minor', text: 'Came in at '+actual+'/'+target+', close. Hold the same weight and take a bit more rest before the next set.' };
+    return { tone: 'minor', text: repsLabel + ' reps, close. Stay at this weight and rest about 2 minutes before the next set to get back toward ' + target + '.' };
   }
-  return { tone: 'major', text: 'Came in at '+actual+'/'+target+'. That\'s a real miss, not just an off rep. Drop the weight roughly 5-10% for the next set so you can actually hit the target range.' };
+  return { tone: 'major', text: repsLabel + ' reps is a real miss, not just an off rep. Drop the weight about 5-10% for the next set so you can reach the target range.' };
 }
 
 function parseTargetSeconds(target) {

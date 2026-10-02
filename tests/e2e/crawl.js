@@ -233,7 +233,11 @@ async function runWorkout(page) {
     await page.waitForTimeout(200);
     // Type a value into every set input on this card.
     const inputs = await page.$$('#excard_' + id + ' input');
-    if (inputs.length === 0) finding('no-inputs', 'flight ' + id, 'expanded card has nowhere to type');
+    if (inputs.length === 0) {
+      // A stopwatch/NSDR card is driven by a Start button, not typing.
+      const hasTimer = await page.$('#excard_' + id + ' .stopwatch-btn, #excard_' + id + ' [onclick*="startStopwatch"], #excard_' + id + ' [onclick*="startNSDR"]');
+      if (!hasTimer) finding('no-inputs', 'flight ' + id, 'expanded card has nowhere to type and no timer');
+    }
     for (const inp of inputs) {
       const type = await inp.getAttribute('inputmode');
       await inp.fill(type === 'decimal' ? '12.5' : '10').catch(() => {});

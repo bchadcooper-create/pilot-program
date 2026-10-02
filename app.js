@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.6 / 20260916_4
+ * Version/build: fcf-v5.44.7 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.6';
+const FCF_VERSION = 'fcf-v5.44.7';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -3461,8 +3461,14 @@ function glowTile(label, value, colorKey, valueColor) {
 // unmistakably marked as AI-generated rather than blending into rule-based
 // copy. `id` is the container's DOM id; `textId` is the inner text node's
 // id that the loader function fills in once the response arrives.
-function aiCoachCard(id, textId, title, colorKey) {
+function aiCoachCard(id, textId, title, colorKey, initialText) {
   const [gs, gf, accent] = GLOW_COLORS[colorKey] || GLOW_COLORS.gold;
+  // A card rebuilt while its answer is already known (a repaint after the
+  // shell delivers HealthKit, say) draws that answer in the first paint
+  // instead of a "Thinking" placeholder that is replaced a frame later.
+  const body = initialText
+    ? initialText.replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))
+    : '<span class="ai-thinking-dots" style="color:var(--muted);font-style:italic">Thinking<span class="ai-dot">.</span><span class="ai-dot">.</span><span class="ai-dot">.</span></span>';
   // BUG FIX (reported): card was display:none until the AI response landed,
   // so for the 2-3 seconds a real request takes, there was zero indication
   // anything was coming — easy to scroll or tab past and never notice the
@@ -3479,9 +3485,7 @@ function aiCoachCard(id, textId, title, colorKey) {
       '<span style="font-size:0.75rem">✦</span>' +
       '<span style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.1em;color:' + accent + '">' + title + '</span>' +
     '</div>' +
-    '<div id="' + textId + '" style="font-size:0.8438rem;color:var(--text);line-height:1.6;position:relative;z-index:1">' +
-      '<span class="ai-thinking-dots" style="color:var(--muted);font-style:italic">Thinking<span class="ai-dot">.</span><span class="ai-dot">.</span><span class="ai-dot">.</span></span>' +
-    '</div>' +
+    '<div id="' + textId + '" style="font-size:0.8438rem;color:var(--text);line-height:1.6;position:relative;z-index:1">' + body + '</div>' +
     '</div>'
   );
 }
@@ -5229,7 +5233,9 @@ let _bootRenderDone = false;
 function requestNativeRepaint() {
   if (!_bootRenderDone) return;
   if (_nativeRepaintTimer) clearTimeout(_nativeRepaintTimer);
-  _nativeRepaintTimer = setTimeout(() => { _nativeRepaintTimer = null; renderPage(); }, 400);
+  // 2s: the shell's two boot deliveries are 1.5s apart, so one window
+  // covers both and a cold open repaints once for them, not twice.
+  _nativeRepaintTimer = setTimeout(() => { _nativeRepaintTimer = null; renderPage(); }, 2000);
 }
 
 window.addEventListener('fcf:healthkit', (e) => {
@@ -5683,6 +5689,27 @@ async function loadFuelLogistics() {
 // recent training load, then asks the AI coach for a scaling judgment.
 // Cached per-day-per-user server-side isn't needed here since it's cheap
 // and the inputs (readiness, duty context) can change through the day.
+// BUG FIX (reported: "the AI Coach card rendered three times, same text
+// each time"). Measured: three renderToday passes on a cold open each
+// fired both AI loads, so the cached answer came back three times and was
+// written into the card three times. The server cache made the text
+// identical; the writes were the flicker. Each load now remembers the
+// context it last asked with: an identical ask while one is in flight or
+// already answered is a no-op, and the answer is re-applied from memory
+// if the card was rebuilt in between.
+const _aiLoadMemo = {};
+async function memoAILoad(key, contextKey, run) {
+  const m = _aiLoadMemo[key];
+  if (m && m.contextKey === contextKey) {
+    if (m.pending) return m.pending;
+    return m.result;
+  }
+  const pending = run().then(r => { _aiLoadMemo[key] = { contextKey, result: r, pending: null }; return r; })
+                       .catch(e => { delete _aiLoadMemo[key]; throw e; });
+  _aiLoadMemo[key] = { contextKey, result: null, pending };
+  return pending;
+}
+
 async function loadFatigueCalibration(ctx) {
   try {
     const sched = ctx.sched || {};
@@ -5748,10 +5775,18 @@ async function loadFatigueCalibration(ctx) {
       // Null when home or under 1 hr off local; see buildBodyClockHTML.
       bodyClock: bodyClockForAI(),
     };
-    const result = await callAICoach('fatigue_calibration', context);
+    const ctxKey = JSON.stringify(context);
+    const card0 = document.getElementById('aiFatigueCard');
+    const text0 = document.getElementById('aiFatigueText');
+    const memo = _aiLoadMemo.fatigue;
+    if (memo && memo.contextKey === ctxKey && memo.result && !memo.result.error && text0 && text0.textContent === memo.result.text) {
+      return; // same ask, same answer already on screen: nothing to do
+    }
+    const result = await memoAILoad('fatigue', ctxKey, () => callAICoach('fatigue_calibration', context));
     const card = document.getElementById('aiFatigueCard');
     const textEl = document.getElementById('aiFatigueText');
     if (!card || !textEl) return; // user navigated away before this resolved
+    if (!result.error && textEl.textContent === result.text && card.style.display !== 'none') return;
     if (result.error) {
       // Hide the card rather than leaving it stuck on "Thinking..." forever —
       // the rule-based briefing above already covers this, so a failed AI
@@ -5803,9 +5838,19 @@ async function loadTripPlan() {
       sessionsLoggedThisTrip,
     };
 
-    const result = await callAICoach('trip_plan', context);
+    const ctxKey = JSON.stringify(context);
+    const memo = _aiLoadMemo.tripPlan;
+    const text0 = document.getElementById('aiTripPlanText');
+    // Already answered for this exact context and the card still shows
+    // it (the element carries the answer it was drawn from): nothing to do.
+    if (memo && memo.contextKey === ctxKey && memo.result && !memo.result.error && text0 && text0.dataset.from === memo.result.text) {
+      return;
+    }
+    const result = await memoAILoad('tripPlan', ctxKey, () => callAICoach('trip_plan', context));
     const textEl = document.getElementById('aiTripPlanText');
     if (!card || !textEl) return; // user navigated away before this resolved
+    if (!result.error && textEl.dataset.from === result.text && card.style.display !== 'none') return;
+    if (!result.error) textEl.dataset.from = result.text;
     if (result.error) { card.style.display = 'none'; return; } // hide the card, don't leave it stuck on "Thinking..."
 
     // Split into lines and highlight today's line — the model returns one
@@ -13244,7 +13289,9 @@ function renderToday(p) {
   // the rule-based briefing above, rather than replacing it. Loads async so
   // it never blocks the page render.
   if (isPro()) {
-    parts.push(aiCoachCard('aiFatigueCard', 'aiFatigueText', 'AI COACH', 'amber'));
+    const fatMemo = _aiLoadMemo.fatigue;
+    parts.push(aiCoachCard('aiFatigueCard', 'aiFatigueText', 'AI COACH', 'amber',
+      fatMemo && fatMemo.result && !fatMemo.result.error ? fatMemo.result.text : null));
   }
 
   // Standalone, always-shown prompt — not folded into one specific briefing

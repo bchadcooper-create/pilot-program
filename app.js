@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.5 / 20260916_4
+ * Version/build: fcf-v5.44.6 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.5';
+const FCF_VERSION = 'fcf-v5.44.6';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -2902,6 +2902,27 @@ function renderPage() {
   if (topbar) topbar.style.display = '';
   if (tabbar) tabbar.style.display = (ST.tab === 'debrief') ? 'none' : 'flex';
 
+  // BUG FIX (reported twice: "home screen redraws itself three times after
+  // a hard close and reopen"). Measured this time with a render census in
+  // a real browser rather than reasoned about: every renderPage() on Today
+  // blanked #mainPage here, then waited ~750ms for loadTodaysMeals() before
+  // drawing anything. On iOS the native shell then delivers HealthKit at
+  // +2s and Calendar at +3.5s after boot, each of which calls renderPage(),
+  // so the person watched the page go blank and rebuild three times. Today
+  // now draws synchronously from whatever is already in memory and only
+  // redraws after the meal fetch if the meals actually changed. The other
+  // tabs keep the old clear-then-draw because they are not on the boot
+  // path and draw synchronously anyway.
+  if (ST.tab === 'today') {
+    const before = JSON.stringify(ST.todaysMeals || []);
+    renderToday(p);
+    loadTodaysMeals().then(() => {
+      if (ST.tab !== 'today') return;
+      if (JSON.stringify(ST.todaysMeals || []) !== before) renderToday(p);
+    }).catch(() => {});
+    return;
+  }
+
   p.innerHTML = '';
   if (ST.tab === 'preflight') {
     renderPreflight(p).catch(e => {
@@ -2920,7 +2941,6 @@ function renderPage() {
   else if (ST.tab === 'data')        renderData(p);
   else if (ST.tab === 'nutrition')   return renderNutrition(p);
   else if (ST.tab === 'fuelplan')    renderNutritionGoalsSetup(p);
-  else if (ST.tab === 'today')       { loadTodaysMeals().then(()=>renderToday(p)).catch(()=>renderToday(p)); }
   else if (ST.tab === 'badges')      renderBadges(p);
   else if (ST.tab === 'superuser')   renderSuperUser(p);
   else if (ST.tab === 'debrief')     renderDebrief(p);
@@ -3330,6 +3350,7 @@ async function bootAppInner() {
 
   ST.muscleGroup = getRecommendedNext();
   renderRoot();
+  _bootRenderDone = true;
 
   // Apply a notification-tap tab request that arrived before boot/auth was
   // ready (see the fcf:pushTap listener's comment for why this can happen
@@ -5194,9 +5215,26 @@ window.addEventListener('fcf:pushTap', (e) => {
   if (ST.authed) switchTab(tab);
   else _pendingPushTapTab.current = tab;
 });
+// The native shell delivers HealthKit and Calendar within a couple of
+// seconds of each other right after boot. Each used to trigger its own
+// full repaint. Coalesce: a repaint requested within a short window of
+// another one is folded into it, so two arrivals mean one redraw.
+// Measured on a cold start: the shell's deliveries can land BEFORE
+// bootAppInner has finished loading the profile, so they used to paint a
+// half-loaded Today that the real boot render then replaced. A repaint
+// asked for before boot is done is simply dropped; the boot render that
+// follows already includes the new data.
+let _nativeRepaintTimer = null;
+let _bootRenderDone = false;
+function requestNativeRepaint() {
+  if (!_bootRenderDone) return;
+  if (_nativeRepaintTimer) clearTimeout(_nativeRepaintTimer);
+  _nativeRepaintTimer = setTimeout(() => { _nativeRepaintTimer = null; renderPage(); }, 400);
+}
+
 window.addEventListener('fcf:healthkit', (e) => {
   ST.healthkit = e.detail || {};
-  renderPage();
+  requestNativeRepaint();
 });
 
 // Calendar data arrives from the native shell. Run it through the AI
@@ -5205,12 +5243,12 @@ window.addEventListener('fcf:calendar', async (e) => {
   const payload = e.detail || {};
   ST.calendarGranted = !!payload.granted;
   ST.calendarDuplicatesRemoved = payload.duplicatesRemoved || 0;
-  if (!payload.granted || !payload.events?.length) { renderPage(); return; }
+  if (!payload.granted || !payload.events?.length) { requestNativeRepaint(); return; }
   await classifyCalendarEvents(payload.events, payload.fingerprint);
   // Calendar data arrives after boot; the environment suggestion at boot
   // couldn't see it. Re-run now that the live schedule is known.
   applyScheduleEnvironmentSuggestion();
-  renderPage();
+  requestNativeRepaint();
   // Reschedule preflight notifications now that we have flight data
   scheduleNotifications();
 });
@@ -13354,7 +13392,15 @@ function renderToday(p) {
   }
 
   parts.push('<button class="btn btn-outline" onclick="switchTab(\'nutrition\')">🍽️ Log a meal</button>');
-  p.innerHTML = parts.join('');
+  const html = parts.join('');
+  // A repaint that produces the same markup (HealthKit arriving with no
+  // visible change, say) is skipped entirely: nothing to redraw, and the
+  // AI cards already loading inside the page are left alone.
+  // Only when the page still holds that same Today markup; after a visit
+  // to another tab the element holds something else and must be redrawn.
+  if (p.dataset.todayHtml === html && p.innerHTML === html) return;
+  p.dataset.todayHtml = html;
+  p.innerHTML = html;
   // Fired after innerHTML so the card element definitely exists
   if (isPro()) loadTripPlan();
   if (isPro()) loadFatigueCalibration(ctx);

@@ -43,3 +43,13 @@ Those still need a human on a real phone.
 
 The bot account is `e2e-bot@flightcrew.fit`. It is on the seed domain, so
 nothing it does touches the leaderboard refresh job or any real account.
+
+## Live set feedback check
+
+    npm run e2e:feedback     # against a local server on :4321
+
+A short, focused run on one exercise card: types reps, then weight, and
+asserts the coach's feedback appears without the rest timer, without
+dropping the keyboard, and without re-rendering the screen. Also checks
+it stays quiet mid-number, clears when corrected, and still works when
+the timer is started.

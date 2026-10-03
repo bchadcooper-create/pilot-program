@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.8 / 20260916_4
+ * Version/build: fcf-v5.44.9 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.8';
+const FCF_VERSION = 'fcf-v5.44.9';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -8675,17 +8675,14 @@ function buildExCard(exItem, phaseKey) {
       parts.push('<div class="sets-wrap"><div class="sets-scroll">');
       sets.forEach((s,i) => {
         parts.push('<div class="set-tile '+(s.reps||s.weight?'ok':'')+'" id="st_'+exItem.id+'_'+i+'"><div class="set-lbl">SET '+(i+1)+'</div>');
-        parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value||ST.sets[\''+exItem.id+'\']['+i+'].weight?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
-        parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="lb" value="'+(s.weight||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].weight=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
+        parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value||ST.sets[\''+exItem.id+'\']['+i+'].weight?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\');queueSetFeedback(\''+exItem.id+'\','+i+',false)" onchange="queueSetFeedback(\''+exItem.id+'\','+i+',true)">');
+        parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="lb" value="'+(s.weight||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].weight=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\');queueSetFeedback(\''+exItem.id+'\','+i+',false)" onchange="queueSetFeedback(\''+exItem.id+'\','+i+',true)">');
         parts.push('<div class="set-hint">reps / lb</div></div>');
       });
       parts.push('</div></div>'+(sets.length>2?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<div class="fb" style="margin-top:6px;justify-content:space-between"><button class="btn-ghost" style="font-size:0.6875rem" onclick="removeLiveSet(\''+exItem.id+'\')">− Remove Set</button><button class="btn-ghost" style="font-size:0.6875rem" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button></div>');
-      const autoreg = autoregSuggestion(exItem, sets);
-      if (autoreg) {
-        const boxColor = autoreg.tone === 'positive' ? 'var(--green)' : autoreg.tone === 'major' ? 'var(--amber)' : 'var(--blue)';
-        const icon = autoreg.tone === 'positive' ? '💪' : '🎯';
-        parts.push('<div class="fb" style="background:var(--bg3);border:1px solid '+boxColor+';border-radius:8px;padding:9px 12px;margin-top:8px;align-items:flex-start"><div style="font-size:0.75rem;line-height:1.5;color:var(--text)">'+icon+' '+autoreg.text+'</div></div>');
-      }
+      // Always present, even when empty, so refreshSetFeedback() has a
+      // slot to write into without re-rendering the card.
+      parts.push('<div id="ar_'+exItem.id+'">'+autoregBoxHtml(autoregSuggestion(exItem, sets))+'</div>');
       if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
         parts.push(buildRestTimerWidget(exItem.id, phaseKey, exItem.target));
       }
@@ -8981,6 +8978,67 @@ function parseTargetReps(target) {
   m = target.match(/(\d+)\s*reps?\b/i);
   if (m) return parseInt(m[1], 10);
   return null;
+}
+
+// ─── LIVE SET FEEDBACK ───────────────────────────────────────────────────────
+//
+// BUG FIX (reported: "sometimes I don't start the timer and so I don't get
+// feedback"). The feedback box was only ever built inside buildExCard(),
+// i.e. on a full renderFlight(). Typing into a set does a targeted update
+// on purpose (a full re-render would drop the keyboard mid-number), so the
+// box stayed stale until something else re-rendered the screen. Starting
+// the rest timer was the usual something, which made the feedback look
+// like it belonged to the timer. It now has its own slot (#ar_<exId>) and
+// its own refresh.
+//
+// When it speaks:
+//   - while typing: once the set has BOTH reps and weight and the keys
+//     have been quiet for a moment. Not on every keystroke, or the "1" of
+//     "10" reads as a nine-rep miss.
+//   - on leaving the field: reps alone is enough, because a bodyweight
+//     set never gets a weight. Skipped if focus only moved to the other
+//     box in the same set and that box is still empty.
+function autoregBoxHtml(autoreg) {
+  if (!autoreg) return '';
+  const boxColor = autoreg.tone === 'positive' ? 'var(--green)' : autoreg.tone === 'major' ? 'var(--amber)' : 'var(--blue)';
+  const icon = autoreg.tone === 'positive' ? '💪' : '🎯';
+  return '<div class="fb" style="background:var(--bg3);border:1px solid '+boxColor+';border-radius:8px;padding:9px 12px;margin-top:8px;align-items:flex-start"><div style="font-size:0.75rem;line-height:1.5;color:var(--text)">'+icon+' '+autoreg.text+'</div></div>';
+}
+function setFeedbackReady(set, leftField) {
+  if (!set) return false;
+  const has = v => v !== '' && v !== undefined && v !== null;
+  if (!has(set.reps)) return false;
+  return leftField ? true : has(set.weight);
+}
+function refreshSetFeedback(exId) {
+  const el = document.getElementById('ar_' + exId);
+  if (!el || !ST.workout) return;
+  const exItem = [...ST.workout.taxi, ...ST.workout.takeoff, ...ST.workout.enroute, ...ST.workout.landing].find(e => e.id === exId);
+  if (!exItem) return;
+  const html = autoregBoxHtml(autoregSuggestion(exItem, ST.sets[exId] || []));
+  if (el.innerHTML !== html) el.innerHTML = html;
+}
+const SET_FEEDBACK_TYPING_MS = 1200;
+const SET_FEEDBACK_LEFT_MS = 150;
+const _setFeedbackTimers = {};
+function queueSetFeedback(exId, i, leftField) {
+  clearTimeout(_setFeedbackTimers[exId]);
+  _setFeedbackTimers[exId] = setTimeout(() => {
+    const set = (ST.sets[exId] || [])[i];
+    const hasReps = !!set && set.reps !== '' && set.reps !== undefined && set.reps !== null;
+    // Only a set with reps can be "not ready yet". A set whose reps were
+    // just deleted must still refresh, or its old message is left behind.
+    if (hasReps) {
+      if (leftField) {
+        // Reps typed, then straight into the empty weight box: still mid-set.
+        const tile = document.getElementById('st_' + exId + '_' + i);
+        const stillInTile = tile && tile.contains && tile.contains(document.activeElement);
+        if (stillInTile && !setFeedbackReady(set, false)) return;
+      }
+      if (!setFeedbackReady(set, leftField)) return;
+    }
+    refreshSetFeedback(exId);
+  }, leftField ? SET_FEEDBACK_LEFT_MS : SET_FEEDBACK_TYPING_MS);
 }
 
 // Looks at the most recently completed set (the last one with a reps value

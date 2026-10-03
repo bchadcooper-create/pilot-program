@@ -538,6 +538,47 @@ test('hitting target on the final set stays quiet', () => {
   assertEqual(r, null, 'no message');
 });
 
+console.log('\nLive set feedback (reported: "sometimes I don\'t start the timer and so I don\'t get feedback"):');
+test('while typing: waits for BOTH reps and weight before speaking', () => {
+  assertEqual(ctx.setFeedbackReady({ reps: '8', weight: '' }, false), false, 'reps only, still typing');
+  assertEqual(ctx.setFeedbackReady({ reps: '', weight: '50' }, false), false, 'weight only, still typing');
+  assertEqual(ctx.setFeedbackReady({ reps: '8', weight: '50' }, false), true, 'both entered');
+});
+test('after leaving the set: reps alone is enough (bodyweight sets have no weight)', () => {
+  assertEqual(ctx.setFeedbackReady({ reps: '8', weight: '' }, true), true, 'reps, left the tile');
+  assertEqual(ctx.setFeedbackReady({ reps: '', weight: '50' }, true), false, 'no reps yet');
+  assertEqual(ctx.setFeedbackReady(undefined, true), false, 'no set at all');
+});
+test('feedback box redraws in place from the logged sets, no timer or full re-render', () => {
+  const exItem = { id: 'fb1', name: 'DB Row', target: '4×10', sets: 4 };
+  ctx.ST.workout = { taxi: [], takeoff: [exItem], enroute: [], landing: [] };
+  ctx.ST.sets = { fb1: [{ reps: '12', weight: '50' }, { reps: '8', weight: '50' }, { reps: '', weight: '' }, { reps: '', weight: '' }] };
+  const box = { innerHTML: '' };
+  const realGet = ctx.document.getElementById;
+  let fullRenders = 0; const realRender = ctx.renderFlight; ctx.renderFlight = () => { fullRenders++; };
+  ctx.document.getElementById = id => id === 'ar_fb1' ? box : null;
+  ctx.refreshSetFeedback('fb1');
+  assertEqual(/8 of 10/.test(box.innerHTML), true, 'shows the miss');
+  assertEqual(/next set/i.test(box.innerHTML), true, 'mid-exercise advice');
+  ctx.ST.sets.fb1[1].reps = '10';
+  ctx.refreshSetFeedback('fb1');
+  assertEqual(box.innerHTML, '', 'cleared once the set is on target');
+  assertEqual(fullRenders, 0, 'never re-rendered the whole screen');
+  ctx.document.getElementById = realGet; ctx.renderFlight = realRender;
+});
+test('exercise card carries the feedback slot and both inputs feed it', () => {
+  const exItem = { id: 'fb2', name: 'DB Row', target: '4×10', sets: 4 };
+  ctx.ST.workout = { taxi: [], takeoff: [exItem], enroute: [], landing: [] };
+  ctx.ST.sets = { fb2: [{ reps: '', weight: '' }, { reps: '', weight: '' }] };
+  ctx.ST.expanded = { fb2: true };
+  const html = ctx.buildExCard(exItem, 'takeoff');
+  assertEqual(html.includes('id="ar_fb2"'), true, 'feedback slot present even with nothing to say');
+  const typing = (html.match(/queueSetFeedback\('fb2',\d+,false\)/g) || []).length;
+  const leaving = (html.match(/queueSetFeedback\('fb2',\d+,true\)/g) || []).length;
+  assertEqual(typing, 4, 'reps + weight on each of 2 sets, while typing');
+  assertEqual(leaving, 4, 'reps + weight on each of 2 sets, on leaving the field');
+});
+
 console.log('\n' + '─'.repeat(50));
 console.log(passed + ' passed, ' + failed + ' failed');
 if (failed > 0) process.exit(1);

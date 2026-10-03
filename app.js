@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.7 / 20260916_4
+ * Version/build: fcf-v5.44.8 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.7';
+const FCF_VERSION = 'fcf-v5.44.8';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -6454,6 +6454,16 @@ const EXERCISE_SYNONYMS = {
   'american swing': 'Kettlebell Swing',
   'turkish getup': 'Turkish Get-Up',
   'tgu': 'Turkish Get-Up',
+  'one arm dumbbell bench': 'Single-Arm DB Bench Press',
+  'one armed dumbbell bench': 'Single-Arm DB Bench Press',
+  'one arm db bench': 'Single-Arm DB Bench Press',
+  'single arm dumbbell bench press': 'Single-Arm DB Bench Press',
+  'one arm lateral raise': 'Single-Arm DB Lateral Raise',
+  'one armed lateral raise': 'Single-Arm DB Lateral Raise',
+  'single arm dumbbell lateral raise': 'Single-Arm DB Lateral Raise',
+  'one arm front raise': 'Single-Arm DB Front Raise',
+  'one armed front raise': 'Single-Arm DB Front Raise',
+  'single arm dumbbell front raise': 'Single-Arm DB Front Raise',
   'one arm kettlebell row': 'Single-Arm Kettlebell Row',
   'one armed kettlebell row': 'Single-Arm Kettlebell Row',
 
@@ -6530,6 +6540,9 @@ const CATALOG_EXTRAS = [
   ex('x_cablefly',  'Cable Fly',                '3×12', 3, 'Slight bend in the elbows, bring the handles together in front of the chest.'),
   ex('x_dbfly',     'Dumbbell Fly',             '3×12', 3, 'Flat or incline bench, wide arc, stretch at the bottom.'),
   ex('x_wristcurl', 'Wrist Curl',               '3×15', 3, 'Forearms on the thighs, curl the wrists only. Light weight.'),
+  ex('x_sa_dbbench','Single-Arm DB Bench Press','3×8/side', 3, 'One dumbbell, free hand on your stomach or out to the side. Brace hard so your torso does not twist or roll toward the free side. That anti-rotation is the core work.'),
+  ex('x_sa_dblat',  'Single-Arm DB Lateral Raise','3×12/side', 3, 'One dumbbell, free hand on a rack or your hip. Raise to shoulder height without leaning away. Resist the tilt and your core does the work.'),
+  ex('x_sa_dbfront','Single-Arm DB Front Raise','3×12/side', 3, 'One dumbbell, raise straight in front to shoulder height. Ribs down, no backward lean. Stay tall against the offset load.'),
   ex('x_ellip',     'Elliptical Intervals',     '20 min', 1, 'Alternate 1 min hard and 2 min easy.', true, 'timed'),
 ];
 

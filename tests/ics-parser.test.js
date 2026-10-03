@@ -459,6 +459,13 @@ test('catalog search finds shrugs and the other added staples', () => {
   ['shrug', 'chin-up', 'skull crusher', 'push press', 'hip thrust', 'elliptical'].forEach(q =>
     assertEqual(names.some(n => n.includes(q)), true, q + ' present'));
 });
+test('single-arm bench, lateral and front raise are searchable by any wording', () => {
+  const find = q => ctx.buildExerciseCatalog().filter(e => ctx.exerciseMatchesQuery(e.name, q)).map(e => e.name);
+  [['one arm dumbbell bench', 'Single-Arm DB Bench Press'], ['one armed lateral raise', 'Single-Arm DB Lateral Raise'],
+   ['one arm front raise', 'Single-Arm DB Front Raise'], ['single arm', 'Single-Arm DB Bench Press'],
+   ['single-arm db lateral', 'Single-Arm DB Lateral Raise']].forEach(([q, want]) =>
+    assertEqual(find(q).includes(want), true, q + ' finds ' + want));
+});
 test('catalog-only extras never appear in a generated program', () => {
   const extraIds = new Set(ctx.CATALOG_EXTRAS.map(e => e.id));
   let leaked = 0;

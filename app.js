@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.9 / 20260916_4
+ * Version/build: fcf-v5.44.10 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.9';
+const FCF_VERSION = 'fcf-v5.44.10';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -630,7 +630,7 @@ WORKOUTS.comm['Longevity'] = {
   ],
   landing: [
     ex('c_lg_l1','Hip 90/90 Rotation Drill','90s/side',1,'Your most important mobility work as a pilot.',true,'timed_bilateral'),
-    ex('c_lg_l2','Neck Mobility Protocol','2×8/direction',1,'Forward, back, rotation each side, lateral flexion.',false,'reps_only'),
+    ex('c_lg_l2','Neck Mobility Protocol','2×8/direction',2,'Forward, back, rotation each side, lateral flexion.',false,'reps_only'),
     ex('c_lg_l3','Zone 2 Walk','10 min',1,'Brisk walk. Conversational pace.',true,'timed'),
   ],
 };
@@ -1068,6 +1068,32 @@ function slugify(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(
 // the original exercise (untouched), a caution-flagged copy (no safe
 // alternative found), or a substituted exercise (new id, so PR history for
 // the swap-in stays clean and separate from the original movement).
+// The one place an alternate ({name, target, note, inputType?}) becomes a
+// workout exercise. Used by the manual Alternate swap AND the automatic
+// injury swap, so the two can never disagree about how many set boxes or
+// which fields the new exercise gets.
+//
+// BUG FIX (found while testing live feedback: "DB Incline Press 4×10"
+// with three set boxes after a shoulder swap). applyInjuryFilter copied
+// the alternate's name, label and note onto the ORIGINAL exercise and kept
+// the original's set count and input fields. 29 of the 43 possible injury
+// swaps came out wrong: the label promised 4 sets and drew 3, a Plank
+// swapped for Dead Bug kept its stopwatch box, a row swapped for pullups
+// kept a weight field.
+//   sets:   from the alternate's own label ("4×10" is 4); a bare duration
+//           ("20 min") is 1; anything else 3
+//   fields: what the alternate says, else what the catalog says for an
+//           exercise of that name, else reps + weight
+function exFromAlternate(id, alt, catalogMatch) {
+  const setsMatch = (alt.target||'').match(/^(\d+)\s*[x×]/i);
+  // A label that is just a duration ("20 min", "60s/side") is one effort.
+  const setsCount = setsMatch ? Math.max(1, parseInt(setsMatch[1], 10)) : (parseTargetSeconds(alt.target) ? 1 : 3);
+  const cat = catalogMatch === undefined ? buildExerciseCatalog().find(e => e.name === alt.name) : catalogMatch;
+  const iType = alt.inputType || (cat && cat.inputType) || 'reps_weight';
+  const isTimed = ['timed','timed_bilateral','timed_distance','nsdr'].includes(iType) || (!alt.inputType && !!(cat && cat.timed));
+  return ex(id, alt.name, alt.target, setsCount, alt.note||'Alternate exercise.', isTimed, iType);
+}
+
 function applyInjuryFilter(exItem) {
   if (!ST.injuries || !ST.injuries.length) return exItem;
   const tags = exerciseRegionTags(exItem.name);
@@ -1083,8 +1109,7 @@ function applyInjuryFilter(exItem) {
   if (safeAlt) {
     return {
       ...exItem,
-      id: 'inj_' + slugify(safeAlt.name),
-      name: safeAlt.name, target: safeAlt.target, note: safeAlt.note,
+      ...exFromAlternate('inj_' + slugify(safeAlt.name), safeAlt),
       swappedForInjury: true, originalName: exItem.name,
       flaggedRegion: INJURY_REGIONS[flagged[0]].label,
     };
@@ -7974,11 +7999,11 @@ const ALTERNATES = {
     {name:'Rowing Machine Intervals',target:'6×500m',note:'Full-body, non-impact substitute.',inputType:'reps_only'},
   ],
   'Treadmill Zone 2 Run': [
-    {name:'Stationary Bike Intervals',target:'20 min',note:'Same aerobic zone, lower impact.',inputType:'reps_only'},
+    {name:'Stationary Bike Intervals',target:'20 min',note:'Same aerobic zone, lower impact.',inputType:'timed'},
     {name:'Walking',target:'30-45 min',note:'Zone 1-2 substitute: easier recovery day option.',inputType:'timed'},
   ],
   'Treadmill': [
-    {name:'Stationary Bike Intervals',target:'20 min',note:'Lower-impact substitute for the same duration.',inputType:'reps_only'},
+    {name:'Stationary Bike Intervals',target:'20 min',note:'Lower-impact substitute for the same duration.',inputType:'timed'},
     {name:'Walking',target:'30-45 min',note:'If the treadmill is occupied or you want lower intensity.',inputType:'timed'},
   ],
 
@@ -8358,10 +8383,6 @@ function swapExercise(exId, alt) {
   for (const phase of ['taxi','takeoff','enroute','landing']) {
     const idx = ST.workout[phase].findIndex(e => e.id === exId);
     if (idx === -1) continue;
-    const setsMatch = (alt.target||'').match(/^(\d+)\s*[x×]/i);
-    const setsCount = setsMatch ? Math.max(1, parseInt(setsMatch[1], 10)) : 3;
-    const iType = alt.inputType || 'reps_weight';
-    const isTimed = iType==='timed' || iType==='timed_bilateral';
     // Reuse the exercise's real catalog id when the swap-in matches an
     // existing exercise exactly — otherwise "Leg Press" swapped into one
     // slot and "Leg Press" swapped into another (or logged from its normal
@@ -8372,7 +8393,7 @@ function swapExercise(exId, alt) {
     // custom exercise also link correctly across sessions.
     const catalogMatch = buildExerciseCatalog().find(e => e.name === alt.name);
     const newId = catalogMatch ? catalogMatch.id : 'swap_' + slugify(alt.name);
-    const newEx = ex(newId, alt.name, alt.target, setsCount, alt.note||'Alternate exercise.', isTimed, iType);
+    const newEx = exFromAlternate(newId, alt, catalogMatch || null);
     ST.workout[phase][idx] = newEx;
     // BUG FIX (reported: "No place to record sets! Clicking add set does
     // nothing"). The old exercise's sets were deleted AFTER the new ones
@@ -8667,10 +8688,11 @@ function buildExCard(exItem, phaseKey) {
       parts.push('<div class="sets-wrap"><div class="sets-scroll">');
       sets.forEach((s,i) => {
         parts.push('<div class="set-tile '+(s.reps?'ok':'')+'" id="st_'+exItem.id+'_'+i+'"><div class="set-lbl">SET '+(i+1)+'</div>');
-        parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
+        parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\');queueSetFeedback(\''+exItem.id+'\','+i+',false)" onchange="queueSetFeedback(\''+exItem.id+'\','+i+',true)">');
         parts.push('<div class="set-hint">reps only</div></div>');
       });
       parts.push('</div></div>'+(sets.length>3?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<div class="fb" style="margin-top:6px;justify-content:space-between"><button class="btn-ghost" style="font-size:0.6875rem" onclick="removeLiveSet(\''+exItem.id+'\')">− Remove Set</button><button class="btn-ghost" style="font-size:0.6875rem" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button></div>');
+      parts.push('<div id="ar_'+exItem.id+'">'+autoregBoxHtml(setFeedbackFor(exItem, phaseKey, sets))+'</div>');
     } else {
       parts.push('<div class="sets-wrap"><div class="sets-scroll">');
       sets.forEach((s,i) => {
@@ -8682,7 +8704,7 @@ function buildExCard(exItem, phaseKey) {
       parts.push('</div></div>'+(sets.length>2?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<div class="fb" style="margin-top:6px;justify-content:space-between"><button class="btn-ghost" style="font-size:0.6875rem" onclick="removeLiveSet(\''+exItem.id+'\')">− Remove Set</button><button class="btn-ghost" style="font-size:0.6875rem" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button></div>');
       // Always present, even when empty, so refreshSetFeedback() has a
       // slot to write into without re-rendering the card.
-      parts.push('<div id="ar_'+exItem.id+'">'+autoregBoxHtml(autoregSuggestion(exItem, sets))+'</div>');
+      parts.push('<div id="ar_'+exItem.id+'">'+autoregBoxHtml(setFeedbackFor(exItem, phaseKey, sets))+'</div>');
       if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
         parts.push(buildRestTimerWidget(exItem.id, phaseKey, exItem.target));
       }
@@ -8971,9 +8993,15 @@ function formatStopwatch(sec) {
 // Extracts the per-set rep target from strings like '3×10', '4×8/leg',
 // '2×15/side', or '10 reps'. Rep ranges ('4×8-12') take the lower bound —
 // same convention as parseTargetSeconds uses for time ranges.
+//
+// BUG FIX: this used to take ANY number after the × as reps, so '3×40yd'
+// read as 40 reps, '8×30s' as 30 and '6×500m' as 500. Feedback on those
+// compared a logged rep count against a distance or a time ("12 of 500
+// reps is a real miss"). The number now only counts when what follows it
+// is rep-shaped: nothing, a range, '/side', 'reps' or 'steps'.
 function parseTargetReps(target) {
   if (!target) return null;
-  let m = target.match(/[×x]\s*(\d+)/);
+  let m = target.match(/[×x]\s*(\d+)(?!\d)(?=\s*(?:$|-\s*\d|\/|reps?\b|steps?\b))/i);
   if (m) return parseInt(m[1], 10);
   m = target.match(/(\d+)\s*reps?\b/i);
   if (m) return parseInt(m[1], 10);
@@ -9004,18 +9032,33 @@ function autoregBoxHtml(autoreg) {
   const icon = autoreg.tone === 'positive' ? '💪' : '🎯';
   return '<div class="fb" style="background:var(--bg3);border:1px solid '+boxColor+';border-radius:8px;padding:9px 12px;margin-top:8px;align-items:flex-start"><div style="font-size:0.75rem;line-height:1.5;color:var(--text)">'+icon+' '+autoreg.text+'</div></div>';
 }
-function setFeedbackReady(set, leftField) {
+function setFeedbackReady(set, leftField, repsOnly) {
   if (!set) return false;
   const has = v => v !== '' && v !== undefined && v !== null;
   if (!has(set.reps)) return false;
-  return leftField ? true : has(set.weight);
+  // A reps-only exercise has no weight box to wait for.
+  return (leftField || repsOnly) ? true : has(set.weight);
+}
+function findWorkoutEx(exId) {
+  if (!ST.workout) return null;
+  for (const phase of ['taxi','takeoff','enroute','landing']) {
+    const exItem = (ST.workout[phase] || []).find(e => e.id === exId);
+    if (exItem) return { exItem, phase };
+  }
+  return null;
+}
+// Which exercises the coach comments on. Weighted work: as before. Reps-
+// only work (pullups, split squats, pushup variations): the working
+// phases only. A warmup's "20 ankle circles" is not a set to be graded.
+function setFeedbackFor(exItem, phase, sets) {
+  if (exItem.inputType === 'reps_only' && phase !== 'takeoff' && phase !== 'enroute') return null;
+  return autoregSuggestion(exItem, sets);
 }
 function refreshSetFeedback(exId) {
   const el = document.getElementById('ar_' + exId);
-  if (!el || !ST.workout) return;
-  const exItem = [...ST.workout.taxi, ...ST.workout.takeoff, ...ST.workout.enroute, ...ST.workout.landing].find(e => e.id === exId);
-  if (!exItem) return;
-  const html = autoregBoxHtml(autoregSuggestion(exItem, ST.sets[exId] || []));
+  const found = findWorkoutEx(exId);
+  if (!el || !found) return;
+  const html = autoregBoxHtml(setFeedbackFor(found.exItem, found.phase, ST.sets[exId] || []));
   if (el.innerHTML !== html) el.innerHTML = html;
 }
 const SET_FEEDBACK_TYPING_MS = 1200;
@@ -9025,6 +9068,8 @@ function queueSetFeedback(exId, i, leftField) {
   clearTimeout(_setFeedbackTimers[exId]);
   _setFeedbackTimers[exId] = setTimeout(() => {
     const set = (ST.sets[exId] || [])[i];
+    const found = findWorkoutEx(exId);
+    const repsOnly = !!found && found.exItem.inputType === 'reps_only';
     const hasReps = !!set && set.reps !== '' && set.reps !== undefined && set.reps !== null;
     // Only a set with reps can be "not ready yet". A set whose reps were
     // just deleted must still refresh, or its old message is left behind.
@@ -9033,9 +9078,9 @@ function queueSetFeedback(exId, i, leftField) {
         // Reps typed, then straight into the empty weight box: still mid-set.
         const tile = document.getElementById('st_' + exId + '_' + i);
         const stillInTile = tile && tile.contains && tile.contains(document.activeElement);
-        if (stillInTile && !setFeedbackReady(set, false)) return;
+        if (stillInTile && !setFeedbackReady(set, false, repsOnly)) return;
       }
-      if (!setFeedbackReady(set, leftField)) return;
+      if (!setFeedbackReady(set, leftField, repsOnly)) return;
     }
     refreshSetFeedback(exId);
   }, leftField ? SET_FEEDBACK_LEFT_MS : SET_FEEDBACK_TYPING_MS);
@@ -9091,6 +9136,10 @@ function autoregSuggestion(exItem, sets) {
   //      is a full, productive session.
   // "8/10" also read like an effort rating, so the copy now says "8 of 10".
   const isFinalSet = lastIdx === sets.length - 1;
+  // No load to adjust on a reps-only exercise, or on a weighted one logged
+  // without a weight. "Drop the weight 5%" means nothing for a pullup, so
+  // those get rest and easier-variation advice instead.
+  const loaded = exItem.inputType !== 'reps_only' && sets.some(s => parseFloat(s.weight) > 0);
   const repsLabel = actual + ' of ' + target;
   const wt = !isNaN(lastWeight) && lastWeight > 0 ? ' at ' + lastWeight + ' lb' : '';
   const missedPct = missedBy / target;
@@ -9114,17 +9163,25 @@ function autoregSuggestion(exItem, sets) {
       : '';
     // Progression rule from the ACSM 2009 position stand: add load once
     // the target is beaten on every set, not after one strong set.
-    const nextTime = ' Keep this weight next session and add more once every set reaches ' + target + '.';
+    const nextTime = loaded
+      ? ' Keep this weight next session and add more once every set reaches ' + target + '.'
+      : ' Next session, aim for ' + target + ' on every set before making it harder.';
     if (missedPct <= 0.25) {
       return { tone: 'positive', text: 'Strong finish: ' + repsLabel + ' on the last set' + wt + '. Losing a couple of reps by the final set is normal fatigue.' + volumeNote + nextTime };
     }
-    return { tone: 'major', text: 'Last set came in at ' + repsLabel + wt + '. Next session, keep the weight or drop about 5% so every set can reach ' + target + '.' };
+    return { tone: 'major', text: loaded
+      ? 'Last set came in at ' + repsLabel + wt + '. Next session, keep the weight or drop about 5% so every set can reach ' + target + '.'
+      : 'Last set came in at ' + repsLabel + '. Next session, rest a little longer between sets or use an easier variation so every set can reach ' + target + '.' };
   }
 
   if (missedPct <= 0.2) {
-    return { tone: 'minor', text: repsLabel + ' reps, close. Stay at this weight and rest about 2 minutes before the next set to get back toward ' + target + '.' };
+    return { tone: 'minor', text: loaded
+      ? repsLabel + ' reps, close. Stay at this weight and rest about 2 minutes before the next set to get back toward ' + target + '.'
+      : repsLabel + ' reps, close. Rest about 2 minutes before the next set to get back toward ' + target + '.' };
   }
-  return { tone: 'major', text: repsLabel + ' reps is a real miss, not just an off rep. Drop the weight about 5-10% for the next set so you can reach the target range.' };
+  return { tone: 'major', text: loaded
+    ? repsLabel + ' reps is a real miss, not just an off rep. Drop the weight about 5-10% for the next set so you can reach the target range.'
+    : repsLabel + ' reps is a real miss, not just an off rep. Take a longer rest, or switch to an easier variation for the next set so you can reach the target range.' };
 }
 
 function parseTargetSeconds(target) {

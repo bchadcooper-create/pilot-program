@@ -52,4 +52,7 @@ A short, focused run on one exercise card: types reps, then weight, and
 asserts the coach's feedback appears without the rest timer, without
 dropping the keyboard, and without re-rendering the screen. Also checks
 it stays quiet mid-number, clears when corrected, and still works when
-the timer is started.
+the timer is started. Then the same for a reps-only exercise (feedback
+from reps alone, no weight advice), and that every card in the hotel
+Full Body program, drawn with a shoulder flag, has as many set boxes as
+its label promises, including the injury-swapped one.

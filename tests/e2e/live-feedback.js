@@ -33,7 +33,16 @@ const check = (name, ok, extra) => { console.log((ok ? '  PASS ' : '  FAIL ') + 
   // Start a workout the way the crawler does.
   await page.evaluate(() => { switchTab('preflight'); });
   await page.waitForTimeout(600);
-  await page.evaluate(() => { ST.muscleGroup = ST.muscleGroup || 'Upper Pull'; ST.env = ST.env || 'comm'; renderPage(); });
+  // A fixed program so every section below has something to test: hotel
+  // Full Body has weighted work, a reps-only working set (Single Leg
+  // Split Squat), a 3×max (Pullups), and DB Overhead Press, which a
+  // shoulder flag swaps for DB Incline Press. The flag is set in memory
+  // only; nothing is saved to the bot's profile.
+  await page.evaluate(() => {
+    ST.workout = null; ST.sets = {};
+    ST.env = 'hotel'; ST.muscleGroup = 'Full Body'; ST.injuries = ['shoulder'];
+    renderPage();
+  });
   await page.waitForTimeout(400);
   await page.getByText(/ENGAGE WORKOUT|RETURN TO WORKOUT/i).first().click();
   await page.waitForTimeout(1200);
@@ -109,6 +118,79 @@ const check = (name, ok, extra) => { console.log((ok ? '  PASS ' : '  FAIL ') + 
     check('timer started from one tap', await page.evaluate(() => ST.restTimer.active));
     await page.evaluate(() => { clearInterval(ST.restTimer.interval); ST.restTimer.active = false; });
   } else console.log('  (no rest timer button on this card)');
+
+  console.log('G. reps-only exercise: feedback about 1.2s after typing, no weight box to wait for');
+  const ro = await page.evaluate(() => {
+    const e = [...ST.workout.takeoff, ...ST.workout.enroute].find(x => x.inputType === 'reps_only' && parseTargetReps(x.target) >= 6 && (ST.sets[x.id] || []).length >= 2);
+    if (!e) return null;
+    ST.sets[e.id] = ST.sets[e.id].map(() => ({ reps: '' }));
+    Object.keys(ST.expanded).forEach(k => ST.expanded[k] = false); ST.expanded[e.id] = true;
+    renderFlight(document.getElementById('mainPage')); window.__renders = 0;
+    return { id: e.id, name: e.name, target: e.target, reps: parseTargetReps(e.target) };
+  });
+  if (ro) {
+    console.log('  exercise: ' + ro.name + ' ' + ro.target);
+    const roBox = () => page.evaluate(id => (document.getElementById('ar_' + id) || {}).innerText || '', ro.id);
+    const roReps = i => page.locator('#st_' + ro.id + '_' + i + ' input').nth(0);
+    const roMiss = String(ro.reps - 2);
+    await roReps(0).tap(); await page.keyboard.type(roMiss, { delay: 80 });
+    check('quiet on the keystroke itself', (await roBox()) === '');
+    await page.waitForTimeout(1500);
+    const g = await roBox();
+    check('feedback appears from reps alone', g.includes(roMiss + ' of ' + ro.reps), g);
+    check('no weight advice on a bodyweight move', !/weight|\blb\b/i.test(g), g);
+    check('reps field kept focus', await page.evaluate(id => document.activeElement === document.querySelector('#st_' + id + '_0 input'), ro.id));
+    check('no full screen re-render', (await page.evaluate(() => window.__renders)) === 0);
+    await roReps(0).fill(String(ro.reps)); await page.waitForTimeout(1500);
+    check('clears when corrected to target', (await roBox()) === '', await roBox());
+    if (OUT) { await roReps(0).fill(roMiss); await page.waitForTimeout(1500); await page.screenshot({ path: path.join(OUT, 'live-feedback-G.png') }); }
+  } else console.log('  (no reps-only working exercise in this workout)');
+
+  console.log('H. "3×max" and warmup moves stay quiet');
+  const quiet = await page.evaluate(() => {
+    const out = [];
+    for (const ph of ['taxi', 'takeoff', 'enroute', 'landing']) for (const e of ST.workout[ph]) {
+      if (e.inputType !== 'reps_only') continue;
+      const isMax = /max/i.test(e.target), warm = ph === 'taxi' || ph === 'landing';
+      if (!isMax && !warm) continue;
+      ST.sets[e.id] = (ST.sets[e.id] || [{}]).map(() => ({ reps: '1' }));
+      const f = setFeedbackFor(e, ph, ST.sets[e.id]);
+      out.push({ name: e.name, target: e.target, ph, said: f ? f.text : '' });
+      ST.sets[e.id] = ST.sets[e.id].map(() => ({ reps: '' }));
+    }
+    return out;
+  });
+  quiet.forEach(q => check(q.name + ' (' + q.target + ', ' + q.ph + ') silent', q.said === '', q.said));
+
+  console.log('I. every card draws the number of set boxes its label promises');
+  const boxes = await page.evaluate(() => {
+    const out = [];
+    // The full, untrimmed program through the app's own builder, with the
+    // shoulder flag on, so the injury swap is always part of what is drawn.
+    ST.injuries = ['shoulder'];
+    ST.workout = getCombinedWorkout('hotel', 'Full Body'); ST.sets = {}; ST.expanded = {};
+    for (const ph of ['taxi', 'takeoff', 'enroute', 'landing']) for (const e of ST.workout[ph]) {
+      const lab = (e.target || '').match(/^(\d+)\s*[x×]/i);
+      const timed = e.timed || ['timed', 'timed_bilateral', 'timed_distance', 'nsdr'].includes(e.inputType);
+      if (!lab || timed) continue;
+      delete ST.sets[e.id];
+      ST.expanded[e.id] = true;
+    }
+    renderFlight(document.getElementById('mainPage'));
+    for (const ph of ['taxi', 'takeoff', 'enroute', 'landing']) for (const e of ST.workout[ph]) {
+      const lab = (e.target || '').match(/^(\d+)\s*[x×]/i);
+      const timed = e.timed || ['timed', 'timed_bilateral', 'timed_distance', 'nsdr'].includes(e.inputType);
+      if (!lab || timed) continue;
+      out.push({ name: e.name, target: e.target, want: parseInt(lab[1], 10), got: document.querySelectorAll('#excard_' + e.id + ' .set-tile').length, swapped: !!e.swappedForInjury });
+    }
+    return out;
+  });
+  boxes.forEach(b => check(b.name + ' ' + b.target + (b.swapped ? ' (injury swap)' : ''), b.want === b.got, b.got + ' boxes'));
+  check('workout includes an injury-swapped exercise to prove the fix', boxes.some(b => b.swapped));
+  if (OUT) {
+    const sw = await page.evaluate(() => { const e = [...ST.workout.takeoff, ...ST.workout.enroute].find(x => x.swappedForInjury); if (!e) return null; Object.keys(ST.expanded).forEach(k => ST.expanded[k] = false); ST.expanded[e.id] = true; renderFlight(document.getElementById('mainPage')); return e.id; });
+    if (sw) { await page.locator('#excard_' + sw).scrollIntoViewIfNeeded(); await page.screenshot({ path: path.join(OUT, 'live-feedback-I.png') }); }
+  }
 
   check('no JavaScript errors', errors.length === 0, errors.join(' | '));
   // Leave the bot account clean: abandon the workout without saving.

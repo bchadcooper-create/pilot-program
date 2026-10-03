@@ -82,7 +82,7 @@ function loadAppJS() {
   // attach themselves automatically and are reachable as context.<name>;
   // this one extra statement is only needed to reach the `const ST` state
   // object itself from outside the sandbox for test setup/assertions.
-  vm.runInContext('this.ST = ST; this.WORKOUTS = WORKOUTS; this.CATALOG_EXTRAS = CATALOG_EXTRAS;', context);
+  vm.runInContext('this.ST = ST; this.WORKOUTS = WORKOUTS; this.CATALOG_EXTRAS = CATALOG_EXTRAS; this.INJURY_REGIONS = INJURY_REGIONS;', context);
   return context;
 }
 
@@ -577,6 +577,117 @@ test('exercise card carries the feedback slot and both inputs feed it', () => {
   const leaving = (html.match(/queueSetFeedback\('fb2',\d+,true\)/g) || []).length;
   assertEqual(typing, 4, 'reps + weight on each of 2 sets, while typing');
   assertEqual(leaving, 4, 'reps + weight on each of 2 sets, on leaving the field');
+});
+
+console.log('\nReps-only feedback (requested: "also for reps only, after 1.2 seconds of typing"):');
+test('rep target is only read from a real rep count, never a time or distance', () => {
+  [['4×10', 10], ['3×8/leg', 8], ['3×10/side', 10], ['4×8-12', 8], ['10 reps', 10], ['3×15 steps/side', 15]].forEach(([t, want]) =>
+    assertEqual(ctx.parseTargetReps(t), want, t));
+  ['3×40yd', '8×30s', '6×500m', '8×1 min', '3×max', '2x20yd', '6×45s', '20 min', '6×2 flights'].forEach(t =>
+    assertEqual(ctx.parseTargetReps(t), null, t + ' has no rep target'));
+});
+test('reps-only set is ready as soon as reps are typed, no weight to wait for', () => {
+  assertEqual(ctx.setFeedbackReady({ reps: '8' }, false, true), true, 'reps-only, typing');
+  assertEqual(ctx.setFeedbackReady({ reps: '' }, false, true), false, 'nothing typed');
+  assertEqual(ctx.setFeedbackReady({ reps: '8', weight: '' }, false, false), false, 'weighted set still waits for weight');
+});
+test('reps-only working set gets feedback worded without any weight advice', () => {
+  const split = { id: 'ro1', name: 'Single Leg Split Squat', target: '3×8/leg', sets: 3, inputType: 'reps_only' };
+  const mid = ctx.setFeedbackFor(split, 'enroute', [{ reps: '8' }, { reps: '6' }, { reps: '' }]);
+  assertEqual(/6 of 8/.test(mid.text), true, 'names the miss');
+  assertEqual(/weight|\blb\b/i.test(mid.text), false, 'no weight talk on a bodyweight move: ' + mid.text);
+  const big = ctx.setFeedbackFor(split, 'enroute', [{ reps: '8' }, { reps: '3' }, { reps: '' }]);
+  assertEqual(/weight|\blb\b/i.test(big.text), false, 'no weight talk on a big miss: ' + big.text);
+  const fin = ctx.setFeedbackFor(split, 'enroute', [{ reps: '9' }, { reps: '8' }, { reps: '7' }]);
+  assertEqual(fin.tone, 'positive', 'final near-miss is a strong finish');
+  assertEqual(/weight|\blb\b|next set/i.test(fin.text), false, 'final set: no weight, no next set: ' + fin.text);
+  const finBig = ctx.setFeedbackFor(split, 'enroute', [{ reps: '8' }, { reps: '5' }, { reps: '3' }]);
+  assertEqual(/weight|\blb\b|next set/i.test(finBig.text), false, 'final big miss: ' + finBig.text);
+  assertEqual(/—/.test(mid.text + big.text + fin.text + finBig.text), false, 'no em dashes');
+});
+test('weighted exercise keeps its weight advice', () => {
+  const row = { id: 'rw1', name: 'DB Row', target: '4×10', sets: 4, inputType: 'reps_weight' };
+  const r = ctx.setFeedbackFor(row, 'enroute', [{ reps: '10', weight: '50' }, { reps: '5', weight: '50' }, { reps: '', weight: '' }, { reps: '', weight: '' }]);
+  assertEqual(/weight/i.test(r.text), true, 'still talks about the weight');
+});
+test('warmup and cooldown reps-only moves stay quiet', () => {
+  const circles = { id: 'ro2', name: 'Ankle Circles', target: '20 reps', sets: 1, inputType: 'reps_only' };
+  assertEqual(ctx.setFeedbackFor(circles, 'taxi', [{ reps: '10' }]), null, 'taxi');
+  assertEqual(ctx.setFeedbackFor(circles, 'landing', [{ reps: '10' }]), null, 'landing');
+});
+test('reps-only card carries the feedback slot and its input feeds it', () => {
+  const split = { id: 'ro3', name: 'Single Leg Split Squat', target: '3×8/leg', sets: 3, inputType: 'reps_only' };
+  ctx.ST.workout = { taxi: [], takeoff: [], enroute: [split], landing: [] };
+  ctx.ST.sets = { ro3: [{ reps: '8' }, { reps: '6' }, { reps: '' }] };
+  ctx.ST.expanded = { ro3: true };
+  const html = ctx.buildExCard(split, 'enroute');
+  assertEqual(html.includes('id="ar_ro3"'), true, 'slot present');
+  assertEqual(/6 of 8/.test(html), true, 'feedback drawn on render too');
+  assertEqual((html.match(/queueSetFeedback\('ro3',\d+,false\)/g) || []).length, 3, 'typing trigger on each set');
+  assertEqual((html.match(/queueSetFeedback\('ro3',\d+,true\)/g) || []).length, 3, 'leave-field trigger on each set');
+});
+
+console.log('\nInjury swaps (found: "4×10" label with 3 set boxes after a shoulder swap):');
+test('shoulder swap of DB Overhead Press gets the 4 sets its label promises', () => {
+  ctx.ST.injuries = ['shoulder'];
+  const out = ctx.applyInjuryFilter({ id: 'h_up_er1', name: 'DB Overhead Press', target: '3×10', sets: 3, note: '', timed: false, inputType: 'reps_weight' });
+  ctx.ST.injuries = [];
+  assertEqual(out.swappedForInjury, true, 'swapped');
+  assertEqual(out.target, '4×10', 'label');
+  assertEqual(out.sets, 4, 'set count follows the new label');
+  assertEqual(ctx.blankSetsFor(out).length, 4, 'four boxes');
+});
+test('a timed hold swapped for a reps exercise gets reps boxes, not a stopwatch', () => {
+  ctx.ST.injuries = ['elbow_wrist'];
+  const out = ctx.applyInjuryFilter({ id: 'r_lg_er1', name: 'Plank', target: '3×45s', sets: 3, note: '', timed: true, inputType: 'timed' });
+  ctx.ST.injuries = [];
+  assertEqual(out.name, 'Dead Bug', 'swapped to Dead Bug');
+  assertEqual(out.inputType, 'reps_only', 'reps boxes');
+  assertEqual(out.timed, false, 'not timed');
+  assertEqual(Object.keys(ctx.blankSetsFor(out)[0]).join(), 'reps', 'set shape');
+});
+test('every possible injury swap: boxes match the label and the fields match the new exercise', () => {
+  const regions = Object.keys(ctx.INJURY_REGIONS);
+  const all = new Map();
+  (function walk(v) {
+    if (Array.isArray(v)) v.forEach(x => { if (x && x.id && x.name) all.set(x.id, x); else walk(x); });
+    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+  })(ctx.WORKOUTS);
+  let swaps = 0; const bad = [];
+  for (const e of all.values()) for (const r of regions) {
+    ctx.ST.injuries = [r];
+    const out = ctx.applyInjuryFilter(e);
+    if (!out.swappedForInjury) continue;
+    swaps++;
+    const alt = ctx.getAlternates(e.name).find(a => a.name === out.name);
+    const lab = (out.target || '').match(/^(\d+)\s*[x×]/i);
+    if (lab && parseInt(lab[1], 10) !== out.sets) bad.push(e.name + ' -> ' + out.name + ': label ' + lab[1] + ', sets ' + out.sets);
+    if (!lab && /\d\s*(min|s)\b/.test(out.target || '') && ctx.blankSetsFor(out).length !== 1) bad.push(e.name + ' -> ' + out.name + ' (' + out.target + '): a single duration drew ' + ctx.blankSetsFor(out).length + ' boxes');
+    if (alt.inputType && alt.inputType !== out.inputType) bad.push(e.name + ' -> ' + out.name + ': fields ' + out.inputType + ', alternate says ' + alt.inputType);
+    const timedType = out.inputType === 'timed' || out.inputType === 'timed_bilateral' || out.inputType === 'timed_distance' || out.inputType === 'nsdr';
+    if (!!out.timed !== timedType && !(out.timed && out.inputType === 'timed')) bad.push(e.name + ' -> ' + out.name + ': timed=' + out.timed + ' but fields ' + out.inputType);
+    if (out.originalName !== e.name || !out.flaggedRegion) bad.push(e.name + ': lost the swap banner details');
+  }
+  ctx.ST.injuries = [];
+  assertEqual(swaps > 30, true, 'sweep actually covered swaps (' + swaps + ')');
+  assertEqual(bad.length, 0, bad.length + ' wrong, e.g. ' + bad.slice(0, 3).join(' | '));
+});
+test('ankle flag: a treadmill session swaps to one timed bike ride, not three reps boxes', () => {
+  ctx.ST.injuries = ['ankle_foot'];
+  const out = ctx.applyInjuryFilter({ id: 'h_ca_er1', name: 'Treadmill', target: '30 min', sets: 1, note: '', timed: true, inputType: 'timed' });
+  ctx.ST.injuries = [];
+  assertEqual(out.name, 'Stationary Bike Intervals', 'swapped to the bike');
+  assertEqual(out.timed, true, 'timed');
+  assertEqual(ctx.blankSetsFor(out).length, 1, 'one box');
+  assertEqual(Object.keys(ctx.blankSetsFor(out)[0]).join(), 'seconds', 'a time box');
+});
+test('manual Alternate swap and injury swap build the same exercise', () => {
+  const alt = ctx.getAlternates('DB Overhead Press').find(a => a.name === 'DB Incline Press');
+  const built = ctx.exFromAlternate('x', alt);
+  assertEqual(built.sets, 4, 'sets from the label');
+  assertEqual(built.inputType, 'reps_weight', 'fields');
+  const bike = ctx.exFromAlternate('x', { name: 'Assault Bike Intervals', target: '8×30s', note: '' });
+  assertEqual(bike.inputType, 'reps_only', 'falls back to the catalog definition when the alternate does not say');
 });
 
 console.log('\n' + '─'.repeat(50));

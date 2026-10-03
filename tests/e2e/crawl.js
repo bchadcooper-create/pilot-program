@@ -456,8 +456,15 @@ async function scheduleFlow(page) {
              tonight: sched.tonightLayoverAirport, flightsToday: sched.flightsToday };
   });
   console.log('    app reads: ' + JSON.stringify(ctx));
-  const hour = new Date().getHours();
-  const expectRemaining = hour < 14 ? 2 : hour < 17 ? 1 : 0;
+  // Counted from the fixture's own departure times, the same way the app
+  // counts (a leg in the air is neither remaining nor completed). The old
+  // hour-of-day table said 1 until 17:00 while leg two departs at 16:30,
+  // which raised a false finding for half an hour every afternoon.
+  const nowMs = Date.now();
+  const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+  const expectRemaining = trip.filter(e => e.type === 'flight'
+    && e.start.getTime() >= dayStart.getTime() && e.start.getTime() < dayStart.getTime() + 86400000
+    && e.start.getTime() > nowMs).length;
   if (ctx.tripDay !== 2 || ctx.tripDays !== 4) finding('schedule', 'trip context', 'expected day 2 of 4, got ' + ctx.tripDay + ' of ' + ctx.tripDays);
   if (ctx.tonight !== 'SEA') finding('schedule', 'trip context', 'tonight should be SEA, got ' + ctx.tonight);
   if (ctx.legsRemaining !== expectRemaining) finding('schedule', 'trip context', 'legs remaining today: expected ' + expectRemaining + ', got ' + ctx.legsRemaining);

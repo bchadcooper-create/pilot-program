@@ -82,7 +82,7 @@ function loadAppJS() {
   // attach themselves automatically and are reachable as context.<name>;
   // this one extra statement is only needed to reach the `const ST` state
   // object itself from outside the sandbox for test setup/assertions.
-  vm.runInContext('this.ST = ST; this.WORKOUTS = WORKOUTS; this.CATALOG_EXTRAS = CATALOG_EXTRAS; this.INJURY_REGIONS = INJURY_REGIONS;', context);
+  vm.runInContext('this.ST = ST; this.WORKOUTS = WORKOUTS; this.CATALOG_EXTRAS = CATALOG_EXTRAS; this.INJURY_REGIONS = INJURY_REGIONS; this.ALTERNATES = ALTERNATES; this.EXERCISE_SYNONYMS = EXERCISE_SYNONYMS;', context);
   return context;
 }
 
@@ -493,6 +493,67 @@ test('every catalog entry has its own id (history for one never lands on another
   ctx.buildExerciseCatalog().forEach(e => { if (seen[e.id]) dup.push(e.id + ': ' + seen[e.id] + ' / ' + e.name); seen[e.id] = e.name; });
   assertEqual(dup.length, 0, 'duplicate ids: ' + dup.join(', '));
 });
+console.log('\nOne catalog (requested: "add those to the search so everything is findable in one place"):');
+test('every exercise the Alternate button can offer is also in the catalog search', () => {
+  const names = new Set(ctx.buildExerciseCatalog().map(e => e.name));
+  const missing = new Set();
+  Object.values(ctx.ALTERNATES).forEach(list => list.forEach(a => { if (!names.has(a.name)) missing.add(a.name); }));
+  assertEqual(missing.size, 0, 'alternates missing from the catalog: ' + [...missing].join(', '));
+});
+test('the same movement is one entry, not two near-identical names', () => {
+  const names = new Set(ctx.buildExerciseCatalog().map(e => e.name));
+  ['Hack Squat', 'Seated Leg Curl', 'Hammer Curl', 'Tricep Pushdown', 'DB Rear Delt Fly', 'Seated Calf Raise', 'Inverted Row'].forEach(n =>
+    assertEqual(names.has(n), false, n + ' should resolve to the existing catalog entry'));
+  const alt = (from, name) => ctx.getAlternates(from).some(a => a.name === name);
+  assertEqual(alt('Leg Press', 'Hack Squat (Machine)'), true, 'Leg Press alternate points at Hack Squat (Machine)');
+  assertEqual(alt('Romanian Deadlift', 'Seated Leg Curl (Machine)'), true, 'RDL alternate points at Seated Leg Curl (Machine)');
+  assertEqual(alt('Face Pull', 'Dumbbell Reverse Fly'), true, 'Face Pull alternate points at Dumbbell Reverse Fly');
+});
+test('history stays attached: Alternate and search give the same id, including ids already logged', () => {
+  const cat = ctx.buildExerciseCatalog();
+  const idOf = n => (cat.find(e => e.name === n) || {}).id;
+  assertEqual(idOf('DB Deadlift'), 'swap_db_deadlift', 'DB Deadlift (3 logged sessions)');
+  assertEqual(idOf('Machine Row'), 'swap_machine_row', 'Machine Row (3 logged sessions)');
+  assertEqual(idOf('Goblet Squat (Heavy)'), 'swap_goblet_squat_heavy', 'Goblet Squat (Heavy) (1 logged session)');
+  const base = { id: 'c_ul_to2', name: 'Barbell Row (Pendlay)', target: '4×8', sets: 4, inputType: 'reps_weight' };
+  ctx.ST.workout = { taxi: [], takeoff: [base], enroute: [], landing: [] }; ctx.ST.sets = { c_ul_to2: [] }; ctx.ST.expanded = {};
+  const realRender = ctx.renderFlight, realToast = ctx.showBigToast; ctx.renderFlight = () => {}; ctx.showBigToast = () => {};
+  ctx.swapExercise('c_ul_to2', ctx.getAlternates('Barbell Row (Pendlay)').find(a => a.name === 'Machine Row'));
+  ctx.renderFlight = realRender; ctx.showBigToast = realToast;
+  assertEqual(ctx.ST.workout.takeoff[0].id, 'swap_machine_row', 'swapping through Alternate uses the catalog id');
+});
+test('catalog entries agree with what each alternate says about its fields', () => {
+  const cat = ctx.buildExerciseCatalog(); const bad = [];
+  Object.values(ctx.ALTERNATES).forEach(list => list.forEach(a => {
+    const c = cat.find(e => e.name === a.name);
+    if (c && String(c.id).startsWith('swap_') && a.inputType && a.inputType !== c.inputType) bad.push(a.name + ': alternate ' + a.inputType + ', catalog ' + c.inputType);
+  }));
+  assertEqual(bad.length, 0, bad.join(' | '));
+});
+test('no search synonym points at a name that does not exist', () => {
+  const names = new Set(ctx.buildExerciseCatalog().map(e => e.name));
+  const dead = Object.entries(ctx.EXERCISE_SYNONYMS).filter(([, v]) => !names.has(v)).map(([k, v]) => k + ' -> ' + v);
+  assertEqual(dead.length, 0, dead.join(' | '));
+});
+test('the newly searchable ones are found by plain wording', () => {
+  const find = q => ctx.buildExerciseCatalog().filter(e => ctx.exerciseMatchesQuery(e.name, q)).map(e => e.name);
+  [['smith squat', 'Smith Machine Squat'], ['smith bench', 'Smith Machine Bench Press'], ['dips', 'Dip'], ['couch stretch', 'Couch Stretch'],
+   ['suitcase carry', 'Suitcase Carry'], ['cable curl', 'Cable Curl'], ['upright row', 'Upright Row'], ['woodchop', 'Cable Woodchop'],
+   ['machine row', 'Machine Row'], ['chest press machine', 'Machine Chest Press'], ['goblet squat', 'Goblet Squat'],
+   ['rear delt fly', 'Dumbbell Reverse Fly'], ['hammer curl', 'DB Hammer Curl'], ['hack squat', 'Hack Squat (Machine)'], ['tricep pushdown', 'Cable Tricep Pushdown']].forEach(([q, want]) =>
+    assertEqual(find(q).includes(want), true, '"' + q + '" finds ' + want));
+});
+test('a stretch added from the catalog lands in the cooldown with a left/right time box', () => {
+  ctx.ST.workout = { taxi: [], takeoff: [], enroute: [], landing: [] }; ctx.ST.sets = {};
+  const realRender = ctx.renderFlight, realToast = ctx.showToast; ctx.renderFlight = () => {}; ctx.showToast = () => {};
+  ctx.addExistingCatalogExercise(0, 'couch stretch');
+  ctx.renderFlight = realRender; ctx.showToast = realToast;
+  assertEqual(ctx.ST.workout.landing.length, 1, 'placed in landing');
+  const e = ctx.ST.workout.landing[0];
+  assertEqual(e.name, 'Couch Stretch', 'name');
+  assertEqual(JSON.stringify(ctx.ST.sets[e.id]), JSON.stringify([{ seconds_left: '', seconds_right: '' }]), 'one left/right time entry');
+});
+
 test('catalog-only extras never appear in a generated program', () => {
   const extraIds = new Set(ctx.CATALOG_EXTRAS.map(e => e.id));
   let leaked = 0;

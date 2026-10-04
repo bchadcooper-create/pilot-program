@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.12 / 20260916_4
+ * Version/build: fcf-v5.44.13 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.12';
+const FCF_VERSION = 'fcf-v5.44.13';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -6321,8 +6321,8 @@ const EXERCISE_SYNONYMS = {
   'barbell bench press': 'Flat Barbell Bench Press',
   'cgbp': 'Close Grip Bench',
   'close grip bench press': 'Close Grip Bench',
-  'dips': 'Weighted Dip',
-  'chest press machine': 'DB Bench Press',
+  'dips': 'Dip',
+  'chest press machine': 'Machine Chest Press',
 
   // Rows & pulls
   'pendlay row': 'Barbell Row (Pendlay)',
@@ -6493,6 +6493,14 @@ const EXERCISE_SYNONYMS = {
   'weighted burpee': 'Medicine Ball Burpee',
   'ball burpee': 'Medicine Ball Burpee',
   'slam ball burpee': 'Medicine Ball Burpee',
+  'rear delt fly': 'Dumbbell Reverse Fly',
+  'db rear delt fly': 'Dumbbell Reverse Fly',
+  'rear delt raise': 'Dumbbell Reverse Fly',
+  'reverse flye': 'Dumbbell Reverse Fly',
+  'parallel bar dip': 'Dip',
+  'straight arm pulldown': 'Cable Straight-Arm Pulldown',
+  'cable woodchopper': 'Cable Woodchop',
+  'wood chop': 'Cable Woodchop',
   'landmine thruster': 'Landmine Squat to Press',
   'landmine squat press': 'Landmine Squat to Press',
   'landmine squat and press': 'Landmine Squat to Press',
@@ -6589,12 +6597,61 @@ const CATALOG_EXTRAS = [
   ex('x_ellip',     'Elliptical Intervals',     '20 min', 1, 'Alternate 1 min hard and 2 min easy.', true, 'timed'),
 ];
 
+// Exercises that used to exist ONLY as suggestions behind the Alternate
+// button: reachable from one related exercise, invisible to the catalog
+// search. (Requested: "add those to the search so that everything is
+// findable in one place.") Every name in ALTERNATES must now be a catalog
+// entry; a test enforces it.
+//
+// The id is 'swap_' + slugify(name) on purpose. That is the id
+// swapExercise() has always given a non-catalog alternate, so sessions
+// already logged through Alternate (DB Deadlift, Machine Row, Goblet
+// Squat (Heavy) all have real history) keep their progression instead of
+// starting over as "first time logging".
+const altEx = (name, target, sets, note, timed, inputType, phase) =>
+  ({ ...ex('swap_' + slugify(name), name, target, sets, note, timed, inputType), phase: phase || 'enroute' });
+const CATALOG_ALTERNATES = [
+  altEx('Goblet Squat (Heavy)',        '4×10', 4, 'Hold one heavy dumbbell against your chest, elbows under it, squat to depth and stand. Front loading keeps the torso upright with less load on the spine.'),
+  altEx('Goblet Squat',                '4×12', 4, 'Hold a dumbbell or kettlebell at your chest and squat to depth. A lighter, higher-rep version of the heavy goblet squat.'),
+  altEx('Smith Machine Squat',         '4×8',  4, 'Bar on the upper back in the Smith machine, feet slightly forward of the bar, squat to depth. The fixed bar path needs less balance.'),
+  altEx('DB Deadlift',                 '4×8',  4, 'Dumbbells at your sides or just in front of the shins, hinge at the hips with a flat back and stand tall. The deadlift pattern at a lighter load.'),
+  altEx('Machine Chest Press',         '4×12', 4, 'Set the seat so the handles line up with mid chest. Press out without locking hard, lower under control. Shoulder friendly.'),
+  altEx('Smith Machine Bench Press',   '4×8',  4, 'Bench centered under the Smith bar, lower to mid chest and press. The fixed bar path suits training without a spotter.'),
+  altEx('Machine Row',                 '4×12', 4, 'Chest against the pad, pull the handles to your ribs and squeeze the shoulder blades together. The supported position suits heavier reps.'),
+  altEx('Cable Straight-Arm Pulldown', '3×15', 3, 'Face a high cable, arms nearly straight, sweep the bar down to your thighs using the lats. Works the lats without the biceps.'),
+  altEx('Seated DB Face Pull',         '3×15', 3, 'Seated and leaning forward, pull light dumbbells up and back toward your ears, finishing with the knuckles rotated back. Rear delts and rotator cuff.'),
+  altEx('Cable Lateral Raise',         '3×15', 3, 'Stand side-on to a low cable, raise the handle out to shoulder height with a soft elbow. The cable keeps tension through the whole range.'),
+  altEx('Upright Row',                 '3×12', 3, 'Bar or dumbbells in front of the thighs, pull up along the body leading with the elbows to about chest height. Side delts and upper traps.'),
+  altEx('Cable Front Raise',           '3×15', 3, 'Back to a low cable, raise the handle straight in front to shoulder height. Constant tension on the front delts.'),
+  altEx('Machine Lateral Raise',       '3×15', 3, 'Arms against the pads, raise out to shoulder height and lower slowly. The machine keeps the form strict.'),
+  altEx('Cable Curl',                  '3×15', 3, 'Face a low cable, elbows pinned at your sides, curl the bar up and lower slowly. Constant tension on the biceps.'),
+  altEx('Dip',                         '3×max', 3, 'On parallel bars, lower until the shoulders are just below the elbows, then press back up. Lean forward for more chest, stay upright for more triceps.', false, 'reps_only'),
+  altEx('Leg Press Calf Raise',        '4×20', 4, 'Balls of the feet on the bottom edge of the leg press platform, knees straight but not locked, press through the toes and lower for a full stretch.'),
+  altEx('Cable Woodchop',              '3×12/side', 3, 'Side-on to a cable, pull the handle diagonally across your body, turning through the hips and trunk. Rotational core work.'),
+  altEx('Suitcase Carry',              '3×40yd', 3, 'One heavy dumbbell or kettlebell in one hand, walk tall without leaning toward or away from the weight. Switch hands each length.'),
+  altEx('Trap Bar Carry',              '3×40yd', 3, 'Stand inside a loaded trap bar, lift it and walk with short quick steps, shoulders back. Heavier than a dumbbell carry.'),
+  // Stretches: these belong in the cooldown when added from the catalog.
+  altEx('Seated Calf Stretch (Strap or Towel)', '2×30s/leg', 2, 'Sit with one leg straight, loop a strap or towel around the ball of the foot, and pull the toes toward you until the calf stretches. No wall needed.', true, 'timed_bilateral', 'landing'),
+  altEx('Downward Dog Calf Pumps',     '2×10/leg', 2, 'From a downward dog, press one heel toward the floor while the other knee bends, then switch. A moving calf stretch that also works as a warmup.', false, 'reps_only', 'landing'),
+  altEx('Seated Forward Fold',         '2×30s', 2, 'Sit with both legs straight, hinge forward from the hips and reach toward your feet. Keep the back long instead of rounding to get lower.', true, 'timed', 'landing'),
+  altEx('Lying Hamstring Stretch (Strap)', '2×30s/leg', 2, 'On your back, strap or towel around one foot, raise that leg straight until the hamstring stretches. Easy to control how hard it pulls.', true, 'timed_bilateral', 'landing'),
+  altEx('Standing Hip Flexor Stretch', '2×30s/leg', 2, 'Step into a long split stance, tuck the hips under and shift forward until the front of the back hip stretches. No floor contact needed.', true, 'timed_bilateral', 'landing'),
+  altEx('Couch Stretch',               '2×30s/leg', 2, 'Back knee on the floor with the shin up against a couch, bed or wall, front foot forward. Tall chest, squeeze the glute. Deep hip flexor and quad stretch.', true, 'timed_bilateral', 'landing'),
+];
+
 function buildExerciseCatalog() {
   const seen = {};
   const catalog = [];
   CATALOG_EXTRAS.forEach(e => {
     seen[e.name] = true;
     catalog.push({ id: e.id, name: e.name, target: e.target, sets: e.sets, note: e.note, timed: e.timed, inputType: e.inputType, phase: 'enroute' });
+  });
+  // After the programs would also work; listed here so their standalone
+  // descriptions win over nothing (no program defines these names).
+  CATALOG_ALTERNATES.forEach(e => {
+    if (seen[e.name]) return;
+    seen[e.name] = true;
+    catalog.push({ id: e.id, name: e.name, target: e.target, sets: e.sets, note: e.note, timed: e.timed, inputType: e.inputType, phase: e.phase });
   });
   Object.values(WORKOUTS).forEach(envW => {
     Object.values(envW).forEach(mgW => {
@@ -7850,7 +7907,7 @@ const ALTERNATES = {
   ],
   'Romanian Deadlift': [
     {name:'DB Romanian Deadlift',target:'4×10',note:'Same hip hinge, dumbbells if no barbell available.'},
-    {name:'Seated Leg Curl',    target:'3×12',note:'Machine isolation: direct hamstring without the hinge.'},
+    {name:'Seated Leg Curl (Machine)',target:'3×12',note:'Machine isolation: direct hamstring without the hinge.'},
     {name:'Good Morning',       target:'3×10',note:'Bar on back, hip hinge. Excellent hamstring stretch.'},
   ],
   'Conventional Deadlift': [
@@ -7887,7 +7944,7 @@ const ALTERNATES = {
   'Seated Cable Row': [
     {name:'DB Row',             target:'4×10/side',note:'Fully loads each side independently.'},
     {name:'Barbell Row (Pendlay)',target:'4×6',    note:'Heavier bilateral pulling.'},
-    {name:'Inverted Row',       target:'3×12',     note:'Bodyweight row under a table or bar.',inputType:'reps_only'},
+    {name:'Table / Inverted Row',target:'3×12',     note:'Bodyweight row under a table or bar.',inputType:'reps_only'},
   ],
   'Box Jump': [
     {name:'Broad Jump',         target:'5×3',note:'Horizontal power. Same explosive hip extension.',inputType:'reps_distance'},
@@ -7900,7 +7957,7 @@ const ALTERNATES = {
     {name:'Single Leg Squat (Pistol)',target:'3×5/leg',note:'Harder bodyweight version.',inputType:'reps_only'},
   ],
   'Face Pull': [
-    {name:'DB Rear Delt Fly',   target:'3×15',note:'Prone or bent-over. Same rear delt + external rotation.'},
+    {name:'Dumbbell Reverse Fly',target:'3×15',note:'Prone or bent-over. Same rear delt + external rotation.'},
     {name:'Band Pull-Apart',    target:'3×20',note:'Resistance band. Great shoulder health work.',inputType:'reps_only'},
     {name:'Seated DB Face Pull',target:'3×15',note:'Seated, light DBs, external rotation finish.'},
   ],
@@ -8152,31 +8209,31 @@ const ALTERNATES = {
   'EZ Bar Curl': [
     {name:'DB Curl',target:'3×12',note:'Dumbbell variation. Allows neutral or supinated grip.'},
     {name:'Cable Curl',target:'3×15',note:'Constant tension throughout. Great pump.'},
-    {name:'Hammer Curl',target:'3×12',note:'Neutral grip. Hits brachialis and brachioradialis.'},
+    {name:'DB Hammer Curl',target:'3×12',note:'Neutral grip. Hits brachialis and brachioradialis.'},
   ],
   'DB Curl': [
     {name:'Preacher Curl',target:'3×12',note:'Removes shoulder swing entirely for the strictest possible bicep isolation.'},
     {name:'EZ Bar Curl',target:'3×12',note:'Barbell variation. Slightly easier on the wrists.'},
     {name:'Cable Curl',target:'3×15',note:'Constant tension. Good isolation.'},
-    {name:'Hammer Curl',target:'3×12',note:'Neutral grip. Different muscle emphasis.'},
+    {name:'DB Hammer Curl',target:'3×12',note:'Neutral grip. Different muscle emphasis.'},
   ],
   'Close Grip Bench': [
-    {name:'Tricep Pushdown',target:'3×15',note:'Cable. Great isolation for all three tricep heads.'},
+    {name:'Cable Tricep Pushdown',target:'3×15',note:'Cable. Great isolation for all three tricep heads.'},
     {name:'DB Tricep Overhead',target:'3×12',note:'Overhead extension. Long head emphasis.'},
     {name:'Dip',target:'3×max',note:'Bodyweight. Chest + tricep compound.',inputType:'reps_only'},
   ],
   'DB Tricep Overhead': [
     {name:'Close Grip Bench',target:'3×8',note:'Barbell tricep pressing.'},
-    {name:'Tricep Pushdown',target:'3×15',note:'Cable isolation.'},
+    {name:'Cable Tricep Pushdown',target:'3×15',note:'Cable isolation.'},
     {name:'Chair Dips',target:'3×max',note:'Bodyweight. No equipment.',inputType:'reps_only'},
   ],
   'Leg Press': [
     {name:'Back Squat',target:'5×5',note:'Free weight. More total body demand.'},
     {name:'Goblet Squat (Heavy)',target:'4×10',note:'DB front-loaded. Good hotel substitute.'},
-    {name:'Hack Squat',target:'4×10',note:'More quad emphasis than leg press.'},
+    {name:'Hack Squat (Machine)',target:'4×10',note:'More quad emphasis than leg press.'},
   ],
   'Standing Calf Raise': [
-    {name:'Seated Calf Raise',target:'4×15',note:'Seated hits the soleus (deeper calf muscle) more.'},
+    {name:'Seated Calf Raise (Machine)',target:'4×15',note:'Seated hits the soleus (deeper calf muscle) more.'},
     {name:'Single-Leg Calf Raise',target:'3×15/leg',note:'Bodyweight on a step. More ROM.',inputType:'reps_only'},
     {name:'Leg Press Calf Raise',target:'4×20',note:'On the leg press machine. Easy to load heavy.'},
   ],
@@ -9399,9 +9456,10 @@ function addExistingCatalogExercise(matchIdx, q) {
   // needed here, since a catalog exercise already has a natural home.
   const phase = ['taxi','takeoff','enroute','landing'].includes(exDef.phase) ? exDef.phase : 'enroute';
   ST.workout[phase].push(newEx);
-  const blankSet = newEx.inputType==='timed_distance' ? {seconds:'',miles:''} : newEx.inputType==='timed' ? {seconds:''} : newEx.inputType==='reps_only' ? {reps:''} : {reps:'',weight:''};
-  const setsCount = newEx.sets || 3;
-  ST.sets[id] = Array.from({ length: setsCount }, () => ({...blankSet}));
+  // One shared shape (blankSetsFor), so a left/right stretch or a jump
+  // with a height box gets the fields its card actually draws. The old
+  // hand-rolled version here gave those reps + weight entries.
+  ST.sets[id] = blankSetsFor(newEx);
   ST.showAddExercise = false;
   showToast('✅ "'+exDef.name+'" added from the catalog.');
   renderFlight(document.getElementById('mainPage'));

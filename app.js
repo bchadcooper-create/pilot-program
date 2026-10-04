@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.13 / 20260916_4
+ * Version/build: fcf-v5.44.14 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.13';
+const FCF_VERSION = 'fcf-v5.44.14';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -3903,7 +3903,55 @@ async function restoreProPurchases() {
 }
 
 // ─── PROMO CODE REDEMPTION ──────────────────────────────────────────────
+//
+// WEB ONLY. App Store Review Guideline 3.1.1: "Apps may not use their own
+// mechanisms to unlock content or functionality, such as license keys."
+// A box in the iOS app that turns a typed code into Pro is exactly that,
+// and the card used to render on the More screen in the shell as well as
+// on the web. It is now absent inside the iOS app: no box, no wording
+// about codes. Codes are redeemed at flightcrew.fit and the Pro time is
+// on the account, so it shows up on the phone (3.1.3(b), multiplatform
+// services; the same Pro is sold in the app as an in-app purchase).
+//
+// Discounts for iOS subscribers go through Apple's own offer codes.
+const PROMO_INPUT_HTML = '<input id="promoCodeInput" type="text" placeholder="ENTER CODE" autocapitalize="characters" style="flex:1;min-width:0;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:var(--mono);font-size:0.8125rem;letter-spacing:0.05em" onkeydown="if(event.key===\'Enter\')redeemPromoCode()">';
+const PROMO_BUTTON_HTML = '<button class="btn btn-outline" style="width:auto;flex-shrink:0;padding:0 18px" onclick="redeemPromoCode()">Redeem</button>';
+function inIOSApp() {
+  return !!storeKitBridge() || (typeof FCFBridge !== 'undefined' && !!FCFBridge.isNative);
+}
+// The two lines under "Pro: all features unlocked" on the More screen.
+// A complimentary account (platform 'promo': the owner, testers, the App
+// Review demo account) reads "Pro (promo)" and "Comp/promo access" on the
+// web. Inside the iOS app the same account gets neutral wording, for the
+// same 3.1.1 reason the code box is hidden there. Still true either way:
+// it does not renew and nothing is billed.
+function proStatusCopy(sub, ios) {
+  const platform = sub?.platform;
+  if (platform === 'promo') {
+    return ios
+      ? { label: 'Pro access through ', manage: 'Complimentary access. No billing, nothing to manage.' }
+      : { label: 'Pro (promo): expires ', manage: 'Comp/promo access: no billing, nothing to manage.' };
+  }
+  return {
+    label: sub?.status === 'grace' ? 'Renewal pending: ' : 'Renews ',
+    manage: platform === 'web' ? 'Manage or cancel by contacting support.' : 'Manage or cancel in your Apple ID subscription settings.',
+  };
+}
+function promoCodeCardHTML() {
+  if (inIOSApp()) return '';
+  return '<div class="card mb12">' +
+    '<div style="font-size:0.75rem;font-weight:600;margin-bottom:8px">Have a promo code?</div>' +
+    '<div style="display:flex;gap:8px">' +
+    PROMO_INPUT_HTML +
+    // flex-shrink:0 plus min-width:0 on the input: at the largest text size
+    // the input's own intrinsic width was pushing this button off screen.
+    PROMO_BUTTON_HTML +
+    '</div>' +
+    '<div id="promoCodeResult" style="font-size:0.6875rem;margin-top:8px"></div>' +
+    '</div>';
+}
 async function redeemPromoCode() {
+  if (inIOSApp()) return;
   const input = document.getElementById('promoCodeInput');
   const resultEl = document.getElementById('promoCodeResult');
   const code = (input?.value || '').trim();
@@ -11797,9 +11845,7 @@ function renderMore(p) {
       // "Renews" implies auto-billing, which a promo grant doesn't have —
       // it just runs out. Saying "Renews" for a comped account would be
       // actively misleading about what happens when the date arrives.
-      const isPromo = ST.subscription?.platform === 'promo';
-      const label = isPromo ? 'Pro (promo): expires ' : (ST.subscription?.status==='grace'?'Renewal pending: ':'Renews ');
-      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:4px">'+label+until+'</div>');
+      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:4px">'+proStatusCopy(ST.subscription, inIOSApp()).label+until+'</div>');
     }
     // BUG FIX (reported: a web/Stripe subscriber saw "Manage or cancel in
     // your Apple ID subscription settings" — wrong instructions for a
@@ -11812,10 +11858,7 @@ function renderMore(p) {
     // pointing at "your Apple ID settings" (false) or inventing a portal
     // link that doesn't exist (also false) are both wrong — support is the
     // only honest option today.
-    const manageCopy = ST.subscription?.platform === 'promo' ? 'Comp/promo access: no billing, nothing to manage.'
-      : ST.subscription?.platform === 'web' ? 'Manage or cancel by contacting support.'
-      : 'Manage or cancel in your Apple ID subscription settings.';
-    parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:8px">'+manageCopy+'</div>');
+    parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:8px">'+proStatusCopy(ST.subscription, inIOSApp()).manage+'</div>');
   } else {
     const rows = [
       ['Workout logging',             '✓',       '✓'],
@@ -11859,18 +11902,9 @@ function renderMore(p) {
   }
   parts.push('</div>');
 
-  // Promo/comp code redemption — separate small card, visible regardless
-  // of current tier (a Pro user can still redeem to extend further).
-  parts.push('<div class="card mb12">');
-  parts.push('<div style="font-size:0.75rem;font-weight:600;margin-bottom:8px">Have a promo code?</div>');
-  parts.push('<div style="display:flex;gap:8px">');
-  parts.push('<input id="promoCodeInput" type="text" placeholder="ENTER CODE" autocapitalize="characters" style="flex:1;min-width:0;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:var(--mono);font-size:0.8125rem;letter-spacing:0.05em" onkeydown="if(event.key===\'Enter\')redeemPromoCode()">');
-  // flex-shrink:0 plus min-width:0 on the input: at the largest text size
-  // the input's own intrinsic width was pushing this button off screen.
-  parts.push('<button class="btn btn-outline" style="width:auto;flex-shrink:0;padding:0 18px" onclick="redeemPromoCode()">Redeem</button>');
-  parts.push('</div>');
-  parts.push('<div id="promoCodeResult" style="font-size:0.6875rem;margin-top:8px"></div>');
-  parts.push('</div>');
+  // Promo/comp code card. Web only: empty inside the iOS app (see
+  // promoCodeCardHTML for why).
+  parts.push(promoCodeCardHTML());
 
   parts.push('<div class="card mb12" style="padding:0">');
   parts.push('<a class="modal-link" style="display:block;padding:14px 16px;border-bottom:1px solid var(--border)" href="'+PRIVACY_POLICY_URL+'" '+externalLinkAttrs()+'>Privacy Policy</a>');

@@ -778,6 +778,40 @@ test('manual Alternate swap and injury swap build the same exercise', () => {
   assertEqual(bike.inputType, 'reps_only', 'falls back to the catalog definition when the alternate does not say');
 });
 
+console.log('\nApp Store Guideline 3.1.1 (no own unlock mechanism inside the iOS app):');
+test('promo code box is shown on the web and absent inside the iOS app', () => {
+  delete ctx.webkit;
+  assertEqual(ctx.inIOSApp(), false, 'plain browser is not the iOS app');
+  assertEqual(/promoCodeInput/.test(ctx.promoCodeCardHTML()), true, 'web shows the box');
+  ctx.webkit = { messageHandlers: { storeKit: { postMessage() {} } } };
+  assertEqual(ctx.inIOSApp(), true, 'StoreKit bridge present means the iOS app');
+  assertEqual(ctx.promoCodeCardHTML(), '', 'iOS app shows nothing: no box, no mention of codes');
+  delete ctx.webkit;
+});
+test('Pro status wording for a complimentary account never says "promo" inside the iOS app', () => {
+  const comp = { platform: 'promo', status: 'active' };
+  const web = ctx.proStatusCopy(comp, false), ios = ctx.proStatusCopy(comp, true);
+  assertEqual(/promo/i.test(web.label + web.manage), true, 'web wording unchanged');
+  assertEqual(/promo|code/i.test(ios.label + ios.manage), false, 'iOS wording: ' + ios.label + ' / ' + ios.manage);
+  assertEqual(/no billing/i.test(ios.manage), true, 'still honest that nothing is billed');
+  assertEqual(/renew/i.test(ios.label), false, 'still does not claim it renews');
+  const apple = { platform: 'ios', status: 'active' };
+  assertEqual(ctx.proStatusCopy(apple, true).label, 'Renews ', 'paid Apple subscriber unchanged');
+  assertEqual(/Apple ID/.test(ctx.proStatusCopy(apple, true).manage), true, 'Apple manage copy unchanged');
+  assertEqual(/support/.test(ctx.proStatusCopy({ platform: 'web', status: 'active' }, false).manage), true, 'web subscriber unchanged');
+  assertEqual(ctx.proStatusCopy({ platform: 'ios', status: 'grace' }, true).label, 'Renewal pending: ', 'grace unchanged');
+});
+test('redeeming is refused inside the iOS app even if something calls it', () => {
+  ctx.webkit = { messageHandlers: { storeKit: { postMessage() {} } } };
+  // redeemPromoCode is async and reads the code box first thing. Refusing
+  // means it never even looks for the box, which is observable right away.
+  let lookedForBox = 0;
+  const realGet = ctx.document.getElementById; ctx.document.getElementById = () => { lookedForBox++; return { value: 'FREEPRO', style: {}, textContent: '' }; };
+  ctx.redeemPromoCode();
+  ctx.document.getElementById = realGet; delete ctx.webkit;
+  assertEqual(lookedForBox, 0, 'stopped before reading a code');
+});
+
 console.log('\n' + '─'.repeat(50));
 console.log(passed + ' passed, ' + failed + ' failed');
 if (failed > 0) process.exit(1);

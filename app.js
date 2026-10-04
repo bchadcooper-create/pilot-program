@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.10 / 20260916_4
+ * Version/build: fcf-v5.44.11 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.10';
+const FCF_VERSION = 'fcf-v5.44.11';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -6489,6 +6489,15 @@ const EXERCISE_SYNONYMS = {
   'one arm front raise': 'Single-Arm DB Front Raise',
   'one armed front raise': 'Single-Arm DB Front Raise',
   'single arm dumbbell front raise': 'Single-Arm DB Front Raise',
+  'burpee with medicine ball': 'Medicine Ball Burpee',
+  'weighted burpee': 'Medicine Ball Burpee',
+  'ball burpee': 'Medicine Ball Burpee',
+  'slam ball burpee': 'Medicine Ball Burpee',
+  'landmine rotation': 'Landmine Twist',
+  'landmine 180': 'Landmine Twist',
+  'landmine russian twist': 'Landmine Twist',
+  'landmine goblet squat': 'Landmine Squat',
+  'landmine shoulder press': 'Landmine Press',
   'one arm kettlebell row': 'Single-Arm Kettlebell Row',
   'one armed kettlebell row': 'Single-Arm Kettlebell Row',
 
@@ -6560,7 +6569,12 @@ const CATALOG_EXTRAS = [
   ex('x_goodmorn',  'Good Morning',             '3×10', 3, 'Bar on the back, hinge at the hips with a flat back, light load.'),
   ex('x_sumo',      'Sumo Deadlift',            '4×5',  4, 'Wide stance, toes out, hips close to the bar, push the floor away.'),
   ex('x_rackpull',  'Rack Pull',                '4×5',  4, 'Bar at knee height in the rack, heavy lockouts for the upper back.'),
-  ex('x_landmine',  'Landmine Press',           '3×10', 3, 'One arm, bar end at the shoulder, press up and forward.'),
+  ex('x_landmine',  'Landmine Press',           '3×10/side', 3, 'Hold the free end of the bar at your shoulder, brace your core, press up and forward until the arm locks out. Log the weight loaded on the bar.'),
+  ex('x_lm_squat',  'Landmine Squat',           '3×10', 3, 'Face the anchor, hold the bar end at your chest with both hands like a goblet squat, sit down between your hips and stand back up. Log the weight loaded on the bar.'),
+  ex('x_lm_row',    'Landmine Row',             '3×10', 3, 'Straddle the bar or stand beside it, hinge at the hips with a flat back, pull the bar end up toward your ribs. Log the weight loaded on the bar.'),
+  ex('x_lm_twist',  'Landmine Twist',           '3×10/side', 3, 'Hold the bar end with straight arms, rotate it from one hip to the other, pivoting your feet as you turn. Core and obliques. Start light.'),
+  ex('x_burpee',    'Burpee',                   '3×10', 3, 'Squat, hands to the floor, jump the feet back to a plank, chest to the floor, jump the feet in, then jump up with hands overhead. Step back and forward instead of jumping to make it easier.', false, 'reps_only'),
+  ex('x_mb_burpee', 'Medicine Ball Burpee',     '3×10', 3, 'Set the ball on the floor, hands on the ball, jump the feet back to a plank, jump them in, then stand and lift the ball overhead. Log the weight of the ball.'),
   ex('x_hipthrust', 'Barbell Hip Thrust',       '3×10', 3, 'Shoulders on a bench, drive the hips up, squeeze the glutes at the top.'),
   ex('x_cablefly',  'Cable Fly',                '3×12', 3, 'Slight bend in the elbows, bring the handles together in front of the chest.'),
   ex('x_dbfly',     'Dumbbell Fly',             '3×12', 3, 'Flat or incline bench, wide arc, stretch at the bottom.'),

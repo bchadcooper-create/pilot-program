@@ -466,6 +466,31 @@ test('single-arm bench, lateral and front raise are searchable by any wording', 
    ['single-arm db lateral', 'Single-Arm DB Lateral Raise']].forEach(([q, want]) =>
     assertEqual(find(q).includes(want), true, q + ' finds ' + want));
 });
+test('burpees and landmine work from a trainer session are in the catalog', () => {
+  const cat = ctx.buildExerciseCatalog();
+  const byName = n => cat.find(e => e.name === n);
+  ['Burpee', 'Medicine Ball Burpee', 'Landmine Press', 'Landmine Squat', 'Landmine Row', 'Landmine Twist'].forEach(n =>
+    assertEqual(!!byName(n), true, n + ' present'));
+  assertEqual(byName('Burpee').inputType, 'reps_only', 'plain burpee is reps only');
+  ['Medicine Ball Burpee', 'Landmine Press', 'Landmine Squat', 'Landmine Row', 'Landmine Twist'].forEach(n => {
+    assertEqual(byName(n).inputType, 'reps_weight', n + ' logs weight and reps');
+    assertEqual(Object.keys(ctx.blankSetsFor(byName(n))[0]).join(), 'reps,weight', n + ' set boxes');
+    assertEqual(ctx.parseTargetReps(byName(n).target) > 0, true, n + ' has a rep target the coach can read');
+  });
+});
+test('they are found however they are typed', () => {
+  const find = q => ctx.buildExerciseCatalog().filter(e => ctx.exerciseMatchesQuery(e.name, q)).map(e => e.name);
+  [['burpee', 'Burpee'], ['Burpees', 'Burpee'], ['burpee', 'Medicine Ball Burpee'], ['med ball burpee', 'Medicine Ball Burpee'],
+   ['medicine ball burpees', 'Medicine Ball Burpee'], ['burpee with medicine ball', 'Medicine Ball Burpee'], ['weighted burpee', 'Medicine Ball Burpee'],
+   ['landmine', 'Landmine Squat'], ['land mine squat', 'Landmine Squat'], ['Land mine row', 'Landmine Row'],
+   ['land mine twist', 'Landmine Twist'], ['landmine rotation', 'Landmine Twist'], ['land mine press', 'Landmine Press']].forEach(([q, want]) =>
+    assertEqual(find(q).includes(want), true, '"' + q + '" finds ' + want));
+});
+test('every catalog entry has its own id (history for one never lands on another)', () => {
+  const seen = {}; const dup = [];
+  ctx.buildExerciseCatalog().forEach(e => { if (seen[e.id]) dup.push(e.id + ': ' + seen[e.id] + ' / ' + e.name); seen[e.id] = e.name; });
+  assertEqual(dup.length, 0, 'duplicate ids: ' + dup.join(', '));
+});
 test('catalog-only extras never appear in a generated program', () => {
   const extraIds = new Set(ctx.CATALOG_EXTRAS.map(e => e.id));
   let leaked = 0;

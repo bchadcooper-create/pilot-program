@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.11 / 20260916_4
+ * Version/build: fcf-v5.44.12 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.11';
+const FCF_VERSION = 'fcf-v5.44.12';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -6493,6 +6493,9 @@ const EXERCISE_SYNONYMS = {
   'weighted burpee': 'Medicine Ball Burpee',
   'ball burpee': 'Medicine Ball Burpee',
   'slam ball burpee': 'Medicine Ball Burpee',
+  'landmine thruster': 'Landmine Squat to Press',
+  'landmine squat press': 'Landmine Squat to Press',
+  'landmine squat and press': 'Landmine Squat to Press',
   'landmine rotation': 'Landmine Twist',
   'landmine 180': 'Landmine Twist',
   'landmine russian twist': 'Landmine Twist',
@@ -6571,6 +6574,7 @@ const CATALOG_EXTRAS = [
   ex('x_rackpull',  'Rack Pull',                '4×5',  4, 'Bar at knee height in the rack, heavy lockouts for the upper back.'),
   ex('x_landmine',  'Landmine Press',           '3×10/side', 3, 'Hold the free end of the bar at your shoulder, brace your core, press up and forward until the arm locks out. Log the weight loaded on the bar.'),
   ex('x_lm_squat',  'Landmine Squat',           '3×10', 3, 'Face the anchor, hold the bar end at your chest with both hands like a goblet squat, sit down between your hips and stand back up. Log the weight loaded on the bar.'),
+  ex('x_lm_thruster','Landmine Squat to Press', '3×8', 3, 'Explosive. Hold the bar end at your chest with both hands, squat, then drive up hard and use that momentum to press the bar up and forward to full reach. Lower it under control into the next squat. Log the weight loaded on the bar.'),
   ex('x_lm_row',    'Landmine Row',             '3×10', 3, 'Straddle the bar or stand beside it, hinge at the hips with a flat back, pull the bar end up toward your ribs. Log the weight loaded on the bar.'),
   ex('x_lm_twist',  'Landmine Twist',           '3×10/side', 3, 'Hold the bar end with straight arms, rotate it from one hip to the other, pivoting your feet as you turn. Core and obliques. Start light.'),
   ex('x_burpee',    'Burpee',                   '3×10', 3, 'Squat, hands to the floor, jump the feet back to a plank, chest to the floor, jump the feet in, then jump up with hands overhead. Step back and forward instead of jumping to make it easier.', false, 'reps_only'),

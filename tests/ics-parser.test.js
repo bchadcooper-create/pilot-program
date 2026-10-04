@@ -469,10 +469,10 @@ test('single-arm bench, lateral and front raise are searchable by any wording', 
 test('burpees and landmine work from a trainer session are in the catalog', () => {
   const cat = ctx.buildExerciseCatalog();
   const byName = n => cat.find(e => e.name === n);
-  ['Burpee', 'Medicine Ball Burpee', 'Landmine Press', 'Landmine Squat', 'Landmine Row', 'Landmine Twist'].forEach(n =>
+  ['Burpee', 'Medicine Ball Burpee', 'Landmine Press', 'Landmine Squat', 'Landmine Row', 'Landmine Twist', 'Landmine Squat to Press'].forEach(n =>
     assertEqual(!!byName(n), true, n + ' present'));
   assertEqual(byName('Burpee').inputType, 'reps_only', 'plain burpee is reps only');
-  ['Medicine Ball Burpee', 'Landmine Press', 'Landmine Squat', 'Landmine Row', 'Landmine Twist'].forEach(n => {
+  ['Medicine Ball Burpee', 'Landmine Press', 'Landmine Squat', 'Landmine Row', 'Landmine Twist', 'Landmine Squat to Press'].forEach(n => {
     assertEqual(byName(n).inputType, 'reps_weight', n + ' logs weight and reps');
     assertEqual(Object.keys(ctx.blankSetsFor(byName(n))[0]).join(), 'reps,weight', n + ' set boxes');
     assertEqual(ctx.parseTargetReps(byName(n).target) > 0, true, n + ' has a rep target the coach can read');
@@ -483,7 +483,9 @@ test('they are found however they are typed', () => {
   [['burpee', 'Burpee'], ['Burpees', 'Burpee'], ['burpee', 'Medicine Ball Burpee'], ['med ball burpee', 'Medicine Ball Burpee'],
    ['medicine ball burpees', 'Medicine Ball Burpee'], ['burpee with medicine ball', 'Medicine Ball Burpee'], ['weighted burpee', 'Medicine Ball Burpee'],
    ['landmine', 'Landmine Squat'], ['land mine squat', 'Landmine Squat'], ['Land mine row', 'Landmine Row'],
-   ['land mine twist', 'Landmine Twist'], ['landmine rotation', 'Landmine Twist'], ['land mine press', 'Landmine Press']].forEach(([q, want]) =>
+   ['land mine twist', 'Landmine Twist'], ['landmine rotation', 'Landmine Twist'], ['land mine press', 'Landmine Press'],
+   ['landmine squat to press', 'Landmine Squat to Press'], ['land mine squat press', 'Landmine Squat to Press'],
+   ['landmine thruster', 'Landmine Squat to Press'], ['landmine squat', 'Landmine Squat to Press'], ['landmine squat', 'Landmine Squat']].forEach(([q, want]) =>
     assertEqual(find(q).includes(want), true, '"' + q + '" finds ' + want));
 });
 test('every catalog entry has its own id (history for one never lands on another)', () => {

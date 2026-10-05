@@ -44,8 +44,24 @@ class ViewController: UIViewController {
     // buffers the tap here if the page hasn't finished its initial load
     // yet, and delivers it from webView(_:didFinish:) below once it has,
     // instead of only from handlePushTap directly.
-    private var webViewFinishedInitialLoad = false
+    //
+    // SECOND FIX (reported again 2026-10-04, same symptom). The first fix
+    // only covered a cold launch. If the app was still in memory but iOS
+    // had restarted the web page (or the page was reloading for an update),
+    // "has finished its initial load" was still true from hours earlier, so
+    // the tap was fired straight into a page that was not listening yet.
+    // A tap is now ALWAYS held here, and only let go once the page itself
+    // answers that it received it (see deliverPendingPushTap). Until then
+    // it is offered again after every page load and once a second, for up
+    // to pushTapMaxAge seconds.
     private var pendingPushTapData: [String: Any]?
+    private var pendingPushTapAt: Date?
+    private var pushTapRetryScheduled = false
+    // A cold-launch tap can arrive twice, once from SceneDelegate and once
+    // from AppDelegate. The second copy within a few seconds is ignored.
+    private var lastPushTapTab: String?
+    private var lastPushTapReceivedAt: Date?
+    private static let pushTapMaxAge: TimeInterval = 60
 
     deinit {
         NotificationCenter.default.removeObserver(self) // removes the selector-based .fcfPushNotificationTapped observer
@@ -213,14 +229,76 @@ class ViewController: UIViewController {
               let deepLink = userInfo["deepLink"] as? String else { return }
         // Post to the web app so it can switchTab() without reloading the page.
         // A full URL load would re-initialize the entire app and lose all state.
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in self?.handlePushTap(notification) }
+            return
+        }
+        let now = Date()
+        if let lastAt = lastPushTapReceivedAt, lastPushTapTab == deepLink,
+           now.timeIntervalSince(lastAt) < 3 {
+            return
+        }
+        lastPushTapTab = deepLink
+        lastPushTapReceivedAt = now
         var data: [String: Any] = ["tab": deepLink]
         if let type = userInfo["type"] as? String { data["type"] = type }
-        if webViewFinishedInitialLoad {
-            postToWeb("fcf:pushTap", data: data)
-        } else {
-            // Page isn't ready yet (cold launch) — hold onto it and deliver
-            // once webView(_:didFinish:) fires instead of losing it here.
-            pendingPushTapData = data
+        pendingPushTapData = data
+        pendingPushTapAt = now
+        deliverPendingPushTap()
+    }
+
+    // Offers the held tap to the page and lets go of it only when the page
+    // answers 'ok'. The page counts as listening once app.js has run: it
+    // sets window.__fcfPushTapReady, and older copies of the web app are
+    // recognised by their global switchTab function. Anything else (page
+    // still loading, web process restarting, script error) leaves the tap
+    // held for the next attempt. Must be called on the main thread.
+    private func deliverPendingPushTap() {
+        guard let data = pendingPushTapData, let tappedAt = pendingPushTapAt else { return }
+        if Date().timeIntervalSince(tappedAt) > ViewController.pushTapMaxAge {
+            // Too old to act on: moving someone to another tab a minute
+            // after they opened the app would be worse than doing nothing.
+            pendingPushTapData = nil
+            pendingPushTapAt = nil
+            return
+        }
+        guard let payload = try? JSONSerialization.data(withJSONObject: data),
+              var payloadString = String(data: payload, encoding: .utf8) else {
+            logNative("deliverPendingPushTap failed to serialize data: \(data)")
+            pendingPushTapData = nil
+            pendingPushTapAt = nil
+            return
+        }
+        payloadString = payloadString
+            .replacingOccurrences(of: "\u{2028}", with: "\\u2028")
+            .replacingOccurrences(of: "\u{2029}", with: "\\u2029")
+        let js = "(function () {"
+            + " var ready = window.__fcfPushTapReady === true || typeof window.switchTab === 'function';"
+            + " if (!ready) { return 'wait'; }"
+            + " window.dispatchEvent(new CustomEvent('fcf:pushTap', { detail: " + payloadString + " }));"
+            + " return 'ok';"
+            + " })();"
+        webView.evaluateJavaScript(js) { [weak self] result, _ in
+            guard let self = self else { return }
+            if (result as? String) == "ok" {
+                // Clear only the tap that was just delivered, not a newer one.
+                if self.pendingPushTapAt == tappedAt {
+                    self.pendingPushTapData = nil
+                    self.pendingPushTapAt = nil
+                }
+                return
+            }
+            self.schedulePushTapRetry()
+        }
+    }
+
+    private func schedulePushTapRetry() {
+        guard pendingPushTapData != nil, !pushTapRetryScheduled else { return }
+        pushTapRetryScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self = self else { return }
+            self.pushTapRetryScheduled = false
+            self.deliverPendingPushTap()
         }
     }
 
@@ -386,19 +464,12 @@ extension ViewController: WKNavigationDelegate {
         showOfflinePage(failedURL: failedURL, error: nsError)
     }
 
-    // See the pendingPushTapData / webViewFinishedInitialLoad comment above
-    // handlePushTap for why this exists. Fires on every successful
-    // navigation, not just the first, but pendingPushTapData is only ever
-    // non-nil right after a cold-launch tap that arrived too early to
-    // deliver directly — it's nil (a harmless no-op) on every subsequent
-    // navigation once that one delivery has happened.
+    // Every finished page load is a chance to hand over a held notification
+    // tap (see the pendingPushTapData comment near the top). A no-op when
+    // nothing is held, which is almost always.
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         isOfflineRetry = false
-        webViewFinishedInitialLoad = true
-        if let pending = pendingPushTapData {
-            pendingPushTapData = nil
-            postToWeb("fcf:pushTap", data: pending)
-        }
+        deliverPendingPushTap()
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {

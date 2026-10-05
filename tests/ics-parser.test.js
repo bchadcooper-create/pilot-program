@@ -812,6 +812,91 @@ test('redeeming is refused inside the iOS app even if something calls it', () =>
   assertEqual(lookedForBox, 0, 'stopped before reading a code');
 });
 
+console.log('\nWeekly coach context (reported: told plyo was "short and sparse" hours after a plyo session):');
+const coachNow = new Date(2026, 9, 4, 19, 0);
+const plyoToday = { date: new Date(2026, 9, 4, 9, 45).toISOString(), muscle_group: 'Power / Plyo', env: 'comm', durationMinutes: 14,
+  sets: { a: [{ reps: '8', weight: '20' }, { reps: '8', weight: '20' }, { reps: '', weight: '' }], b: [{ reps: '6', weight: '25' }], c: [{ reps: '5', height: '24' }, { reps: '5', height: '24' }] },
+  workoutSnapshot: { taxi: [{ id: 'w', name: 'Arm Circles' }], takeoff: [{ id: 'a', name: 'Medicine Ball Burpee' }, { id: 'b', name: 'Landmine Squat to Press' }], enroute: [{ id: 'c', name: 'Box Jump' }], landing: [{ id: 'z', name: 'Full Body Stretch' }] } };
+const legsLastWeek = { date: new Date(2026, 8, 30, 16, 11).toISOString(), muscle_group: 'Lower Body', env: 'hotel', durationMinutes: 49,
+  sets: { q: [{ reps: '8', weight: '50' }] }, workoutSnapshot: { taxi: [], takeoff: [{ id: 'q', name: 'Kettlebell Goblet Squat (Heavy)' }], enroute: [], landing: [] } };
+const airportWalk = { date: new Date(2026, 9, 2, 9, 12).toISOString(), muscle_group: 'Cardio', env: 'comm', durationMinutes: 22, importedFromOura: true, ouraActivity: 'walking', sets: { o: [{ seconds: '1320' }] }, workoutSnapshot: {} };
+const tooOld = { date: new Date(2026, 6, 1, 9, 0).toISOString(), muscle_group: 'Lower Body', env: 'comm', durationMinutes: 50 };
+test('each session tells the coach what was actually done, not only how long the app was open', () => {
+  const out = ctx.weeklyCoachSessions([legsLastWeek, airportWalk, plyoToday, tooOld], coachNow);
+  assertEqual(out.length, 3, 'six-week window drops the July session');
+  const p = out.find(x => x.muscleGroup === 'Power / Plyo');
+  assertEqual(p.exercises.join(' | '), 'Medicine Ball Burpee | Landmine Squat to Press | Box Jump', 'main work only, no warmup or cooldown');
+  assertEqual(p.setsLogged, 5, 'counts sets with something entered');
+  assertEqual(p.daysAgo, 0, 'today is 0 days ago');
+  assertEqual(p.environment, 'comm', 'where it happened');
+  const l = out.find(x => x.muscleGroup === 'Lower Body');
+  assertEqual(l.daysAgo, 4, 'Sep 30 is 4 days before Oct 4');
+});
+test('an airport walk is still flagged and carries no exercise list', () => {
+  const w = ctx.weeklyCoachSessions([airportWalk], coachNow)[0];
+  assertEqual(w.incidentalWalk, true, 'incidental walk');
+  assertEqual(w.exercises.length, 0, 'no exercises');
+});
+test('the summary is refreshed when a new workout is logged, not frozen for a day', () => {
+  const before = ctx.weeklyCoachSessionKey(ctx.weeklyCoachSessions([legsLastWeek], coachNow));
+  const after = ctx.weeklyCoachSessionKey(ctx.weeklyCoachSessions([legsLastWeek, plyoToday], coachNow));
+  assertEqual(before === after, false, 'key changes when a session is added');
+  assertEqual(after, ctx.weeklyCoachSessionKey(ctx.weeklyCoachSessions([plyoToday, legsLastWeek], coachNow)), 'same sessions, same key, whatever the order');
+});
+test('where the member trains is summarised so advice fits the equipment they have', () => {
+  const out = ctx.weeklyCoachSessions([legsLastWeek, plyoToday, airportWalk], coachNow);
+  const env = ctx.weeklyCoachEnvironments(out);
+  assertEqual(env.hotel, 1, 'one hotel session'); assertEqual(env.comm, 1, 'one gym session (the walk is not a training choice)');
+});
+// Found in real data: the ring imports yard work, house work and "strength
+// training" all day, each saved with the default location "comm". Counted
+// as gym sessions they made a member who trains in hotels look like someone
+// who lives in a commercial gym, and each one would have paid for a new note.
+const ringYardwork = { date: new Date(2026, 8, 26, 9, 30).toISOString(), muscle_group: 'Cardio', env: 'comm', durationMinutes: 33, importedFromOura: true, ouraActivity: 'yardwork',
+  sets: { o: [{ seconds: '1980' }] }, workoutSnapshot: { enroute: [{ id: 'o', name: 'Yardwork (via Oura)' }] } };
+test('something the ring picked up is marked as such and claims no location', () => {
+  const y = ctx.weeklyCoachSessions([ringYardwork], coachNow)[0];
+  assertEqual(y.autoDetected, true, 'marked as ring-detected');
+  assertEqual(y.environment, null, 'the saved "comm" is a default, not a fact');
+  assertEqual(y.incidentalWalk, false, 'yard work is not an airport walk');
+  assertEqual(ctx.weeklyCoachSessions([plyoToday], coachNow)[0].autoDetected, false, 'an app-logged workout is not ring-detected');
+});
+test('ring activity does not count as gym sessions or trigger a new note', () => {
+  const withRing = ctx.weeklyCoachSessions([legsLastWeek, plyoToday, ringYardwork], coachNow);
+  const without = ctx.weeklyCoachSessions([legsLastWeek, plyoToday], coachNow);
+  assertEqual(ctx.weeklyCoachEnvironments(withRing).comm, 1, 'still one gym session');
+  assertEqual(ctx.weeklyCoachSessionKey(withRing), ctx.weeklyCoachSessionKey(without), 'yard work does not change the key');
+});
+
+console.log('\nNotification tap survives a page reload (reported: weekly summary notification opened Today, not Trends):');
+// The page can be reloaded moments after a tap is handled: a new version
+// installing, or iOS restarting the web view. The reload used to forget
+// where the tap was headed and land on Today.
+const fakeStore = () => { const m = {}; return { getItem: k => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); }, removeItem: k => { delete m[k]; }, _m: m }; };
+test('a tap handled just before a reload is applied again on the reloaded page, once', () => {
+  const st = fakeStore();
+  ctx.rememberPushTap('trends', 1000, st);
+  assertEqual(ctx.pushTapCarriedOverReload(st, 4000, 3000), 'trends', 'page started at 3000, after the tap at 1000');
+  assertEqual(ctx.pushTapCarriedOverReload(st, 5000, 3000), null, 'used once, then gone');
+});
+test('the page that received the tap does not apply it a second time, and keeps it for a reload', () => {
+  const st = fakeStore();
+  ctx.rememberPushTap('trends', 1000, st);
+  assertEqual(ctx.pushTapCarriedOverReload(st, 2000, 500), null, 'this page started at 500, before the tap');
+  assertEqual(ctx.pushTapCarriedOverReload(st, 6000, 5000), 'trends', 'still there for the reload that follows');
+});
+test('an old tap never moves someone who opens the app later', () => {
+  const st = fakeStore();
+  ctx.rememberPushTap('trends', 1000, st);
+  assertEqual(ctx.pushTapCarriedOverReload(st, 1000 + 31000, 20000), null, '31 seconds later is too late');
+  assertEqual(Object.keys(st._m).length, 0, 'and the stale note is thrown away');
+});
+test('a damaged note is ignored instead of breaking startup', () => {
+  const st = fakeStore(); st.setItem('fcf_push_tap', '{not json');
+  assertEqual(ctx.pushTapCarriedOverReload(st, 2000, 1500), null, 'no crash, no tab');
+  assertEqual(ctx.pushTapCarriedOverReload(null, 2000, 1500), null, 'no storage at all is fine too');
+});
+
 console.log('\n' + '─'.repeat(50));
 console.log(passed + ' passed, ' + failed + ' failed');
 if (failed > 0) process.exit(1);

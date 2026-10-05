@@ -53,7 +53,7 @@ const CORS = {
 // OLD prompt (e.g. one that doesn't know about incidentalWalk or recency)
 // for up to a full day after the fix ships. Included in the cache check so
 // a prompt change auto-invalidates any stale cached response.
-const WEEKLY_SUMMARY_PROMPT_VERSION = 4; // v4: goal-aware weight framing, house style; // v3: model upgrade to Sonnet 5 // v2: incidentalWalk awareness + recency check + sandwich structure
+const WEEKLY_SUMMARY_PROMPT_VERSION = 5; // v5: sees exercises/sets/daysAgo, never judges by minutes, equipment-aware, today's work is credited, ring-detected sessions explained; // v4: goal-aware weight framing, house style; // v3: model upgrade to Sonnet 5 // v2: incidentalWalk awareness + recency check + sandwich structure
 // v2: added minutesActuallyFreeBeforeNeedingToLeave awareness, so the cache
 // (added the same day this constant was) doesn't keep serving a
 // pre-fix response — that field didn't exist in the context sent to
@@ -122,6 +122,31 @@ You will receive their workout history, each session already paired with what th
 that day (day of week, whether they were flying, what day of a trip it was, layover info), this comes from
 their actual flight schedule, not anything they typed in. You'll also get body weight trend and Oura biometrics.
 
+Each session also carries exercises (the main lifts or drills done), setsLogged, and daysAgo (0 means today,
+1 yesterday). Use these to see WHAT was done and how recently.
+
+For a workout logged in the app, durationMinutes is only the clock time between opening the workout and saving
+it. People often log a session afterwards from memory, so it can be a fraction of the real workout. NEVER call
+a session short, rushed, light, or "tacked on" because of durationMinutes, and never compare minutes between
+sessions. Judge the work by exercises and setsLogged, and judge consistency by how often a kind of session
+shows up.
+
+Power, plyo and jump sessions are supposed to be brief and low volume, a handful of high-quality sets done
+fresh. A brief plyo session is a correct plyo session. If you comment on jump work at all, comment on how often
+it happens, never on how long it took.
+
+Sessions with autoDetected: true were picked up by their Oura ring, not logged in the app. They carry no
+exercise detail, no setsLogged and no environment, and their durationMinutes is a real measured time. Yard work,
+house work and "other" are daily life, not training, so leave them out of the coaching. A ring-detected strength
+session on the same day as an app-logged workout is the same workout seen twice, count it once.
+
+environment is where a session happened, and sessionsByEnvironment counts them: comm is a full commercial gym,
+hotel is a hotel gym, call it that (dumbbells, maybe a bench and cardio machines, no rack, no plyo boxes), room
+is a hotel room with no equipment, band is resistance bands only. Anything you suggest must be doable where
+they mostly train. On the road, jump work means box-free moves: squat jumps, broad jumps, split jumps, pogo
+hops. Never tell someone who trains in hotels to use a box, a rack, a platform or a machine they will not find
+there.
+
 Each session includes a muscleGroup and an incidentalWalk flag. incidentalWalk: true means the session is
 gate-to-gate or terminal walking that Oura auto-detected during duty, it is NOT discretionary training time.
 Never suggest swapping it for a workout, never count it as a sign the user "already did cardio," and never treat
@@ -134,6 +159,11 @@ window. If the thing you were about to flag as a gap (e.g. "you barely strength 
 addressed in that recent stretch (e.g. two upper-body sessions back to back this week), do not raise it as a gap
 ,  that critique is now stale and wrong. Either pick a different, still-true thing to work on, or acknowledge the
 recent improvement directly. Never critique a pattern the user has already just fixed.
+
+TODAY AND YESTERDAY COUNT MOST. If a session with daysAgo 0 or 1 is the very kind of work you were about to
+call missing or thin, that session is your opening positive: name it and credit it. You may add that doing it
+weekly is what moves the goal, but you may not describe that kind of work as missing, sparse or neglected in the
+same note. Someone who trained it this morning and is told they are not doing it stops trusting you.
 
 Never mention data quality, duplicate entries, timestamps, logging glitches, or anything about HOW the data was
 recorded, not as a fact, not as a hedge, not as a question to the user. If something in the data looks like a
@@ -320,7 +350,13 @@ Deno.serve(async (req) => {
         .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
       const cachedAt = cached?.profile_data?.weeklyCoachGeneratedAt;
       const cachedPromptVersion = cached?.profile_data?.weeklyCoachPromptVersion;
-      if (cachedAt && cachedPromptVersion === WEEKLY_SUMMARY_PROMPT_VERSION &&
+      // BUG FIX (reported: the note called plyo work sparse hours after a
+      // plyo session). A note written before today's workout used to stand
+      // for a full day. sessionKey changes whenever a session is added,
+      // edited or removed, so logging a workout now earns a fresh note.
+      // An older client that sends no key keeps the plain 24h behaviour.
+      const sameSessions = !context.sessionKey || cached?.profile_data?.weeklyCoachSessionKey === context.sessionKey;
+      if (cachedAt && cachedPromptVersion === WEEKLY_SUMMARY_PROMPT_VERSION && sameSessions &&
           (Date.now() - new Date(cachedAt).getTime()) < 24 * 60 * 60 * 1000) {
         return new Response(JSON.stringify({
           text: cached.profile_data.weeklyCoachText,
@@ -539,6 +575,7 @@ Deno.serve(async (req) => {
         const profile = profileData?.profile_data || {};
         profile.weeklyCoachText = text;
         profile.weeklyCoachGeneratedAt = new Date().toISOString();
+        profile.weeklyCoachSessionKey = context.sessionKey || null;
         profile.weeklyCoachPromptVersion = WEEKLY_SUMMARY_PROMPT_VERSION;
         await supabase.from('user_profiles').upsert({
           user_id: user.id, profile_data: profile, updated_at: new Date().toISOString()

@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.14 / 20260916_4
+ * Version/build: fcf-v5.44.15 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.14';
+const FCF_VERSION = 'fcf-v5.44.15';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -3381,9 +3381,10 @@ async function bootAppInner() {
   // ready (see the fcf:pushTap listener's comment for why this can happen
   // on a cold launch) — now that ST.authed is set and the page has its
   // first real render, it's safe to switch tabs without losing state.
-  if (_pendingPushTapTab.current) {
-    switchTab(_pendingPushTapTab.current);
+  const tapTab = _pendingPushTapTab.current || pushTapCarriedOverReload();
+  if (tapTab) {
     _pendingPushTapTab.current = null;
+    switchTab(tapTab);
   }
 
   bindFoodPhotoInputs();
@@ -5286,12 +5287,45 @@ window.addEventListener('fcf:siwa:error', (e) => {
 // requested tab if auth isn't ready yet, and applies it once boot
 // actually completes, instead of losing it.
 let _pendingPushTapTab = { current: null };
+// BUG FIX (reported: the weekly summary notification opened Today, not
+// Trends). The page can be reloaded moments after a tap is handled, by a
+// new version installing or by iOS restarting the web view, and the reload
+// forgot where the tap was headed. The tap is now written down for 30
+// seconds so the reloaded page can finish the trip. Only a page that
+// started AFTER the tap applies it: the page that received it has already
+// switched tabs, and anyone opening the app later is past the 30 seconds.
+const PUSH_TAP_KEY = 'fcf_push_tap';
+const PUSH_TAP_KEEP_MS = 30000;
+function pushTapStore() { try { return window.localStorage; } catch (e) { return null; } }
+function rememberPushTap(tab, now, store) {
+  try { (store || pushTapStore()).setItem(PUSH_TAP_KEY, JSON.stringify({ tab, at: now || Date.now() })); } catch (e) { /* private mode, storage full: the live switch still happens */ }
+}
+function pushTapCarriedOverReload(store, now, pageStartedAt) {
+  try {
+    const st = store || pushTapStore();
+    const raw = st.getItem(PUSH_TAP_KEY);
+    if (!raw) return null;
+    let v = null;
+    try { v = JSON.parse(raw); } catch (e) { /* damaged: dropped below */ }
+    const t = now || Date.now();
+    const started = pageStartedAt || performance.timeOrigin;
+    const fresh = !!(v && v.tab && typeof v.at === 'number' && t - v.at >= 0 && t - v.at < PUSH_TAP_KEEP_MS);
+    if (!fresh) { st.removeItem(PUSH_TAP_KEY); return null; }
+    if (v.at >= started) return null; // this page received the tap itself; keep the note for a reload
+    st.removeItem(PUSH_TAP_KEY);
+    return v.tab;
+  } catch (e) { return null; }
+}
 window.addEventListener('fcf:pushTap', (e) => {
   const tab = e.detail?.tab;
   if (!tab) return;
+  rememberPushTap(tab);
   if (ST.authed) switchTab(tab);
   else _pendingPushTapTab.current = tab;
 });
+// Lets the iOS shell (next build) confirm this page is listening before it
+// hands over a tap, instead of sending one into a page that is still loading.
+window.__fcfPushTapReady = true;
 // The native shell delivers HealthKit and Calendar within a couple of
 // seconds of each other right after boot. Each used to trigger its own
 // full repaint. Coalesce: a repaint requested within a short window of
@@ -5562,6 +5596,74 @@ async function callAICoach(mode, context) {
 // Pulls workout history + trip/pairing context + biometrics over the past
 // several weeks and asks the AI to find patterns tied to flying schedule
 // specifically, not generic fitness commentary. Server-side cached 24h.
+// The weekly coach's view of the last six weeks of sessions.
+//
+// BUG FIX (reported: "I just did a plyo today. How can it tell me this?"
+// The coach had called his plyo work "short and sparse... a couple minutes
+// tacked on" hours after a plyo session). It had been sent only a muscle
+// group and durationMinutes per session. durationMinutes is the clock
+// time between starting the workout in the app and saving it: a session
+// logged afterwards from memory reads as a few minutes, and a plyo
+// session is brief by design. With nothing else to go on, the coach
+// judged the work by the one number that did not describe it.
+//   exercises   the main work (takeoff + enroute), so it can see WHAT was done
+//   setsLogged  how much of it
+//   daysAgo     0 is today, so "you did this this morning" is unmissable
+function weeklyCoachSessions(sessionCache, now) {
+  const nowD = now || new Date();
+  const cutoff = new Date(nowD.getTime() - 42 * 24 * 60 * 60 * 1000); // 6 weeks of history
+  const today0 = new Date(nowD); today0.setHours(0, 0, 0, 0);
+  const has = v => v !== '' && v !== undefined && v !== null;
+  return (sessionCache || [])
+    .filter(s => s && s.date && new Date(s.date) >= cutoff)
+    .map(s => {
+      const day0 = new Date(s.date); day0.setHours(0, 0, 0, 0);
+      // BUG FIX (reported: AI suggested swapping "shorter cardio blocks"
+      // for strength sessions — those blocks were gate-to-gate airport
+      // walking, not discretionary training time). Flag incidental
+      // Oura-imported walking explicitly so the model can tell the
+      // difference between cardio the user chose and cardio the job
+      // requires, instead of guessing from muscleGroup alone.
+      const incidentalWalk = !!(s.importedFromOura && (s.ouraActivity||'').toLowerCase() === 'walking');
+      // Anything the ring picked up (yard work, house work, a lift it
+      // noticed) is saved with the default location "comm" and no exercise
+      // detail. Mark it so the coach does not read it as a gym visit.
+      const autoDetected = !!s.importedFromOura;
+      const snap = s.workoutSnapshot || {};
+      const main = incidentalWalk ? [] : [...(snap.takeoff || []), ...(snap.enroute || [])];
+      const setsLogged = incidentalWalk ? 0 : Object.values(s.sets || {}).reduce((n, list) =>
+        n + (Array.isArray(list) ? list.filter(x => x && (has(x.reps) || has(x.seconds) || has(x.seconds_left) || has(x.seconds_right))).length : 0), 0);
+      return {
+        date: s.date,
+        daysAgo: Math.round((today0.getTime() - day0.getTime()) / 86400000),
+        muscleGroup: s.muscle_group || null,
+        durationMinutes: s.durationMinutes || null,
+        environment: autoDetected ? null : (s.env || null),
+        exercises: main.map(e => e && e.name).filter(Boolean).slice(0, 6),
+        setsLogged: autoDetected ? 0 : setsLogged,
+        incidentalWalk,
+        autoDetected,
+      };
+    });
+}
+// Changes whenever a workout logged in the app is added, edited or removed,
+// so the cached weekly note is rewritten after a workout instead of standing
+// for 24h. Ring-detected activity is left out on purpose: it arrives several
+// times a day and each change here is a paid AI call.
+function weeklyCoachSessionKey(sessions) {
+  const real = (sessions || []).filter(s => !s.incidentalWalk && !s.autoDetected);
+  const latest = real.map(s => String(s.date)).sort().pop() || 'none';
+  const sets = real.reduce((n, s) => n + (s.setsLogged || 0), 0);
+  return real.length + '_' + sets + '_' + latest;
+}
+// How many chosen sessions happened in each kind of place. Advice has to
+// fit the equipment the member actually has in front of them.
+function weeklyCoachEnvironments(sessions) {
+  const out = {};
+  (sessions || []).forEach(s => { if (!s.incidentalWalk && !s.autoDetected && s.environment) out[s.environment] = (out[s.environment] || 0) + 1; });
+  return out;
+}
+
 async function loadProgressionAnalytics() {
   try {
     const cutoff = new Date(Date.now() - 42 * 24 * 60 * 60 * 1000); // 6 weeks of history
@@ -5570,21 +5672,7 @@ async function loadProgressionAnalytics() {
     // calendar that day. This is what makes the analysis crew-specific —
     // and it's why the model should never need to ask the user to hand-log
     // "trip context" in a notes field: the calendar already knows.
-    const sessions = (ST.sessionCache || [])
-      .filter(s => s.date && new Date(s.date) >= cutoff)
-      .map(s => ({
-        date: s.date,
-        muscleGroup: s.muscle_group || null,
-        durationMinutes: s.durationMinutes || null,
-        environment: s.env || null,
-        // BUG FIX (reported: AI suggested swapping "shorter cardio blocks"
-        // for strength sessions — those blocks were gate-to-gate airport
-        // walking, not discretionary training time). Flag incidental
-        // Oura-imported walking explicitly so the model can tell the
-        // difference between cardio the user chose and cardio the job
-        // requires, instead of guessing from muscleGroup alone.
-        incidentalWalk: !!(s.importedFromOura && (s.ouraActivity||'').toLowerCase() === 'walking'),
-      }));
+    const sessions = weeklyCoachSessions(ST.sessionCache);
 
     if (sessions.length < 3) {
       // Not enough data yet — don't waste an API call on "not enough data"
@@ -5657,6 +5745,8 @@ async function loadProgressionAnalytics() {
       // Goal decides how a weight trend should be read: up is progress for
       // 'muscle', a warning for 'fatloss', neutral-ish for the others.
       trainingGoal: ST.goal || 'longevity',
+      sessionKey: weeklyCoachSessionKey(sessions),
+      sessionsByEnvironment: weeklyCoachEnvironments(sessions),
       sessions: sessionsWithTripContext,
       weightTrend,
       biometrics,

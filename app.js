@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.17 / 20260916_4
+ * Version/build: fcf-v5.44.18 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.17';
+const FCF_VERSION = 'fcf-v5.44.18';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -7979,9 +7979,35 @@ function lastLoggedMaxField(exId, field, exName) {
   }
   return null;
 }
+// Most hotel gym dumbbell racks stop at 50 lb. Once someone is there, "add
+// weight" is advice they cannot follow, so progression switches to reps.
+const HOTEL_DB_MAX_LB = 50;
+function isDumbbellName(exName) {
+  const name = (exName || '').toLowerCase();
+  return name.includes('db ') || name.includes('dumbbell') || name.startsWith('db') || name.includes('kettlebell');
+}
+function atHotelDumbbellCap(exName, env, weight) {
+  return (env === 'hotel' || env === 'room') && isDumbbellName(exName) && parseFloat(weight) >= HOTEL_DB_MAX_LB;
+}
+// What to aim for next time: a heavier weight, or, when the rack cannot go
+// heavier, the same weight for more reps. Returns { kind, lb, reps, label }.
+function overloadTarget(exItem, o) {
+  const last = o.lastWeight;
+  if (!last) return null;
+  if (atHotelDumbbellCap(exItem.name, o.env, last)) {
+    const base = Math.max(o.lastReps || 0, parseTargetReps(exItem.target) || 0);
+    const reps = base + 2;
+    return { kind: 'reps', lb: last, reps, label: last + ' lb × ' + reps + ' reps' };
+  }
+  const lb = nextWeightFrom(last, exItem.name, o.phaseKey);
+  return { kind: 'weight', lb, label: lb + ' lb' };
+}
 function suggestNextWeight(exId, exName, phaseKey) {
   const last = lastLoggedMax(exId, exName);
   if (!last) return null;
+  return nextWeightFrom(last, exName, phaseKey);
+}
+function nextWeightFrom(last, exName, phaseKey) {
   const name = (exName||'').toLowerCase();
   const isLower = name.includes('squat')||name.includes('deadlift')||name.includes('lunge')||name.includes('rdl');
   // BUG FIX (reported: "Target -> 37.5 lb" on DB Bench Press, but dumbbells
@@ -8785,14 +8811,17 @@ function buildExCard(exItem, phaseKey) {
     if (!exItem.timed && exItem.inputType !== 'reps_only' && exItem.inputType !== 'reps_height' && exItem.inputType !== 'reps_distance' && exItem.inputType !== 'nsdr' && !exItem.custom) {
       const lastW = lastLoggedMax(exItem.id, exItem.name);
       const lastR = lastLoggedReps(exItem.id, exItem.name);
-      const suggested = suggestNextWeight(exItem.id, exItem.name, phaseKey);
+      const next = overloadTarget(exItem, { lastWeight: lastW, lastReps: lastR, env: ST.env, phaseKey });
+      const suggested = next ? next.label : null;
       if (lastW !== null) {
         parts.push('<div class="stat-banner">');
         parts.push('<div class="stat-banner-label">PROGRESSIVE OVERLOAD</div>');
         parts.push('<div style="display:flex;justify-content:space-between;align-items:center">');
         parts.push('<span style="font-size:0.75rem">Last: <strong style="color:var(--text)">'+lastW+' lb'+(lastR?' × '+lastR+' reps':'')+'</strong></span>');
-        parts.push('<span style="color:var(--gold);font-weight:700;font-size:0.75rem">Target → '+suggested+' lb</span>');
-        parts.push('</div></div>');
+        parts.push('<span style="color:var(--gold);font-weight:700;font-size:0.75rem">Target → '+suggested+'</span>');
+        parts.push('</div>');
+        if (next && next.kind === 'reps') parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:4px">Hotel racks usually stop at '+HOTEL_DB_MAX_LB+' lb, so progress here is reps: add a rep or two per set, slow the lowering, or shorten the rest.</div>');
+        parts.push('</div>');
       } else {
         const variant = lastLoggedFamilyVariant(exItem.id, exItem.name);
         if (variant) {
@@ -8905,7 +8934,7 @@ function buildExCard(exItem, phaseKey) {
         parts.push('<div class="set-hint">reps only</div></div>');
       });
       parts.push('</div></div>'+(sets.length>3?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<div class="fb" style="margin-top:6px;justify-content:space-between"><button class="btn-ghost" style="font-size:0.6875rem" onclick="removeLiveSet(\''+exItem.id+'\')">− Remove Set</button><button class="btn-ghost" style="font-size:0.6875rem" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button></div>');
-      parts.push('<div id="ar_'+exItem.id+'">'+autoregBoxHtml(setFeedbackFor(exItem, phaseKey, sets))+'</div>');
+      parts.push('<div id="ar_'+exItem.id+'">'+autoregBoxHtml(setFeedbackFor(exItem, phaseKey, sets), exItem.id)+'</div>');
     } else {
       parts.push('<div class="sets-wrap"><div class="sets-scroll">');
       sets.forEach((s,i) => {
@@ -8917,7 +8946,7 @@ function buildExCard(exItem, phaseKey) {
       parts.push('</div></div>'+(sets.length>2?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<div class="fb" style="margin-top:6px;justify-content:space-between"><button class="btn-ghost" style="font-size:0.6875rem" onclick="removeLiveSet(\''+exItem.id+'\')">− Remove Set</button><button class="btn-ghost" style="font-size:0.6875rem" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button></div>');
       // Always present, even when empty, so refreshSetFeedback() has a
       // slot to write into without re-rendering the card.
-      parts.push('<div id="ar_'+exItem.id+'">'+autoregBoxHtml(setFeedbackFor(exItem, phaseKey, sets))+'</div>');
+      parts.push('<div id="ar_'+exItem.id+'">'+autoregBoxHtml(setFeedbackFor(exItem, phaseKey, sets), exItem.id)+'</div>');
       if (phaseKey === 'takeoff' || phaseKey === 'enroute') {
         parts.push(buildRestTimerWidget(exItem.id, phaseKey, exItem.target));
       }
@@ -9239,8 +9268,18 @@ function parseTargetReps(target) {
 //   - on leaving the field: reps alone is enough, because a bodyweight
 //     set never gets a weight. Skipped if focus only moved to the other
 //     box in the same set and that box is still empty.
-function autoregBoxHtml(autoreg) {
+function swapSetFields(exId, i) {
+  const set = (ST.sets[exId] || [])[i];
+  if (!set) return;
+  const r = set.reps; set.reps = set.weight; set.weight = r;
+  persistWorkoutState();
+  renderFlight(document.getElementById('mainPage'));
+}
+function autoregBoxHtml(autoreg, exId) {
   if (!autoreg) return '';
+  if (autoreg.action === 'swap' && exId) {
+    return '<div class="fb" style="background:var(--bg3);border:1px solid var(--blue);border-radius:8px;padding:9px 12px;margin-top:8px;align-items:center;gap:10px"><div style="font-size:0.75rem;line-height:1.5;flex:1">🔁 ' + autoreg.text + '</div><button class="btn btn-outline" style="width:auto;padding:0 14px;flex-shrink:0" onclick="swapSetFields(\'' + exId + '\',' + autoreg.setIdx + ')">Swap</button></div>';
+  }
   const boxColor = autoreg.tone === 'positive' ? 'var(--green)' : autoreg.tone === 'major' ? 'var(--amber)' : 'var(--blue)';
   const icon = autoreg.tone === 'positive' ? '💪' : '🎯';
   return '<div class="fb" style="background:var(--bg3);border:1px solid '+boxColor+';border-radius:8px;padding:9px 12px;margin-top:8px;align-items:flex-start"><div style="font-size:0.75rem;line-height:1.5;color:var(--text)">'+icon+' '+autoreg.text+'</div></div>';
@@ -9271,7 +9310,7 @@ function refreshSetFeedback(exId) {
   const el = document.getElementById('ar_' + exId);
   const found = findWorkoutEx(exId);
   if (!el || !found) return;
-  const html = autoregBoxHtml(setFeedbackFor(found.exItem, found.phase, ST.sets[exId] || []));
+  const html = autoregBoxHtml(setFeedbackFor(found.exItem, found.phase, ST.sets[exId] || []), exId);
   if (el.innerHTML !== html) el.innerHTML = html;
 }
 const SET_FEEDBACK_TYPING_MS = 1200;
@@ -9311,7 +9350,17 @@ function queueSetFeedback(exId, i, leftField) {
 // the opposite situation — that's genuine effort finding its ceiling, and
 // treating it as something to fix rather than a result to feel good about
 // sends exactly the wrong signal about attempting progressive overload.
-function autoregSuggestion(exItem, sets) {
+// Reps and weight typed into each other's boxes. Found in a real export:
+// "130 reps at 6 lb" on a 4x8 deadlift. Only for weighted exercises, and
+// only when the numbers are far outside anything a set could really be.
+function looksSwapped(exItem, set) {
+  if (!exItem || exItem.inputType === 'reps_only' || exItem.timed) return false;
+  const reps = parseInt(set && set.reps), weight = parseFloat(set && set.weight);
+  if (isNaN(reps) || isNaN(weight) || weight <= 0) return false;
+  const target = parseTargetReps(exItem.target) || 10;
+  return reps >= 40 && reps >= 3 * target && weight < Math.max(2 * target, 12) && weight < reps / 4;
+}
+function autoregSuggestion(exItem, sets, env) {
   const target = parseTargetReps(exItem.target);
   if (!target || target <= 0) return null;
   let lastIdx = -1;
@@ -9322,6 +9371,11 @@ function autoregSuggestion(exItem, sets) {
   const last = sets[lastIdx];
   const actual = parseInt(last.reps);
   if (isNaN(actual)) return null;
+  if (looksSwapped(exItem, last)) {
+    return { tone: 'minor', action: 'swap', setIdx: lastIdx,
+      text: actual + ' reps at ' + parseFloat(last.weight) + ' lb looks like reps and weight got swapped. Tap Swap to put ' + parseFloat(last.weight) + ' in reps and ' + actual + ' in weight.' };
+  }
+  const where = env === undefined ? (ST.env || null) : env;
   const missedBy = target - actual;
   if (missedBy <= 0) return null; // hit or beat target — nothing to say
 
@@ -9376,7 +9430,10 @@ function autoregSuggestion(exItem, sets) {
       : '';
     // Progression rule from the ACSM 2009 position stand: add load once
     // the target is beaten on every set, not after one strong set.
-    const nextTime = loaded
+    const capped = loaded && atHotelDumbbellCap(exItem.name, where, lastWeight);
+    const nextTime = capped
+      ? ' Hotel racks stop at ' + HOTEL_DB_MAX_LB + ' lb, so next session keep ' + lastWeight + ' lb and work toward ' + (target + 2) + ' reps on every set, or slow the lowering.'
+      : loaded
       ? ' Keep this weight next session and add more once every set reaches ' + target + '.'
       : ' Next session, aim for ' + target + ' on every set before making it harder.';
     if (missedPct <= 0.25) {
@@ -10785,6 +10842,34 @@ function exportBodyRows(biometrics) {
       v(b.weight_lb), v(b.waist_in), v(b.systolic_bp), v(b.diastolic_bp), v(b.fasting_glucose)]; });
 }
 
+// Cleans the session list before it goes into the file. Two problems an AI
+// reading a real export pointed out:
+//   1. Nine "Invalid Date" rows: the first sessions ever saved (June 2026)
+//      had no date field, only a start timestamp in milliseconds.
+//   2. Duplicated sets: before the Aug 11 fix, a double tap on "Set the
+//      chocks" saved the same workout two or three times within seconds.
+//      Those rows are still in the database, so they are collapsed here:
+//      identical sets saved within a minute count once.
+function exportSessions(sessions) {
+  const out = [];
+  let prevKey = null, prevTime = 0;
+  (sessions || []).forEach(s => {
+    if (!s) return;
+    let date = s.date;
+    if (!date || isNaN(new Date(date).getTime())) {
+      const ms = Number(s.started) || Number(s.completedAt) || null;
+      if (!ms) return; // nothing dates it, nothing to put on a timeline
+      date = new Date(ms).toISOString();
+    }
+    const t = new Date(date).getTime();
+    const key = JSON.stringify(s.sets || {}) + '|' + (s.muscle_group || s.key || '');
+    if (key === prevKey && Math.abs(t - prevTime) < 60000) return;
+    prevKey = key; prevTime = t;
+    out.push(date === s.date ? s : { ...s, date });
+  });
+  return out;
+}
+
 async function exportCSV() {
   showBigToast('Building export...','info');
   let sessions = [];
@@ -10795,6 +10880,10 @@ async function exportCSV() {
     const sd = await fetchAllRows(() => own('workout_sessions').order('started_at', { ascending: true }));
     sessions = sd.map(r => r.session_data).filter(Boolean);
     biometrics = await fetchAllRows(() => own('weight_log').order('logged_at', { ascending: true }));
+    // Rows written before started_at existed sort to the front, in the
+    // order they were stored. Sorting by the saved date keeps the file in
+    // time order after the fallback dates are filled in.
+    sessions = exportSessions(sessions).sort((x, y) => new Date(x.date) - new Date(y.date));
     // Everything else the app stores. Previously the export was workouts +
     // five biometrics only — Oura, meals, hydration and the flight schedule
     // were all absent, which left most of the picture out of any analysis.
@@ -10812,7 +10901,7 @@ async function exportCSV() {
       ouraRows = o || []; mealRows = m || []; dailyInputRows = di || []; medLogRows = ml || [];
     }
   } catch(e) {
-    sessions = JSON.parse(localStorage.getItem('fcf_sessions')||'[]');
+    sessions = exportSessions(JSON.parse(localStorage.getItem('fcf_sessions')||'[]'));
     biometrics = JSON.parse(localStorage.getItem('fcf_bio')||'[]');
   }
 

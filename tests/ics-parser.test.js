@@ -939,6 +939,51 @@ test('every weigh-in is exported, including rest days, and empty entries are ski
   assertEqual(rows[1].slice(2).join('|'), '191.8|35|118|76|92', 'all five measurements in order');
 });
 
+console.log('\nExport data quality (feedback from an AI reading the export: duplicate sets, swapped reps and weight, Invalid Date rows):');
+const dupA = { date: '2026-07-30T18:18:43.170Z', muscle_group: 'Power / Plyo', env: 'hotel', sets: { a: [{ reps: '8', weight: '20' }] }, workoutSnapshot: { takeoff: [{ id: 'a', name: 'X' }] } };
+const dupB = { ...dupA, date: '2026-07-30T18:18:46.147Z' };
+const other = { date: '2026-07-31T18:18:46.147Z', muscle_group: 'Power / Plyo', env: 'hotel', sets: { a: [{ reps: '8', weight: '20' }] }, workoutSnapshot: dupA.workoutSnapshot };
+const legacy = { key: 'A', started: 1780805979146, completedAt: 1780806050338, gymUsed: 'commercial', sets: { rdl: [{ reps: '8', weight: '135' }] } };
+test('a workout saved two or three times within seconds is exported once', () => {
+  const out = ctx.exportSessions([dupA, dupB, other]);
+  assertEqual(out.length, 2, 'three rows in, two workouts out');
+  assertEqual(out[0].date, dupA.date, 'the first copy is kept');
+});
+test('an early session with no date falls back to its start time instead of Invalid Date', () => {
+  const out = ctx.exportSessions([legacy]);
+  assertEqual(out.length, 1, 'kept');
+  assertEqual(new Date(out[0].date).getTime(), 1780805979146, 'date comes from the start timestamp');
+  assertEqual(isNaN(new Date(out[0].date).getTime()), false, 'a real date');
+});
+test('reps and weight that look swapped are spotted, with a one-tap fix', () => {
+  const rw = { inputType: 'reps_weight', target: '4×8', name: 'DB Deadlift' };
+  assertEqual(ctx.looksSwapped(rw, { reps: '130', weight: '6' }), true, '130 reps at 6 lb on a 4x8');
+  assertEqual(ctx.looksSwapped(rw, { reps: '8', weight: '130' }), false, 'the right way round');
+  assertEqual(ctx.looksSwapped(rw, { reps: '20', weight: '15' }), false, 'a high-rep light set is normal');
+  assertEqual(ctx.looksSwapped({ inputType: 'reps_only', target: '3×50' }, { reps: '50', weight: '' }), false, 'reps-only never flags');
+  const fb = ctx.autoregSuggestion(rw, [{ reps: '130', weight: '6' }], 'comm');
+  assertEqual(/swapped/i.test(fb.text), true, 'the set feedback says so'); assertEqual(fb.action, 'swap', 'and offers to swap them');
+});
+
+console.log('\nHotel dumbbells top out at 50 lb (feedback: once you max the rack there is no heavier weight to suggest):');
+test('in a hotel gym at 50 lb the next target is more reps, not more weight', () => {
+  const t = ctx.overloadTarget({ name: 'DB Bench Press', target: '4×10' }, { lastWeight: 50, lastReps: 10, env: 'hotel', phaseKey: 'takeoff' });
+  assertEqual(t.kind, 'reps', 'reps progression'); assertEqual(t.lb, 50, 'stay at 50'); assertEqual(t.reps, 12, 'two more reps than last time');
+  assertEqual(/50 lb × 12/.test(t.label), true, 'label shows both');
+});
+test('below the cap, or in a real gym, weight still goes up', () => {
+  assertEqual(ctx.overloadTarget({ name: 'DB Bench Press', target: '4×10' }, { lastWeight: 45, lastReps: 10, env: 'hotel', phaseKey: 'takeoff' }).label, '50 lb', 'hotel below the cap');
+  assertEqual(ctx.overloadTarget({ name: 'DB Bench Press', target: '4×10' }, { lastWeight: 50, lastReps: 10, env: 'comm', phaseKey: 'takeoff' }).label, '55 lb', 'commercial gym has heavier dumbbells');
+  assertEqual(ctx.overloadTarget({ name: 'Cable Row', target: '4×10' }, { lastWeight: 50, lastReps: 10, env: 'hotel', phaseKey: 'takeoff' }).label, '52.5 lb', 'not a dumbbell, not capped');
+});
+test('the end-of-exercise note in a hotel at 50 lb asks for reps instead of "add more weight"', () => {
+  const sets = [{ reps: '10', weight: '50' }, { reps: '10', weight: '50' }, { reps: '10', weight: '50' }, { reps: '8', weight: '50' }];
+  const hotel = ctx.autoregSuggestion({ name: 'DB Bench Press', inputType: 'reps_weight', target: '4×10' }, sets, 'hotel');
+  assertEqual(/rep/i.test(hotel.text) && /50/.test(hotel.text) && !/add more/i.test(hotel.text), true, 'hotel wording: ' + hotel.text);
+  const gym = ctx.autoregSuggestion({ name: 'DB Bench Press', inputType: 'reps_weight', target: '4×10' }, sets, 'comm');
+  assertEqual(/add more/i.test(gym.text), true, 'gym wording unchanged: ' + gym.text);
+});
+
 console.log('\n' + '─'.repeat(50));
 console.log(passed + ' passed, ' + failed + ' failed');
 if (failed > 0) process.exit(1);

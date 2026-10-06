@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.15 / 20260916_4
+ * Version/build: fcf-v5.44.16 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.15';
+const FCF_VERSION = 'fcf-v5.44.16';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -10886,13 +10886,87 @@ async function exportCSV() {
     }));
 
   const csv = rows.map(r => r.map(v => '"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
-  const blob = new Blob([csv], {type:'text/csv'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'flight-crew-fitness-'+new Date().toISOString().slice(0,10)+'.csv';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  setTimeout(() => showBigToast('CSV exported, ready for AI analysis.','ok'), 300);
+  deliverFile('flight-crew-fitness-'+new Date().toISOString().slice(0,10)+'.csv', 'text/csv', csv, {
+    done: 'CSV exported, ready for AI analysis.',
+    hint: 'Copy it and paste it straight into an AI chat, or save the file.',
+  });
+}
+
+// ─── HANDING A FILE TO THE MEMBER ────────────────────────────────────────────
+// BUG FIX (reported: "Export CSV for AI Analysis" opened a giant spreadsheet
+// with no file to download and no way out). A download link only downloads
+// in a real browser. Inside the iPhone app there is no download manager, so
+// the link REPLACED the whole app screen with the file, and the app has no
+// back button: the only way out was to force-quit. The same was true of the
+// flight schedule download. Inside the iPhone app a file is now offered on a
+// sheet that stays in the app (Share when the phone allows it, Copy always),
+// and a build of the app that can share files natively gets the real
+// iPhone share sheet.
+function fileDeliveryPlan(env) {
+  if (!env.ios) return 'download';
+  return env.nativeFileShare ? 'native' : 'sheet';
+}
+let _preparedExport = null; // { filename, mime, text, hint }
+function deliverFile(filename, mime, text, opts) {
+  const o = opts || {};
+  const nativeFileShare = !!(typeof FCFBridge !== 'undefined' && FCFBridge.capabilities && FCFBridge.capabilities.shareFile
+    && window.webkit?.messageHandlers?.share);
+  const plan = fileDeliveryPlan({ ios: inIOSApp(), nativeFileShare });
+  if (plan === 'download') {
+    const blob = new Blob([text], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    if (o.done) setTimeout(() => showBigToast(o.done, 'ok'), 300);
+    return;
+  }
+  if (plan === 'native') {
+    window.webkit.messageHandlers.share.postMessage({ filename, mime, text });
+    return;
+  }
+  _preparedExport = { filename, mime, text, hint: o.hint || '' };
+  showExportReadySheet();
+}
+function exportFileObject() {
+  try { return new File([_preparedExport.text], _preparedExport.filename, { type: _preparedExport.mime }); } catch (e) { return null; }
+}
+function showExportReadySheet() {
+  const root = document.getElementById('modalRoot');
+  if (!root || !_preparedExport) return;
+  const file = exportFileObject();
+  let canShare = false;
+  try { canShare = !!(file && navigator.canShare && navigator.canShare({ files: [file] })); } catch (e) { /* no file sharing here */ }
+  const kb = Math.max(1, Math.round(_preparedExport.text.length / 1024));
+  root.innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()">' +
+    '<div class="modal-sheet" style="text-align:center">' +
+    '<div class="modal-handle"></div>' +
+    '<div class="modal-title">Your export is ready</div>' +
+    '<div class="modal-body" style="margin-bottom:6px;font-family:var(--mono);font-size:0.75rem">' + escapeUserProse(_preparedExport.filename) + ' (' + kb + ' KB)</div>' +
+    (_preparedExport.hint ? '<div class="modal-body" style="margin-bottom:14px">' + escapeUserProse(_preparedExport.hint) + '</div>' : '<div style="height:10px"></div>') +
+    (canShare ? '<button class="btn btn-gold" onclick="haptic(\'light\');shareExportFile()">Save or share the file</button>' : '') +
+    '<button class="btn btn-outline mt8" id="exportCopyBtn" onclick="copyExportText()">Copy to clipboard</button>' +
+    '<button class="btn btn-outline mt8" onclick="closeModal()">Done</button>' +
+    '</div></div>';
+}
+function shareExportFile() {
+  const file = _preparedExport && exportFileObject();
+  if (!file) return;
+  navigator.share({ files: [file] }).catch(e => {
+    if (!e || e.name !== 'AbortError') showToast('Sharing did not open here. Use Copy to clipboard.');
+  });
+}
+function copyExportText() {
+  if (!_preparedExport) return;
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(_preparedExport.text)
+      .then(() => showToast('Copied. Paste it where you need it.'))
+      .catch(() => showToast('Copy did not work on this device.'));
+  } else {
+    showToast('Copy is not available on this device.');
+  }
 }
 
 // ─── OURA RING OAUTH2 + DATA SYNC ────────────────────────────────────────────
@@ -15268,11 +15342,5 @@ async function handleICSUpload(file) {
 
 function downloadFlightScheduleICS() {
   if (!ST.flightScheduleRaw) return;
-  const blob = new Blob([ST.flightScheduleRaw], { type: 'text/calendar' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'my_flight_schedule.ics';
-  a.click();
-  URL.revokeObjectURL(url);
+  deliverFile('my_flight_schedule.ics', 'text/calendar', ST.flightScheduleRaw);
 }

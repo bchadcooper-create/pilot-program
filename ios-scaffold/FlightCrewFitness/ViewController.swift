@@ -125,6 +125,9 @@ class ViewController: UIViewController {
               calendar:        !!(window.webkit?.messageHandlers?.calendar),
               notifications:   !!(window.webkit?.messageHandlers?.notifications),
               haptics:         !!(window.webkit?.messageHandlers?.haptics),
+              // This build can hand a file made by the web app (CSV export,
+              // flight schedule) to the iPhone share sheet. See handleShareMessage.
+              shareFile:       !!(window.webkit?.messageHandlers?.share),
             },
             getProducts:      () => send('storeKit',      { action: 'getProducts' }),
             purchase:         (o) => send('storeKit',      { action: 'purchase', productId: o.productId, appAccountToken: o.appAccountToken }),
@@ -434,6 +437,15 @@ extension ViewController: WKNavigationDelegate {
     func webView(_ webView: WKWebView,
                  decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        // A blob: or data: address is a file the page made itself. Opened as
+        // the whole screen it replaces the app with the file, and this app
+        // has no back button (reported 2026-10-06). Never allow it.
+        if let scheme = navigationAction.request.url?.scheme?.lowercased(),
+           scheme == "blob" || scheme == "data",
+           navigationAction.targetFrame?.isMainFrame ?? true {
+            decisionHandler(.cancel)
+            return
+        }
         guard let url = navigationAction.request.url, let host = url.host else {
             // No host (about:blank, data: URLs, etc.) — nothing external to
             // redirect to, so let WebKit handle it as it normally would.
@@ -878,15 +890,39 @@ extension ViewController {
     // a URL over AirDrop arrives as two separate items, which is messier for
     // the recipient than a single link that opens in Safari.
     private func handleShareMessage(_ body: [String: Any]) {
+        // A file the web app made (CSV export, flight schedule). BUG FIX
+        // (reported 2026-10-06: Export CSV opened a giant spreadsheet with no
+        // way out): a web download link has nowhere to download to in this
+        // app, so it replaced the whole screen with the file. The web app now
+        // sends the contents here instead and the file goes to the share
+        // sheet (Save to Files, AirDrop, another app).
+        if let text = body["text"] as? String, let rawName = body["filename"] as? String {
+            // Plain file name only, never a path.
+            var name = rawName.components(separatedBy: CharacterSet(charactersIn: "/\\:")).last ?? ""
+            if name.isEmpty || name.hasPrefix(".") { name = "export.txt" }
+            let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+            do {
+                try text.write(to: fileURL, atomically: true, encoding: .utf8)
+            } catch {
+                logNative("share: could not write \(name): \(error)")
+                return
+            }
+            presentShareSheet(items: [fileURL])
+            return
+        }
         guard let urlString = body["url"] as? String,
               let url = URL(string: urlString),
               url.scheme == "https" else {
             logNative("share: missing or non-https url in body \(body)")
             return
         }
+        presentShareSheet(items: [url])
+    }
+
+    private func presentShareSheet(items: [Any]) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+            let sheet = UIActivityViewController(activityItems: items, applicationActivities: nil)
             // Required on iPad: presenting a share sheet without a popover
             // anchor crashes the app there. The app now ships on iPad, so
             // anchor it to the center of the screen with no arrow.

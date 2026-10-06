@@ -897,6 +897,17 @@ test('a damaged note is ignored instead of breaking startup', () => {
   assertEqual(ctx.pushTapCarriedOverReload(null, 2000, 1500), null, 'no storage at all is fine too');
 });
 
+console.log('\nExports inside the iPhone app (reported: Export CSV opened a giant spreadsheet with no way out):');
+// A download link does not download inside the iPhone app. It replaces the
+// whole app screen with the file, and the app has no back button.
+test('the iPhone app never uses a download link, which would replace the app with the file', () => {
+  assertEqual(ctx.fileDeliveryPlan({ ios: true, nativeFileShare: false }), 'sheet', 'current app build: in-app sheet with Share and Copy');
+  assertEqual(ctx.fileDeliveryPlan({ ios: true, nativeFileShare: true }), 'native', 'a build that can share files hands it to the iPhone share sheet');
+});
+test('a normal browser still gets a normal download', () => {
+  assertEqual(ctx.fileDeliveryPlan({ ios: false, nativeFileShare: false }), 'download', 'Safari, Chrome, desktop');
+});
+
 console.log('\n' + '─'.repeat(50));
 console.log(passed + ' passed, ' + failed + ' failed');
 if (failed > 0) process.exit(1);

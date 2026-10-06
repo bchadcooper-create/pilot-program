@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.18 / 20260916_4
+ * Version/build: fcf-v5.44.19 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.18';
+const FCF_VERSION = 'fcf-v5.44.19';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -8428,9 +8428,36 @@ function getAlternates(exName) {
   return ALTERNATES[exName] || [];
 }
 
+// BUG FIX (reported: tapping Swap In on an AI substitute threw "JS ERROR:
+// SyntaxError: Unexpected EOF"). Three buttons on this sheet carried a whole
+// exercise as JSON inside a single-quoted onclick='...' attribute. The first
+// apostrophe in a name or note ("don't force it", "isn't available") ended
+// the attribute early, so the tap ran half a line of code and did nothing.
+// It hit the AI suggestion, the Ask AI Coach button on any exercise with an
+// apostrophe, and every curated alternate whose note has one. No button
+// carries data now: each one names a plain function and the exercise is
+// looked up when it is tapped.
+function findWorkoutExById(exId) {
+  if (!ST.workout) return null;
+  for (const phase of ['taxi','takeoff','enroute','landing']) {
+    const e = (ST.workout[phase] || []).find(x => x.id === exId);
+    if (e) return e;
+  }
+  return null;
+}
+function swapCuratedAlternate(exId, i) {
+  const exItem = findWorkoutExById(exId);
+  const alt = exItem ? getAlternates(exItem.name)[i] : null;
+  if (!alt) { showToast('Could not find that alternate. Close this sheet and try again.'); return; }
+  swapExercise(exId, alt);
+  closeModal();
+}
 function showAlternates(exId, exName, phaseKey) {
-  const alts = getAlternates(exName);
   const root = document.getElementById('modalRoot');
+  if (root) root.innerHTML = alternatesSheetHtml(exId, exName, phaseKey);
+}
+function alternatesSheetHtml(exId, exName, phaseKey) {
+  const alts = getAlternates(exName);
   const parts = [];
   parts.push('<div class="modal-bg" onclick="if(event.target===this)closeModal()">');
   parts.push('<div class="modal-sheet" style="max-height:85vh;overflow-y:auto">');
@@ -8438,12 +8465,12 @@ function showAlternates(exId, exName, phaseKey) {
   parts.push('<div class="modal-title">Alternate Exercises</div>');
   if (alts.length) {
     parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:14px">Same muscle group, different movement. Tap to swap in.</div>');
-    alts.forEach(alt => {
+    alts.forEach((alt, altIdx) => {
       parts.push('<div style="background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">');
       parts.push('<div style="font-weight:700;font-size:0.875rem;margin-bottom:3px">'+alt.name+'</div>');
       parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--gold);margin-bottom:6px">'+alt.target+'</div>');
       parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px">'+alt.note+'</div>');
-      parts.push('<button class="btn btn-gold btn-sm" onclick=\'swapExercise("'+exId+'",'+JSON.stringify(alt)+');closeModal()\'>Swap In</button>');
+      parts.push('<button class="btn btn-gold btn-sm" onclick="swapCuratedAlternate(\''+exId+'\','+altIdx+')">Swap In</button>');
       parts.push('</div>');
     });
   } else {
@@ -8463,7 +8490,6 @@ function showAlternates(exId, exName, phaseKey) {
   // pick { name, target, note, inputType }, everything else about how a
   // swap is applied stays exactly as it already works for the manual path.
   if (isPro()) {
-    const exItem = (ST.workout?.[phaseKey] || []).find(e => e.id === exId);
     parts.push('<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">');
     parts.push('<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">');
     parts.push('<span style="font-size:0.75rem">✦</span><span style="font-size:0.75rem;font-weight:600">AI Coach: Don\'t have any of this?</span>');
@@ -8471,7 +8497,7 @@ function showAlternates(exId, exName, phaseKey) {
     parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:10px">Describe what you actually have access to and the AI will pick a substitute that trains the same thing.</div>');
     parts.push('<div class="field"><input type="text" id="aiSubExplain" placeholder="e.g. hotel room, no equipment, carpeted floor" autocomplete="off"></div>');
     parts.push('<div id="aiSubResult"></div>');
-    parts.push('<button class="btn btn-outline" onclick=\'requestAISubstitute("'+exId+'","'+phaseKey+'",'+JSON.stringify(exItem)+')\'>Ask AI Coach</button>');
+    parts.push('<button class="btn btn-outline" onclick="requestAISubstitute(\''+exId+'\',\''+phaseKey+'\')">Ask AI Coach</button>');
     parts.push('</div>');
   }
 
@@ -8486,7 +8512,7 @@ function showAlternates(exId, exName, phaseKey) {
 
   parts.push('<button class="btn btn-outline mt8" onclick="closeModal()">CANCEL</button>');
   parts.push('</div></div>');
-  root.innerHTML = parts.join('');
+  return parts.join('');
 }
 
 // Genuine dynamic-warmup/mobility movements — curated from what actually
@@ -8554,7 +8580,41 @@ function swapAddCatalogExercise(exId, matchIdx, q) {
 // AI Adaptive Environment Routing — one exercise in, one exercise out.
 // Calls the AI, parses the strict-JSON response, and feeds the result
 // straight into the EXISTING swapExercise() — no new swap machinery.
+// What the AI sent back, made safe to show and to store. The note keeps its
+// apostrophes and its full length (it used to be cut at 120 characters,
+// mid-word); only characters that could be read as markup are dropped.
+const AI_SUB_INPUT_TYPES = ['reps_weight', 'reps_only', 'reps_height', 'timed', 'timed_bilateral'];
+function cleanAISubstitute(alt) {
+  if (!alt || alt.error || !alt.name) return null;
+  const strip = (v, max) => String(v || '').replace(/[<>"`\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, max);
+  const name = sanitizeUserText(String(alt.name).trim());
+  if (!name) return null;
+  return {
+    name,
+    target: sanitizeUserText(String(alt.target || '').trim()) || '3x10',
+    note: strip(alt.note, 300) || 'AI Coach substitute.',
+    inputType: AI_SUB_INPUT_TYPES.includes(alt.inputType) ? alt.inputType : 'reps_weight',
+  };
+}
+function aiSubstituteCardHtml(c) {
+  return '<div style="background:var(--bg3);border:1.5px solid var(--gold);border-radius:10px;padding:14px;margin:10px 0">' +
+    '<div style="font-weight:700;font-size:0.875rem;margin-bottom:3px">'+c.name+'</div>' +
+    '<div style="font-family:var(--mono);font-size:0.625rem;color:var(--gold);margin-bottom:6px">'+c.target+'</div>' +
+    '<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px">'+c.note.replace(/&/g, '&amp;')+'</div>' +
+    '<button class="btn btn-gold btn-sm" onclick="swapInAISubstitute()">Swap In</button>' +
+    '</div>';
+}
+let _aiSubstitute = null; // { exId, alt }: the suggestion currently on screen
+function swapInAISubstitute() {
+  const s = _aiSubstitute;
+  if (!s || !findWorkoutExById(s.exId)) { showToast('That suggestion expired. Tap Ask AI Coach again.'); return; }
+  _aiSubstitute = null;
+  swapExercise(s.exId, s.alt);
+  closeModal();
+}
 async function requestAISubstitute(exId, phaseKey, exItem) {
+  if (!exItem) exItem = (ST.workout?.[phaseKey] || []).find(e => e.id === exId) || findWorkoutExById(exId);
+  _aiSubstitute = null;
   const input = document.getElementById('aiSubExplain');
   const resultBox = document.getElementById('aiSubResult');
   const available = (input?.value || '').trim();
@@ -8593,18 +8653,13 @@ async function requestAISubstitute(exId, phaseKey, exItem) {
     resultBox.innerHTML = '<div style="font-size:0.6875rem;color:var(--amber);margin:8px 0">Got an unreadable response. Try again.</div>';
     return;
   }
-  if (alt.error || !alt.name) {
+  const clean = cleanAISubstitute(alt);
+  if (!clean) {
     resultBox.innerHTML = '<div style="font-size:0.6875rem;color:var(--muted);margin:8px 0">No good substitute found for that. Try catalog search above, or describe what you have differently.</div>';
     return;
   }
-
-  resultBox.innerHTML =
-    '<div style="background:var(--bg3);border:1.5px solid var(--gold);border-radius:10px;padding:14px;margin:10px 0">' +
-    '<div style="font-weight:700;font-size:0.875rem;margin-bottom:3px">'+sanitizeUserText(alt.name)+'</div>' +
-    '<div style="font-family:var(--mono);font-size:0.625rem;color:var(--gold);margin-bottom:6px">'+sanitizeUserText(alt.target||'')+'</div>' +
-    '<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px">'+sanitizeUserText(alt.note||'')+'</div>' +
-    '<button class="btn btn-gold btn-sm" onclick=\'swapExercise("'+exId+'",'+JSON.stringify(alt)+');closeModal()\'>Swap In</button>' +
-    '</div>';
+  _aiSubstitute = { exId, alt: clean };
+  resultBox.innerHTML = aiSubstituteCardHtml(clean);
 }
 
 function swapCustomAlternate(exId) {

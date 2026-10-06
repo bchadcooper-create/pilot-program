@@ -984,6 +984,45 @@ test('the end-of-exercise note in a hotel at 50 lb asks for reps instead of "add
   assertEqual(/add more/i.test(gym.text), true, 'gym wording unchanged: ' + gym.text);
 });
 
+console.log('\nSwap In buttons survive an apostrophe (reported: "JS ERROR: SyntaxError: Unexpected EOF" on tapping Swap In for an AI substitute):');
+// The button carried the whole exercise as JSON inside a single-quoted HTML
+// attribute. The first apostrophe in a note ("don't force it") ended the
+// attribute early and the tap ran half a line of code.
+const aiAnswer = { name: 'Dumbbell Overhead Lat Stretch', target: '60s/side', inputType: 'timed_bilateral',
+  note: 'Hold a light dumbbell overhead with one arm and lean sideways to deepen the lat stretch, keep breathing and don\'t force it past a "good" stretch.' };
+test('an AI suggestion keeps its whole note, apostrophe included, and loses only what could break the page', () => {
+  const c = ctx.cleanAISubstitute(aiAnswer);
+  assertEqual(c.name, 'Dumbbell Overhead Lat Stretch', 'name');
+  assertEqual(c.note.includes("don't force it past a good stretch."), true, 'full sentence, apostrophe kept, quotes dropped: ' + c.note);
+  assertEqual(c.inputType, 'timed_bilateral', 'type kept');
+  assertEqual(ctx.cleanAISubstitute({ name: 'X', target: '3x10', inputType: 'alert(1)' }).inputType, 'reps_weight', 'unknown type falls back');
+  assertEqual(ctx.cleanAISubstitute({ target: '3x10' }), null, 'no name, no suggestion');
+  assertEqual(ctx.cleanAISubstitute({ name: '<img src=x>', target: '3x10' }).name.includes('<'), false, 'no markup');
+});
+test('the AI suggestion card carries no exercise data inside its button', () => {
+  const html = ctx.aiSubstituteCardHtml(ctx.cleanAISubstitute(aiAnswer));
+  assertEqual(html.includes('onclick="swapInAISubstitute()"'), true, 'button calls a plain function');
+  assertEqual(html.includes("don't force it"), true, 'note shown in full');
+  assertEqual(/onclick='/.test(html) || html.includes('{"name"'), false, 'nothing embedded in the attribute');
+});
+test('every curated alternate has a working Swap In button, including the ones with an apostrophe', () => {
+  let withApostrophe = 0, total = 0;
+  Object.keys(ctx.ALTERNATES).forEach(name => {
+    const alts = ctx.getAlternates(name);
+    const html = ctx.alternatesSheetHtml('ex1', name, 'takeoff');
+    assertEqual((html.match(/Swap In<\/button>/g) || []).length, alts.length, name + ': one button per alternate');
+    assertEqual(/onclick='/.test(html), false, name + ': no single-quoted handler');
+    alts.forEach((a, i) => { total++; if (/'/.test(a.name + a.note)) withApostrophe++; assertEqual(html.includes('onclick="swapCuratedAlternate(\'ex1\',' + i + ')"'), true, name + ' #' + i); });
+  });
+  console.log('      (' + withApostrophe + ' of ' + total + ' curated alternates contain an apostrophe and had a dead button)');
+  assertEqual(total > 50, true, 'covered the real list');
+});
+test('no button anywhere carries JSON inside a single-quoted attribute', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'app.js'), 'utf8');
+  const bad = src.split('\n').filter(l => /on(click|change|input)=\\'/.test(l) && l.includes('JSON.stringify('));
+  assertEqual(bad.length, 0, 'offending lines: ' + bad.map(l => l.trim().slice(0, 80)).join(' | '));
+});
+
 console.log('\n' + '─'.repeat(50));
 console.log(passed + ' passed, ' + failed + ' failed');
 if (failed > 0) process.exit(1);

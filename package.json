@@ -11,7 +11,8 @@
     "e2e": "node tests/e2e/crawl.js",
     "e2e:local": "BASE_URL=http://localhost:4321 node tests/e2e/crawl.js",
     "e2e:feedback": "node tests/e2e/live-feedback.js",
-    "e2e:export": "node tests/e2e/export-files.js"
+    "e2e:export": "node tests/e2e/export-files.js",
+    "e2e:swap": "node tests/e2e/swap-buttons.js"
   },
   "dependencies": {
     "@capacitor/app": "^7.0.0",

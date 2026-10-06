@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.16 / 20260916_4
+ * Version/build: fcf-v5.44.17 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.16';
+const FCF_VERSION = 'fcf-v5.44.17';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -10745,6 +10745,46 @@ async function fetchAllRows(makeQuery) {
   return out;
 }
 
+// The "who is this and what are they aiming for" block at the top of the
+// export. Two columns, Item and Value. Only things that are actually set are
+// listed, except nutrition targets, where "not set" is itself useful to know.
+function exportProfileRows(st) {
+  const rows = [];
+  const add = (k, v) => { if (v !== undefined && v !== null && v !== '') rows.push([k, v]); };
+  const goal = GOALS[st.goal];
+  add('Training goal', goal ? goal.label : (st.goal || ''));
+  add('Experience level', st.level);
+  const inj = (st.injuries || []).map(r => (INJURY_REGIONS[r] && INJURY_REGIONS[r].label) || r);
+  if (inj.length) add('Injuries flagged', inj.join(', '));
+  add('Sex', st.sex);
+  add('Age', st.age);
+  add('Height (in)', st.heightIn);
+  add('Latest body weight (lb)', st.lastWeight);
+  const g = st.nutritionGoals && st.nutritionGoals.mode && st.nutritionGoals.mode !== 'none' ? st.nutritionGoals : null;
+  if (g) {
+    add('Nutrition plan', ({ maintain: 'Maintain weight', fatloss: 'Fat loss', muscle: 'Build muscle' })[g.mode] || g.mode);
+    add('Calorie target (per day)', g.calories);
+    add('Protein target (g per day)', g.protein);
+    add('Carb target (g per day)', g.carbs);
+    add('Fat target (g per day)', g.fat);
+    add('Estimated resting burn, BMR (cal per day)', g.bmr);
+    add('Estimated total burn, TDEE (cal per day)', g.tdee);
+    if (g.setAt) add('Nutrition targets set on', new Date(g.setAt).toLocaleDateString('en-US'));
+  } else {
+    add('Nutrition targets', 'not set');
+  }
+  if (st.trackHydration) add('Hydration target', HYDRO_RATE + ' L per flight hour, at least ' + HYDRO_FLOOR + ' L a day');
+  return rows;
+}
+// One row per body measurement entry, whatever day it was taken.
+function exportBodyRows(biometrics) {
+  const v = x => (x === undefined || x === null ? '' : x);
+  return (biometrics || [])
+    .filter(b => b && b.logged_at && [b.weight_lb, b.waist_in, b.systolic_bp, b.diastolic_bp, b.fasting_glucose].some(x => x !== undefined && x !== null && x !== ''))
+    .map(b => { const d = new Date(b.logged_at); return [d.toLocaleDateString('en-US'), d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      v(b.weight_lb), v(b.waist_in), v(b.systolic_bp), v(b.diastolic_bp), v(b.fasting_glucose)]; });
+}
+
 async function exportCSV() {
   showBigToast('Building export...','info');
   let sessions = [];
@@ -10782,8 +10822,12 @@ async function exportCSV() {
     bioByDate[d] = b;
   });
 
+  // The export opens with who this is and what they are aiming for. Without
+  // it an AI saw what was eaten and lifted but not the targets behind it.
+  const rows = [['### PROFILE AND TARGETS'], ['Item','Value'], ...exportProfileRows(ST), [],
+    ['### WORKOUTS (one row per set)']];
   // Build CSV: one row per exercise set
-  const rows = [['Date','Day','Muscle Group','Environment','Goal','Fatigue','Level','Duration (min)','Phase','Exercise','Set #','Reps','Weight (lb)','Seconds','Height (in)','Distance (in)','Seconds Left','Seconds Right','Body Weight (lb)','Waist (in)','Systolic BP','Diastolic BP','Fasting Glucose (mg/dL)']];
+  rows.push(['Date','Day','Muscle Group','Environment','Goal','Fatigue','Level','Duration (min)','Phase','Exercise','Set #','Reps','Weight (lb)','Seconds','Height (in)','Distance (in)','Seconds Left','Seconds Right','Body Weight (lb)','Waist (in)','Systolic BP','Diastolic BP','Fasting Glucose (mg/dL)']);
 
   sessions.forEach(s => {
     const date = new Date(s.date);
@@ -10830,6 +10874,12 @@ async function exportCSV() {
     if (!dataRows.length) rows.push(['(no data)']);
     else dataRows.forEach(r => rows.push(r));
   };
+
+  // Every weigh-in and measurement. The columns on the workout rows above
+  // only carry a measurement taken on a workout day, so a rest-day weigh-in
+  // used to be missing from the file altogether.
+  section('BODY MEASUREMENTS (every entry)', ['Date','Time','Body Weight (lb)','Waist (in)','Systolic BP','Diastolic BP','Fasting Glucose (mg/dL)'],
+    exportBodyRows(biometrics));
 
   section('OURA DAILY', ['Date','Readiness','Sleep Score','HRV Balance','Activity Score','Temp Deviation','Total Sleep (h)','Deep Sleep (h)','REM Sleep (h)'],
     ouraRows.map(o => [o.date||'', o.readiness_score??'', o.sleep_score??'', o.hrv_balance??'', o.activity_score??'', o.temperature_deviation??'',
@@ -15309,7 +15359,7 @@ function renderData(p) {
   // ── Export ────────────────────────────────────────────────────────────────
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">EXPORT DATA</div>');
-  parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;line-height:1.6">Exports everything the app holds, in one CSV with labelled sections: workouts (one row per set, biometrics joined by date), Oura daily metrics, every logged food item, hydration and flight hours, your scheduled flights, and your medication and supplement list with check-off history. Optimized for AI analysis.</div>');
+  parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;line-height:1.6">Exports everything the app holds, in one CSV with labelled sections: your goal and nutrition targets, workouts (one row per set), every weigh-in and body measurement, Oura daily metrics, every logged food item, hydration and flight hours, your scheduled flights, and your medication and supplement list with check-off history. Optimized for AI analysis.</div>');
   parts.push('<div style="font-size:0.6875rem;color:var(--gold);margin-bottom:10px;line-height:1.5">💡 Recommended: export and review weekly. Daily exports are too noisy to show real trends; monthly is often too late to catch a stall early.</div>');
   parts.push('<button class="btn btn-outline" onclick="exportCSV()">📊 Export CSV for AI Analysis</button>');
   parts.push('<button class="btn btn-outline mt8" onclick="showAIPromptModal()">📋 View & Copy AI Prompt</button>');

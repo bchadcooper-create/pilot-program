@@ -78,7 +78,12 @@ const snap = page => page.evaluate(() => ({ url: location.pathname, app: !!docum
   check('B4. iPhone app: no Share button when the phone cannot share files from a page', s.shareBtn === false, s);
   await page.click('#exportCopyBtn'); await page.waitForTimeout(400);
   s = await snap(page);
-  check('B5. iPhone app: Copy puts the whole export on the clipboard', s.copiedChars > 500 && /FLIGHT CREW FITNESS|WORKOUT|"Date"/i.test(s.copiedHead + (await page.evaluate(() => window.__copied.slice(0, 400)))), { chars: s.copiedChars, head: s.copiedHead });
+  check('B5. iPhone app: Copy puts the whole export on the clipboard', s.copiedChars > 500 && (await page.evaluate(() => window.__copied.includes('"Date","Day","Muscle Group"'))), { chars: s.copiedChars, head: s.copiedHead });
+  const body = await page.evaluate(() => window.__copied);
+  const lines = body.split('\n');
+  check('B5b. the export opens with goal and targets, and has every body measurement', lines[0] === '"### PROFILE AND TARGETS"' && /"Training goal","[^"]+"/.test(body) && /"Nutrition (plan|targets)","[^"]+"/.test(body)
+    && body.includes('"### WORKOUTS (one row per set)"') && body.includes('"### BODY MEASUREMENTS (every entry)"') && body.includes('"### NUTRITION'), lines.slice(0, 6));
+  if (process.env.SHOW_HEAD) console.log(lines.slice(0, 16).join('\n') + '\n...\n' + lines.filter(l => l.startsWith('"###')).join('\n'));
   await page.locator('#modalRoot button', { hasText: /^Done$/ }).click(); await page.waitForTimeout(300);
   s = await snap(page);
   check('B6. iPhone app: Done closes the sheet and the app is still there', !s.sheet && s.app, s);

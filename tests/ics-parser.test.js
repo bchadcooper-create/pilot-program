@@ -908,6 +908,37 @@ test('a normal browser still gets a normal download', () => {
   assertEqual(ctx.fileDeliveryPlan({ ios: false, nativeFileShare: false }), 'download', 'Safari, Chrome, desktop');
 });
 
+console.log('\nExport includes goals, targets and every weigh-in (requested: an AI should see what you were aiming for):');
+test('the export opens with the training goal and the nutrition targets', () => {
+  const rows = ctx.exportProfileRows({ goal: 'jump', level: 'intermediate', injuries: ['shoulder'], sex: 'male', age: 50, heightIn: 71, lastWeight: 192,
+    trackHydration: true, nutritionGoals: { mode: 'muscle', calories: 2800, protein: 192, carbs: 310, fat: 78, bmr: 1850, tdee: 2600, setAt: '2026-09-01T12:00:00.000Z' } });
+  const get = k => (rows.find(r => r[0] === k) || [])[1];
+  assertEqual(get('Training goal'), 'Vertical Jump', 'goal in plain words, not the internal code');
+  assertEqual(get('Calorie target (per day)'), 2800, 'calories');
+  assertEqual(get('Protein target (g per day)'), 192, 'protein');
+  assertEqual(get('Carb target (g per day)'), 310, 'carbs');
+  assertEqual(get('Fat target (g per day)'), 78, 'fat');
+  assertEqual(get('Nutrition plan'), 'Build muscle', 'plan in plain words');
+  assertEqual(/Shoulder/i.test(String(get('Injuries flagged'))), true, 'injury flags are named');
+  assertEqual(get('Latest body weight (lb)'), 192, 'latest weight');
+});
+test('with no nutrition targets set the export says so instead of leaving a gap', () => {
+  const rows = ctx.exportProfileRows({ goal: 'longevity', injuries: [], nutritionGoals: { mode: 'none' } });
+  assertEqual((rows.find(r => r[0] === 'Nutrition targets') || [])[1], 'not set', 'stated plainly');
+  assertEqual(rows.some(r => r[0] === 'Calorie target (per day)'), false, 'no invented numbers');
+  assertEqual(rows.some(r => r[0] === 'Injuries flagged'), false, 'nothing flagged, nothing listed');
+});
+test('every weigh-in is exported, including rest days, and empty entries are skipped', () => {
+  const rows = ctx.exportBodyRows([
+    { logged_at: new Date(2026, 9, 1, 7, 5).toISOString(), weight_lb: 192.4 },
+    { logged_at: new Date(2026, 9, 2, 6, 50).toISOString(), weight_lb: 191.8, waist_in: 35, systolic_bp: 118, diastolic_bp: 76, fasting_glucose: 92 },
+    { logged_at: new Date(2026, 9, 3, 6, 50).toISOString() },
+  ]);
+  assertEqual(rows.length, 2, 'two real entries, the empty one dropped');
+  assertEqual(rows[0][0], '10/1/2026', 'date'); assertEqual(rows[0][2], 192.4, 'weight');
+  assertEqual(rows[1].slice(2).join('|'), '191.8|35|118|76|92', 'all five measurements in order');
+});
+
 console.log('\n' + '─'.repeat(50));
 console.log(passed + ' passed, ' + failed + ' failed');
 if (failed > 0) process.exit(1);

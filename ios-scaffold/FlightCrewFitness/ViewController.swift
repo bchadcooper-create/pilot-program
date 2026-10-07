@@ -131,6 +131,9 @@ class ViewController: UIViewController {
               // This build can also share a picture the web app drew (the
               // workout summary card) through the native share sheet.
               shareImage:      !!(window.webkit?.messageHandlers?.share),
+              // This build answers the two Apple Health distance requests
+              // (see handleHealthKitMessage: "distance", "recentDistanceWorkout").
+              healthDistance:  !!(window.webkit?.messageHandlers?.healthkit),
             },
             getProducts:      () => send('storeKit',      { action: 'getProducts' }),
             purchase:         (o) => send('storeKit',      { action: 'purchase', productId: o.productId, appAccountToken: o.appAccountToken }),
@@ -789,6 +792,32 @@ extension ViewController {
             // Connected Devices page). Skips the permission sheet — just reads.
             HealthKitManager.shared.syncAll { [weak self] payload in
                 self?.postToWeb("fcf:healthkit", data: payload)
+            }
+        case "distance":
+            // Distance covered between two moments. startMs and endMs are
+            // JavaScript timestamps (milliseconds since 1970). Replies on
+            // fcf:healthDistance, never fcf:healthkit: the web app replaces
+            // its whole health summary with whatever arrives on that one.
+            let exId = body["exId"] as? String ?? ""
+            guard let startMs = body["startMs"] as? Double, let endMs = body["endMs"] as? Double else {
+                postToWeb("fcf:healthDistance", data: ["success": false, "code": "invalid_payload", "kind": "window", "exId": exId])
+                return
+            }
+            HealthKitManager.shared.distanceBetween(start: Date(timeIntervalSince1970: startMs / 1000),
+                                                    end: Date(timeIntervalSince1970: endMs / 1000)) { [weak self] payload in
+                var out = payload
+                out["exId"] = exId
+                out["kind"] = "window"
+                self?.postToWeb("fcf:healthDistance", data: out)
+            }
+        case "recentDistanceWorkout":
+            // The latest run, walk or hike in Health with a distance.
+            let exId = body["exId"] as? String ?? ""
+            HealthKitManager.shared.recentDistanceWorkout { [weak self] payload in
+                var out = payload
+                out["exId"] = exId
+                out["kind"] = "workout"
+                self?.postToWeb("fcf:healthDistance", data: out)
             }
         default:
             postToWeb("fcf:healthkit", data: ["success": false, "code": "unsupported_action", "message": "Unrecognized HealthKit action: \(action)"])

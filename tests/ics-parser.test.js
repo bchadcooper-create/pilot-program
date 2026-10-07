@@ -1200,6 +1200,29 @@ test('nothing is earned by training on a NO-GO day', () => {
   assertEqual(earned('nogo'), earned('go'), 'four NO-GO sessions earn exactly what four normal ones do');
 });
 
+console.log('\nRun and walk distance from Apple Health (requested for the next app build, in place of GPS):');
+test('a distance measured for the stopwatch window fills an empty distance box', () => {
+  const r = ctx.healthDistanceUpdate({ seconds: '1680', miles: '' }, { success: true, kind: 'window', miles: 3.12, source: 'motion' });
+  assertEqual(r.changed, true, 'changed'); assertEqual(r.set.miles, '3.12', 'miles filled'); assertEqual(r.set.seconds, undefined, 'time left alone');
+  assertEqual(/3\.12 mi/.test(r.message), true, r.message);
+});
+test('it never overwrites a distance the person typed', () => {
+  const r = ctx.healthDistanceUpdate({ seconds: '1680', miles: '3.5' }, { success: true, kind: 'window', miles: 3.12 });
+  assertEqual(r.changed, false, 'left as typed'); assertEqual(/kept/.test(r.message) && /3\.12/.test(r.message), true, r.message);
+});
+test('pulling in a recorded run fills both time and distance, and says where it came from', () => {
+  const r = ctx.healthDistanceUpdate({ seconds: '', miles: '' }, { success: true, kind: 'workout', miles: 3.1, seconds: 1685, activityType: 'Running', source: 'Apple Watch' });
+  assertEqual(r.set.miles, '3.1', 'miles'); assertEqual(r.set.seconds, '1685', 'seconds');
+  assertEqual(/Running/.test(r.message) && /3\.1 mi/.test(r.message) && /28 min/.test(r.message) && /Apple Watch/.test(r.message), true, r.message);
+});
+test('nothing found is said plainly when asked for, and quietly when it was automatic', () => {
+  const asked = ctx.healthDistanceUpdate({}, { success: false, kind: 'workout', code: 'no_workout' });
+  assertEqual(asked.changed, false, 'nothing changed'); assertEqual(/No run or walk/.test(asked.message), true, asked.message);
+  const auto = ctx.healthDistanceUpdate({}, { success: false, kind: 'window', code: 'no_distance' });
+  assertEqual(auto.changed, false, 'nothing changed'); assertEqual(auto.message, '', 'no popup after an ordinary stopwatch stop');
+  assertEqual(ctx.healthDistanceUpdate({}, { success: true, kind: 'window', miles: 0 }).changed, false, 'a zero is not a distance');
+});
+
 console.log('\n' + '─'.repeat(50));
 console.log(passed + ' passed, ' + failed + ' failed');
 if (failed > 0) process.exit(1);

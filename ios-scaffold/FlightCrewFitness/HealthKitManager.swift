@@ -43,6 +43,10 @@ class HealthKitManager {
             .heartRateVariabilitySDNN,
             .restingHeartRate,
             .activeEnergyBurned,
+            // Distance for runs and walks (see distanceBetween below). The
+            // iPhone records this from its own motion sensors, and a watch
+            // adds to it. Added 2026-10-07 in place of in-app GPS.
+            .distanceWalkingRunning,
         ]
         for id in quantityTypeIds {
             if let t = HKQuantityType.quantityType(forIdentifier: id) { types.insert(t) }
@@ -206,6 +210,86 @@ class HealthKitManager {
         #if DEBUG
         print("FCF HealthKitManager:", message)
         #endif
+    }
+
+    // ── Distance for a run or walk ───────────────────────────────────────────
+    //
+    // Requested 2026-10-07: log distance for runs and walks without typing
+    // it. GPS in the app was turned down (the web page is paused when the
+    // phone locks, GPS reads nothing on a treadmill, and it would add a
+    // location permission). Apple Health already has the distance.
+    //
+    // NOT YET BUILT OR TESTED ON A DEVICE. Written without a compiler.
+
+    private var distanceReadTypes: Set<HKObjectType> {
+        var types = Set<HKObjectType>()
+        if let d = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning) { types.insert(d) }
+        if let workout = HKObjectType.workoutType() as? HKObjectType { types.insert(workout) }
+        return types
+    }
+
+    /// Miles walked or run between two moments, from every source Health
+    /// has (phone motion sensors, a watch), counted once. Used when the
+    /// run was timed with the stopwatch in the app.
+    func distanceBetween(start: Date, end: Date, completion: @escaping ([String: Any]) -> Void) {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            completion(["success": false, "code": "unavailable"]); return
+        }
+        guard end > start else {
+            completion(["success": false, "code": "bad_window"]); return
+        }
+        // Someone who connected Health before this build was never asked
+        // for distance. Asking here shows the Health sheet for the new item
+        // only, the first time, and is a no-op after that.
+        store.requestAuthorization(toShare: nil, read: distanceReadTypes) { [weak self] _, error in
+            guard let self = self else { return }
+            if let error = error { self.logNative("distanceBetween authorization error: \(error)") }
+            self.querySum(.distanceWalkingRunning, unit: .mile(), start: start, end: end) { miles in
+                if let miles = miles, miles > 0 {
+                    completion(["success": true, "miles": (miles * 100).rounded() / 100, "source": "Apple Health"])
+                } else {
+                    completion(["success": false, "code": "no_distance"])
+                }
+            }
+        }
+    }
+
+    /// The latest run, walk or hike recorded to Health in the last 24
+    /// hours that has a distance, with its time. Reads workouts, which the
+    /// app already had permission for.
+    func recentDistanceWorkout(completion: @escaping ([String: Any]) -> Void) {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            completion(["success": false, "code": "unavailable"]); return
+        }
+        let end = Date()
+        let start = end.addingTimeInterval(-24 * 60 * 60)
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        let query = HKSampleQuery(sampleType: HKWorkoutType.workoutType(),
+                                  predicate: predicate,
+                                  limit: 20,
+                                  sortDescriptors: [sort]) { [weak self] _, samples, error in
+            if let error = error { self?.logNative("recentDistanceWorkout error: \(error)") }
+            let workouts = (samples as? [HKWorkout]) ?? []
+            let wanted: [HKWorkoutActivityType] = [.running, .walking, .hiking]
+            let match = workouts.first { workout in
+                wanted.contains(workout.workoutActivityType)
+                    && (workout.totalDistance?.doubleValue(for: .mile()) ?? 0) > 0
+            }
+            guard let workout = match,
+                  let miles = workout.totalDistance?.doubleValue(for: .mile()) else {
+                completion(["success": false, "code": "no_workout"]); return
+            }
+            completion([
+                "success": true,
+                "miles": (miles * 100).rounded() / 100,
+                "seconds": Int(workout.duration.rounded()),
+                "activityType": workout.workoutActivityType.name,
+                "endedAt": Self.iso8601Formatter.string(from: workout.endDate),
+                "source": workout.sourceRevision.source.name
+            ])
+        }
+        store.execute(query)
     }
 
     private func querySum(_ typeId: HKQuantityTypeIdentifier,

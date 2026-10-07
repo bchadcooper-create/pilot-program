@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.26 / 20260916_4
+ * Version/build: fcf-v5.44.27 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.26';
+const FCF_VERSION = 'fcf-v5.44.27';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -5353,6 +5353,72 @@ window.addEventListener('fcf:healthkit', (e) => {
   requestNativeRepaint();
 });
 
+// ─── RUN AND WALK DISTANCE FROM APPLE HEALTH ────────────────────────────────
+// Requested: log distance for runs and walks without typing it. GPS inside
+// the app was considered and turned down: the page is paused when the phone
+// locks, GPS reads nothing on a treadmill, and it would add a location
+// permission the app has never needed. Apple Health already holds the
+// distance, from the phone's own motion sensors or from a watch.
+//
+// Needs an app build that answers the two requests below (it announces
+// that with capabilities.healthDistance). In an older build none of this
+// is shown and nothing is sent.
+//   distance               the distance covered between two moments, used
+//                          when the run was timed with the stopwatch here
+//   recentDistanceWorkout  the latest run, walk or hike recorded to Health
+//                          in the last 24 hours, with its time and distance
+// The reply comes back as fcf:healthDistance. It has its own event name
+// because fcf:healthkit replaces the whole health summary with whatever
+// arrives on it.
+function healthDistanceAvailable() {
+  return !!(inIOSApp() && typeof FCFBridge !== 'undefined' && FCFBridge.capabilities && FCFBridge.capabilities.healthDistance
+    && window.webkit?.messageHandlers?.healthkit);
+}
+function requestHealthDistance(exId, startMs, endMs) {
+  if (!healthDistanceAvailable() || !(endMs > startMs)) return false;
+  window.webkit.messageHandlers.healthkit.postMessage({ action: 'distance', exId, startMs, endMs });
+  return true;
+}
+function requestRecentHealthWorkout(exId) {
+  if (!healthDistanceAvailable()) return false;
+  window.webkit.messageHandlers.healthkit.postMessage({ action: 'recentDistanceWorkout', exId });
+  return true;
+}
+// What a reply does to one run/walk entry. Pure: returns the fields to
+// change and the message to show, and touches nothing.
+function healthDistanceUpdate(set, p) {
+  const cur = set || {}, payload = p || {};
+  const miles = Math.round((parseFloat(payload.miles) || 0) * 100) / 100;
+  const explicit = payload.kind === 'workout'; // the person tapped "Fill from Apple Health"
+  if (!payload.success || !(miles > 0)) {
+    // An automatic lookup after the stopwatch that finds nothing stays quiet.
+    return { changed: false, set: {}, message: explicit ? 'No run or walk with a distance in Apple Health in the last 24 hours.' : '' };
+  }
+  if (explicit) {
+    const out = { miles: String(miles) };
+    const secs = Math.round(parseFloat(payload.seconds) || 0);
+    if (secs > 0) out.seconds = String(secs);
+    return { changed: true, set: out, message: 'Filled from Apple Health: ' + (payload.activityType || 'Workout') + ', ' + miles + ' mi'
+      + (secs > 0 ? ' in ' + Math.round(secs / 60) + ' min' : '') + (payload.source ? ' (' + payload.source + ')' : '') + '.' };
+  }
+  const typed = cur.miles !== undefined && cur.miles !== null && cur.miles !== '';
+  if (typed) return { changed: false, set: {}, message: 'Apple Health measured ' + miles + ' mi. Your entry was kept.' };
+  return { changed: true, set: { miles: String(miles) }, message: 'Distance from Apple Health: ' + miles + ' mi.' };
+}
+window.addEventListener('fcf:healthDistance', (e) => {
+  const p = e.detail || {};
+  if (!p.exId || !findWorkoutEx(p.exId)) return; // the workout moved on while Health was answering
+  ensureSetEntry(p.exId, 0);
+  const r = healthDistanceUpdate(ST.sets[p.exId][0], p);
+  if (r.changed) {
+    Object.assign(ST.sets[p.exId][0], r.set);
+    persistWorkoutState();
+    updateExDoneIndicator(p.exId);
+    if (ST.tab === 'flight') renderFlight(document.getElementById('mainPage'));
+  }
+  if (r.message) showToast(r.message);
+});
+
 // Calendar data arrives from the native shell. Run it through the AI
 // classifier — the edge function handles caching via fingerprint comparison.
 window.addEventListener('fcf:calendar', async (e) => {
@@ -9275,6 +9341,13 @@ function buildExCard(exItem, phaseKey) {
       parts.push('<input class="timed-inp" type="text" inputmode="decimal" placeholder="0" value="'+valMi+'" oninput="ensureSetEntry(\''+exItem.id+'\',0);ST.sets[\''+exItem.id+'\'][0].miles=this.value;persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
       parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">mi</div></div>');
       parts.push('</div></div>');
+      // Runs and walks had no stopwatch (every other timed card does). Timing
+      // one here also gives Apple Health an exact window to measure.
+      parts.push(buildStopwatchWidget(exItem.id, null, exItem.target));
+      if (healthDistanceAvailable()) {
+        parts.push('<button class="btn btn-outline mt8" onclick="haptic(\'light\');requestRecentHealthWorkout(\''+exItem.id+'\')">Fill from Apple Health</button>');
+        parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px;text-align:center">Uses your latest run or walk recorded in the last 24 hours. Timing it with the stopwatch here fills the distance on its own.</div>');
+      }
     } else if (exItem.timed && isMinuteScale(exItem)) {
       // Reported bug: Walking, Treadmill, and similar 20-45 min activities
       // forced entry in raw seconds (e.g. typing "1200" for 20 minutes) —
@@ -9885,6 +9958,7 @@ function tickStopwatch(exId, side) {
 function stopStopwatch(exId, side) {
   if (ST.stopwatch.interval) clearInterval(ST.stopwatch.interval);
   const total = ST.stopwatch.seconds;
+  const startedTs = ST.stopwatch.startTs || null;
   ST.stopwatch.active = false;
   // BUG FIX: the old guard (`if (ST.sets[exId])`) only checked the array
   // itself existed, not that index [0] did — an existing-but-empty array
@@ -9902,6 +9976,8 @@ function stopStopwatch(exId, side) {
   persistTimerState();
   persistWorkoutState();
   showToast('⏱ Recorded '+total+' seconds'+(multi?' for set '+(idx+1):'')+(side?' ('+side+' side)':'')+'.');
+  // A run or walk timed here: ask Apple Health how far that was.
+  if (found && found.exItem.inputType === 'timed_distance' && startedTs) requestHealthDistance(exId, startedTs, Date.now());
   renderFlight(document.getElementById('mainPage'));
 }
 

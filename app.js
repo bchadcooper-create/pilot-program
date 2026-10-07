@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.20 / 20260916_4
+ * Version/build: fcf-v5.44.21 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.20';
+const FCF_VERSION = 'fcf-v5.44.21';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -9884,9 +9884,9 @@ function exerciseMET(exItem) {
   if (exItem.name && /walk/i.test(exItem.name)) return 3.5; // walking specifically
   if (RUNNING_EXERCISES.includes(exItem.id) || exItem.inputType === 'timed_distance') return 8.0; // running
   if (exItem.inputType === 'nsdr') return 1.5; // lying down
-  if (exItem.inputType === 'timed_bilateral') return 2.8; // stretches/holds
+  if (exItem.inputType === 'timed_bilateral') return 2.3; // stretches (Compendium 02101, stretching, mild)
   if (exItem.inputType === 'reps_height' || exItem.inputType === 'reps_distance') return 7.5; // jump/sprint tests
-  if (exItem.timed) return 3.0; // other timed holds (planks etc.)
+  if (exItem.timed) return 2.8; // other timed holds, planks etc. (Compendium 02024)
   if (exItem.inputType === 'reps_only') return 6.0; // bodyweight circuits
   return 5.5; // reps_weight (default) — resistance training
 }
@@ -9895,32 +9895,80 @@ function exerciseMET(exItem) {
 // commonly-used estimate of actual working time per set, excluding rest.
 const ASSUMED_SET_SECONDS = 45;
 
-// Computes both total logged minutes and estimated calories from what was
-// ACTUALLY entered — real seconds for timed exercises, an estimate for
-// reps-based sets — rather than a fixed phase-time assumption rescaled by
-// how long the app happened to be open. Bodyweight is a real input (falls
-// back to 180lb only when nothing is on file).
-function computeSessionEffort(wk, sessionSets, bodyWeightLb) {
+// ─── WORKOUT CALORIES ────────────────────────────────────────────────────────
+// BUG FIX (reported: 120 calories for an hour of lifting). Sets used to be
+// costed for their 45 seconds under the bar and nothing else, so a 59 minute
+// session was priced as 13 minutes of work.
+//
+// Lifting is now costed the way the reference table defines it. The 2024
+// Compendium of Physical Activities lists resistance training as a session
+// value, rests between sets included (its own guidance: count the time
+// "performing the activity and during the rests between sets"):
+//   02054  3.5  resistance training, multiple exercises, 8-15 reps
+//   02052  5.0  squats, deadlift, slow or explosive effort
+//   02022  3.8  calisthenics (pushups, pull-ups, lunges), moderate effort
+//   02024  2.8  calisthenics, light effort (also used for warmup/cooldown reps)
+// Calories = MET x body weight in kg x hours. That is the total burned in
+// the session, the same convention the Compendium and most trackers use.
+// Check: 3.5 x 87 kg x 59 min is about 300, in line with the roughly 290
+// to 300 kcal measured by indirect calorimetry for lifting sessions
+// (Rustaden et al. 2020, Frontiers in Physiology).
+function strengthSessionMET(exItem, phase) {
+  if (phase === 'taxi' || phase === 'landing') return 2.8;
+  if (exItem.inputType === 'reps_height' || exItem.inputType === 'reps_distance') return 5.0; // jumps: nearest listed value, explosive effort
+  if (exItem.inputType === 'reps_only') return 3.8;
+  if (/squat|deadlift/i.test(exItem.name || '')) return 5.0;
+  return 3.5;
+}
+// How much session time one reps-based set can account for, rest included.
+// The saved session length is used when there is one, held between a floor
+// (a workout typed in afterwards has almost no clock time) and a cap (an app
+// left open for hours is not hours of lifting). With no saved length at all,
+// a typical set-plus-rest is assumed.
+const SET_SECONDS_FLOOR = 120;
+const SET_SECONDS_TYPICAL = 150;
+const SET_SECONDS_CAP = 240;
+
+// minutes:  time under effort only (real seconds for timed work, 45 s per
+//           reps-based set). Unchanged, and still the floor for a session's
+//           saved length in setTheChocks.
+// calories: timed work at its own pace for its own logged time, plus
+//           reps-based work over the session time it occupied.
+// Bodyweight is a real input (falls back to 180 lb only when none is on file).
+function computeSessionEffort(wk, sessionSets, bodyWeightLb, sessionMinutes) {
   const bwKg = (bodyWeightLb || 180) * 0.4536;
-  const allEx = [...(wk.taxi||[]), ...(wk.takeoff||[]), ...(wk.enroute||[]), ...(wk.landing||[])];
-  let totalSeconds = 0, totalCal = 0;
-  allEx.forEach(exItem => {
-    const sets = (sessionSets && sessionSets[exItem.id]) || [];
-    const met = exerciseMET(exItem);
-    let exSeconds = 0;
-    sets.forEach(s => {
-      if (s.seconds) exSeconds += parseFloat(s.seconds) || 0;
-      else if (s.seconds_left || s.seconds_right) exSeconds += (parseFloat(s.seconds_left)||0) + (parseFloat(s.seconds_right)||0);
-      else if (s.reps || s.weight || s.height || s.distance) exSeconds += ASSUMED_SET_SECONDS;
+  let workSeconds = 0, timedSeconds = 0, timedCal = 0, repSets = 0, repMetSum = 0;
+  ['taxi', 'takeoff', 'enroute', 'landing'].forEach(phase => {
+    (wk[phase] || []).forEach(exItem => {
+      const sets = (sessionSets && sessionSets[exItem.id]) || [];
+      sets.forEach(s => {
+        let sec = 0;
+        if (s.seconds) sec = parseFloat(s.seconds) || 0;
+        else if (s.seconds_left || s.seconds_right) sec = (parseFloat(s.seconds_left)||0) + (parseFloat(s.seconds_right)||0);
+        else if (s.reps || s.weight || s.height || s.distance) {
+          repSets++;
+          repMetSum += strengthSessionMET(exItem, phase);
+          workSeconds += ASSUMED_SET_SECONDS;
+          return;
+        }
+        timedSeconds += sec;
+        timedCal += exerciseMET(exItem) * bwKg * (sec / 3600);
+      });
     });
-    totalSeconds += exSeconds;
-    totalCal += met * bwKg * (exSeconds / 3600);
   });
-  return { minutes: Math.round(totalSeconds / 60), calories: Math.round(totalCal) };
+  workSeconds += timedSeconds;
+  let strengthCal = 0;
+  if (repSets) {
+    const known = parseFloat(sessionMinutes) > 0;
+    const available = known ? parseFloat(sessionMinutes) * 60 - timedSeconds : repSets * SET_SECONDS_TYPICAL;
+    const strengthSeconds = Math.min(repSets * SET_SECONDS_CAP, Math.max(repSets * SET_SECONDS_FLOOR, available));
+    strengthCal = (repMetSum / repSets) * bwKg * (strengthSeconds / 3600);
+  }
+  return { minutes: Math.round(workSeconds / 60), calories: Math.round(timedCal + strengthCal) };
 }
 
-function estimateCalories(wk, bodyWeightLb, sessionSets) {
-  return computeSessionEffort(wk, sessionSets, bodyWeightLb).calories;
+function estimateCalories(wk, bodyWeightLb, sessionSets, sessionMinutes) {
+  return computeSessionEffort(wk, sessionSets, bodyWeightLb, sessionMinutes).calories;
 }
 
 // ─── WORKOUT SUMMARY / DEBRIEF ────────────────────────────────────────────────
@@ -9987,13 +10035,16 @@ function buildWorkoutSummary(session, allExDefs, weeklySessions, bodyWeightLb) {
   const landingIds = (session.workoutSnapshot?.landing || []).map(e => e.id);
   const landingLogged = landingIds.length ? landingIds.some(id => (sets[id]||[]).some(s => s.reps||s.weight||s.seconds||s.seconds_left||s.seconds_right)) : null;
 
-  const effort = computeSessionEffort(session.workoutSnapshot || {taxi:[],takeoff:[],enroute:[],landing:[]}, sets, bodyWeightLb);
+  const effort = computeSessionEffort(session.workoutSnapshot || {taxi:[],takeoff:[],enroute:[],landing:[]}, sets, bodyWeightLb, session.durationMinutes);
+  // A workout the ring recorded carries the ring's own heart-rate-based
+  // figure. It was saved for exactly this purpose and then never shown.
+  const measuredCal = session.importedFromOura && session.estCalories > 0 ? Math.round(session.estCalories) : null;
 
   return {
     totalSets, totalReps, totalVolume: Math.round(totalVolume),
     completedExCount, totalPlanned, completionPct,
     prHits, sessionsThisWeek, targetDays,
-    landingLogged, estCalories: effort.calories,
+    landingLogged, estCalories: measuredCal !== null ? measuredCal : effort.calories,
     // BUG FIX (reported: a workout of about 45 minutes showed MINUTES 13).
     // effort.minutes is time under the bar only: 45 seconds per logged set
     // with no rest counted, so 18 sets read as 13 minutes. The session's

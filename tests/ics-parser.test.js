@@ -1039,6 +1039,59 @@ test('a session with no saved length still falls back to the estimate', () => {
   assertEqual(sum.durationMinutes, 14, '18 sets x 45 seconds, rounded');
 });
 
+console.log('\nWorkout calories (reported: 120 calories for an hour of lifting):');
+// The old figure counted only the seconds under the bar (45 per set) and
+// ignored every rest, so a 59 minute session was costed as 13 minutes.
+// The 2024 Compendium of Physical Activities gives resistance training
+// 3.5 METs (code 02054) for the session as performed, rests included.
+const kg192 = 192 * 0.4536;
+const mixSnap = { taxi: [{ id: 'w', name: 'Thoracic Extension (chair)', target: '1×20', inputType: 'reps_only' }],
+  takeoff: [{ id: 'b', name: 'DB Bench Press', target: '4×8', inputType: 'reps_weight' }], enroute: [], landing: [] };
+const mixSets = { w: [{ reps: '20' }], b: Array.from({ length: 17 }, () => ({ reps: '10', weight: '50' })) };
+test('an hour of lifting is costed over the hour, not over 13 minutes of bar time', () => {
+  const e = ctx.computeSessionEffort(mixSnap, mixSets, 192, 59);
+  const expected = ((17 * 3.5 + 1 * 2.8) / 18) * kg192 * (59 / 60);
+  assertEqual(Math.abs(e.calories - expected) <= 3, true, 'about ' + Math.round(expected) + ', got ' + e.calories);
+  assertEqual(e.calories > 250 && e.calories < 350, true, 'in the range measured for real lifting sessions: ' + e.calories);
+  assertEqual(e.minutes, 14, 'the bar-time estimate itself is unchanged (18 sets x 45 s)');
+});
+test('an app left open for hours cannot inflate the calories', () => {
+  const normal = ctx.computeSessionEffort(mixSnap, mixSets, 192, 59).calories;
+  const leftOpen = ctx.computeSessionEffort(mixSnap, mixSets, 192, 300).calories;
+  const cap = ((17 * 3.5 + 2.8) / 18) * kg192 * (18 * 240 / 3600);
+  assertEqual(Math.abs(leftOpen - cap) <= 3, true, 'capped at 4 minutes per set: ' + leftOpen);
+  assertEqual(leftOpen < normal * 1.3, true, 'five hours on the clock is not five hours of work');
+});
+test('a workout typed in afterwards still gets a sensible figure', () => {
+  const typed = ctx.computeSessionEffort(mixSnap, mixSets, 192, 14).calories;   // saved length = bar time only
+  const unknown = ctx.computeSessionEffort(mixSnap, mixSets, 192).calories;      // no saved length at all
+  assertEqual(typed > 170 && typed < 230, true, 'floor of 2 minutes per set: ' + typed);
+  assertEqual(unknown > 210 && unknown < 290, true, 'typical 2.5 minutes per set: ' + unknown);
+});
+test('timed work keeps its own clock and is not double counted', () => {
+  const snap = { taxi: [], takeoff: [{ id: 'b', name: 'DB Bench Press', target: '4×8', inputType: 'reps_weight' }], enroute: [{ id: 'run', name: 'Treadmill Walk', target: '20 min', timed: true, inputType: 'timed' }], landing: [] };
+  const sets = { b: Array.from({ length: 8 }, () => ({ reps: '8', weight: '50' })), run: [{ seconds: '1200' }] };
+  const e = ctx.computeSessionEffort(snap, sets, 192, 45);
+  const expected = 3.5 * kg192 * (1200 / 3600) + 3.5 * kg192 * ((45 * 60 - 1200) / 3600);
+  assertEqual(Math.abs(e.calories - expected) <= 3, true, '20 min walk plus 25 min of lifting: about ' + Math.round(expected) + ', got ' + e.calories);
+});
+test('heavier kinds of work cost more than lighter ones', () => {
+  const one = (ex) => ctx.computeSessionEffort({ taxi: [], takeoff: [ex], enroute: [], landing: [] }, { x: Array.from({ length: 10 }, () => ({ reps: '8', weight: '100', height: '24' })) }, 192, 30).calories;
+  const bench = one({ id: 'x', name: 'DB Bench Press', inputType: 'reps_weight' });
+  const squat = one({ id: 'x', name: 'Back Squat', inputType: 'reps_weight' });
+  const jump = one({ id: 'x', name: 'Box Jump', inputType: 'reps_height' });
+  assertEqual(squat > bench && jump > bench, true, 'squats and jumps above bench: ' + [bench, squat, jump].join(', '));
+});
+test('a ring-measured workout shows the ring\'s calories, not an estimate', () => {
+  const snap = { taxi: [], takeoff: [], enroute: [{ id: 'o', name: 'Strength Training (via Oura)', timed: true, inputType: 'timed' }], landing: [] };
+  const sum = ctx.buildWorkoutSummary({ date: new Date().toISOString(), importedFromOura: true, estCalories: 412, durationMinutes: 56, sets: { o: [{ seconds: '3360' }] }, workoutSnapshot: snap }, snap.enroute, [], 192);
+  assertEqual(sum.estCalories, 412, 'measured value used as-is');
+});
+test('the session sheet uses the saved session length for calories', () => {
+  const sum = ctx.buildWorkoutSummary({ date: new Date().toISOString(), durationMinutes: 59, sets: mixSets, workoutSnapshot: mixSnap }, [...mixSnap.taxi, ...mixSnap.takeoff], [], 192);
+  assertEqual(sum.estCalories > 250 && sum.estCalories < 350, true, 'about 300, got ' + sum.estCalories);
+});
+
 console.log('\n' + '─'.repeat(50));
 console.log(passed + ' passed, ' + failed + ' failed');
 if (failed > 0) process.exit(1);

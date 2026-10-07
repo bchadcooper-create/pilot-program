@@ -1023,6 +1023,22 @@ test('no button anywhere carries JSON inside a single-quoted attribute', () => {
   assertEqual(bad.length, 0, 'offending lines: ' + bad.map(l => l.trim().slice(0, 80)).join(' | '));
 });
 
+console.log('\nSession minutes (reported: a workout of about 45 minutes showed MINUTES 13):');
+// The Minutes tile showed an estimate of time under the bar (45 seconds per
+// logged set, no rest), not how long the session lasted. The real length
+// was saved with the session all along and simply not shown.
+const pushSnap = { taxi: [], takeoff: [{ id: 'b', name: 'DB Bench Press', target: '4×8', inputType: 'reps_weight' }], enroute: [], landing: [] };
+const pushSets = { b: Array.from({ length: 18 }, () => ({ reps: '10', weight: '50' })) };
+test('the Minutes tile shows how long the session really lasted', () => {
+  const sum = ctx.buildWorkoutSummary({ date: new Date().toISOString(), durationMinutes: 59, sets: pushSets, workoutSnapshot: pushSnap }, pushSnap.takeoff, [], 190);
+  assertEqual(sum.durationMinutes, 59, 'the saved session length, not 18 sets x 45 seconds');
+  assertEqual(sum.totalSets, 18, 'sets unchanged');
+});
+test('a session with no saved length still falls back to the estimate', () => {
+  const sum = ctx.buildWorkoutSummary({ date: new Date().toISOString(), sets: pushSets, workoutSnapshot: pushSnap }, pushSnap.takeoff, [], 190);
+  assertEqual(sum.durationMinutes, 14, '18 sets x 45 seconds, rounded');
+});
+
 console.log('\n' + '─'.repeat(50));
 console.log(passed + ' passed, ' + failed + ' failed');
 if (failed > 0) process.exit(1);

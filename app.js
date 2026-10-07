@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.19 / 20260916_4
+ * Version/build: fcf-v5.44.20 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.19';
+const FCF_VERSION = 'fcf-v5.44.20';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -9994,7 +9994,13 @@ function buildWorkoutSummary(session, allExDefs, weeklySessions, bodyWeightLb) {
     completedExCount, totalPlanned, completionPct,
     prHits, sessionsThisWeek, targetDays,
     landingLogged, estCalories: effort.calories,
-    durationMinutes: effort.minutes,
+    // BUG FIX (reported: a workout of about 45 minutes showed MINUTES 13).
+    // effort.minutes is time under the bar only: 45 seconds per logged set
+    // with no rest counted, so 18 sets read as 13 minutes. The session's
+    // real length (first logged set to setting the chocks) is saved on the
+    // session and is what this tile means. The estimate remains the
+    // fallback for old or imported sessions that carry no saved length.
+    durationMinutes: session.durationMinutes || effort.minutes,
   };
 }
 

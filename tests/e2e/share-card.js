@@ -10,7 +10,7 @@ const OUT = process.env.SHOT_DIR || '';
 let fail = 0;
 const check = (name, cond, got) => { console.log((cond ? 'PASS ' : 'FAIL ') + name + (cond ? '' : '  got ' + JSON.stringify(got))); if (!cond) fail++; };
 
-// mode: 'browser' | 'phone_browser' | 'ios' | 'ios_next'
+// mode: 'browser' | 'phone_browser' | 'ios' | 'ios_noshare' | 'ios_next'
 function stub(mode) {
   window.__blobOrDataLinks = []; window.__shared = []; window.__native = []; window.__copied = null;
   const realClick = HTMLAnchorElement.prototype.click;
@@ -19,10 +19,10 @@ function stub(mode) {
   const fileShare = () => { navigator.canShare = d => !!(d && d.files && d.files.length); navigator.share = d => { window.__shared.push({ files: (d.files || []).map(f => f.name + '|' + f.type + '|' + (f.size > 20000)), text: d.text || '' }); return Promise.resolve(); }; };
   if (mode === 'phone_browser') fileShare();
   if (mode === 'browser') { try { delete Navigator.prototype.canShare; delete Navigator.prototype.share; } catch (e) {} }
-  if (mode === 'ios' || mode === 'ios_next') {
+  if (mode === 'ios' || mode === 'ios_noshare' || mode === 'ios_next') {
     const noop = { postMessage() {} };
     window.webkit = { messageHandlers: { storeKit: noop, haptics: noop, share: { postMessage(m) { window.__native.push({ keys: Object.keys(m).sort().join(','), imageChars: (m.imageBase64 || '').length, url: m.url || null }); } } } };
-    fileShare(); // even if the phone COULD share files from a page, the current build must not use it for pictures
+    if (mode === 'ios_noshare') { try { delete Navigator.prototype.canShare; delete Navigator.prototype.share; } catch (e) {} } else fileShare(); // the real app shares files from the page (confirmed on an iPhone)
     if (mode === 'ios_next') window.FCFBridge = new Proxy({ isNative: true, capabilities: { shareFile: true, shareImage: true } }, { get: (t, k) => (k in t ? t[k] : () => {}) });
   }
 }
@@ -66,8 +66,8 @@ const sheet = page => page.evaluate(() => ({ text: document.getElementById('moda
 (async () => {
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 
-  // A. Current iPhone app build.
-  let { ctx, page } = await open(browser, 'ios');
+  // A. An iPhone app that cannot share files from the page: the screenshot fallback.
+  let { ctx, page } = await open(browser, 'ios_noshare');
   console.log('version ' + await page.evaluate(() => FCF_VERSION) + ' at ' + BASE);
   const state = await ctx.storageState();
   let seeded = await seedDebrief(page);
@@ -77,9 +77,8 @@ const sheet = page => page.evaluate(() => ({ text: document.getElementById('moda
   await page.waitForSelector('#shareCardImg', { timeout: 10000 }); await page.waitForTimeout(400);
   let s = await sheet(page);
   check('A2. it draws a 1080 x 1350 picture', s.img && s.img.png && s.img.w === 1080 && s.img.h === 1350 && s.img.bytes > 40000, s.img);
-  check('A3. current iPhone build: full-screen for a screenshot, and no picture share sheet', s.buttons.includes('Show full screen') && !s.buttons.some(b => /^📤 Share$|Save the picture/.test(b)), s.buttons);
-  check('A4. the picture cannot be press-and-held inside the app', s.img.pe === 'none', s.img);
-  if (OUT) { const b64 = await page.evaluate(() => document.getElementById('shareCardImg').src.split(',')[1]); fs.writeFileSync(path.join(OUT, 'share-card.png'), Buffer.from(b64, 'base64')); await page.screenshot({ path: path.join(OUT, 'share-sheet-ios.png') }); }
+  check('A3. iPhone without file sharing: full-screen for a screenshot', s.buttons.includes('Show full screen') && !s.buttons.some(b => /^📤 Share$|Save the picture/.test(b)), s.buttons);
+  if (OUT) { const b64 = await page.evaluate(() => document.getElementById('shareCardImg').src.split(',')[1]); fs.writeFileSync(path.join(OUT, 'share-card.png'), Buffer.from(b64, 'base64')); }
   await page.locator('#modalRoot button', { hasText: 'Show full screen' }).click(); await page.waitForTimeout(300);
   s = await sheet(page);
   check('A5. Show full screen puts the card alone on the screen', s.full, s);
@@ -88,7 +87,7 @@ const sheet = page => page.evaluate(() => ({ text: document.getElementById('moda
   await page.locator('#modalRoot button', { hasText: /Copy a caption/ }).click(); await page.waitForTimeout(300);
   s = await sheet(page);
   check('A6. tapping closes it, and the caption with the link can be copied', !s.full && /Cardio: 57 min, \d+ sets\. Logged with Flight Crew Fitness\. https:\/\/flightcrew\.fit/.test(s.copied || ''), s.copied);
-  check('A7. nothing was sent to a share sheet or a download in this build', s.shared.length === 0 && s.native.length === 0 && s.links.length === 0, s);
+  check('A7. nothing was sent to a share sheet or a download', s.shared.length === 0 && s.native.length === 0 && s.links.length === 0, s);
   // The same button on a past workout, opened from the calendar on Trends.
   await page.evaluate(() => closeModal());
   const past = await page.evaluate(async () => {
@@ -111,6 +110,19 @@ const sheet = page => page.evaluate(() => ({ text: document.getElementById('moda
   check('A8. no page errors', page.__errs.length === 0, page.__errs);
   await ctx.close();
 
+  // A2. The current iPhone build (it can share files from the page, checked on a real iPhone).
+  ({ ctx, page } = await open(browser, 'ios', state));
+  await seedDebrief(page);
+  await page.locator('button', { hasText: /SHARE THIS WORKOUT/ }).first().click(); await page.waitForSelector('#shareCardImg'); await page.waitForTimeout(300);
+  s = await sheet(page);
+  check('AA1. current iPhone build: a Share button, no download button, and the picture can be pressed and held', s.buttons.some(b => /^📤 Share$/.test(b)) && !s.buttons.includes('Save the picture') && !s.buttons.includes('Show full screen') && s.img.pe !== 'none' && /press and hold/i.test(s.text), { buttons: s.buttons, img: s.img });
+  if (OUT) await page.screenshot({ path: path.join(OUT, 'share-sheet-ios.png') });
+  await page.locator('#modalRoot button', { hasText: /^📤 Share$/ }).click(); await page.waitForTimeout(300);
+  s = await sheet(page);
+  check('AA2. one tap hands the picture, and only the picture, to the iPhone share sheet', s.shared.length === 1 && s.shared[0].files.length === 1 && s.shared[0].files[0] === 'flight-crew-fitness-workout.png|image/png|true' && s.shared[0].text === '' && s.native.length === 0 && s.links.length === 0, s.shared);
+  check('AA3. no page errors', page.__errs.length === 0, page.__errs);
+  await ctx.close();
+
   // B. The next iPhone build: native picture share.
   ({ ctx, page } = await open(browser, 'ios_next', state));
   await seedDebrief(page);
@@ -126,7 +138,7 @@ const sheet = page => page.evaluate(() => ({ text: document.getElementById('moda
   await page.locator('button', { hasText: /SHARE THIS WORKOUT/ }).first().click(); await page.waitForSelector('#shareCardImg'); await page.waitForTimeout(300);
   await page.locator('#modalRoot button', { hasText: /^📤 Share$/ }).click(); await page.waitForTimeout(300);
   s = await sheet(page);
-  check('C. phone browser: shares a PNG with the caption', s.shared.length === 1 && s.shared[0].files[0] === 'flight-crew-fitness-workout.png|image/png|true' && /flightcrew\.fit/.test(s.shared[0].text), s.shared);
+  check('C. phone browser: shares the picture', s.shared.length === 1 && s.shared[0].files[0] === 'flight-crew-fitness-workout.png|image/png|true', s.shared);
   await ctx.close();
 
   // D. A computer.

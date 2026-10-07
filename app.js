@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.24 / 20260916_4
+ * Version/build: fcf-v5.44.25 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.24';
+const FCF_VERSION = 'fcf-v5.44.25';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -6454,11 +6454,13 @@ async function showCalendarDay(isoDate) {
 // leaves off anything about where the person was or how they felt.
 //
 // How the picture leaves the app depends on the device (see shareMethod).
-// The one path that is never used is a picture share sheet inside the
-// current iPhone build: its "Save Image" option needs a photo permission
-// text that build does not have, and iOS closes an app that asks without
-// one. That build gets a full-screen card to screenshot instead. The next
-// build declares the permission and shares the picture natively.
+// Inside the iPhone app the page hands the picture to the iPhone share
+// sheet itself. The first version avoided that, on the theory that saving
+// a picture would crash a build with no "add to Photos" permission text.
+// Checked on a real iPhone on 2026-10-07 and both worries were wrong: the
+// page can share a file from inside the app, and saving a picture to
+// Photos works. A phone that cannot share files from the page still gets
+// the full-screen card to screenshot.
 const SHARE_TAGLINE = 'Engineered for the flight deck. Built for the layover.';
 const SHARE_MAX_ROWS = 6;
 function shareCardData(session, summary, rows) {
@@ -6496,8 +6498,9 @@ function shareRowsFor(session, prNames) {
   }).filter(Boolean);
 }
 function shareMethod(env) {
-  if (env.ios) return env.nativeImageShare ? 'native' : 'screenshot';
-  return env.canShareFiles ? 'webshare' : 'download';
+  if (env.ios && env.nativeImageShare) return 'native';
+  if (env.canShareFiles) return 'webshare';
+  return env.ios ? 'screenshot' : 'download';
 }
 
 // Cards waiting behind a Share button. The button names a key; the card is
@@ -6607,18 +6610,20 @@ async function openShareCard(key) {
   const ios = inIOSApp();
   const nativeImageShare = !!(typeof FCFBridge !== 'undefined' && FCFBridge.capabilities && FCFBridge.capabilities.shareImage && window.webkit?.messageHandlers?.share);
   let canShareFiles = false;
-  if (!ios) { try { const f = shareCardFile(); canShareFiles = !!(f && navigator.canShare && navigator.canShare({ files: [f] })); } catch (e) { /* no file sharing here */ } }
+  try { const f = shareCardFile(); canShareFiles = !!(f && navigator.canShare && navigator.canShare({ files: [f] })); } catch (e) { /* no file sharing here */ }
   const method = shareMethod({ ios, nativeImageShare, canShareFiles });
   const parts = [];
   parts.push('<div class="modal-bg" onclick="if(event.target===this)closeModal()">');
   parts.push('<div class="modal-sheet" style="text-align:center;max-height:92vh;overflow-y:auto">');
   parts.push('<div class="modal-handle"></div>');
   parts.push('<div class="modal-title">Share this workout</div>');
-  // No press-and-hold menu on the picture: inside the iPhone app its "Save to Photos" has the same missing-permission problem.
-  parts.push('<img id="shareCardImg" alt="Workout summary card" src="' + _shareCurrent.dataUrl + '" style="display:block;width:100%;max-width:320px;margin:4px auto 14px;border-radius:14px;border:1px solid var(--border);-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;pointer-events:none">');
+  // Press and hold on the picture offers Save to Photos, which works.
+  parts.push('<img id="shareCardImg" alt="Workout summary card" src="' + _shareCurrent.dataUrl + '" style="display:block;width:100%;max-width:320px;margin:4px auto 14px;border-radius:14px;border:1px solid var(--border)">');
   if (method === 'native' || method === 'webshare') {
     parts.push('<button class="btn btn-gold" onclick="haptic(\'light\');shareCardNow()">📤 Share</button>');
-    if (method === 'webshare') parts.push('<button class="btn btn-outline mt8" onclick="downloadShareCard()">Save the picture</button>');
+    // A download link replaces the screen inside the iPhone app, so "Save the picture" is for browsers only.
+    if (method === 'webshare' && !ios) parts.push('<button class="btn btn-outline mt8" onclick="downloadShareCard()">Save the picture</button>');
+    if (ios) parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:8px">Or press and hold the picture to save it to Photos.</div>');
   } else if (method === 'download') {
     parts.push('<button class="btn btn-gold" onclick="downloadShareCard()">Save the picture</button>');
   } else {
@@ -6644,11 +6649,13 @@ function shareCardNow() {
     window.webkit.messageHandlers.share.postMessage({ imageBase64: _shareCurrent.dataUrl.split(',')[1], filename: 'flight-crew-fitness-workout.png' });
     return;
   }
-  if (inIOSApp()) return; // never a picture share sheet in a build without native picture sharing
   const file = shareCardFile();
-  if (!file) return;
-  navigator.share({ files: [file], text: shareCaption(_shareCurrent.data) }).catch(e => {
-    if (!e || e.name !== 'AbortError') showToast('Sharing did not open here. Use Save the picture.');
+  if (!file || !navigator.share) return;
+  // The picture alone, no caption text alongside it: some apps, Instagram
+  // among them, drop out of the share sheet when text rides with a photo.
+  // The caption has its own Copy button.
+  navigator.share({ files: [file] }).catch(e => {
+    if (!e || e.name !== 'AbortError') showToast(inIOSApp() ? 'Sharing did not open. Press and hold the picture to save it.' : 'Sharing did not open here. Use Save the picture.');
   });
 }
 function downloadShareCard() {

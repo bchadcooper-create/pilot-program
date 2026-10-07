@@ -129,8 +129,7 @@ class ViewController: UIViewController {
               // flight schedule) to the iPhone share sheet. See handleShareMessage.
               shareFile:       !!(window.webkit?.messageHandlers?.share),
               // This build can also share a picture the web app drew (the
-              // workout summary card). Needs NSPhotoLibraryAddUsageDescription
-              // in Info.plist, because the share sheet offers "Save Image".
+              // workout summary card) through the native share sheet.
               shareImage:      !!(window.webkit?.messageHandlers?.share),
             },
             getProducts:      () => send('storeKit',      { action: 'getProducts' }),

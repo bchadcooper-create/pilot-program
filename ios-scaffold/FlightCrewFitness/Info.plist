@@ -143,8 +143,10 @@
   <key>NSPhotoLibraryUsageDescription</key>
   <string>Flight Crew Fitness accesses your photo library so you can attach meal photos for nutrition logging.</string>
   <!-- Saving a picture to Photos (the "Save Image" option when sharing a
-       workout summary card). Without this text iOS closes the app the
-       moment Save Image is tapped. Added 2026-10-07 for the next build. -->
+       workout summary card). Saving already works in build 6 without this
+       (checked on a real iPhone 2026-10-07), so this is belt and braces:
+       Apple documents it as the text for add-only access. Added 2026-10-07
+       for the next build. -->
   <key>NSPhotoLibraryAddUsageDescription</key>
   <string>Flight Crew Fitness saves a workout summary picture to your photo library when you choose Save Image.</string>
 

@@ -1178,7 +1178,8 @@ test('the caption names the app and links to it', () => {
 });
 test('how the picture leaves the app depends on what the device can safely do', () => {
   assertEqual(ctx.shareMethod({ ios: true, nativeImageShare: true }), 'native', 'an app build that can share pictures uses the iPhone share sheet');
-  assertEqual(ctx.shareMethod({ ios: true, nativeImageShare: false, canShareFiles: true }), 'screenshot', 'the current app build never opens a picture share sheet (Save Image would crash it)');
+  assertEqual(ctx.shareMethod({ ios: true, nativeImageShare: false, canShareFiles: true }), 'webshare', 'the current app build shares the picture in one tap (confirmed working on a real iPhone)');
+  assertEqual(ctx.shareMethod({ ios: true, nativeImageShare: false, canShareFiles: false }), 'screenshot', 'an iPhone that cannot share files from the page falls back to a screenshot');
   assertEqual(ctx.shareMethod({ ios: false, canShareFiles: true }), 'webshare', 'a phone browser shares the picture');
   assertEqual(ctx.shareMethod({ ios: false, canShareFiles: false }), 'download', 'a computer downloads it');
 });

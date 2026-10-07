@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.21 / 20260916_4
+ * Version/build: fcf-v5.44.22 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.21';
+const FCF_VERSION = 'fcf-v5.44.22';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -8827,12 +8827,72 @@ function openYouTubeSearch(exName) {
 
 // The empty set list an exercise starts with, by input type. One place
 // for the shape so swapExercise, the card, and Add Set can never disagree.
+// BUG FIX (reported: "Jumping Jacks, I'm supposed to do two sets of 30
+// seconds. So where do I record the second set?"). A timed exercise had one
+// TOTAL TIME box whatever its label said, and the stopwatch overwrote that
+// box, so timing set two erased set one. A label that promises sets
+// ("2×30s", "3×60s", "2x30s/leg") now gets one slot per set. Long single
+// efforts keep their single box: anything measured in minutes, runs, NSDR.
+function timedSetCount(exItem) {
+  const t = exItem.inputType || (exItem.timed ? 'timed' : '');
+  if (t === 'nsdr' || t === 'timed_distance' || isMinuteScale(exItem)) return 1;
+  const m = String(exItem.target || '').match(/^(\d+)\s*[x×]/i);
+  return m ? Math.min(8, Math.max(1, parseInt(m[1], 10))) : 1;
+}
+// Which set a stopwatch time belongs to: the first one still empty on that
+// side. With every planned set filled, a new one is added after the last so
+// nothing already recorded is replaced. A single-set exercise is re-timed.
+function nextTimedSlot(sets, side, n) {
+  if (!(n > 1)) return 0;
+  const field = side === 'left' ? 'seconds_left' : side === 'right' ? 'seconds_right' : 'seconds';
+  const list = sets || [];
+  const len = Math.max(n, list.length);
+  for (let i = 0; i < len; i++) {
+    const v = list[i] ? list[i][field] : '';
+    if (v === undefined || v === null || v === '') return i;
+  }
+  return len;
+}
+function setTimedSeconds(exId, i, side, value) {
+  for (let k = 0; k <= i; k++) ensureSetEntry(exId, k);
+  const set = ST.sets[exId][i];
+  set[side === 'left' ? 'seconds_left' : side === 'right' ? 'seconds_right' : 'seconds'] = value;
+  const tile = document.getElementById('st_' + exId + '_' + i);
+  if (tile) tile.className = 'set-tile' + ((set.seconds || set.seconds_left || set.seconds_right) ? ' ok' : '');
+  persistWorkoutState();
+  updateExDoneIndicator(exId);
+}
+function timedSetTilesHtml(exItem, sets, bilateral) {
+  const id = exItem.id;
+  const n = Math.max(timedSetCount(exItem), sets.length);
+  const inp = (i, side, ph, val) => '<input class="set-inp" type="number" inputmode="numeric" placeholder="' + ph + '" value="' + (val || '') +
+    '" oninput="setTimedSeconds(\'' + id + '\',' + i + ',' + (side ? '\'' + side + '\'' : 'null') + ',this.value)">';
+  const parts = ['<div class="sets-wrap"><div class="sets-scroll">'];
+  for (let i = 0; i < n; i++) {
+    const st = sets[i] || {};
+    const filled = bilateral ? (st.seconds_left || st.seconds_right) : st.seconds;
+    parts.push('<div class="set-tile ' + (filled ? 'ok' : '') + '" id="st_' + id + '_' + i + '"><div class="set-lbl">SET ' + (i + 1) + '</div>');
+    if (bilateral) parts.push(inp(i, 'left', 'Left', st.seconds_left) + inp(i, 'right', 'Right', st.seconds_right) + '<div class="set-hint">seconds, left / right</div>');
+    else parts.push(inp(i, null, 'Sec', st.seconds) + '<div class="set-hint">seconds</div>');
+    parts.push('</div>');
+  }
+  parts.push('</div></div>' + (n > 2 ? '<div class="swipe-hint">← swipe for all sets</div>' : ''));
+  return parts.join('');
+}
+// "SET 2 OF 2" on the stopwatch, so it is clear where the time will land.
+function timedSetTag(exItem, sets, side) {
+  const n = timedSetCount(exItem);
+  const i = nextTimedSlot(sets, side, Math.max(n, 2));
+  const total = Math.max(n, sets.length);
+  if (side) return side.toUpperCase() + ' ' + (i < total ? (i + 1) + '/' + total : 'EXTRA'); // half-width box: keep it to one line
+  return i < total ? 'SET ' + (i + 1) + ' OF ' + total : 'EXTRA SET';
+}
 function blankSetsFor(exItem) {
   const n = Math.max(1, parseInt(exItem.sets, 10) || 3);
   const t = exItem.inputType || (exItem.timed ? 'timed' : 'reps_weight');
-  if (t === 'timed_bilateral') return [{ seconds_left: '', seconds_right: '' }];
+  if (t === 'timed_bilateral') return Array.from({ length: timedSetCount(exItem) }, () => ({ seconds_left: '', seconds_right: '' }));
   if (t === 'timed_distance')  return [{ seconds: '', miles: '' }];
-  if (t === 'timed' || t === 'nsdr' || exItem.timed) return [{ seconds: '' }];
+  if (t === 'timed' || t === 'nsdr' || exItem.timed) return Array.from({ length: timedSetCount(exItem) }, () => ({ seconds: '' }));
   if (t === 'reps_only')     return Array.from({ length: n }, () => ({ reps: '' }));
   if (t === 'reps_height')   return Array.from({ length: n }, () => ({ reps: '', height: '' }));
   if (t === 'reps_distance') return Array.from({ length: n }, () => ({ reps: '', distance: '' }));
@@ -8905,6 +8965,13 @@ function buildExCard(exItem, phaseKey) {
       parts.push(buildNSDRWidget(exItem.id, sets[0]?.seconds||''));
     } else if (exItem.inputType === 'timed_bilateral' || (exItem.timed && exItem.target?.includes('/side'))) {
       // Bilateral stretches marked as timed_bilateral OR timed with "/side" in target (e.g., "90s/side")
+      if (timedSetCount(exItem) > 1 || sets.length > 1) {
+        parts.push(timedSetTilesHtml(exItem, sets, true));
+        parts.push('<div style="display:flex;gap:8px">');
+        parts.push('<div style="flex:1;min-width:0">' + buildStopwatchWidget(exItem.id, 'left', exItem.target, timedSetTag(exItem, sets, 'left')) + '</div>');
+        parts.push('<div style="flex:1;min-width:0">' + buildStopwatchWidget(exItem.id, 'right', exItem.target, timedSetTag(exItem, sets, 'right')) + '</div>');
+        parts.push('</div>');
+      } else {
       const valL = sets[0]?.seconds_left || '';
       const valR = sets[0]?.seconds_right || '';
       parts.push('<div style="display:flex;gap:8px">');
@@ -8921,6 +8988,7 @@ function buildExCard(exItem, phaseKey) {
       parts.push(buildStopwatchWidget(exItem.id, 'right', exItem.target));
       parts.push('</div>');
       parts.push('</div>');
+      }
     } else if (exItem.inputType === 'timed_distance') {
       // Was falling through to the generic seconds-only branch below with no
       // distance field shown at all — meaning Treadmill/Outdoor Run could
@@ -8949,6 +9017,9 @@ function buildExCard(exItem, phaseKey) {
       parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">min</div>');
       parts.push('</div>');
       parts.push(buildStopwatchWidget(exItem.id, null, exItem.target));
+    } else if (exItem.timed && (timedSetCount(exItem) > 1 || sets.length > 1)) {
+      parts.push(timedSetTilesHtml(exItem, sets, false));
+      parts.push(buildStopwatchWidget(exItem.id, null, exItem.target, timedSetTag(exItem, sets, null)));
     } else if (exItem.timed) {
       const val = sets[0]?.seconds || '';
       parts.push('<div class="timed-box '+(val?'ok':'')+'" id="tb_'+exItem.id+'">');
@@ -9261,13 +9332,13 @@ function stopRestTimer() {
 }
 
 // ─── STOPWATCH (auto-fills timed exercise seconds) ───────────────────────────
-function buildStopwatchWidget(exId, side, targetLabel) {
+function buildStopwatchWidget(exId, side, targetLabel, tag) {
   const isActive = ST.stopwatch.active && ST.stopwatch.exId === exId && (ST.stopwatch.side||null) === (side||null);
   const domId = side ? exId+'_'+side : exId;
   const targetSec = parseTargetSeconds(targetLabel);
   const parts = [];
   parts.push('<div class="timed-box" style="margin-top:8px" id="sw_'+domId+'">');
-  parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">STOPWATCH'+(targetSec?' · CHIMES AT '+formatStopwatch(targetSec):'')+'</div>');
+  parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">'+(tag ? tag : 'STOPWATCH')+(targetSec?(tag && side ? ' · ' : ' · CHIMES AT ')+formatStopwatch(targetSec):'')+'</div>');
   parts.push('<div class="stopwatch-display" id="sw_disp_'+domId+'">'+formatStopwatch(isActive?ST.stopwatch.seconds:0)+'</div>');
   if (!isActive) {
     parts.push('<button class="stopwatch-btn btn-blue" onclick="startStopwatch(\''+exId+'\','+(side?"'"+side+"'":'null')+','+(targetSec||'null')+')">START</button>');
@@ -9547,13 +9618,18 @@ function stopStopwatch(exId, side) {
   // itself existed, not that index [0] did — an existing-but-empty array
   // would still crash on .seconds_left = ... the same way the reported
   // oninput crash did. ensureSetEntry covers both cases.
-  ensureSetEntry(exId, 0);
-  if (side === 'left') ST.sets[exId][0].seconds_left = String(total);
-  else if (side === 'right') ST.sets[exId][0].seconds_right = String(total);
-  else ST.sets[exId][0].seconds = String(total);
+  // The time goes to the next empty set, never over one already recorded.
+  const found = findWorkoutEx(exId);
+  const planned = found ? timedSetCount(found.exItem) : 1;
+  const multi = planned > 1 || (ST.sets[exId] || []).length > 1;
+  const idx = multi ? nextTimedSlot(ST.sets[exId], side, Math.max(planned, 2)) : 0;
+  for (let k = 0; k <= idx; k++) ensureSetEntry(exId, k);
+  if (side === 'left') ST.sets[exId][idx].seconds_left = String(total);
+  else if (side === 'right') ST.sets[exId][idx].seconds_right = String(total);
+  else ST.sets[exId][idx].seconds = String(total);
   persistTimerState();
   persistWorkoutState();
-  showToast('⏱ Recorded '+total+' seconds'+(side?' ('+side+' side)':'')+'.');
+  showToast('⏱ Recorded '+total+' seconds'+(multi?' for set '+(idx+1):'')+(side?' ('+side+' side)':'')+'.');
   renderFlight(document.getElementById('mainPage'));
 }
 

@@ -551,7 +551,9 @@ test('a stretch added from the catalog lands in the cooldown with a left/right t
   assertEqual(ctx.ST.workout.landing.length, 1, 'placed in landing');
   const e = ctx.ST.workout.landing[0];
   assertEqual(e.name, 'Couch Stretch', 'name');
-  assertEqual(JSON.stringify(ctx.ST.sets[e.id]), JSON.stringify([{ seconds_left: '', seconds_right: '' }]), 'one left/right time entry');
+  // Couch Stretch is 2×30s/leg: one left/right entry per set its label promises.
+  assertEqual(e.target, '2×30s/leg', 'label');
+  assertEqual(JSON.stringify(ctx.ST.sets[e.id]), JSON.stringify([{ seconds_left: '', seconds_right: '' }, { seconds_left: '', seconds_right: '' }]), 'a left/right time entry for each of its two sets');
 });
 
 test('catalog-only extras never appear in a generated program', () => {
@@ -1090,6 +1092,34 @@ test('a ring-measured workout shows the ring\'s calories, not an estimate', () =
 test('the session sheet uses the saved session length for calories', () => {
   const sum = ctx.buildWorkoutSummary({ date: new Date().toISOString(), durationMinutes: 59, sets: mixSets, workoutSnapshot: mixSnap }, [...mixSnap.taxi, ...mixSnap.takeoff], [], 192);
   assertEqual(sum.estCalories > 250 && sum.estCalories < 350, true, 'about 300, got ' + sum.estCalories);
+});
+
+console.log('\nTimed exercises with more than one set (reported: Jumping Jacks 2×30s had nowhere to record the second set):');
+// A timed exercise had one "TOTAL TIME" box whatever its label said, and
+// the stopwatch overwrote it, so set two erased set one.
+const jj = { id: 'c_ca_t2', name: 'Jumping Jacks', target: '2×30s', sets: 2, timed: true, inputType: 'timed' };
+test('a timed exercise gets one slot per set its label promises', () => {
+  assertEqual(ctx.blankSetsFor(jj).length, 2, 'Jumping Jacks 2×30s');
+  assertEqual(ctx.blankSetsFor({ name: 'Plank', target: '3×60s', sets: 3, timed: true, inputType: 'timed' }).length, 3, 'Plank 3×60s');
+  assertEqual(ctx.blankSetsFor({ name: 'Mountain Climbers', target: '4×30s', sets: 4, timed: true, inputType: 'timed' }).length, 4, 'Mountain Climbers 4×30s');
+  const calf = ctx.blankSetsFor({ name: 'Standing Calf Stretch', target: '2x30s/leg', sets: 2, timed: true, inputType: 'timed_bilateral' });
+  assertEqual(calf.length, 2, 'per-side stretch 2x30s/leg'); assertEqual('seconds_left' in calf[1] && 'seconds_right' in calf[1], true, 'each set has a left and a right');
+});
+test('single efforts keep their single box', () => {
+  assertEqual(ctx.blankSetsFor({ name: 'Treadmill Walk', target: '20 min', sets: 1, timed: true, inputType: 'timed' }).length, 1, 'a 20 minute walk');
+  assertEqual(ctx.blankSetsFor({ name: 'Lat Overhead Stretch', target: '60s/side', sets: 1, timed: true, inputType: 'timed_bilateral' }).length, 1, '60s/side');
+  assertEqual(ctx.blankSetsFor({ name: 'Intervals', target: '3×10 min', sets: 3, timed: true, inputType: 'timed' }).length, 1, 'minute-scale work stays one total');
+  assertEqual(ctx.blankSetsFor({ name: 'NSDR', target: '10 min', sets: 1, inputType: 'nsdr' }).length, 1, 'NSDR');
+  assertEqual(ctx.blankSetsFor({ name: 'Outdoor Run', target: '3×1 mi', sets: 3, inputType: 'timed_distance' }).length, 1, 'runs');
+});
+test('the stopwatch fills the next empty set and never erases an earlier one', () => {
+  assertEqual(ctx.nextTimedSlot([{ seconds: '' }, { seconds: '' }], null, 2), 0, 'first stop goes to set 1');
+  assertEqual(ctx.nextTimedSlot([{ seconds: '33' }, { seconds: '' }], null, 2), 1, 'second stop goes to set 2');
+  assertEqual(ctx.nextTimedSlot([{ seconds: '33' }, { seconds: '31' }], null, 2), 2, 'a bonus set is added after the last, nothing overwritten');
+  assertEqual(ctx.nextTimedSlot([{ seconds: '33' }], null, 2), 1, 'an older in-progress workout with one slot still gets set 2');
+  assertEqual(ctx.nextTimedSlot([{ seconds_left: '30', seconds_right: '' }, {}], 'left', 2), 1, 'left side moves on to set 2');
+  assertEqual(ctx.nextTimedSlot([{ seconds_left: '30', seconds_right: '' }, {}], 'right', 2), 0, 'right side still owes set 1');
+  assertEqual(ctx.nextTimedSlot([{ seconds: '45' }], null, 1), 0, 'a single-set exercise is simply re-timed');
 });
 
 console.log('\n' + '─'.repeat(50));

@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.22 / 20260916_4
+ * Version/build: fcf-v5.44.23 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.22';
+const FCF_VERSION = 'fcf-v5.44.23';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -641,8 +641,8 @@ WORKOUTS.comm['Cardio'] = {
     ex('c_ca_t2','Jumping Jacks','2×30s',2,'Classic full-body warmup, zero equipment. Raises heart rate before the main cardio effort.',true,'timed'),
   ],
   takeoff: [
-    ex('c_ca_to1','Rowing Machine Intervals','6×500m',6,'Hard effort. Log your 500m split in seconds as the rep value for each interval.',false,'reps_only'),
-    ex('c_ca_to2','Assault Bike Intervals','8×30s',8,'All-out 30 seconds, 60s easy spin. Log calories or RPM as the rep value.',false,'reps_only'),
+    ex('c_ca_to1','Rowing Machine Intervals','6×500m',6,'Hard effort. Log your 500m split in seconds for each interval.',false,'reps_only'),
+    ex('c_ca_to2','Assault Bike Intervals','8×30s',8,'All-out 30 seconds, 60s easy spin. Log the watts you held for each interval.',false,'reps_only'),
   ],
   enroute: [
     ex('c_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace: speak in full sentences. Log distance for the leaderboard.',true,'timed_distance'),
@@ -781,8 +781,8 @@ WORKOUTS.hotel['Stretch'] = WORKOUTS.comm['Stretch'];
 WORKOUTS.hotel['Cardio'] = {
   taxi: WORKOUTS.comm['Cardio'].taxi,
   takeoff: [
-    ex('h_ca_to1','Treadmill Intervals','8×1 min',8,'Hard 1 min run, 90s walk. Log speed (mph) as the rep value.',false,'reps_only'),
-    ex('h_ca_to2','Stationary Bike Intervals','6×45s',6,'High resistance, hard effort. Log resistance level or watts as the rep value.',false,'reps_only'),
+    ex('h_ca_to1','Treadmill Intervals','8×1 min',8,'Hard 1 min run, 90s walk. Log your speed in mph for each interval.',false,'reps_only'),
+    ex('h_ca_to2','Stationary Bike Intervals','6×45s',6,'High resistance, hard effort. Log the watts you held for each interval.',false,'reps_only'),
   ],
   enroute: [
     ex('h_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace. Log distance for the leaderboard.',true,'timed_distance'),
@@ -6280,6 +6280,29 @@ function isLoggableStrengthExercise(exItem) {
   return true; // timed cardio (walking, treadmill, runs) now shows with minutes
 }
 
+// Machine intervals are logged as one number per round, kept in the same
+// slot a rep count uses. The box used to say "Reps / reps only" while the
+// note said to log resistance level or watts (or calories, or RPM), so one
+// exercise collected several kinds of number and none of them was labelled.
+// Requested: standardize bike intervals on watts. Watts is the one reading
+// that means the same thing on every bike; a resistance level does not.
+// The rower and treadmill already asked for one specific number, so their
+// boxes now simply say which.
+const REP_VALUE_UNITS = {
+  'Stationary Bike Intervals': { placeholder: 'Watts', hint: 'watts', short: 'W' },
+  'Assault Bike Intervals':    { placeholder: 'Watts', hint: 'watts', short: 'W' },
+  'Rowing Machine Intervals':  { placeholder: 'Split', hint: '500m split, sec', short: 's/500m', lowerIsBetter: true },
+  'Treadmill Intervals':       { placeholder: 'mph', hint: 'speed, mph', short: 'mph' },
+};
+function repValueUnit(exItem) {
+  return (exItem && exItem.inputType === 'reps_only' && REP_VALUE_UNITS[exItem.name]) || null;
+}
+// In the CSV the number sits in the Reps column, so the exercise name says
+// what it is. Otherwise a reader, human or AI, sees "250 reps".
+function exportExerciseName(exItem) {
+  const u = repValueUnit(exItem);
+  return (exItem.name || '') + (u ? ' [Reps column = ' + u.hint + ']' : '');
+}
 function formatSetPerformance(exItem, sets) {
   const loggedSets = sets.filter(s => s.reps || s.weight || s.height || s.distance || s.seconds);
   if (!loggedSets.length) return null;
@@ -6290,6 +6313,12 @@ function formatSetPerformance(exItem, sets) {
   }
   if (exItem.inputType === 'reps_only') {
     const reps = loggedSets.map(s => s.reps).filter(Boolean);
+    const unit = repValueUnit(exItem);
+    if (unit) {
+      const nums = reps.map(Number).filter(v => !isNaN(v));
+      const best = nums.length ? (unit.lowerIsBetter ? Math.min(...nums) : Math.max(...nums)) : '–';
+      return loggedSets.length+' round'+(loggedSets.length===1?'':'s')+' · best '+best+' '+unit.short;
+    }
     return loggedSets.length+'×'+(reps.length?Math.max(...reps.map(Number)):'–')+' reps';
   }
   if (exItem.inputType === 'reps_height') {
@@ -6812,7 +6841,7 @@ function edFieldsFor(exDef) {
   if (exDef.inputType === 'timed_distance') return [['seconds','Time','min'],['miles','Distance','mi']];
   if (exDef.inputType === 'timed_bilateral') return [['seconds_left','Left','min'],['seconds_right','Right','min']];
   if (exDef.timed || exDef.inputType === 'timed' || exDef.inputType === 'nsdr') return [['seconds','Time','min']];
-  if (exDef.inputType === 'reps_only') return [['reps','Reps','reps']];
+  if (exDef.inputType === 'reps_only') { const u = repValueUnit(exDef); return u ? [['reps', u.placeholder, u.short]] : [['reps','Reps','reps']]; }
   if (exDef.inputType === 'reps_height') return [['reps','Reps','reps'],['height','Height','in']];
   if (exDef.inputType === 'reps_distance') return [['reps','Reps','reps'],['distance','Distance','in']];
   return [['reps','Reps','reps'],['weight','Weight','lb']];
@@ -7780,11 +7809,11 @@ function engageWorkout() {
     if (exItem.inputType === 'nsdr') {
       ST.sets[exItem.id] = [{ seconds: '' }];
     } else if (exItem.inputType === 'timed_bilateral' || (exItem.timed && exItem.target?.includes('/side'))) {
-      ST.sets[exItem.id] = [{ seconds_left: '', seconds_right: '' }];
+      ST.sets[exItem.id] = Array.from({ length: timedSetCount(exItem) }, () => ({ seconds_left: '', seconds_right: '' }));
     } else if (exItem.inputType === 'timed_distance') {
       ST.sets[exItem.id] = [{ seconds: '', miles: '' }];
     } else if (exItem.timed) {
-      ST.sets[exItem.id] = [{ seconds: '' }];
+      ST.sets[exItem.id] = Array.from({ length: timedSetCount(exItem) }, () => ({ seconds: '' }));
     } else if (exItem.inputType === 'reps_height') {
       ST.sets[exItem.id] = Array.from({ length: exItem.sets }, () => ({ reps: '', height: '' }));
     } else if (exItem.inputType === 'reps_distance') {
@@ -9053,11 +9082,12 @@ function buildExCard(exItem, phaseKey) {
         parts.push(buildRestTimerWidget(exItem.id, phaseKey, exItem.target));
       }
     } else if (exItem.inputType === 'reps_only') {
+      const valueUnit = repValueUnit(exItem); // watts, split, mph: see REP_VALUE_UNITS
       parts.push('<div class="sets-wrap"><div class="sets-scroll">');
       sets.forEach((s,i) => {
         parts.push('<div class="set-tile '+(s.reps?'ok':'')+'" id="st_'+exItem.id+'_'+i+'"><div class="set-lbl">SET '+(i+1)+'</div>');
-        parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\');queueSetFeedback(\''+exItem.id+'\','+i+',false)" onchange="queueSetFeedback(\''+exItem.id+'\','+i+',true)">');
-        parts.push('<div class="set-hint">reps only</div></div>');
+        parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="'+(valueUnit ? valueUnit.placeholder : 'Reps')+'" value="'+(s.reps||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\');queueSetFeedback(\''+exItem.id+'\','+i+',false)" onchange="queueSetFeedback(\''+exItem.id+'\','+i+',true)">');
+        parts.push('<div class="set-hint">'+(valueUnit ? valueUnit.hint : 'reps only')+'</div></div>');
       });
       parts.push('</div></div>'+(sets.length>3?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<div class="fb" style="margin-top:6px;justify-content:space-between"><button class="btn-ghost" style="font-size:0.6875rem" onclick="removeLiveSet(\''+exItem.id+'\')">− Remove Set</button><button class="btn-ghost" style="font-size:0.6875rem" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button></div>');
       parts.push('<div id="ar_'+exItem.id+'">'+autoregBoxHtml(setFeedbackFor(exItem, phaseKey, sets), exItem.id)+'</div>');
@@ -11124,7 +11154,7 @@ async function exportCSV() {
             dateStr, dayStr,
             s.muscle_group||'', s.env||'', s.goal||'', s.fatigue||'', s.level||'',
             s.durationMinutes||'',
-            phase, exItem.name||'', i+1,
+            phase, exportExerciseName(exItem), i+1,
             set.reps||'', set.weight||'', set.seconds||'', set.height||'', set.distance||'', set.seconds_left||'', set.seconds_right||'',
             bio.weight_lb||'', bio.waist_in||'', bio.systolic_bp||'',
             bio.diastolic_bp||'', bio.fasting_glucose||'',

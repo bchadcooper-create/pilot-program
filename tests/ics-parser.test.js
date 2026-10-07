@@ -1122,6 +1122,35 @@ test('the stopwatch fills the next empty set and never erases an earlier one', (
   assertEqual(ctx.nextTimedSlot([{ seconds: '45' }], null, 1), 0, 'a single-set exercise is simply re-timed');
 });
 
+console.log('\nMachine intervals say what number to enter (requested: standardize bike intervals on watts):');
+// The box said "Reps / reps only" while the note said to log resistance
+// level or watts, so one exercise held two kinds of number and neither was
+// labelled. Bike intervals are watts now, and the box says so.
+const bikeI = { id: 'h_ca_to2', name: 'Stationary Bike Intervals', target: '6×45s', inputType: 'reps_only' };
+test('bike intervals are logged in watts, on both kinds of bike', () => {
+  assertEqual(ctx.repValueUnit(bikeI).placeholder, 'Watts', 'stationary bike box');
+  assertEqual(ctx.repValueUnit({ name: 'Assault Bike Intervals', inputType: 'reps_only' }).placeholder, 'Watts', 'assault bike box');
+  const cat = ctx.buildExerciseCatalog();
+  ['Stationary Bike Intervals', 'Assault Bike Intervals'].forEach(n => {
+    const e = cat.find(x => x.name === n && x.inputType === 'reps_only');
+    assertEqual(/watts/i.test(e.note) && !/resistance level|calories|RPM|rep value/i.test(e.note), true, n + ' note asks for watts only: ' + e.note);
+  });
+});
+test('the other machine intervals name their number too, and ordinary exercises are untouched', () => {
+  assertEqual(ctx.repValueUnit({ name: 'Rowing Machine Intervals', inputType: 'reps_only' }).short, 's/500m', 'rower split');
+  assertEqual(ctx.repValueUnit({ name: 'Treadmill Intervals', inputType: 'reps_only' }).short, 'mph', 'treadmill speed');
+  assertEqual(ctx.repValueUnit({ name: 'Push-Up', inputType: 'reps_only' }), null, 'push-ups are still reps');
+  assertEqual(ctx.repValueUnit({ name: 'Stationary Bike Intervals', inputType: 'timed', timed: true }), null, 'the 20 minute timed bike is still time');
+});
+test('a logged bike session reads as watts, not reps', () => {
+  const sets = [{ reps: '250' }, { reps: '260' }, { reps: '240' }];
+  assertEqual(ctx.formatSetPerformance(bikeI, sets), '3 rounds · best 260 W', 'session sheet');
+  assertEqual(ctx.formatSetPerformance({ name: 'Push-Up', inputType: 'reps_only' }, sets), '3×260 reps', 'push-ups unchanged');
+  assertEqual(JSON.stringify(ctx.edFieldsFor(bikeI)), JSON.stringify([['reps', 'Watts', 'W']]), 'edit screen');
+  assertEqual(ctx.exportExerciseName(bikeI), 'Stationary Bike Intervals [Reps column = watts]', 'export tells a reader what the number is');
+  assertEqual(ctx.exportExerciseName({ name: 'Push-Up', inputType: 'reps_only' }), 'Push-Up', 'export leaves ordinary names alone');
+});
+
 console.log('\n' + '─'.repeat(50));
 console.log(passed + ' passed, ' + failed + ' failed');
 if (failed > 0) process.exit(1);

@@ -13,7 +13,8 @@
     "e2e:feedback": "node tests/e2e/live-feedback.js",
     "e2e:export": "node tests/e2e/export-files.js",
     "e2e:swap": "node tests/e2e/swap-buttons.js",
-    "e2e:timed": "node tests/e2e/timed-sets.js"
+    "e2e:timed": "node tests/e2e/timed-sets.js",
+    "e2e:share": "node tests/e2e/share-card.js"
   },
   "dependencies": {
     "@capacitor/app": "^7.0.0",

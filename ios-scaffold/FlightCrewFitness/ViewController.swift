@@ -128,6 +128,10 @@ class ViewController: UIViewController {
               // This build can hand a file made by the web app (CSV export,
               // flight schedule) to the iPhone share sheet. See handleShareMessage.
               shareFile:       !!(window.webkit?.messageHandlers?.share),
+              // This build can also share a picture the web app drew (the
+              // workout summary card). Needs NSPhotoLibraryAddUsageDescription
+              // in Info.plist, because the share sheet offers "Save Image".
+              shareImage:      !!(window.webkit?.messageHandlers?.share),
             },
             getProducts:      () => send('storeKit',      { action: 'getProducts' }),
             purchase:         (o) => send('storeKit',      { action: 'purchase', productId: o.productId, appAccountToken: o.appAccountToken }),
@@ -908,6 +912,17 @@ extension ViewController {
                 return
             }
             presentShareSheet(items: [fileURL])
+            return
+        }
+        // A picture the web app drew: the workout summary card, sent as
+        // base64 PNG. Shared as an image so Instagram, Messages and the rest
+        // treat it as a photo.
+        if let b64 = body["imageBase64"] as? String {
+            guard let data = Data(base64Encoded: b64), let image = UIImage(data: data) else {
+                logNative("share: imageBase64 did not decode to an image")
+                return
+            }
+            presentShareSheet(items: [image])
             return
         }
         guard let urlString = body["url"] as? String,

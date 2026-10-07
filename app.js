@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.23 / 20260916_4
+ * Version/build: fcf-v5.44.24 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.23';
+const FCF_VERSION = 'fcf-v5.44.24';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -6427,9 +6427,10 @@ async function showCalendarDay(isoDate) {
       });
     }
 
+    parts.push(shareButtonHtml(registerShareCard('day' + si, shareCardData(session, summary, exerciseRows)), 'mt12'));
     // Edit and delete stay per-session — with two logged that day, they
     // have to act on a specific one rather than "the day".
-    parts.push('<button class="btn btn-gold mt12" onclick="openEditSessionEditor(\''+(session._key||'')+'\')">✏️ EDIT '+(session.muscle_group||'SESSION').toUpperCase()+'</button>');
+    parts.push('<button class="btn btn-gold mt8" onclick="openEditSessionEditor(\''+(session._key||'')+'\')">✏️ EDIT '+(session.muscle_group||'SESSION').toUpperCase()+'</button>');
     parts.push('<button class="btn btn-outline mt8" style="color:var(--red);border-color:var(--red)" onclick="confirmDeleteSession(\''+(session._key||'')+'\')">🗑 DELETE '+(session.muscle_group||'SESSION').toUpperCase()+'</button>');
     });
 
@@ -6442,6 +6443,237 @@ async function showCalendarDay(isoDate) {
     // tap every time, and this message is exactly what to relay back.
     showBigToast('Could not open that workout: ' + (e.message || 'unknown error'), 'warn');
   }
+}
+
+// ─── SHARE A WORKOUT ─────────────────────────────────────────────────────────
+// Requested: a Share button after a workout and on a past session, so it can
+// go to social media, with branding on it so people know where it came from.
+//
+// What is shared is a picture: the workout, its three numbers, the exercises,
+// and the Flight Crew Fitness name, tagline and web address. It deliberately
+// leaves off anything about where the person was or how they felt.
+//
+// How the picture leaves the app depends on the device (see shareMethod).
+// The one path that is never used is a picture share sheet inside the
+// current iPhone build: its "Save Image" option needs a photo permission
+// text that build does not have, and iOS closes an app that asks without
+// one. That build gets a full-screen card to screenshot instead. The next
+// build declares the permission and shares the picture natively.
+const SHARE_TAGLINE = 'Engineered for the flight deck. Built for the layover.';
+const SHARE_MAX_ROWS = 6;
+function shareCardData(session, summary, rows) {
+  const all = rows || [];
+  const fits = all.length <= SHARE_MAX_ROWS;
+  const shown = fits ? all : all.slice(0, SHARE_MAX_ROWS - 1);
+  return {
+    brand: 'FLIGHT CREW FITNESS',
+    url: 'flightcrew.fit',
+    tagline: SHARE_TAGLINE,
+    title: String(session.muscle_group || 'Workout').toUpperCase(),
+    name: session.muscle_group || 'Workout',
+    dateLabel: new Date(session.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }),
+    stats: [
+      { label: 'MINUTES', value: summary.durationMinutes || '–', color: 'gold' },
+      { label: 'SETS', value: summary.totalSets ?? '–', color: 'blue' },
+      { label: 'CALORIES', value: summary.estCalories ?? '–', color: 'teal' },
+    ],
+    rows: shown.map(r => ({ name: r.name, perf: r.perf, pr: !!r.isPR })),
+    more: all.length - shown.length,
+  };
+}
+function shareCaption(d) {
+  const mins = d.stats[0].value, sets = d.stats[1].value;
+  return d.name + ': ' + (mins !== '–' ? mins + ' min, ' : '') + sets + ' sets. Logged with Flight Crew Fitness. https://flightcrew.fit';
+}
+// Rows for the workout just finished. prNames comes from the debrief.
+function shareRowsFor(session, prNames) {
+  const snap = session.workoutSnapshot || {};
+  const allEx = [...(snap.taxi || []), ...(snap.takeoff || []), ...(snap.enroute || []), ...(snap.landing || [])];
+  const prs = new Set(prNames || []);
+  return allEx.filter(isLoggableStrengthExercise).map(exItem => {
+    const perf = formatSetPerformance(exItem, (session.sets && session.sets[exItem.id]) || []);
+    return perf ? { name: exItem.name, perf, isPR: prs.has(exItem.name) } : null;
+  }).filter(Boolean);
+}
+function shareMethod(env) {
+  if (env.ios) return env.nativeImageShare ? 'native' : 'screenshot';
+  return env.canShareFiles ? 'webshare' : 'download';
+}
+
+// Cards waiting behind a Share button. The button names a key; the card is
+// looked up when it is tapped (no data inside the button itself).
+const _shareCards = {};
+let _shareCurrent = null; // { data, dataUrl }
+function registerShareCard(key, data) { _shareCards[key] = data; return key; }
+function shareButtonHtml(key, cls) {
+  return '<button class="btn btn-outline ' + (cls || 'mt8') + '" onclick="haptic(\'light\');openShareCard(\'' + key + '\')">📤 SHARE THIS WORKOUT</button>';
+}
+
+function drawShareCard(canvas, d) {
+  const W = 1080, H = 1350, P = 72;
+  canvas.width = W; canvas.height = H;
+  const c = canvas.getContext('2d');
+  const MONO = '"Share Tech Mono", ui-monospace, Menlo, monospace', SANS = 'Inter, -apple-system, "Helvetica Neue", Arial, sans-serif';
+  const GOLD = '#c9a84c', GOLD2 = '#e8c46a', TEXT = '#e8eef6', MUTED = '#8899b4';
+  const glow = (x, y, r, rgb, a) => { const g = c.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, 'rgba(' + rgb + ',' + a + ')'); g.addColorStop(1, 'rgba(' + rgb + ',0)'); c.fillStyle = g; c.fillRect(0, 0, W, H); };
+  // Letter-spaced text, drawn a character at a time (canvas letterSpacing is not on every iPhone).
+  const spaced = (text, x, y, gap, align) => {
+    const chars = String(text).split(''); const widths = chars.map(ch => c.measureText(ch).width);
+    const total = widths.reduce((a, w) => a + w, 0) + gap * (chars.length - 1);
+    let cx = align === 'right' ? x - total : align === 'center' ? x - total / 2 : x;
+    c.textAlign = 'left'; chars.forEach((ch, i) => { c.fillText(ch, cx, y); cx += widths[i] + gap; });
+    return total;
+  };
+  const fit = (text, maxW) => { let t = String(text); if (c.measureText(t).width <= maxW) return t; while (t.length > 1 && c.measureText(t + '…').width > maxW) t = t.slice(0, -1); return t.trimEnd() + '…'; };
+  const rr = (x, y, w, h, r) => { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); };
+  const star = (cx, cy, R) => { c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? R * 0.45 : R; c.lineTo(cx + r * Math.cos(a), cy + r * Math.sin(a)); } c.closePath(); c.fill(); };
+
+  c.fillStyle = '#080d17'; c.fillRect(0, 0, W, H);
+  glow(120, 60, 760, '201,168,76', 0.20);
+  glow(1040, 620, 640, '59,130,246', 0.16);
+  glow(200, 1340, 560, '45,212,191', 0.08);
+
+  // Brand
+  c.textBaseline = 'alphabetic';
+  c.fillStyle = GOLD; c.font = '40px ' + MONO; spaced(d.brand, P, 128, 9);
+  const rule = c.createLinearGradient(P, 0, W - P, 0); rule.addColorStop(0, GOLD2); rule.addColorStop(1, 'rgba(201,168,76,0)');
+  c.fillStyle = rule; c.fillRect(P, 158, W - 2 * P, 3);
+
+  // Title
+  c.fillStyle = MUTED; c.font = '28px ' + MONO; spaced('WORKOUT COMPLETE', P, 262, 7);
+  let size = 118; c.fillStyle = TEXT;
+  do { c.font = '800 ' + size + 'px ' + SANS; size -= 4; } while (c.measureText(d.title).width > W - 2 * P && size > 56);
+  c.textAlign = 'left'; c.fillText(d.title, P - 4, 372);
+  c.fillStyle = MUTED; c.font = '500 36px ' + SANS; c.fillText(d.dateLabel, P, 428);
+
+  // Three numbers
+  const tones = { gold: ['201,168,76', GOLD2], blue: ['59,130,246', '#60a5fa'], teal: ['45,212,191', '#2dd4bf'] };
+  const gap = 24, tw = (W - 2 * P - 2 * gap) / 3, ty = 478, th = 196;
+  d.stats.forEach((st, i) => {
+    const x = P + i * (tw + gap), [rgb, accent] = tones[st.color] || tones.blue;
+    c.save(); rr(x, ty, tw, th, 28); c.clip();
+    c.fillStyle = '#0f1623'; c.fillRect(x, ty, tw, th);
+    const g = c.createRadialGradient(x + tw - 20, ty + 10, 0, x + tw - 20, ty + 10, 190); g.addColorStop(0, 'rgba(' + rgb + ',0.42)'); g.addColorStop(1, 'rgba(' + rgb + ',0)');
+    c.fillStyle = g; c.fillRect(x, ty, tw, th); c.restore();
+    c.strokeStyle = 'rgba(255,255,255,0.09)'; c.lineWidth = 2; rr(x, ty, tw, th, 28); c.stroke();
+    c.fillStyle = accent; c.font = '24px ' + MONO; spaced(st.label, x + 26, ty + 50, 5);
+    c.fillStyle = TEXT; c.font = '700 92px ' + MONO; c.textAlign = 'left'; c.fillText(String(st.value), x + 24, ty + th - 30);
+  });
+
+  // Exercises
+  let y = 760;
+  if (d.rows.length) {
+    c.fillStyle = MUTED; c.font = '24px ' + MONO; spaced('EXERCISES', P, y, 7);
+    y += 24;
+    d.rows.forEach(r => {
+      const mid = y + 42;
+      c.font = (r.pr ? '700 ' : '') + '31px ' + MONO; const perfW = c.measureText(r.perf).width;
+      c.fillStyle = r.pr ? GOLD2 : TEXT; c.textAlign = 'right'; c.fillText(r.perf, W - P, mid);
+      let nx = P;
+      if (r.pr) { c.fillStyle = GOLD2; star(P + 17, mid - 12, 18); nx = P + 46; }
+      c.fillStyle = TEXT; c.font = '500 35px ' + SANS; c.textAlign = 'left';
+      c.fillText(fit(r.name, W - P - perfW - 36 - nx), nx, mid);
+      c.fillStyle = 'rgba(136,153,180,0.22)'; c.fillRect(P, y + 64, W - 2 * P, 2);
+      y += 66;
+    });
+    if (d.more > 0) { c.fillStyle = MUTED; c.font = '26px ' + MONO; c.textAlign = 'left'; c.fillText('+ ' + d.more + ' more', P, y + 40); }
+  }
+
+  // Where to get it
+  c.fillStyle = rule; c.fillRect(P, 1178, W - 2 * P, 3);
+  c.fillStyle = MUTED; c.font = '500 30px ' + SANS; c.textAlign = 'left'; c.fillText(d.tagline, P, 1234);
+  c.fillStyle = GOLD2; c.font = '60px ' + MONO; spaced(d.url, P, 1304, 4);
+  return canvas;
+}
+
+async function openShareCard(key) {
+  const data = _shareCards[key];
+  const root = document.getElementById('modalRoot');
+  if (!data || !root) { showToast('Could not build the share card. Close this and try again.'); return; }
+  try {
+    // The card uses the app's two typefaces; wait briefly for them, then draw either way.
+    if (document.fonts && document.fonts.load) {
+      await Promise.race([
+        Promise.all([document.fonts.load('800 100px Inter'), document.fonts.load('500 36px Inter'), document.fonts.load('40px "Share Tech Mono"')]),
+        new Promise(res => setTimeout(res, 1500)),
+      ]).catch(() => {});
+    }
+    const canvas = drawShareCard(document.createElement('canvas'), data);
+    _shareCurrent = { data, dataUrl: canvas.toDataURL('image/png') };
+  } catch (e) {
+    showToast('Could not build the share card on this device.');
+    return;
+  }
+  const ios = inIOSApp();
+  const nativeImageShare = !!(typeof FCFBridge !== 'undefined' && FCFBridge.capabilities && FCFBridge.capabilities.shareImage && window.webkit?.messageHandlers?.share);
+  let canShareFiles = false;
+  if (!ios) { try { const f = shareCardFile(); canShareFiles = !!(f && navigator.canShare && navigator.canShare({ files: [f] })); } catch (e) { /* no file sharing here */ } }
+  const method = shareMethod({ ios, nativeImageShare, canShareFiles });
+  const parts = [];
+  parts.push('<div class="modal-bg" onclick="if(event.target===this)closeModal()">');
+  parts.push('<div class="modal-sheet" style="text-align:center;max-height:92vh;overflow-y:auto">');
+  parts.push('<div class="modal-handle"></div>');
+  parts.push('<div class="modal-title">Share this workout</div>');
+  // No press-and-hold menu on the picture: inside the iPhone app its "Save to Photos" has the same missing-permission problem.
+  parts.push('<img id="shareCardImg" alt="Workout summary card" src="' + _shareCurrent.dataUrl + '" style="display:block;width:100%;max-width:320px;margin:4px auto 14px;border-radius:14px;border:1px solid var(--border);-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;pointer-events:none">');
+  if (method === 'native' || method === 'webshare') {
+    parts.push('<button class="btn btn-gold" onclick="haptic(\'light\');shareCardNow()">📤 Share</button>');
+    if (method === 'webshare') parts.push('<button class="btn btn-outline mt8" onclick="downloadShareCard()">Save the picture</button>');
+  } else if (method === 'download') {
+    parts.push('<button class="btn btn-gold" onclick="downloadShareCard()">Save the picture</button>');
+  } else {
+    parts.push('<div class="modal-body" style="margin-bottom:12px">Show it full screen, take a screenshot, and post the screenshot.</div>');
+    parts.push('<button class="btn btn-gold" onclick="showShareCardFullscreen()">Show full screen</button>');
+  }
+  parts.push('<button class="btn btn-outline mt8" onclick="copyShareCaption()">Copy a caption with the link</button>');
+  parts.push('<button class="btn btn-outline mt8" onclick="closeModal()">Done</button>');
+  parts.push('</div></div>');
+  root.innerHTML = parts.join('');
+}
+function shareCardFile() {
+  try {
+    const b64 = _shareCurrent.dataUrl.split(',')[1], bin = atob(b64), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new File([bytes], 'flight-crew-fitness-workout.png', { type: 'image/png' });
+  } catch (e) { return null; }
+}
+function shareCardNow() {
+  if (!_shareCurrent) return;
+  const nativeImageShare = !!(inIOSApp() && typeof FCFBridge !== 'undefined' && FCFBridge.capabilities && FCFBridge.capabilities.shareImage && window.webkit?.messageHandlers?.share);
+  if (nativeImageShare) {
+    window.webkit.messageHandlers.share.postMessage({ imageBase64: _shareCurrent.dataUrl.split(',')[1], filename: 'flight-crew-fitness-workout.png' });
+    return;
+  }
+  if (inIOSApp()) return; // never a picture share sheet in a build without native picture sharing
+  const file = shareCardFile();
+  if (!file) return;
+  navigator.share({ files: [file], text: shareCaption(_shareCurrent.data) }).catch(e => {
+    if (!e || e.name !== 'AbortError') showToast('Sharing did not open here. Use Save the picture.');
+  });
+}
+function downloadShareCard() {
+  if (!_shareCurrent || inIOSApp()) return; // a download link replaces the screen inside the iPhone app
+  const a = document.createElement('a');
+  a.href = _shareCurrent.dataUrl; a.download = 'flight-crew-fitness-workout.png';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+function copyShareCaption() {
+  if (!_shareCurrent) return;
+  const text = shareCaption(_shareCurrent.data);
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => showToast('Caption copied.')).catch(() => showToast('Copy did not work on this device.'));
+  else showToast('Copy is not available on this device.');
+}
+// The card alone on a black screen, for a clean screenshot. Tap to close.
+function showShareCardFullscreen() {
+  if (!_shareCurrent) return;
+  let el = document.getElementById('shareCardFull');
+  if (!el) { el = document.createElement('div'); el.id = 'shareCardFull'; document.body.appendChild(el); }
+  el.style.cssText = 'position:fixed;inset:0;z-index:100000;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)';
+  el.onclick = () => { el.remove(); };
+  el.innerHTML = '<img alt="Workout summary card" src="' + _shareCurrent.dataUrl + '" style="max-width:100%;max-height:calc(100% - 44px);object-fit:contain;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;pointer-events:none">' +
+    '<div id="shareCardFullHint" style="height:44px;line-height:44px;font-size:0.75rem;color:#8899b4;font-family:Inter,sans-serif">Take a screenshot, then tap anywhere to close</div>';
+  // The hint steps aside so it is not in the screenshot.
+  setTimeout(() => { const h = document.getElementById('shareCardFullHint'); if (h) h.style.visibility = 'hidden'; }, 2500);
 }
 
 // ─── SESSION EDITOR (edit past workouts / retroactively log missed ones) ─────
@@ -11000,7 +11232,8 @@ function renderDebrief(p) {
   // app not having registered what just happened. Trends is where the
   // session they just logged actually shows up — calendar, strength
   // trends, body weight — which is the natural next stop after finishing.
-  parts.push('<button class="btn btn-gold mt16" onclick="ST.lastDebrief=null;switchTab(\'trends\')">View in Trends</button>');
+  parts.push(shareButtonHtml(registerShareCard('debrief', shareCardData(session, s, shareRowsFor(session, (s.prHits || []).map(pr => pr.name)))), 'mt16'));
+  parts.push('<button class="btn btn-gold mt8" onclick="ST.lastDebrief=null;switchTab(\'trends\')">View in Trends</button>');
   p.innerHTML = parts.join('');
 }
 

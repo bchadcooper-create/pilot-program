@@ -1151,6 +1151,44 @@ test('a logged bike session reads as watts, not reps', () => {
   assertEqual(ctx.exportExerciseName({ name: 'Push-Up', inputType: 'reps_only' }), 'Push-Up', 'export leaves ordinary names alone');
 });
 
+console.log('\nShare a workout (requested: a Share button after a workout and on a past session, with branding on what is shared):');
+const shSession = { date: new Date(2026, 9, 7, 12, 40).toISOString(), muscle_group: 'Cardio', env: 'hotel', fatigue: 'go', durationMinutes: 57 };
+const shSummary = { durationMinutes: 57, totalSets: 16, estCalories: 398 };
+const shRows = [['Brisk Walk Ramp-Up', '40 min'], ['Jumping Jacks', '1.1 min'], ['Treadmill Intervals', '4 rounds · best 6 mph'], ['Stationary Bike Intervals', '3 rounds · best 300 W'],
+  ['Step-Up', '3×15 @ 30 lb', true], ['Cool-Down Walk', '3 min'], ['Extra One', '1×10 reps'], ['Extra Two', '1×10 reps']].map(([name, perf, isPR]) => ({ name, perf, isPR: !!isPR }));
+test('the share card carries the workout and the brand, and nothing private', () => {
+  const d = ctx.shareCardData(shSession, shSummary, shRows);
+  assertEqual(d.title, 'CARDIO', 'title'); assertEqual(d.dateLabel, 'Wednesday, Oct 7', 'date, no clock time');
+  assertEqual(d.stats.map(x => x.label + ' ' + x.value).join(' | '), 'MINUTES 57 | SETS 16 | CALORIES 398', 'the three numbers');
+  assertEqual(d.brand, 'FLIGHT CREW FITNESS', 'brand name'); assertEqual(d.url, 'flightcrew.fit', 'where to get it');
+  assertEqual(d.tagline.length > 10, true, 'tagline');
+  assertEqual(/hotel|Condition|go\b/.test(JSON.stringify(d)), false, 'no location or condition');
+});
+test('a long workout is trimmed to fit the card and says how much was left off', () => {
+  const d = ctx.shareCardData(shSession, shSummary, shRows);
+  assertEqual(d.rows.length, 5, 'five rows shown'); assertEqual(d.more, 3, 'three more noted');
+  assertEqual(d.rows.find(r => r.name === 'Step-Up').pr, true, 'a personal record is marked');
+  const short = ctx.shareCardData(shSession, shSummary, shRows.slice(0, 6));
+  assertEqual(short.rows.length, 6, 'six fit without a "more" line'); assertEqual(short.more, 0, 'nothing left off');
+});
+test('the caption names the app and links to it', () => {
+  const c = ctx.shareCaption(ctx.shareCardData(shSession, shSummary, shRows));
+  assertEqual(c.includes('Cardio') && c.includes('57 min') && c.includes('Flight Crew Fitness') && c.includes('https://flightcrew.fit'), true, c);
+  assertEqual(/\u2014|\u2013/.test(c), false, 'no dashes');
+});
+test('how the picture leaves the app depends on what the device can safely do', () => {
+  assertEqual(ctx.shareMethod({ ios: true, nativeImageShare: true }), 'native', 'an app build that can share pictures uses the iPhone share sheet');
+  assertEqual(ctx.shareMethod({ ios: true, nativeImageShare: false, canShareFiles: true }), 'screenshot', 'the current app build never opens a picture share sheet (Save Image would crash it)');
+  assertEqual(ctx.shareMethod({ ios: false, canShareFiles: true }), 'webshare', 'a phone browser shares the picture');
+  assertEqual(ctx.shareMethod({ ios: false, canShareFiles: false }), 'download', 'a computer downloads it');
+});
+test('the workout just finished can be turned into rows for the card', () => {
+  const snap = { taxi: [], takeoff: [{ id: 'b', name: 'DB Bench Press', inputType: 'reps_weight' }], enroute: [{ id: 's', name: 'Couch Stretch', inputType: 'timed_bilateral' }], landing: [] };
+  const rows = ctx.shareRowsFor({ sets: { b: [{ reps: '10', weight: '50' }, { reps: '9', weight: '50' }], s: [{ seconds_left: '30' }] }, workoutSnapshot: snap }, ['DB Bench Press']);
+  assertEqual(rows.length, 1, 'stretches are left off, as on the session sheet');
+  assertEqual(rows[0].perf, '2×10 @ 50 lb', 'performance'); assertEqual(rows[0].isPR, true, 'record flagged from the debrief');
+});
+
 console.log('\n' + '─'.repeat(50));
 console.log(passed + ' passed, ' + failed + ' failed');
 if (failed > 0) process.exit(1);

@@ -82,7 +82,7 @@ function loadAppJS() {
   // attach themselves automatically and are reachable as context.<name>;
   // this one extra statement is only needed to reach the `const ST` state
   // object itself from outside the sandbox for test setup/assertions.
-  vm.runInContext('this.ST = ST; this.WORKOUTS = WORKOUTS; this.CATALOG_EXTRAS = CATALOG_EXTRAS; this.INJURY_REGIONS = INJURY_REGIONS; this.ALTERNATES = ALTERNATES; this.EXERCISE_SYNONYMS = EXERCISE_SYNONYMS;', context);
+  vm.runInContext('this.ST = ST; this.WORKOUTS = WORKOUTS; this.CATALOG_EXTRAS = CATALOG_EXTRAS; this.INJURY_REGIONS = INJURY_REGIONS; this.ALTERNATES = ALTERNATES; this.EXERCISE_SYNONYMS = EXERCISE_SYNONYMS; this.BADGES = BADGES;', context);
   return context;
 }
 
@@ -1188,6 +1188,16 @@ test('the workout just finished can be turned into rows for the card', () => {
   const rows = ctx.shareRowsFor({ sets: { b: [{ reps: '10', weight: '50' }, { reps: '9', weight: '50' }], s: [{ seconds_left: '30' }] }, workoutSnapshot: snap }, ['DB Bench Press']);
   assertEqual(rows.length, 1, 'stretches are left off, as on the session sheet');
   assertEqual(rows[0].perf, '2×10 @ 50 lb', 'performance'); assertEqual(rows[0].isPR, true, 'record flagged from the debrief');
+});
+
+console.log('\nNo award for training against the app\'s own advice (owner: "This seems unhealthy to me"):');
+// "Redline" was earned by training three times on a NO-GO fatigue day, the
+// days the app itself tells you to take off.
+test('nothing is earned by training on a NO-GO day', () => {
+  assertEqual(ctx.BADGES.some(b => b.id === 'redline' || /NO-GO|no-go/.test(b.desc)), false, 'no badge mentions NO-GO');
+  const day = (i, fatigue) => ({ date: new Date(2026, 8, 1 + i * 3, 9).toISOString(), fatigue, env: 'comm', sets: { a: [{ reps: '8', weight: '50' }] }, workoutSnapshot: { takeoff: [{ id: 'a', name: 'X' }] } });
+  const earned = fatigue => { const st = ctx.computeBadgeStats([0, 1, 2, 3].map(i => day(i, fatigue)), []); return ctx.BADGES.filter(b => b.check && b.check(st)).map(b => b.id).sort().join(','); };
+  assertEqual(earned('nogo'), earned('go'), 'four NO-GO sessions earn exactly what four normal ones do');
 });
 
 console.log('\n' + '─'.repeat(50));

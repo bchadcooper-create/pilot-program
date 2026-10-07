@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.25 / 20260916_4
+ * Version/build: fcf-v5.44.26 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.25';
+const FCF_VERSION = 'fcf-v5.44.26';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -2199,7 +2199,11 @@ const BADGES = [
   { id:'logger_7',     icon:'📋', title:'Flight Recorder',  desc:'Log biometrics 7 days in a row',         check:s => s.bioStreak >= 7 },
   { id:'century',      icon:'💯', title:'Century Club',     desc:'500 lifetime sets logged',               check:s => s.totalSets >= 500 },
   { id:'iron_will',    icon:'🦾', title:'Iron Will',        desc:'20+ sets in a single session',           check:s => s.maxSetsInSession >= 20 },
-  { id:'redline',      icon:'🔴', title:'Redline',          desc:'Trained through NO-GO fatigue 3 times: showing up beats the mood you showed up in', check:s => s.nogoTrainedCount >= 3 },
+  // 'redline' ("Trained through NO-GO fatigue 3 times") was removed
+  // 2026-10-07. It rewarded training on exactly the days the app tells you
+  // to take off, which is the opposite of what the app is for. Do not add an
+  // award that pays out for overriding a recovery call. Anyone who already
+  // earned it keeps the stored record; it is simply no longer shown.
   { id:'all_weather',  icon:'🌍', title:'All-Weather',      desc:'Trained in 3 different environments (room, gym, or bands)', check:s => s.envsTrained >= 3 },
   { id:'early_bird',   icon:'🌅', title:'Early Bird',       desc:'Logged a workout before 6 AM, 5 times',  check:s => s.earlyBirdCount >= 5 },
   { id:'top_gun',      icon:'🎖️', title:'Top Gun',          desc:'Hold the #1 spot on any leaderboard',    check:null, live:true },
@@ -2210,7 +2214,7 @@ const BADGES = [
 // Pure computation over session + biometric history — testable, no I/O.
 function computeBadgeStats(sessions, bioRows) {
   const stats = { totalSessions: 0, best7Day: 0, best28Day: 0, prCount: 0, weightLost: 0, bioStreak: 0,
-    totalSets: 0, maxSetsInSession: 0, nogoTrainedCount: 0, envsTrained: 0, earlyBirdCount: 0 };
+    totalSets: 0, maxSetsInSession: 0, envsTrained: 0, earlyBirdCount: 0 };
   const sorted = (sessions||[]).filter(s => s?.date).slice().sort((a,b) => new Date(a.date) - new Date(b.date));
   stats.totalSessions = sorted.length;
 
@@ -2256,7 +2260,6 @@ function computeBadgeStats(sessions, bioRows) {
     });
     stats.totalSets += sessionSets;
     if (sessionSets > stats.maxSetsInSession) stats.maxSetsInSession = sessionSets;
-    if (s.fatigue === 'nogo') stats.nogoTrainedCount++;
     if (s.env) envs.add(s.env);
     const hour = new Date(s.date).getHours();
     if (hour < 6) stats.earlyBirdCount++;

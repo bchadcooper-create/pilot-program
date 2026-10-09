@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.28 / 20260916_4
+ * Version/build: fcf-v5.44.29 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.28';
+const FCF_VERSION = 'fcf-v5.44.29';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -523,6 +523,7 @@ WORKOUTS.comm['Upper Push'] = {
     ex('c_up_er7','Pec Fly (Machine)','3×15',3,'Seated, arms slightly bent throughout. Squeeze at full contraction, control the stretch back.'),
     ex('c_up_er8','Cable Tricep Pushdown','3×15',3,'Elbows pinned to your sides. The whole rep should come from the elbow, not the shoulder.'),
     ex('c_up_er9','Assisted Dip (Machine)','3×10',3,'Counterweight assists the lift. Lean forward slightly for more chest emphasis.'),
+    ex('c_up_er11','Seated Tricep Press (Machine)','3×12',3,'Seated, handles at chest height, elbows tucked. Press to full extension and control the return. Tricep isolation without loading the shoulders.'),
   ],
   landing: [
     ex('c_up_l1','Doorframe Chest Stretch','60s/side',1,'Arm at 90° in doorframe, rotate body away.',true,'timed_bilateral'),
@@ -6886,6 +6887,12 @@ const EXERCISE_SYNONYMS = {
   'tricep push down': 'Cable Tricep Pushdown',
   'rope pushdown': 'Cable Tricep Pushdown',
   'cable pushdown': 'Cable Tricep Pushdown',
+  'tricep press': 'Seated Tricep Press (Machine)',
+  'tricep press machine': 'Seated Tricep Press (Machine)',
+  'triceps press machine': 'Seated Tricep Press (Machine)',
+  'seated tricep press': 'Seated Tricep Press (Machine)',
+  'seated dip machine': 'Seated Tricep Press (Machine)',
+  'tricep extension machine': 'Seated Tricep Press (Machine)',
   'assisted dip': 'Assisted Dip (Machine)',
   'assisted dip machine': 'Assisted Dip (Machine)',
   'dip machine': 'Assisted Dip (Machine)',
@@ -8727,10 +8734,18 @@ const ALTERNATES = {
     {name:'Cable Tricep Pushdown',target:'3×15',note:'Cable. Great isolation for all three tricep heads.'},
     {name:'DB Tricep Overhead',target:'3×12',note:'Overhead extension. Long head emphasis.'},
     {name:'Dip',target:'3×max',note:'Bodyweight. Chest + tricep compound.',inputType:'reps_only'},
+    {name:'Seated Tricep Press (Machine)',target:'3×12',note:'Machine pressing. Same tricep emphasis, no bar to balance.'},
   ],
   'DB Tricep Overhead': [
     {name:'Close Grip Bench',target:'3×8',note:'Barbell tricep pressing.'},
     {name:'Cable Tricep Pushdown',target:'3×15',note:'Cable isolation.'},
+    {name:'Seated Tricep Press (Machine)',target:'3×12',note:'Machine. Heavier loading than overhead DB work.'},
+    {name:'Chair Dips',target:'3×max',note:'Bodyweight. No equipment.',inputType:'reps_only'},
+  ],
+  'Seated Tricep Press (Machine)': [
+    {name:'Cable Tricep Pushdown',target:'3×15',note:'Cable isolation. Elbows pinned.'},
+    {name:'Close Grip Bench',target:'3×8',note:'Barbell tricep pressing.'},
+    {name:'DB Tricep Overhead',target:'3×12',note:'Hotel-friendly. One dumbbell, both hands.'},
     {name:'Chair Dips',target:'3×max',note:'Bodyweight. No equipment.',inputType:'reps_only'},
   ],
   'Leg Press': [

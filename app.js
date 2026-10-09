@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.27 / 20260916_4
+ * Version/build: fcf-v5.44.28 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.27';
+const FCF_VERSION = 'fcf-v5.44.28';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -13733,6 +13733,11 @@ function fmtDutyEnd(ts) {
   return d.toLocaleDateString('en-US',{weekday:'long'}) + ' ' + time;
 }
 
+// The done-flying card's lines. Product judgment, not research values,
+// except the evening one (see the comment in buildTodayBriefing, rule 7).
+const DONE_FLYING_LATE_HOUR = 21;   // 9 PM: past this, no full session
+const DONE_FLYING_HEAVY_LEGS = 3;   // three or more legs is a heavy day
+const DONE_FLYING_POOR_SLEEP = 70;  // sleep score or readiness under this
 const POST_LANDING_BUFFER_MIN = 10;
 const PRE_DEPARTURE_BUFFER_MIN = 30;
 // Distinct from PRE_DEPARTURE_BUFFER_MIN above (which is gate-prep time for
@@ -13975,9 +13980,49 @@ function buildTodayBriefing(ctx) {
       action:{ label:'Start a workout', fn:"switchTab('preflight')" } };
   }
 
-  // 7. Flying is done for the day — this is the genuine training window.
+  // 7. Flying is done for the day.
+  // BUG FIX (reported Oct 8: at 9:27 PM, after three legs on a 63 sleep
+  // score, this said "a full session now" while the AI coach said "dial it
+  // back"; the owner sided with the coach). It used to look only at
+  // whether flying was over. It now weighs what the coach weighs:
+  //   - the hour: a hard session that ends within about an hour of bed may
+  //     cost sleep (Stutz et al. 2019, Sports Medicine, meta-analysis of
+  //     evening exercise). After DONE_FLYING_LATE_HOUR it is a wind-down.
+  //   - an early report tomorrow (inside 12 hours): sleep comes first.
+  //     The separate "Early report tomorrow" rule further down could never
+  //     be reached after a flying day, because this rule always won first.
+  //   - how heavy the day was (legs flown) and last night's sleep:
+  //     either one turns a full session into a moderate one, both together
+  //     into a wind-down evening.
   if (sched.legsCompleted > 0 && sched.legsRemaining === 0) {
     const endStr = sched.dutyEndsAt ? new Date(sched.dutyEndsAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : null;
+    const legs = sched.legsTodayCompleted || 0;
+    const sleep = oura.sleep;
+    const heavyDay = legs >= DONE_FLYING_HEAVY_LEGS;
+    const poorSleep = (sleep !== null && sleep !== undefined && sleep < DONE_FLYING_POOR_SLEEP)
+      || (readiness !== null && readiness < DONE_FLYING_POOR_SLEEP);
+    const late = hour >= DONE_FLYING_LATE_HOUR;
+    const nowMs = (ctx.now || new Date()).getTime();
+    const reportMs = sched.tomorrowFirstDuty ? new Date(sched.tomorrowFirstDuty.start).getTime() : null;
+    const earlyReport = reportMs !== null && reportMs > nowMs && reportMs - nowMs <= 12 * 3600000;
+    const why = [legs ? legs + ' leg' + (legs === 1 ? '' : 's') : '', poorSleep && sleep != null ? 'a ' + sleep + ' sleep score' : ''].filter(Boolean).join(' and ');
+    const landed = (endStr ? 'Last leg landed at ' + endStr + (why ? ' after ' + why : '') + '. ' : (why ? 'After ' + why + '. ' : ''));
+    if (earlyReport) {
+      const rt = new Date(reportMs).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+      return { tone:'rest', headline:'Done flying for the day',
+        body: landed + 'First leg tomorrow at ' + rt + ', so tonight is about sleep: eat, wind down, and get to bed. Train on a later day.',
+        action:null };
+    }
+    if (late || (heavyDay && poorSleep)) {
+      return { tone:'rest', headline:'Done flying for the day',
+        body: landed + 'Make tonight a wind-down, not a training session: eat, stretch if you like, and protect your sleep.',
+        action:{ label:'Start a light session', fn:"switchTab('preflight')" } };
+    }
+    if (heavyDay || poorSleep) {
+      return { tone:'ease', headline:'Done flying for the day',
+        body: landed + 'Keep it moderate tonight: mobility or an easy session, not a hard one.',
+        action:{ label:'Start a session', fn:"switchTab('preflight')" } };
+    }
     return { tone:'go', headline:'Done flying for the day',
       body:(endStr ? 'Last leg landed at '+endStr+'. ' : '')+'This is your window: a full session now, then dinner, and you\'re still in good shape for tomorrow.',
       action:{ label:'Start a workout', fn:"switchTab('preflight')" } };

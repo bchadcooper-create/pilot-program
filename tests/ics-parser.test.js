@@ -1223,6 +1223,45 @@ test('nothing found is said plainly when asked for, and quietly when it was auto
   assertEqual(ctx.healthDistanceUpdate({}, { success: true, kind: 'window', miles: 0 }).changed, false, 'a zero is not a distance');
 });
 
+console.log('\nDone-flying card agrees with the AI coach (reported: card said "a full session now" while the coach said "dial it back"):');
+// Real case, Oct 8: three legs, last landed 8:25 PM, checked at 9:27 PM,
+// sleep score 63, readiness 83. The card ignored all of it but the clock.
+const dfCtx = (o) => {
+  const now = new Date(2026, 9, 8, o.hour, o.minute || 0);
+  const landed = new Date(2026, 9, 8, o.landedH, o.landedM || 0).getTime();
+  return { now, hour: o.hour, sched: { current: null, freeMinutesUntilDuty: null, legsCompleted: o.legs, legsRemaining: 0, legsTodayCompleted: o.legs, legsTodayRemaining: 0,
+      dutyEndsAt: landed, dutyEndsToday: null, yesterdayDutyHours: 0, tomorrowFirstDuty: o.tomorrow ? { start: new Date(2026, 9, 9, o.tomorrow, 0).toISOString() } : null,
+      layoverAirport: null, justLandedMinAgo: Math.round((now - landed) / 60000), hasSchedule: true, flightsToday: o.legs },
+    oura: { readiness: o.readiness ?? 83, sleep: o.sleep ?? null, napDetected: null }, training: { workoutToday: false },
+    nutrition: { consumed: { protein: 0 }, goals: null, mealCount: 1 }, water: 0 };
+};
+test('the reported evening: three legs, 9:27 PM, poor sleep is a wind-down, not a full session', () => {
+  const b = ctx.buildTodayBriefing(dfCtx({ hour: 21, minute: 27, landedH: 20, landedM: 25, legs: 3, sleep: 63 }));
+  assertEqual(b.tone, 'rest', 'tone: ' + b.tone);
+  assertEqual(/full session/i.test(b.body), false, 'no full session: ' + b.body);
+  assertEqual(/wind.down|sleep/i.test(b.body) && /3 legs/.test(b.body), true, 'says why: ' + b.body);
+});
+test('late in the evening alone is enough to skip a hard session', () => {
+  const b = ctx.buildTodayBriefing(dfCtx({ hour: 21, minute: 15, landedH: 20, landedM: 0, legs: 1, sleep: 85 }));
+  assertEqual(b.tone !== 'go' && !/full session/i.test(b.body), true, b.tone + ': ' + b.body);
+});
+test('a heavy day or a poor night earlier in the evening means a moderate session', () => {
+  const heavy = ctx.buildTodayBriefing(dfCtx({ hour: 17, landedH: 16, landedM: 30, legs: 3, sleep: 82 }));
+  assertEqual(heavy.tone, 'ease', 'three legs: ' + heavy.body);
+  const poor = ctx.buildTodayBriefing(dfCtx({ hour: 17, landedH: 16, landedM: 30, legs: 1, sleep: 62 }));
+  assertEqual(poor.tone, 'ease', 'sleep 62: ' + poor.body);
+  assertEqual(/62/.test(poor.body), true, 'names the sleep score');
+});
+test('an early report tomorrow makes tonight about sleep', () => {
+  const b = ctx.buildTodayBriefing(dfCtx({ hour: 19, landedH: 18, legs: 2, sleep: 85, tomorrow: 6 }));
+  assertEqual(b.tone, 'rest', b.body); assertEqual(/6:00 AM/.test(b.body), true, 'names the report time: ' + b.body);
+});
+if (process.env.SHOW_BRIEF) [[21,27,20,25,3,63],[17,0,16,30,3,82],[17,0,16,30,1,62]].forEach(([h,m,lh,lm,legs,sl]) => console.log('      ' + JSON.stringify(ctx.buildTodayBriefing(dfCtx({ hour: h, minute: m, landedH: lh, landedM: lm, legs, sleep: sl }))).slice(0, 260)));
+test('a light day, good sleep, early evening still gets the full session', () => {
+  const b = ctx.buildTodayBriefing(dfCtx({ hour: 16, landedH: 15, legs: 2, sleep: 84 }));
+  assertEqual(b.tone, 'go', b.body); assertEqual(/full session/.test(b.body), true, b.body);
+});
+
 console.log('\n' + '─'.repeat(50));
 console.log(passed + ' passed, ' + failed + ' failed');
 if (failed > 0) process.exit(1);

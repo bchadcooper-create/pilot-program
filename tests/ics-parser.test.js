@@ -1256,7 +1256,6 @@ test('an early report tomorrow makes tonight about sleep', () => {
   const b = ctx.buildTodayBriefing(dfCtx({ hour: 19, landedH: 18, legs: 2, sleep: 85, tomorrow: 6 }));
   assertEqual(b.tone, 'rest', b.body); assertEqual(/6:00 AM/.test(b.body), true, 'names the report time: ' + b.body);
 });
-if (process.env.SHOW_BRIEF) [[21,27,20,25,3,63],[17,0,16,30,3,82],[17,0,16,30,1,62]].forEach(([h,m,lh,lm,legs,sl]) => console.log('      ' + JSON.stringify(ctx.buildTodayBriefing(dfCtx({ hour: h, minute: m, landedH: lh, landedM: lm, legs, sleep: sl }))).slice(0, 260)));
 test('a light day, good sleep, early evening still gets the full session', () => {
   const b = ctx.buildTodayBriefing(dfCtx({ hour: 16, landedH: 15, legs: 2, sleep: 84 }));
   assertEqual(b.tone, 'go', b.body); assertEqual(/full session/.test(b.body), true, b.body);

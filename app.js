@@ -3490,7 +3490,7 @@ function glowTile(label, value, colorKey, valueColor) {
 // unmistakably marked as AI-generated rather than blending into rule-based
 // copy. `id` is the container's DOM id; `textId` is the inner text node's
 // id that the loader function fills in once the response arrives.
-function aiCoachCard(id, textId, title, colorKey, initialText) {
+function aiCoachCard(id, textId, title, colorKey, initialText, footerHtml) {
   const [gs, gf, accent] = GLOW_COLORS[colorKey] || GLOW_COLORS.gold;
   // A card rebuilt while its answer is already known (a repaint after the
   // shell delivers HealthKit, say) draws that answer in the first paint
@@ -3515,6 +3515,7 @@ function aiCoachCard(id, textId, title, colorKey, initialText) {
       '<span style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.1em;color:' + accent + '">' + title + '</span>' +
     '</div>' +
     '<div id="' + textId + '" style="font-size:0.8438rem;color:var(--text);line-height:1.6;position:relative;z-index:1">' + body + '</div>' +
+    (footerHtml ? '<div style="position:relative;z-index:1">' + footerHtml + '</div>' : '') +
     '</div>'
   );
 }
@@ -6020,12 +6021,16 @@ async function loadFatigueCalibration(ctx) {
     if (!card || !textEl) return; // user navigated away before this resolved
     if (!result.error && textEl.textContent === result.text && card.style.display !== 'none') return;
     if (result.error) {
-      // Hide the card rather than leaving it stuck on "Thinking..." forever —
-      // the rule-based briefing above already covers this, so a failed AI
-      // call just means one fewer card, not a broken page.
+      // Hide the card rather than leaving it stuck on "Thinking...", and
+      // bring back the rule-based card that waits hidden underneath, so the
+      // spot still says something useful.
       card.style.display = 'none';
+      const fallback = document.getElementById('ruleBriefCard');
+      if (fallback) fallback.style.display = '';
       return;
     }
+    const ruleCard = document.getElementById('ruleBriefCard');
+    if (ruleCard) ruleCard.style.display = 'none';
     textEl.textContent = result.text;
     card.style.display = '';
   } catch (e) { console.warn('loadFatigueCalibration error:', e); }
@@ -14112,12 +14117,36 @@ function buildOuraTopSectionHTML(ctx) {
     parts.push('</div>');
   }
 
-  parts.push('<div class="card mb12" style="border-left:3px solid '+toneColor+'">');
-  parts.push('<div style="font-size:1.0625rem;font-weight:600;letter-spacing:-.01em;margin-bottom:7px">'+brief.headline+'</div>');
-  parts.push('<div style="font-size:0.8125rem;color:var(--muted);line-height:1.65">'+brief.body+'</div>');
-  if (brief.action) parts.push('<button class="btn btn-gold" style="margin-top:14px" onclick="'+brief.action.fn+'">'+brief.action.label+'</button>');
-  parts.push('</div>');
-
+  // One coaching card, never two (owner, Oct 8: "someone who is pro
+  // shouldn't be getting both of these cards"). The two used to sit on the
+  // same screen and could disagree: "a full session now" above "dial it
+  // back". Pro members get the AI coach in this spot; everyone else gets
+  // the rule-based card. The rule-based card is still drawn for Pro, hidden,
+  // and shown only if the coach cannot answer (no connection, an error),
+  // so the spot is never left empty.
+  const ruleCard = '<div class="card mb12" style="border-left:3px solid '+toneColor+'">' +
+    '<div style="font-size:1.0625rem;font-weight:600;letter-spacing:-.01em;margin-bottom:7px">'+brief.headline+'</div>' +
+    '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.65">'+brief.body+'</div>' +
+    (brief.action ? '<button class="btn btn-gold" style="margin-top:14px" onclick="'+brief.action.fn+'">'+brief.action.label+'</button>' : '') +
+    '</div>';
+  const fatMemo = _aiLoadMemo.fatigue;
+  const coachFailed = !!(fatMemo && fatMemo.result && fatMemo.result.error);
+  if (isPro()) {
+    // A neutral way into the workout. Not the rule card's suggestion, which
+    // could contradict what the coach just said.
+    const startBtn = ST.workout
+      ? '<button class="btn btn-gold" style="margin-top:14px" onclick="engageWorkout()">↩ Return to workout</button>'
+      : '<button class="btn btn-gold" style="margin-top:14px" onclick="switchTab(\'preflight\')">Start a workout</button>';
+    let coach = aiCoachCard('aiFatigueCard', 'aiFatigueText', 'AI COACH', 'amber',
+      fatMemo && fatMemo.result && !fatMemo.result.error ? fatMemo.result.text : null, startBtn);
+    // After a failed answer the coach card stays in the page, hidden, so a
+    // later successful answer can still take the spot back.
+    if (coachFailed) coach = coach.replace('<div id="aiFatigueCard" style="', '<div id="aiFatigueCard" style="display:none;');
+    parts.push(coach);
+    parts.push('<div id="ruleBriefCard"' + (coachFailed ? '' : ' style="display:none"') + '>' + ruleCard + '</div>');
+  } else {
+    parts.push('<div id="ruleBriefCard">' + ruleCard + '</div>');
+  }
   return parts.join('');
 }
 
@@ -14408,14 +14437,8 @@ function renderToday(p) {
     parts.push(aiCoachCard('aiTripPlanCard', 'aiTripPlanText', 'AI COACH · TRIP PLAN', 'blue'));
   }
 
-  // AI Fatigue Calibration — Pro only. Adds trip-context reasoning on top of
-  // the rule-based briefing above, rather than replacing it. Loads async so
-  // it never blocks the page render.
-  if (isPro()) {
-    const fatMemo = _aiLoadMemo.fatigue;
-    parts.push(aiCoachCard('aiFatigueCard', 'aiFatigueText', 'AI COACH', 'amber',
-      fatMemo && fatMemo.result && !fatMemo.result.error ? fatMemo.result.text : null));
-  }
+  // AI Fatigue Calibration (Pro) is drawn in the top section now, in place
+  // of the rule-based card: see buildOuraTopSectionHTML.
 
   // Standalone, always-shown prompt — not folded into one specific briefing
   // outcome, since a low-readiness day (or several other rules) would

@@ -16,7 +16,8 @@
     "e2e:timed": "node tests/e2e/timed-sets.js",
     "e2e:share": "node tests/e2e/share-card.js",
     "e2e:distance": "node tests/e2e/health-distance.js",
-    "e2e:coachcard": "node tests/e2e/one-coach-card.js"
+    "e2e:coachcard": "node tests/e2e/one-coach-card.js",
+    "e2e:machines": "node tests/e2e/gym-machines.js"
   },
   "dependencies": {
     "@capacitor/app": "^7.0.0",

@@ -82,7 +82,7 @@ function loadAppJS() {
   // attach themselves automatically and are reachable as context.<name>;
   // this one extra statement is only needed to reach the `const ST` state
   // object itself from outside the sandbox for test setup/assertions.
-  vm.runInContext('this.ST = ST; this.WORKOUTS = WORKOUTS; this.CATALOG_EXTRAS = CATALOG_EXTRAS; this.INJURY_REGIONS = INJURY_REGIONS; this.ALTERNATES = ALTERNATES; this.EXERCISE_SYNONYMS = EXERCISE_SYNONYMS; this.BADGES = BADGES;', context);
+  vm.runInContext('this.ST = ST; this.WORKOUTS = WORKOUTS; this.CATALOG_EXTRAS = CATALOG_EXTRAS; this.INJURY_REGIONS = INJURY_REGIONS; this.ALTERNATES = ALTERNATES; this.EXERCISE_SYNONYMS = EXERCISE_SYNONYMS; this.BADGES = BADGES; this.EXERCISE_VIDEOS = EXERCISE_VIDEOS;', context);
   return context;
 }
 
@@ -513,14 +513,19 @@ test('history stays attached: Alternate and search give the same id, including i
   const cat = ctx.buildExerciseCatalog();
   const idOf = n => (cat.find(e => e.name === n) || {}).id;
   assertEqual(idOf('DB Deadlift'), 'swap_db_deadlift', 'DB Deadlift (3 logged sessions)');
-  assertEqual(idOf('Machine Row'), 'swap_machine_row', 'Machine Row (3 logged sessions)');
+  assertEqual(idOf('Seated Row (Machine)'), 'c_ul_er8', 'Seated Row (Machine) is a real catalog exercise');
+  // The 3 sessions logged as "Machine Row" (swap_machine_row) still count as Seated Row (Machine) history.
+  const savedCache = ctx.ST.sessionCache;
+  ctx.ST.sessionCache = [{ sets: { swap_machine_row: [{ reps: '10', weight: '120' }] } }];
+  assertEqual(ctx.equivalentExerciseIds('c_ul_er8', 'Seated Row (Machine)').includes('swap_machine_row'), true, 'old Machine Row history is attached');
+  ctx.ST.sessionCache = savedCache;
   assertEqual(idOf('Goblet Squat (Heavy)'), 'swap_goblet_squat_heavy', 'Goblet Squat (Heavy) (1 logged session)');
   const base = { id: 'c_ul_to2', name: 'Barbell Row (Pendlay)', target: '4×8', sets: 4, inputType: 'reps_weight' };
   ctx.ST.workout = { taxi: [], takeoff: [base], enroute: [], landing: [] }; ctx.ST.sets = { c_ul_to2: [] }; ctx.ST.expanded = {};
   const realRender = ctx.renderFlight, realToast = ctx.showBigToast; ctx.renderFlight = () => {}; ctx.showBigToast = () => {};
-  ctx.swapExercise('c_ul_to2', ctx.getAlternates('Barbell Row (Pendlay)').find(a => a.name === 'Machine Row'));
+  ctx.swapExercise('c_ul_to2', ctx.getAlternates('Barbell Row (Pendlay)').find(a => a.name === 'Seated Row (Machine)'));
   ctx.renderFlight = realRender; ctx.showBigToast = realToast;
-  assertEqual(ctx.ST.workout.takeoff[0].id, 'swap_machine_row', 'swapping through Alternate uses the catalog id');
+  assertEqual(ctx.ST.workout.takeoff[0].id, 'c_ul_er8', 'swapping through Alternate uses the catalog id');
 });
 test('catalog entries agree with what each alternate says about its fields', () => {
   const cat = ctx.buildExerciseCatalog(); const bad = [];
@@ -539,7 +544,8 @@ test('the newly searchable ones are found by plain wording', () => {
   const find = q => ctx.buildExerciseCatalog().filter(e => ctx.exerciseMatchesQuery(e.name, q)).map(e => e.name);
   [['smith squat', 'Smith Machine Squat'], ['smith bench', 'Smith Machine Bench Press'], ['dips', 'Dip'], ['couch stretch', 'Couch Stretch'],
    ['suitcase carry', 'Suitcase Carry'], ['cable curl', 'Cable Curl'], ['upright row', 'Upright Row'], ['woodchop', 'Cable Woodchop'],
-   ['machine row', 'Machine Row'], ['chest press machine', 'Machine Chest Press'], ['goblet squat', 'Goblet Squat'],
+   ['machine row', 'Seated Row (Machine)'], ['chest press machine', 'Chest Press (Machine)'], ['booty builder', 'Hip Thrust (Machine)'],
+   ['stairs', 'Stair Climber'], ['ab machine', 'Ab Crunch (Machine)'], ['recumbent bicycle', 'Recumbent Bike'], ['goblet squat', 'Goblet Squat'],
    ['rear delt fly', 'Dumbbell Reverse Fly'], ['hammer curl', 'DB Hammer Curl'], ['hack squat', 'Hack Squat (Machine)'], ['tricep pushdown', 'Cable Tricep Pushdown']].forEach(([q, want]) =>
     assertEqual(find(q).includes(want), true, '"' + q + '" finds ' + want));
 });
@@ -1259,6 +1265,42 @@ test('an early report tomorrow makes tonight about sleep', () => {
 test('a light day, good sleep, early evening still gets the full session', () => {
   const b = ctx.buildTodayBriefing(dfCtx({ hour: 16, landedH: 15, legs: 2, sleep: 84 }));
   assertEqual(b.tone, 'go', b.body); assertEqual(/full session/.test(b.body), true, b.body);
+});
+
+console.log('\nGym machines (requested: add my gym\'s machines, rotate them in, alternates, YouTube tutorials):');
+const GYM_MACHINES = ['Ab Crunch (Machine)','Torso Rotation (Machine)','Back Extension (Machine)','Biceps Curl (Machine)','Triceps Extension (Machine)',
+  'Pullover (Machine)','Seated Row (Machine)','Lat Pulldown','Lateral Raise (Machine)','Shoulder Press (Machine)','Assisted Dip (Machine)',
+  'Assisted Pull-Up (Machine)','Rear Delt Fly (Machine)','Pec Fly (Machine)','Incline Chest Press (Machine)','Chest Press (Machine)',
+  'Leg Extension (Machine)','Seated Leg Curl (Machine)','Lying Leg Curl (Machine)','Hip Abduction (Machine)','Hip Adduction (Machine)',
+  'Hip Thrust (Machine)','Glute Kickback (Machine)','Standing Calf Raise (Machine)','Seated Calf Raise (Machine)','Leg Press',
+  'Horizontal Calf Press (Machine)','Stair Climber','Recumbent Bike','Upright Bike','Seated Tricep Press (Machine)'];
+const commPool = Object.values(ctx.WORKOUTS.comm).flatMap(w => [...w.takeoff, ...w.enroute]).map(e => e.name);
+test('every machine at the gym is in the commercial-gym rotation', () => {
+  const missing = GYM_MACHINES.filter(n => !commPool.includes(n));
+  assertEqual(missing.length, 0, 'not in rotation: ' + missing.join(', '));
+});
+test('every machine has its own alternates', () => {
+  const none = GYM_MACHINES.filter(n => !(ctx.ALTERNATES[n] || []).length);
+  assertEqual(none.length, 0, 'no alternates: ' + none.join(', '));
+});
+test('every machine links straight to a YouTube video, not a search', () => {
+  const bad = GYM_MACHINES.filter(n => !/^https:\/\/www\.youtube\.com\/watch\?v=[\w-]{11}$/.test(ctx.EXERCISE_VIDEOS[n] || ''));
+  assertEqual(bad.length, 0, 'no direct video: ' + bad.join(', '));
+  assertEqual(ctx.getExGuide('c_up_er12', 'Chest Press (Machine)').exrx, ctx.EXERCISE_VIDEOS['Chest Press (Machine)'], 'guide link uses the video');
+  assertEqual(ctx.getExGuide('c_up_er1', 'Incline DB Press').exrx.includes('results?search_query'), true, 'others still fall back to a search');
+});
+test('free-weight moves offer the matching machine as an alternate', () => {
+  const alt = (from, name) => (ctx.ALTERNATES[from] || []).some(a => a.name === name);
+  [['Flat Barbell Bench Press','Chest Press (Machine)'],['Standing Overhead Press','Shoulder Press (Machine)'],['Seated Cable Row','Seated Row (Machine)'],
+   ['Face Pull','Rear Delt Fly (Machine)'],['EZ Bar Curl','Biceps Curl (Machine)'],['Romanian Deadlift','Hip Thrust (Machine)'],
+   ['Standing Calf Raise','Horizontal Calf Press (Machine)'],['Treadmill Zone 2 Run','Recumbent Bike'],['Sit-Up','Ab Crunch (Machine)']].forEach(([f, n]) =>
+    assertEqual(alt(f, n), true, f + ' -> ' + n));
+});
+test('cardio machines get a real calorie rate, not the 2.8 stretch-and-hold rate', () => {
+  const met = n => ctx.exerciseMET(ctx.WORKOUTS.comm['Cardio'].enroute.find(e => e.name === n));
+  assertEqual(met('Stair Climber'), 9.0, 'Stair Climber MET');
+  assertEqual(met('Recumbent Bike'), 4.8, 'Recumbent Bike MET');
+  assertEqual(met('Upright Bike'), 4.8, 'Upright Bike MET');
 });
 
 console.log('\n' + '─'.repeat(50));

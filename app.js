@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.29 / 20260916_4
+ * Version/build: fcf-v5.44.30 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.29';
+const FCF_VERSION = 'fcf-v5.44.30';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -494,6 +494,9 @@ WORKOUTS.comm['Lower Body'] = {
     ex('c_lb_er9','Seated Calf Raise (Machine)','4×15',4,'Knees bent under the pad. Targets the soleus, distinct from standing calf raises, which emphasize the gastrocnemius.'),
     ex('c_lb_er10','Hip Abduction (Machine)','3×15',3,'Seated, push knees outward against the pads. Glute medius: often neglected but key for hip stability.'),
     ex('c_lb_er11','Hip Adduction (Machine)','3×15',3,'Seated, squeeze knees together against the pads. Inner thigh: commonly skipped but balances the abductors.'),
+    ex('c_lb_er12','Hip Thrust (Machine)','3×10',3,'Upper back against the pad, belt or pad across the hips. Drive the hips up until your body is flat, squeeze the glutes for a second, lower under control. Chin tucked, ribs down.'),
+    ex('c_lb_er13','Lying Leg Curl (Machine)','3×12',3,'Face down, knees just off the bench edge, pad above the heels. Curl up without lifting the hips, lower slowly. Hamstrings in a different position than the seated curl.'),
+    ex('c_lb_er14','Horizontal Calf Press (Machine)','4×15',4,'Seated, balls of the feet on the plate, knees straight but not locked. Press through the toes, then let the heels travel back for a full stretch.'),
   ],
   landing: [
     ex('c_lb_l1','Pigeon Pose','90s/side',1,'External hip rotation stretch. Hold completely still.',true,'timed_bilateral'),
@@ -523,6 +526,10 @@ WORKOUTS.comm['Upper Push'] = {
     ex('c_up_er7','Pec Fly (Machine)','3×15',3,'Seated, arms slightly bent throughout. Squeeze at full contraction, control the stretch back.'),
     ex('c_up_er8','Cable Tricep Pushdown','3×15',3,'Elbows pinned to your sides. The whole rep should come from the elbow, not the shoulder.'),
     ex('c_up_er9','Assisted Dip (Machine)','3×10',3,'Counterweight assists the lift. Lean forward slightly for more chest emphasis.'),
+    ex('c_up_er12','Chest Press (Machine)','3×10',3,'Seat height so the handles line up with mid chest. Press out without locking the elbows hard, return under control. Shoulder friendly.'),
+    ex('c_up_er13','Shoulder Press (Machine)','3×10',3,'Seat height so the handles start at shoulder level. Press overhead without shrugging, lower to shoulder height. Back stays on the pad.'),
+    ex('c_up_er14','Lateral Raise (Machine)','3×15',3,'Arms against the pads, raise out to shoulder height and lower slowly. The machine keeps the form strict.'),
+    ex('c_up_er15','Triceps Extension (Machine)','3×12',3,'Upper arms flat on the pad, elbows lined up with the pivot. Straighten the arms fully, return slowly. Only the forearms move.'),
     ex('c_up_er11','Seated Tricep Press (Machine)','3×12',3,'Seated, handles at chest height, elbows tucked. Press to full extension and control the return. Tricep isolation without loading the shoulders.'),
   ],
   landing: [
@@ -549,6 +556,10 @@ WORKOUTS.comm['Upper Pull'] = {
     ex('c_ul_er4','EZ Bar Curl','3×12',3,'Strict, no swing. Control the eccentric.'),
     ex('c_ul_er6','Assisted Pull-Up (Machine)','3×8',3,'Counterweight assists the lift. Dial in just enough assistance to hit real reps with good form.'),
     ex('c_ul_er7','T-Bar Row (Machine)','3×10',3,'Chest supported, pull to the lower ribs. Removes lower-back strain compared to a free-standing barbell row.'),
+    ex('c_ul_er8','Seated Row (Machine)','3×12',3,'Chest against the pad, pull the handles to your ribs and squeeze the shoulder blades together. The supported position suits heavier reps.'),
+    ex('c_ul_er9','Pullover (Machine)','3×12',3,'Elbows on the pads, shoulders lined up with the pivot. Sweep the arms down and forward using the lats, return slowly to a full stretch. Lats without the biceps.'),
+    ex('c_ul_er10','Rear Delt Fly (Machine)','3×15',3,'Face the pad on the rear delt/pec fly machine, handles at shoulder height. Open the arms out and back with a soft elbow, squeeze, return slowly. Counters cockpit posture.'),
+    ex('c_ul_er11','Biceps Curl (Machine)','3×12',3,'Upper arms flat on the pad, elbows lined up with the pivot. Curl up, squeeze, lower slowly to almost straight.'),
     ex('c_ul_er5','Preacher Curl','3×12',3,'Arm braced on the pad. Isolates the biceps by removing shoulder swing entirely.'),
   ],
   landing: [
@@ -606,6 +617,8 @@ WORKOUTS.comm['Full Body'] = {
     ex('c_fb_er11','Kettlebell Halo','3×8/side',3,'Hold the bell by the horns at chest height, circle it around your head, leading with the same direction each set. Keeps your core braced throughout.'),
     ex('c_fb_er12','Medicine Ball Slam','3×12',3,'Raise the ball overhead and slam it straight down as hard as you can, catching it on the bounce or picking it back up. Full body: legs, core, and shoulders drive the power.'),
     ex('c_fb_er13','Medicine Ball Russian Twist','3×16/side',3,'Sit with knees bent, lean back slightly, rotate the ball side to side, tapping it to the floor on each side.',false,'reps_only'),
+    ex('c_fb_er14','Ab Crunch (Machine)','3×15',3,'Curl the ribs toward the hips using the abs, not the arms. Pause, then return slowly. Moderate weight: if your hips lift off the seat it is too heavy.'),
+    ex('c_fb_er15','Torso Rotation (Machine)','3×12/side',3,'Hips locked in, rotate slowly through the trunk and return under control. Light to moderate weight, smooth range, no jerking at the end.'),
   ],
   landing: [
     ex('c_fb_l1','Full Body Stretch Circuit','5 min',1,'Child\'s pose → pigeon each side → lat hang → chest doorframe.',true,'timed'),
@@ -628,6 +641,7 @@ WORKOUTS.comm['Longevity'] = {
     ex('c_lg_er2','Face Pull','3×20',3,'Essential shoulder health.'),
     ex('c_lg_er3','Pallof Press','3×10/side',3,'Cable or band. Anti-rotation core stability.'),
     ex('c_lg_er4','Split Squat','3×10/leg',3,'Both feet on floor. Controlled descent.',false,'reps_only'),
+    ex('c_lg_er5','Back Extension (Machine)','3×12',3,'Pad across the upper back, hips lined up with the pivot. Extend back slowly to upright, no further. Light weight, smooth reps. Builds the lower back that hours of sitting weakens.'),
   ],
   landing: [
     ex('c_lg_l1','Hip 90/90 Rotation Drill','90s/side',1,'Your most important mobility work as a pilot.',true,'timed_bilateral'),
@@ -651,6 +665,9 @@ WORKOUTS.comm['Cardio'] = {
     ex('c_ca_er4','Treadmill','30 min',1,'Any steady treadmill session: walk, incline, or run.',true,'timed'),
     ex('c_ca_er5','Outdoor Run','20-40 min',1,'Any pace, any route. Log distance for the leaderboard.',true,'timed_distance'),
     ex('c_ca_er2','Step-Up','3×15/leg',3,'Active recovery strength.'),
+    ex('c_ca_er6','Stair Climber','15-20 min',1,'Steady pace you can hold. Stand tall and keep a light touch on the rails instead of leaning on them.',true,'timed'),
+    ex('c_ca_er7','Recumbent Bike','20-30 min',1,'Seat set so the knee stays slightly bent at the far pedal. Zone 2: you can speak in full sentences. Easy on the back and knees.',true,'timed'),
+    ex('c_ca_er8','Upright Bike','20-30 min',1,'Seat at hip height when standing next to it. Steady Zone 2 cadence, or add short harder efforts if the day allows.',true,'timed'),
   ],
   landing: [
     ex('c_ca_l1','Cool-Down Walk','5 min',1,'Slow your pace gradually.',true,'timed'),
@@ -1046,12 +1063,12 @@ function femaleTargetBump(target) {
 // one exists (via the same ALTERNATES data the manual Alternate button uses),
 // and to caution-flag exercises where no confident substitute exists.
 const INJURY_REGIONS = {
-  shoulder:    { label: 'Shoulder',      keywords: ['Overhead Press','Lateral Raise','Front Raise','Upright Row','Handstand','Pike Pushup','Arnold','Y-T-W','Face Pull'] },
+  shoulder:    { label: 'Shoulder',      keywords: ['Overhead Press','Shoulder Press','Pullover','Lateral Raise','Front Raise','Upright Row','Handstand','Pike Pushup','Arnold','Y-T-W','Face Pull'] },
   elbow_wrist: { label: 'Elbow / Wrist',  keywords: ['Curl','Tricep','Extension','Close Grip','Dip','Pushup','Push-up','Plank'] },
-  lower_back:  { label: 'Lower Back',     keywords: ['Deadlift','Good Morning','Back Extension','Superman','Row','RDL','Romanian'] },
+  lower_back:  { label: 'Lower Back',     keywords: ['Torso Rotation','Deadlift','Good Morning','Back Extension','Superman','Row','RDL','Romanian'] },
   hip:         { label: 'Hip',            keywords: ['Squat','Lunge','Split Squat','Step-Up','Hip Thrust','Deadlift','Pistol','Goblet'] },
   knee:        { label: 'Knee',           keywords: ['Squat','Lunge','Split Squat','Step-Up','Jump','Box Jump','Pistol','Leg Press','Leg Extension'] },
-  ankle_foot:  { label: 'Ankle / Foot',   keywords: ['Calf Raise','Jump','Box Jump','Run','Sprint','Walking','Treadmill'] },
+  ankle_foot:  { label: 'Ankle / Foot',   keywords: ['Calf Raise','Calf Press','Stair Climber','Jump','Box Jump','Run','Sprint','Walking','Treadmill'] },
   neck:        { label: 'Neck',           keywords: ['Neck','Shrug'] },
 };
 
@@ -1305,6 +1322,46 @@ const EXRX_VERIFIED = {
   r_pp_to2:'https://exrx.net/Plyometrics/BroadJump',
 };
 
+// Tutorial videos for gym machines (Chad's gym list, Oct 2026). Every URL
+// appeared in a live search result and its title and channel were checked
+// against YouTube's oEmbed record, never typed from memory. Most are the
+// manufacturer's own setup videos (Matrix Fitness, Life Fitness). Keyed by
+// exercise NAME so a swap-in or a Build Your Own copy gets the same video.
+const EXERCISE_VIDEOS = {
+  'Chest Press (Machine)':          'https://www.youtube.com/watch?v=6KFQqLTR-fc', // Matrix Fitness, Aura Chest Press
+  'Incline Chest Press (Machine)':  'https://www.youtube.com/watch?v=7_scLkTCwTU', // Live Lean TV, Star Trac incline press
+  'Shoulder Press (Machine)':       'https://www.youtube.com/watch?v=eqSPtPg3HD8', // Matrix Fitness, Aura Shoulder Press
+  'Lateral Raise (Machine)':        'https://www.youtube.com/watch?v=sEhjeYuf--Q', // Matrix Fitness, Aura Lateral Raise
+  'Pec Fly (Machine)':              'https://www.youtube.com/watch?v=3kDQzcNzYvo', // Matrix Fitness, Ultra Pec Fly
+  'Rear Delt Fly (Machine)':        'https://www.youtube.com/watch?v=3dJzVebHVos', // Matrix Fitness, Aura Rear Delt/Pec Fly
+  'Triceps Extension (Machine)':    'https://www.youtube.com/watch?v=r9d-O-zLj3g', // Matrix Fitness, Aura Triceps Extension
+  'Seated Tricep Press (Machine)':  'https://www.youtube.com/watch?v=xjpc2tX5aXs', // Matrix Fitness, Aura Seated Triceps Press
+  'Assisted Dip (Machine)':         'https://www.youtube.com/watch?v=q5wPdEZfcoQ', // Matrix Fitness, Aura Dip/Chin Assist
+  'Assisted Pull-Up (Machine)':     'https://www.youtube.com/watch?v=wFj808u2HWU', // PureGym
+  'Lat Pulldown':                   'https://www.youtube.com/watch?v=_OkuPey2eJU', // Matrix Fitness, Aura Lat Pulldown
+  'Seated Row (Machine)':           'https://www.youtube.com/watch?v=BoDiUlDHlOo', // Matrix Fitness, Aura Seated Row
+  'Pullover (Machine)':             'https://www.youtube.com/watch?v=M9JTBabQXQ4', // Power Palace Gym, Nautilus pullover
+  'Biceps Curl (Machine)':          'https://www.youtube.com/watch?v=AycGrMUIXKA', // Matrix Fitness, Versa Biceps Curl
+  'Ab Crunch (Machine)':            'https://www.youtube.com/watch?v=Ic6DrH6cKvQ', // Matrix Fitness, Aura Abdominal Crunch
+  'Torso Rotation (Machine)':       'https://www.youtube.com/watch?v=0t17aBlo680', // Matrix Fitness, Aura Rotary Torso
+  'Back Extension (Machine)':       'https://www.youtube.com/watch?v=YrBgyPSajvU', // Life Fitness, Pro2 Back Extension
+  'Leg Extension (Machine)':        'https://www.youtube.com/watch?v=loXT1KnX6to', // Life Fitness, Pro2 Leg Extension
+  'Seated Leg Curl (Machine)':      'https://www.youtube.com/watch?v=TlBPcxdpVMo', // Life Fitness, Pro2 Seated Leg Curl
+  'Lying Leg Curl (Machine)':       'https://www.youtube.com/watch?v=5OTJv6P1Ae8', // Matrix Fitness, Ultra Prone Leg Curl
+  'Hip Abduction (Machine)':        'https://www.youtube.com/watch?v=RfC_GJ9FvP0', // Life Fitness, Pro2 Hip Abductor
+  'Hip Adduction (Machine)':        'https://www.youtube.com/watch?v=iJ7hmniZqdI', // Life Fitness, Pro2 Hip Adductor
+  'Glute Kickback (Machine)':       'https://www.youtube.com/watch?v=24pvhNOoK80', // Live Lean TV, Life Fitness glute kickback
+  'Hip Thrust (Machine)':           'https://www.youtube.com/watch?v=HLR07AVY1sc', // Booty Builder official, Dual Hip Thrust
+  'Standing Calf Raise (Machine)':  'https://www.youtube.com/watch?v=GAQ-oohMhog', // SIU Rec Center
+  'Seated Calf Raise (Machine)':    'https://www.youtube.com/watch?v=3gXOhpOcD2c', // Hammer Strength seated calf
+  'Horizontal Calf Press (Machine)':'https://www.youtube.com/watch?v=dkeweUb_Nd4', // Life Fitness, Pro2 Horizontal Calf
+  'Leg Press':                      'https://www.youtube.com/watch?v=30N6fKpuTNo', // Life Fitness, Pro2 Seated Leg Press
+  'Stair Climber':                  'https://www.youtube.com/watch?v=ihNNujnvqBs', // ClubSport, StairMaster 10G
+  'Recumbent Bike':                 'https://www.youtube.com/watch?v=XugMoMDxyhM', // SilverSneakers
+  'Upright Bike':                   'https://www.youtube.com/watch?v=sAZ2yr1ryHo', // UMW Campus Recreation
+};
+function exerciseVideoUrl(name) { return EXERCISE_VIDEOS[name] || null; }
+
 function youtubeSearchLink(name) {
   const clean = name.replace(/\([^)]*\)/g, '').replace(/[\/]/g, ' ').trim();
   return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(clean + ' exercise how to form');
@@ -1312,9 +1369,11 @@ function youtubeSearchLink(name) {
 
 function getExGuide(exId, exName) {
   const verified = EXRX_VERIFIED[exId];
+  const video = exerciseVideoUrl(exName);
   return {
-    exrx: verified || youtubeSearchLink(exName || exId),
+    exrx: verified || video || youtubeSearchLink(exName || exId),
     verified: !!verified,
+    video: !verified && !!video,
   };
 }
 
@@ -6803,7 +6862,14 @@ const EXERCISE_SYNONYMS = {
   'cgbp': 'Close Grip Bench',
   'close grip bench press': 'Close Grip Bench',
   'dips': 'Dip',
-  'chest press machine': 'Machine Chest Press',
+  'chest press machine': 'Chest Press (Machine)',
+  'seated chest press': 'Chest Press (Machine)',
+  'shoulder press machine': 'Shoulder Press (Machine)',
+  'machine shoulder press': 'Shoulder Press (Machine)',
+  'seated shoulder press machine': 'Shoulder Press (Machine)',
+  'lateral raise machine': 'Lateral Raise (Machine)',
+  'machine lateral raise': 'Lateral Raise (Machine)',
+  'deltoid raise machine': 'Lateral Raise (Machine)',
 
   // Rows & pulls
   'pendlay row': 'Barbell Row (Pendlay)',
@@ -6882,7 +6948,7 @@ const EXERCISE_SYNONYMS = {
   'incline press machine': 'Incline Chest Press (Machine)',
   'machine decline press': 'Decline Chest Press (Machine)',
   'decline press machine': 'Decline Chest Press (Machine)',
-  'machine chest press': 'Incline Chest Press (Machine)',
+  'machine chest press': 'Chest Press (Machine)',
   'tricep pushdown': 'Cable Tricep Pushdown',
   'tricep push down': 'Cable Tricep Pushdown',
   'rope pushdown': 'Cable Tricep Pushdown',
@@ -6892,7 +6958,53 @@ const EXERCISE_SYNONYMS = {
   'triceps press machine': 'Seated Tricep Press (Machine)',
   'seated tricep press': 'Seated Tricep Press (Machine)',
   'seated dip machine': 'Seated Tricep Press (Machine)',
-  'tricep extension machine': 'Seated Tricep Press (Machine)',
+  'tricep extension machine': 'Triceps Extension (Machine)',
+  'triceps extension machine': 'Triceps Extension (Machine)',
+  'machine tricep extension': 'Triceps Extension (Machine)',
+  'seated row machine': 'Seated Row (Machine)',
+  'machine row': 'Seated Row (Machine)',
+  'pullover machine': 'Pullover (Machine)',
+  'machine pullover': 'Pullover (Machine)',
+  'nautilus pullover': 'Pullover (Machine)',
+  'pull down machine': 'Lat Pulldown',
+  'pulldown machine': 'Lat Pulldown',
+  'rear delt machine': 'Rear Delt Fly (Machine)',
+  'rear delt fly machine': 'Rear Delt Fly (Machine)',
+  'reverse pec deck': 'Rear Delt Fly (Machine)',
+  'machine rear delt fly': 'Rear Delt Fly (Machine)',
+  'bicep curl machine': 'Biceps Curl (Machine)',
+  'biceps curl machine': 'Biceps Curl (Machine)',
+  'machine curl': 'Biceps Curl (Machine)',
+  'machine bicep curl': 'Biceps Curl (Machine)',
+  'ab machine': 'Ab Crunch (Machine)',
+  'ab crunch machine': 'Ab Crunch (Machine)',
+  'abdominal machine': 'Ab Crunch (Machine)',
+  'abdominal crunch machine': 'Ab Crunch (Machine)',
+  'abdominals machine': 'Ab Crunch (Machine)',
+  'torso rotation machine': 'Torso Rotation (Machine)',
+  'rotary torso': 'Torso Rotation (Machine)',
+  'rotary torso machine': 'Torso Rotation (Machine)',
+  'back extension machine': 'Back Extension (Machine)',
+  'lower back machine': 'Back Extension (Machine)',
+  'booty builder': 'Hip Thrust (Machine)',
+  'hip thrust machine': 'Hip Thrust (Machine)',
+  'glute bridge machine': 'Hip Thrust (Machine)',
+  'lying leg curl': 'Lying Leg Curl (Machine)',
+  'prone leg curl': 'Lying Leg Curl (Machine)',
+  'horizontal calf': 'Horizontal Calf Press (Machine)',
+  'horizontal calf press': 'Horizontal Calf Press (Machine)',
+  'calf press machine': 'Horizontal Calf Press (Machine)',
+  'seated calf press': 'Horizontal Calf Press (Machine)',
+  'stairs': 'Stair Climber',
+  'stair machine': 'Stair Climber',
+  'stairmaster': 'Stair Climber',
+  'stair master': 'Stair Climber',
+  'stepmill': 'Stair Climber',
+  'recumbent bicycle': 'Recumbent Bike',
+  'recumbent': 'Recumbent Bike',
+  'upright bicycle': 'Upright Bike',
+  'exercise bike': 'Upright Bike',
+  'seated leg press': 'Leg Press',
   'assisted dip': 'Assisted Dip (Machine)',
   'assisted dip machine': 'Assisted Dip (Machine)',
   'dip machine': 'Assisted Dip (Machine)',
@@ -6912,7 +7024,6 @@ const EXERCISE_SYNONYMS = {
   'lat pulldown machine': 'Lat Pulldown',
   'cable row': 'Seated Cable Row',
   'seated row': 'Seated Cable Row',
-  'seated row machine': 'Seated Cable Row',
 
   // Band exercises — common alternate names and full "resistance band ___"
   // phrasings that don't share words with the catalog's shorter "Banded
@@ -7102,15 +7213,14 @@ const CATALOG_ALTERNATES = [
   altEx('Goblet Squat',                '4×12', 4, 'Hold a dumbbell or kettlebell at your chest and squat to depth. A lighter, higher-rep version of the heavy goblet squat.'),
   altEx('Smith Machine Squat',         '4×8',  4, 'Bar on the upper back in the Smith machine, feet slightly forward of the bar, squat to depth. The fixed bar path needs less balance.'),
   altEx('DB Deadlift',                 '4×8',  4, 'Dumbbells at your sides or just in front of the shins, hinge at the hips with a flat back and stand tall. The deadlift pattern at a lighter load.'),
-  altEx('Machine Chest Press',         '4×12', 4, 'Set the seat so the handles line up with mid chest. Press out without locking hard, lower under control. Shoulder friendly.'),
   altEx('Smith Machine Bench Press',   '4×8',  4, 'Bench centered under the Smith bar, lower to mid chest and press. The fixed bar path suits training without a spotter.'),
-  altEx('Machine Row',                 '4×12', 4, 'Chest against the pad, pull the handles to your ribs and squeeze the shoulder blades together. The supported position suits heavier reps.'),
   altEx('Cable Straight-Arm Pulldown', '3×15', 3, 'Face a high cable, arms nearly straight, sweep the bar down to your thighs using the lats. Works the lats without the biceps.'),
   altEx('Seated DB Face Pull',         '3×15', 3, 'Seated and leaning forward, pull light dumbbells up and back toward your ears, finishing with the knuckles rotated back. Rear delts and rotator cuff.'),
   altEx('Cable Lateral Raise',         '3×15', 3, 'Stand side-on to a low cable, raise the handle out to shoulder height with a soft elbow. The cable keeps tension through the whole range.'),
   altEx('Upright Row',                 '3×12', 3, 'Bar or dumbbells in front of the thighs, pull up along the body leading with the elbows to about chest height. Side delts and upper traps.'),
   altEx('Cable Front Raise',           '3×15', 3, 'Back to a low cable, raise the handle straight in front to shoulder height. Constant tension on the front delts.'),
-  altEx('Machine Lateral Raise',       '3×15', 3, 'Arms against the pads, raise out to shoulder height and lower slowly. The machine keeps the form strict.'),
+  altEx('DB Flye',                     '3×12', 3, 'On a flat bench, dumbbells over the chest with a slight elbow bend. Open the arms wide for a deep stretch, then hug back up.'),
+  altEx('Cable Glute Kickback',        '3×12/leg', 3, 'Ankle strap on a low cable, slight forward lean, kick straight back through the heel and squeeze. No swinging.'),
   altEx('Cable Curl',                  '3×15', 3, 'Face a low cable, elbows pinned at your sides, curl the bar up and lower slowly. Constant tension on the biceps.'),
   altEx('Dip',                         '3×max', 3, 'On parallel bars, lower until the shoulders are just below the elbows, then press back up. Lean forward for more chest, stay upright for more triceps.', false, 'reps_only'),
   altEx('Leg Press Calf Raise',        '4×20', 4, 'Balls of the feet on the bottom edge of the leg press platform, knees straight but not locked, press through the toes and lower for a full stretch.'),
@@ -8210,6 +8320,11 @@ const MOVEMENT_ALIASES = {
   'box jump': 'box jump',
   'bench/box jump': 'box jump',
   'bed/chair jump': 'box jump',
+  // Machines first offered as free-text alternates, now real catalog
+  // exercises. Old sessions logged under the old name keep counting.
+  'machine chest press': 'chest press (machine)',
+  'machine row': 'seated row (machine)',
+  'machine lateral raise': 'lateral raise (machine)',
 };
 function normalizeMovementName(name) {
   const n = (name || '').toLowerCase().trim();
@@ -8422,6 +8537,8 @@ const ALTERNATES = {
     {name:'DB Romanian Deadlift',target:'4×10',note:'Same hip hinge, dumbbells if no barbell available.'},
     {name:'Seated Leg Curl (Machine)',target:'3×12',note:'Machine isolation: direct hamstring without the hinge.'},
     {name:'Good Morning',       target:'3×10',note:'Bar on back, hip hinge. Excellent hamstring stretch.'},
+    {name:'Back Extension (Machine)',target:'3×12',note:'Lower back and glutes without the hinge load. Lighter on the spine.'},
+    {name:'Hip Thrust (Machine)',target:'3×10',note:'Glute-focused hip extension with the back supported.'},
   ],
   'Conventional Deadlift': [
     {name:'Trap Bar Deadlift',  target:'5×3', note:'More quad-friendly. Great for athletes.'},
@@ -8435,7 +8552,7 @@ const ALTERNATES = {
   ],
   'Flat Barbell Bench Press': [
     {name:'DB Bench Press',     target:'4×10',note:'Greater ROM. Often easier on shoulders.'},
-    {name:'Machine Chest Press',target:'4×12',note:'Shoulder-friendly machine alternative.'},
+    {name:'Chest Press (Machine)',target:'4×12',note:'Shoulder-friendly machine alternative.'},
     {name:'Close Grip Bench',   target:'4×8', note:'More tricep emphasis. Same pressing stimulus.'},
     {name:'Smith Machine Bench Press',target:'4×8',note:'Fixed bar path. Good when the rack is busy or you\'re training without a spotter.'},
   ],
@@ -8443,21 +8560,25 @@ const ALTERNATES = {
     {name:'DB Overhead Press',  target:'4×8', note:'Independent arms. Easier shoulder position.'},
     {name:'Push Press',         target:'4×5', note:'Leg drive added, allowing heavier overhead loads.'},
     {name:'Pike Pushup',        target:'4×12',note:'Bodyweight overhead pressing. No equipment.',inputType:'reps_only'},
+    {name:'Shoulder Press (Machine)',target:'3×10',note:'Seated machine press. Back supported, no balance demand.'},
   ],
   'Barbell Row (Pendlay)': [
     {name:'DB Row',             target:'4×10/side',note:'Unilateral. Fuller ROM per side.'},
     {name:'Seated Cable Row',   target:'4×12',     note:'Constant tension through full range.'},
-    {name:'Machine Row',        target:'4×12',     note:'Easier position. Good for heavier reps.'},
+    {name:'Seated Row (Machine)',target:'4×12',     note:'Easier position. Good for heavier reps.'},
   ],
   'Lat Pulldown': [
     {name:'Pullups',            target:'4×max',note:'Bodyweight variant. Builds more strength.',inputType:'reps_only'},
     {name:'Chinups',            target:'4×max',note:'Supinated grip. More bicep involvement.',inputType:'reps_only'},
     {name:'Cable Straight-Arm Pulldown',target:'3×15',note:'Isolation. Hits lower lat without bicep.'},
+    {name:'Pullover (Machine)',target:'3×12',note:'Lats only, no biceps. Good if the elbows or grip are tired.'},
+    {name:'Assisted Pull-Up (Machine)',target:'3×8',note:'Real pull-up pattern with counterweight help.'},
   ],
   'Seated Cable Row': [
     {name:'DB Row',             target:'4×10/side',note:'Fully loads each side independently.'},
     {name:'Barbell Row (Pendlay)',target:'4×6',    note:'Heavier bilateral pulling.'},
     {name:'Table / Inverted Row',target:'3×12',     note:'Bodyweight row under a table or bar.',inputType:'reps_only'},
+    {name:'Seated Row (Machine)',target:'3×12',note:'Chest supported. Same squeeze, less lower-back demand.'},
   ],
   'Box Jump': [
     {name:'Broad Jump',         target:'5×3',note:'Horizontal power. Same explosive hip extension.',inputType:'reps_distance'},
@@ -8473,6 +8594,7 @@ const ALTERNATES = {
     {name:'Dumbbell Reverse Fly',target:'3×15',note:'Prone or bent-over. Same rear delt + external rotation.'},
     {name:'Band Pull-Apart',    target:'3×20',note:'Resistance band. Great shoulder health work.',inputType:'reps_only'},
     {name:'Seated DB Face Pull',target:'3×15',note:'Seated, light DBs, external rotation finish.'},
+    {name:'Rear Delt Fly (Machine)',target:'3×15',note:'Rear delts on the fly machine. Strict and easy to load.'},
   ],
   'Goblet Squat': [
     {name:'Back Squat',         target:'5×5',note:'Barbell version for heavier loading.'},
@@ -8510,7 +8632,7 @@ const ALTERNATES = {
     {name:'Step-Up (Weighted)',target:'3×12/leg',note:'Different plane, same single-leg strength demand.'},
   ],
   'DB Bench Press': [
-    {name:'Machine Chest Press',target:'4×12',note:'Fixed path, easier on the shoulders for higher reps.'},
+    {name:'Chest Press (Machine)',target:'4×12',note:'Fixed path, easier on the shoulders for higher reps.'},
     {name:'Pushup Variations',target:'4×max',note:'Bodyweight substitute if dumbbells aren\'t heavy enough or available.',inputType:'reps_only'},
     {name:'DB Incline Press',target:'4×10',note:'Shifts emphasis to upper chest.'},
   ],
@@ -8521,7 +8643,7 @@ const ALTERNATES = {
   ],
   'DB Incline Press': [
     {name:'DB Bench Press',target:'4×10',note:'Flat variant if an incline bench isn\'t available.'},
-    {name:'Machine Chest Press',target:'4×12',note:'Fixed path alternative.'},
+    {name:'Chest Press (Machine)',target:'4×12',note:'Fixed path alternative.'},
     {name:'Pushup Variations',target:'4×max',note:'Bodyweight substitute. Elevate feet for upper-chest emphasis.',inputType:'reps_only'},
   ],
   'DB Lateral Raise': [
@@ -8589,10 +8711,14 @@ const ALTERNATES = {
   'Treadmill Zone 2 Run': [
     {name:'Stationary Bike Intervals',target:'20 min',note:'Same aerobic zone, lower impact.',inputType:'timed'},
     {name:'Walking',target:'30-45 min',note:'Zone 1-2 substitute: easier recovery day option.',inputType:'timed'},
+    {name:'Recumbent Bike',target:'20-30 min',note:'Same aerobic zone, zero impact, back supported.',inputType:'timed'},
+    {name:'Stair Climber',target:'15-20 min',note:'Harder aerobic work at a slower pace, low impact.',inputType:'timed'},
   ],
   'Treadmill': [
     {name:'Stationary Bike Intervals',target:'20 min',note:'Lower-impact substitute for the same duration.',inputType:'timed'},
     {name:'Walking',target:'30-45 min',note:'If the treadmill is occupied or you want lower intensity.',inputType:'timed'},
+    {name:'Upright Bike',target:'20-30 min',note:'Lower-impact substitute for the same duration.',inputType:'timed'},
+    {name:'Stair Climber',target:'15-20 min',note:'Climbing instead of walking or running. Low impact.',inputType:'timed'},
   ],
 
   // HOTEL ROOM
@@ -8716,13 +8842,15 @@ const ALTERNATES = {
   // EN ROUTE accessories
   'Lateral Raise': [
     {name:'Cable Lateral Raise',target:'3×15',note:'Cable keeps tension at the bottom, making it harder than DBs.'},
-    {name:'Machine Lateral Raise',target:'3×15',note:'Machine version. Strict form, no cheating.'},
+    {name:'Lateral Raise (Machine)',target:'3×15',note:'Machine version. Strict form, no cheating.'},
     {name:'Upright Row',target:'3×12',note:'Barbell or DB. Hits lateral delt and upper trap.'},
+    {name:'Shoulder Press (Machine)',target:'3×10',note:'Pressing instead of raising if the side raise bothers the shoulder.'},
   ],
   'EZ Bar Curl': [
     {name:'DB Curl',target:'3×12',note:'Dumbbell variation. Allows neutral or supinated grip.'},
     {name:'Cable Curl',target:'3×15',note:'Constant tension throughout. Great pump.'},
     {name:'DB Hammer Curl',target:'3×12',note:'Neutral grip. Hits brachialis and brachioradialis.'},
+    {name:'Biceps Curl (Machine)',target:'3×12',note:'Arms braced on the pad. No swinging possible.'},
   ],
   'DB Curl': [
     {name:'Preacher Curl',target:'3×12',note:'Removes shoulder swing entirely for the strictest possible bicep isolation.'},
@@ -8735,6 +8863,7 @@ const ALTERNATES = {
     {name:'DB Tricep Overhead',target:'3×12',note:'Overhead extension. Long head emphasis.'},
     {name:'Dip',target:'3×max',note:'Bodyweight. Chest + tricep compound.',inputType:'reps_only'},
     {name:'Seated Tricep Press (Machine)',target:'3×12',note:'Machine pressing. Same tricep emphasis, no bar to balance.'},
+    {name:'Triceps Extension (Machine)',target:'3×12',note:'Machine isolation. Easy on the shoulders.'},
   ],
   'DB Tricep Overhead': [
     {name:'Close Grip Bench',target:'3×8',note:'Barbell tricep pressing.'},
@@ -8747,21 +8876,27 @@ const ALTERNATES = {
     {name:'Close Grip Bench',target:'3×8',note:'Barbell tricep pressing.'},
     {name:'DB Tricep Overhead',target:'3×12',note:'Hotel-friendly. One dumbbell, both hands.'},
     {name:'Chair Dips',target:'3×max',note:'Bodyweight. No equipment.',inputType:'reps_only'},
+    {name:'Triceps Extension (Machine)',target:'3×12',note:'Elbow-only extension, arms braced on the pad.'},
   ],
   'Leg Press': [
     {name:'Back Squat',target:'5×5',note:'Free weight. More total body demand.'},
     {name:'Goblet Squat (Heavy)',target:'4×10',note:'DB front-loaded. Good hotel substitute.'},
     {name:'Hack Squat (Machine)',target:'4×10',note:'More quad emphasis than leg press.'},
+    {name:'Hip Thrust (Machine)',target:'3×10',note:'Glute-focused instead of quad-focused, knee friendly.'},
+    {name:'Leg Extension (Machine)',target:'3×15',note:'Quad isolation if the back needs a break from pressing.'},
   ],
   'Standing Calf Raise': [
     {name:'Seated Calf Raise (Machine)',target:'4×15',note:'Seated hits the soleus (deeper calf muscle) more.'},
     {name:'Single-Leg Calf Raise',target:'3×15/leg',note:'Bodyweight on a step. More ROM.',inputType:'reps_only'},
     {name:'Leg Press Calf Raise',target:'4×20',note:'On the leg press machine. Easy to load heavy.'},
+    {name:'Horizontal Calf Press (Machine)',target:'4×15',note:'Seated, no load on the spine or shoulders.'},
   ],
   'Pallof Press': [
     {name:'Dead Bug',target:'3×8/side',note:'Anti-extension core. No equipment.',inputType:'reps_only'},
     {name:'Plank',target:'3×60s',note:'Anti-extension. Simpler but still effective.',inputType:'timed'},
     {name:'Cable Woodchop',target:'3×12/side',note:'Rotational power. Same anti-rotation principle.'},
+    {name:'Torso Rotation (Machine)',target:'3×12/side',note:'Controlled rotation with the hips locked in.'},
+    {name:'Ab Crunch (Machine)',target:'3×15',note:'Loaded ab flexion, easy to progress.'},
   ],
   'Farmer Carry': [
     {name:'Suitcase Carry',target:'3×40yd',note:'Single DB/KB. Greater anti-lateral-flexion demand.'},
@@ -8777,6 +8912,185 @@ const ALTERNATES = {
     {name:'Lunge (Walking)',target:'3×10/leg',note:'Floor-based. No box needed.'},
     {name:'Single Leg Split Squat',target:'3×10/leg',note:'Rear foot elevated. More challenging.',inputType:'reps_only'},
     {name:'Leg Press',target:'4×12',note:'Machine substitute. Same quad emphasis.'},
+  ],
+
+  // COMMERCIAL GYM MACHINES
+  'Chest Press (Machine)': [
+    {name:'Flat Barbell Bench Press',target:'4×8',note:'Free-weight version. More stabilizer work.'},
+    {name:'Incline Chest Press (Machine)',target:'3×10',note:'Same machine pattern, more upper chest.'},
+    {name:'DB Bench Press',target:'3×10',note:'Dumbbells. Each arm works on its own.'},
+    {name:'Push-Up',target:'3×15',note:'Bodyweight. Works anywhere.',inputType:'reps_only'},
+  ],
+  'Incline Chest Press (Machine)': [
+    {name:'Incline DB Press',target:'3×10',note:'Free-weight version of the incline press.'},
+    {name:'Chest Press (Machine)',target:'3×10',note:'Flat version on the machine.'},
+    {name:'Pec Fly (Machine)',target:'3×15',note:'Chest isolation if pressing bothers the shoulders.'},
+  ],
+  'Decline Chest Press (Machine)': [
+    {name:'Chest Press (Machine)',target:'3×10',note:'Flat version if the decline machine is busy.'},
+    {name:'Assisted Dip (Machine)',target:'3×10',note:'Lower chest and triceps with a forward lean.'},
+    {name:'DB Bench Press',target:'3×10',note:'Free-weight pressing.'},
+  ],
+  'Shoulder Press (Machine)': [
+    {name:'DB Overhead Press',target:'3×10',note:'Free-weight version. Each arm on its own.'},
+    {name:'Standing Overhead Press',target:'4×6',note:'Barbell, standing. More core demand.'},
+    {name:'Lateral Raise (Machine)',target:'3×15',note:'Side delts only, if pressing overhead bothers the shoulder.'},
+  ],
+  'Lateral Raise (Machine)': [
+    {name:'Lateral Raise',target:'3×15',note:'Dumbbells. Same movement.'},
+    {name:'Cable Lateral Raise',target:'3×15',note:'Constant tension through the whole range.'},
+    {name:'Shoulder Press (Machine)',target:'3×10',note:'Pressing instead of raising.'},
+  ],
+  'Pec Fly (Machine)': [
+    {name:'Chest Press (Machine)',target:'3×10',note:'Pressing version. Easier to load heavy.'},
+    {name:'DB Flye',target:'3×12',note:'Dumbbells on a bench. Deeper stretch.'},
+    {name:'Push-Up',target:'3×15',note:'Bodyweight chest work.',inputType:'reps_only'},
+  ],
+  'Triceps Extension (Machine)': [
+    {name:'Seated Tricep Press (Machine)',target:'3×12',note:'Pressing machine. Heavier loading.'},
+    {name:'Cable Tricep Pushdown',target:'3×15',note:'Cable isolation. Elbows pinned.'},
+    {name:'DB Tricep Overhead',target:'3×12',note:'One dumbbell, both hands. Long head stretch.'},
+  ],
+  'Cable Tricep Pushdown': [
+    {name:'Triceps Extension (Machine)',target:'3×12',note:'Machine isolation, arms braced on the pad.'},
+    {name:'Seated Tricep Press (Machine)',target:'3×12',note:'Pressing machine. Heavier loading.'},
+    {name:'DB Tricep Overhead',target:'3×12',note:'One dumbbell, both hands.'},
+  ],
+  'Assisted Dip (Machine)': [
+    {name:'Seated Tricep Press (Machine)',target:'3×12',note:'Same pressing-down pattern, seated.'},
+    {name:'Chair Dips',target:'3×max',note:'Bodyweight. No equipment.',inputType:'reps_only'},
+    {name:'Dip',target:'3×max',note:'Unassisted dips on parallel bars.',inputType:'reps_only'},
+  ],
+  'Seated Row (Machine)': [
+    {name:'Seated Cable Row',target:'3×12',note:'Cable version. Constant tension.'},
+    {name:'T-Bar Row (Machine)',target:'3×10',note:'Chest-supported, heavier rowing.'},
+    {name:'DB Row',target:'3×10/side',note:'One arm at a time on a bench.'},
+  ],
+  'T-Bar Row (Machine)': [
+    {name:'Seated Row (Machine)',target:'3×12',note:'Selectorized chest-supported row.'},
+    {name:'Seated Cable Row',target:'3×12',note:'Cable version.'},
+    {name:'DB Row',target:'3×10/side',note:'One arm at a time.'},
+  ],
+  'Pullover (Machine)': [
+    {name:'Lat Pulldown',target:'3×10',note:'Classic lat builder with the arms bent.'},
+    {name:'Cable Straight-Arm Pulldown',target:'3×15',note:'Cable version of the same lat sweep.'},
+    {name:'Assisted Pull-Up (Machine)',target:'3×8',note:'Vertical pull with counterweight help.'},
+  ],
+  'Assisted Pull-Up (Machine)': [
+    {name:'Lat Pulldown',target:'3×10',note:'Same vertical pull, seated.'},
+    {name:'Pullover (Machine)',target:'3×12',note:'Lats without the biceps.'},
+    {name:'Pullups',target:'3×max',note:'Unassisted, once you can do clean reps.',inputType:'reps_only'},
+  ],
+  'Rear Delt Fly (Machine)': [
+    {name:'Face Pull',target:'3×20',note:'Cable. Rear delts plus rotator cuff.'},
+    {name:'Dumbbell Reverse Fly',target:'3×15',note:'Bent-over with light dumbbells.'},
+    {name:'Band Pull-Apart',target:'3×20',note:'Band. Works anywhere.',inputType:'reps_only'},
+  ],
+  'Biceps Curl (Machine)': [
+    {name:'EZ Bar Curl',target:'3×12',note:'Free-weight curl.'},
+    {name:'Preacher Curl',target:'3×12',note:'Arm braced on a pad, strict isolation.'},
+    {name:'Cable Curl',target:'3×15',note:'Constant tension.'},
+  ],
+  'Preacher Curl': [
+    {name:'Biceps Curl (Machine)',target:'3×12',note:'Machine version, arms braced on the pad.'},
+    {name:'EZ Bar Curl',target:'3×12',note:'Standing free-weight curl.'},
+    {name:'DB Curl',target:'3×12',note:'Dumbbells.'},
+  ],
+  'Ab Crunch (Machine)': [
+    {name:'Sit-Up',target:'3×20',note:'Bodyweight. No machine needed.',inputType:'reps_only'},
+    {name:'Bicycle Crunch',target:'3×20/side',note:'Bodyweight, adds rotation.',inputType:'reps_only'},
+    {name:'Plank',target:'3×60s',note:'Holds the trunk still instead of crunching.',inputType:'timed'},
+  ],
+  'Sit-Up': [
+    {name:'Ab Crunch (Machine)',target:'3×15',note:'Loaded crunch. Easy to progress.'},
+    {name:'Bicycle Crunch',target:'3×20/side',note:'Adds rotation.',inputType:'reps_only'},
+    {name:'Dead Bug',target:'3×8/side',note:'Gentler on the lower back.',inputType:'reps_only'},
+  ],
+  'Bicycle Crunch': [
+    {name:'Torso Rotation (Machine)',target:'3×12/side',note:'Loaded rotation, hips locked in.'},
+    {name:'Ab Crunch (Machine)',target:'3×15',note:'Loaded crunch.'},
+    {name:'Dead Bug',target:'3×8/side',note:'Gentler on the lower back.',inputType:'reps_only'},
+  ],
+  'Torso Rotation (Machine)': [
+    {name:'Medicine Ball Russian Twist',target:'3×16/side',note:'Free version of the same rotation.',inputType:'reps_only'},
+    {name:'Cable Woodchop',target:'3×12/side',note:'Standing rotation through the hips.'},
+    {name:'Pallof Press',target:'3×10/side',note:'Resists rotation instead of creating it. Easiest on the back.'},
+  ],
+  'Medicine Ball Russian Twist': [
+    {name:'Torso Rotation (Machine)',target:'3×12/side',note:'Machine rotation, hips locked in.'},
+    {name:'Cable Woodchop',target:'3×12/side',note:'Standing rotation.'},
+    {name:'Bicycle Crunch',target:'3×20/side',note:'Bodyweight rotation.',inputType:'reps_only'},
+  ],
+  'Back Extension (Machine)': [
+    {name:'Superman Hold',target:'3×30s',note:'Bodyweight on the floor.',inputType:'timed'},
+    {name:'Bird Dog',target:'3×8/side',note:'Gentle back and core stability.',inputType:'reps_only'},
+    {name:'Romanian Deadlift',target:'3×8',note:'Free-weight hinge. Heavier.'},
+  ],
+  'Hip Thrust (Machine)': [
+    {name:'Single-Leg Glute Bridge',target:'3×12/leg',note:'Bodyweight on the floor.',inputType:'reps_only'},
+    {name:'Glute Kickback (Machine)',target:'3×12/leg',note:'One leg at a time on the glute machine.'},
+    {name:'Romanian Deadlift',target:'3×8',note:'Hip hinge, more hamstrings.'},
+  ],
+  'Glute Kickback (Machine)': [
+    {name:'Hip Thrust (Machine)',target:'3×10',note:'Both legs, heavier glute loading.'},
+    {name:'Cable Glute Kickback',target:'3×12/leg',note:'Cable version.'},
+    {name:'Single-Leg Glute Bridge',target:'3×12/leg',note:'Bodyweight.',inputType:'reps_only'},
+  ],
+  'Leg Extension (Machine)': [
+    {name:'Leg Press',target:'3×12',note:'Compound quad work.'},
+    {name:'Single Leg Split Squat',target:'3×8/leg',note:'Free-weight quad and glute work.',inputType:'reps_only'},
+    {name:'Step-Up',target:'3×12/leg',note:'Bench or box.'},
+  ],
+  'Seated Leg Curl (Machine)': [
+    {name:'Lying Leg Curl (Machine)',target:'3×12',note:'Face-down version. Different hamstring position.'},
+    {name:'Romanian Deadlift',target:'3×8',note:'Hip hinge. Hamstrings stretched under load.'},
+    {name:'Hamstring Raise (Nordic Curl)',target:'3×5',note:'Bodyweight. Very demanding.',inputType:'reps_only'},
+  ],
+  'Lying Leg Curl (Machine)': [
+    {name:'Seated Leg Curl (Machine)',target:'3×12',note:'Seated version. Hamstrings on more stretch.'},
+    {name:'Romanian Deadlift',target:'3×8',note:'Hip hinge.'},
+    {name:'Hamstring Raise (Nordic Curl)',target:'3×5',note:'Bodyweight. Very demanding.',inputType:'reps_only'},
+  ],
+  'Hip Abduction (Machine)': [
+    {name:'Lateral Band Walk',target:'2×15/side',note:'Band above the knees. Same glute medius work.',inputType:'reps_only'},
+    {name:'Glute Kickback (Machine)',target:'3×12/leg',note:'Glute work in a different direction.'},
+  ],
+  'Hip Adduction (Machine)': [
+    {name:'Hip Abduction (Machine)',target:'3×15',note:'The opposite movement, if the machine is shared or busy.'},
+    {name:'Dumbbell Lateral Lunge',target:'3×10/side',note:'Inner thigh and glute on the floor.'},
+  ],
+  'Standing Calf Raise (Machine)': [
+    {name:'Horizontal Calf Press (Machine)',target:'4×15',note:'Seated, no spine or shoulder load.'},
+    {name:'Seated Calf Raise (Machine)',target:'4×15',note:'Knees bent, more soleus.'},
+    {name:'Single-Leg Calf Raise',target:'3×15/leg',note:'Bodyweight on a step.',inputType:'reps_only'},
+  ],
+  'Seated Calf Raise (Machine)': [
+    {name:'Standing Calf Raise (Machine)',target:'4×15',note:'Knees straight, more gastrocnemius.'},
+    {name:'Horizontal Calf Press (Machine)',target:'4×15',note:'Seated press, knees straight.'},
+  ],
+  'Horizontal Calf Press (Machine)': [
+    {name:'Standing Calf Raise (Machine)',target:'4×15',note:'Standing version.'},
+    {name:'Seated Calf Raise (Machine)',target:'4×15',note:'Knees bent, more soleus.'},
+    {name:'Leg Press Calf Raise',target:'4×20',note:'On the leg press platform.'},
+  ],
+  'Stair Climber': [
+    {name:'Upright Bike',target:'20-30 min',note:'Lower effort per minute, zero impact.',inputType:'timed'},
+    {name:'Treadmill',target:'30 min',note:'Incline walk is the closest match.',inputType:'timed'},
+    {name:'Recumbent Bike',target:'20-30 min',note:'Back supported, easiest on the joints.',inputType:'timed'},
+  ],
+  'Recumbent Bike': [
+    {name:'Upright Bike',target:'20-30 min',note:'Same cardio, sitting upright.',inputType:'timed'},
+    {name:'Walking',target:'30-45 min',note:'Zone 1-2 on foot.',inputType:'timed_distance'},
+    {name:'Stair Climber',target:'15-20 min',note:'Harder per minute, still low impact.',inputType:'timed'},
+  ],
+  'Upright Bike': [
+    {name:'Recumbent Bike',target:'20-30 min',note:'Back supported version.',inputType:'timed'},
+    {name:'Treadmill',target:'30 min',note:'Walk, incline or run.',inputType:'timed'},
+    {name:'Stair Climber',target:'15-20 min',note:'Low-impact climbing.',inputType:'timed'},
+  ],
+  'Walking': [
+    {name:'Recumbent Bike',target:'20-30 min',note:'Zero impact, same easy zone.',inputType:'timed'},
+    {name:'Upright Bike',target:'20-30 min',note:'Zero impact.',inputType:'timed'},
   ],
 };
 
@@ -9168,14 +9482,15 @@ function openExerciseGuide(exName) {
 // taps hands off to the browser cleanly and comes back to the PWA — which
 // is why the guide links elsewhere in the app have never done this.
 function openYouTubeSearch(exName) {
-  const url = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(exName + ' form');
+  const video = exerciseVideoUrl(exName);
+  const url = video || ('https://www.youtube.com/results?search_query=' + encodeURIComponent(exName + ' form'));
   const root = document.getElementById('modalRoot');
   if (!root) return;
   root.innerHTML =
     '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet">' +
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">' + escapeUserProse(exName, 120) + '</div>' +
-    '<div class="modal-body">No built-in form guide for this one yet. This opens a YouTube search in your browser.</div>' +
+    '<div class="modal-body">' + (video ? 'A short tutorial on setting up and using this machine. It opens on YouTube.' : 'No built-in form guide for this one yet. This opens a YouTube search in your browser.') + '</div>' +
     '<a class="btn btn-gold mt12" style="display:block;text-align:center;text-decoration:none" href="' + url + '" ' + externalLinkAttrs() + ' onclick="closeModal()">▶ Watch on YouTube</a>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">Cancel</button>' +
     '</div></div>';
@@ -10300,7 +10615,9 @@ function showGuide(exId) {
 
   const linkLabel = guide.verified
     ? '📹 View Exercise Guide on ExRx.net →'
-    : '▶️ Search YouTube: "' + e.name + '" →';
+    : guide.video
+      ? '▶️ Watch the tutorial on YouTube →'
+      : '▶️ Search YouTube: "' + e.name + '" →';
   const linkHTML = '<a class="modal-link" href="'+guide.exrx+'" '+externalLinkAttrs()+'>'+linkLabel+'</a>';
 
   root.innerHTML =
@@ -10330,6 +10647,8 @@ function exerciseMET(exItem) {
   if (exItem.inputType === 'nsdr') return 1.5; // lying down
   if (exItem.inputType === 'timed_bilateral') return 2.3; // stretches (Compendium 02101, stretching, mild)
   if (exItem.inputType === 'reps_height' || exItem.inputType === 'reps_distance') return 7.5; // jump/sprint tests
+  if (exItem.name && /stair climber/i.test(exItem.name)) return 9.0; // Compendium 02065, stair-treadmill ergometer, general
+  if (exItem.name && /^(recumbent|upright) bike$/i.test(exItem.name)) return 4.8; // Compendium 02014, stationary bicycling 51-89 W, light to moderate (Zone 2)
   if (exItem.timed) return 2.8; // other timed holds, planks etc. (Compendium 02024)
   if (exItem.inputType === 'reps_only') return 6.0; // bodyweight circuits
   return 5.5; // reps_weight (default) — resistance training

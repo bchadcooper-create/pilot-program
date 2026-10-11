@@ -478,7 +478,18 @@ Deno.serve(async (req) => {
         + '_b' + (context.bodyClock ? (context.bodyClock.hoursOffLocal + context.bodyClock.strategy.charAt(0)) : 0)
         + '_w' + (context.workoutLoggedToday ? 1 : 0)
         + '_l' + (context.legsCompletedToday ?? 0)
-        + '_p' + localDayPartFor(context.timezone);
+        + '_p' + localDayPartFor(context.timezone)
+        // BUG FIX (reported: tiles showed readiness 68 and sleep 50 while
+        // the AI card said "readiness is sitting at 85"). Confirmed in the
+        // data: the note was generated at 15:05:06.5Z with yesterday's
+        // readiness (85, the row the app still had on boot), and today's
+        // Oura row (68) landed 400 ms later. The front end did re-ask with
+        // the fresh numbers, but this key had no dependency on the scores
+        // themselves, so the stale answer was served back from cache. The
+        // scores are now part of the key: a new readiness or sleep score
+        // is a new answer. One extra low-cost call on mornings where the
+        // ring syncs after the first open.
+        + '_r' + (context.readiness ?? 'null') + '_s' + (context.sleepScore ?? 'null');
       const { data: cached } = await supabase
         .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
       const cachedKey = cached?.profile_data?.fatigueCalibrationCacheKey;

@@ -7,6 +7,8 @@
 //   POST /ttlock/connect  -> phone app: exchange the TTLock app login for a token (password is never stored)
 //   POST /ttlock          -> phone app: locks / sendkey / removekey / setlock (manager sign-in required)
 //   POST /ttlock/callback -> TTLock pushes door events here (set as the Callback URL on open.ttlock.com)
+//   POST /groupme/connect -> phone app: save the GroupMe access token and find the house group
+//   POST /groupme         -> phone app: add / remove a tenant (manager sign-in required)
 //   POST /            -> WordPress webhook: new applications and signed agreements (website key required)
 import { createClient } from "npm:@supabase/supabase-js@2.49.4";
 import { crypto } from "jsr:@std/crypto@1";
@@ -287,6 +289,87 @@ async function ttlockCallback(req: Request, db: DB) {
   return new Response("success");
 }
 
+// ---------------- GroupMe ----------------
+// Docs: https://dev.groupme.com/docs/v3 (token in the X-Access-Token header).
+const GM = "https://api.groupme.com/v3";
+async function gmFetch(token: string, path: string, init: RequestInit = {}) {
+  const r = await fetch(`${GM}${path}`, { ...init, headers: { "x-access-token": token, "content-type": "application/json", ...(init.headers ?? {}) } });
+  let out: any = null;
+  try { out = await r.json(); } catch { /* empty body on some calls */ }
+  return { code: r.status, out };
+}
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function groupmeConnect(req: Request, d: Record<string, unknown>, db: DB) {
+  const denied = await requireManager(req, db);
+  if (denied) return denied;
+  const token = String(d.token ?? "").trim();
+  if (!token) return json(400, { ok: false, message: "Paste your GroupMe access token." });
+  const { code, out } = await gmFetch(token, "/groups?per_page=100&omit=memberships");
+  if (code !== 200) return json(400, { ok: false, message: `GroupMe didn't accept that token (HTTP ${code}). Copy the Access Token from dev.groupme.com again.` });
+  const groups = (out?.response ?? []).map((g: any) => ({ id: String(g.id), name: g.name }));
+  const pick = d.group_id ? groups.find((g: any) => g.id === String(d.group_id)) : groups.filter((g: any) => /dfw\s*crash\s*pads?/i.test(g.name)).length === 1 ? groups.find((g: any) => /dfw\s*crash\s*pads?/i.test(g.name)) : null;
+  if (!pick) return json(200, { ok: true, choose: true, groups, message: "Pick the house group." });
+  await db.from("cp_groupme_auth").upsert({ id: 1, access_token: token, group_id: pick.id, group_name: pick.name, connected_at: new Date().toISOString() });
+  await db.from("cp_settings").upsert({ key: "groupme_connected", value: pick.name });
+  return json(200, { ok: true, group: pick, message: `Connected to ${pick.name}.` });
+}
+
+async function groupme(req: Request, d: Record<string, unknown>, db: DB) {
+  const denied = await requireManager(req, db);
+  if (denied) return denied;
+  const { data: a } = await db.from("cp_groupme_auth").select("*").eq("id", 1).maybeSingle();
+  if (!a) return json(400, { ok: false, message: "GroupMe isn't connected yet. Connect it under More." });
+  const { data: t } = await db.from("cp_tenants").select("*").eq("id", String(d.tenant_id ?? "")).maybeSingle();
+  if (!t) return json(404, { ok: false, message: "Tenant not found." });
+  const action = String(d.action ?? "");
+
+  if (action === "add") {
+    const digits = String(t.phone ?? "").replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+    if (digits.length !== 10) return json(400, { ok: false, message: "This tenant needs a 10-digit phone number first." });
+    const guid = globalThis.crypto.randomUUID();
+    const nickname = `${t.name}`.slice(0, 50);
+    const add = await gmFetch(a.access_token, `/groups/${a.group_id}/members/add`, { method: "POST", body: JSON.stringify({ members: [{ nickname, phone_number: `+1 ${digits}`, guid }] }) });
+    const resultsId = add.out?.response?.results_id;
+    if (add.code >= 300 || !resultsId) return json(502, { ok: false, message: `GroupMe add failed (HTTP ${add.code}): ${JSON.stringify(add.out?.meta?.errors ?? add.out).slice(0, 160)}` });
+    // Results arrive a moment later; they carry the membership id we need for removal.
+    let memberId: string | null = null;
+    for (let i = 0; i < 6 && !memberId; i++) {
+      await sleep(i === 0 ? 800 : 1500);
+      const r = await gmFetch(a.access_token, `/groups/${a.group_id}/members/results/${resultsId}`);
+      if (r.code === 200) { const m = (r.out?.response?.members ?? []).find((x: any) => x.guid === guid) ?? (r.out?.response?.members ?? [])[0]; memberId = m?.id ? String(m.id) : null; break; }
+      if (r.code === 404) break;
+    }
+    await db.from("cp_tenants").update({ groupme_added: true, groupme_member_id: memberId }).eq("id", t.id);
+    if (d.welcome) {
+      const first = String(t.name).trim().split(" ")[0];
+      await gmFetch(a.access_token, `/groups/${a.group_id}/messages`, { method: "POST", body: JSON.stringify({ message: { source_guid: globalThis.crypto.randomUUID(), text: `Everyone welcome ${first}${t.bed_id ? ", who's moving into " + t.bed_id : ""}!` } }) });
+    }
+    await db.from("cp_contact_log").insert({ tenant_id: t.id, who: t.name, channel: "GroupMe", summary: `Added to ${a.group_name}${memberId ? "" : " (membership id not returned yet)"}` });
+    return json(200, { ok: true, message: `Added to ${a.group_name}.`, member_id: memberId });
+  }
+
+  if (action === "remove") {
+    let memberId = t.groupme_member_id as string | null;
+    if (!memberId) {
+      // Added before this hookup existed: find them by name in the group.
+      const g = await gmFetch(a.access_token, `/groups/${a.group_id}`);
+      const members: any[] = g.out?.response?.members ?? [];
+      const norm = (s: string) => String(s ?? "").toLowerCase().replace(/[^a-z ]/g, "").trim();
+      const full = norm(t.name), first = full.split(" ")[0], last = full.split(" ").slice(-1)[0];
+      const hits = members.filter((m) => norm(m.nickname) === full || (norm(m.nickname).includes(first) && norm(m.nickname).includes(last)));
+      if (hits.length !== 1) return json(409, { ok: false, message: hits.length ? `More than one member matches "${t.name}". Remove them in GroupMe by hand.` : `Couldn't find "${t.name}" in the group by name. Remove them in GroupMe by hand.` });
+      memberId = String(hits[0].id);
+    }
+    const r = await gmFetch(a.access_token, `/groups/${a.group_id}/members/${memberId}/remove`, { method: "POST" });
+    if (r.code >= 300 && r.code !== 404) return json(502, { ok: false, message: `GroupMe remove failed (HTTP ${r.code}).` });
+    await db.from("cp_tenants").update({ groupme_added: false, groupme_member_id: null }).eq("id", t.id);
+    await db.from("cp_contact_log").insert({ tenant_id: t.id, who: t.name, channel: "GroupMe", summary: `Removed from ${a.group_name}` });
+    return json(200, { ok: true, message: `Removed from ${a.group_name}.` });
+  }
+  return json(400, { ok: false, message: "Unknown action." });
+}
+
 Deno.serve(async (req) => {
   const url = new URL(req.url);
   const path = url.pathname.replace(/^\/app/, "") || "/";
@@ -305,6 +388,11 @@ Deno.serve(async (req) => {
   let d: Record<string, unknown> = {};
   try { d = await req.json(); } catch { return json(400, { ok: false, message: "Send JSON." }); }
   const db = admin();
+
+  if (path === "/groupme/connect" || path === "/groupme") {
+    try { return path === "/groupme" ? await groupme(req, d, db) : await groupmeConnect(req, d, db); }
+    catch (e) { return json(500, { ok: false, message: String((e as Error)?.message ?? e) }); }
+  }
 
   if (path === "/ttlock/connect" || path === "/ttlock") {
     try { return path === "/ttlock" ? await ttlock(req, d, db) : await ttlockConnect(req, d, db); }

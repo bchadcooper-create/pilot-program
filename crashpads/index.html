@@ -160,7 +160,7 @@ document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ checkUp
 // ---------- self-update ----------
 // GitHub Pages lets phones keep the page for 10 minutes. On open and on return to the app,
 // ask for the latest copy directly; if the version differs, reload onto it.
-const APP_VERSION = '2026.10.12-6';
+const APP_VERSION = '2026.10.12-7';
 async function checkUpdate(){
   try{
     const r = await fetch(location.pathname+'?check='+Date.now(), { cache:'no-store' });
@@ -245,7 +245,9 @@ function moveoutTodo(t){
   if(t.fee_paid_on && !t.fee_refunded_on && !t.fee_kept)
     todo.push({label:'Refund the $150 reservation fee', act:'feerefund', id:t.id, btn:'Refund', pri:true});
   if(t.groupme_added)
-    todo.push({label:'Remove from the DFW CRASHPADS GroupMe', act:'clearflag', id:t.id+'|groupme_added', btn:'Done'});
+    todo.push(S.data&&gmConnected()
+      ? {label:'Remove from the GroupMe', act:'gmremove', id:t.id, btn:'Remove', pri:true}
+      : {label:'Remove from the DFW CRASHPADS GroupMe', act:'clearflag', id:t.id+'|groupme_added', btn:'Done'});
   if(S.data&&ttConnected()&&activeKeys(t.id).length)
     todo.push({label:'Remove their TTLock door key', act:'keyremove', id:t.id, btn:'Remove', pri:true});
   else if(t.ttlock_account)
@@ -377,7 +379,7 @@ function agrShow(leadId, a, justSent){
   agrBox(`<div><span class="pill info">${justSent?'Sent':'Waiting for signature'}</span> <span class="small muted">${esc(a.sent_at||'just now')}${a.sent_to?' to '+esc(a.sent_to):''}</span></div>
     ${a.rent?`<div class="small muted" style="margin-top:4px">${esc(a.bed_id||a.category||'')} · ${money(a.rent)}/mo · move-in ${fmtD(a.move_in)}</div>`:''}
     <div class="row" style="margin-top:8px">
-      ${l.phone?`<a class="btn sm pri" href="${gvUrl(l.phone)}" target="_blank" rel="noopener" data-act="agrgv" data-id="${leadId}">Text via Google Voice</a>`:''}
+      ${l.phone?`<a class="btn sm pri" href="${gvUrl(l.phone)}" target="_blank" rel="noopener" data-act="agrgv" data-id="${leadId}">Text via Google Voice</a><button class="btn sm" data-act="copynum" data-id="${leadId}">Copy number</button>`:''}
       <a class="btn sm" target="_blank" rel="noopener" href="${esc(a.url)}">Open</a>
       <button class="btn sm" data-act="agrcopy" data-id="x">Copy link</button>
     </div>
@@ -470,6 +472,7 @@ function openTenant(id){
       </div>
       ${moveoutTodo(t).length&&t.status==='Moved Out'?`<div class="card"><h3>Still to do</h3>${moveoutTodo(t).map(i=>`<div class="row" style="padding:3px 0"><span class="grow small">${i.label}</span><button class="btn sm ${i.pri?'pri':''}" data-act="${i.act}" data-id="${i.id}">${i.btn}</button></div>`).join('')}</div>`:''}
       ${doorKeyCard(t)}
+      ${groupmeRow(t)}
       <div class="card">${flags.map(([k,l])=>`<label class="chk"><input type="checkbox" data-act="flag" data-id="${t.id}|${k}" ${t[k]?'checked':''}> ${l}</label>`).join('')}
         <div class="small muted">Fee: ${t.fee_paid_on?'paid '+fmtD(t.fee_paid_on):'not received'}${t.fee_refunded_on?', refunded '+fmtD(t.fee_refunded_on):''}${t.fee_kept?', kept <button class="btn sm" data-act="feeunkeep" data-id="'+t.id+'">Undo</button>':''} · Code <span class="mono">${esc(t.payment_code||'')}</span>${t.notice_given_on?' · Notice given '+fmtD(t.notice_given_on):''}</div>
         ${t.contract_url?`<div class="small"><a href="${esc(t.contract_url)}" target="_blank" rel="noopener">Signed agreement</a></div>`:''}
@@ -538,6 +541,7 @@ function vMore(){
       ${months.map((m,i)=>`<div class="row small" style="margin:3px 0"><span style="width:56px">${monthLabel(m).replace(' 20',' ')}</span><div class="bar grow"><i style="width:${100*income[i]/max}%"></i></div><span class="mono" style="width:56px;text-align:right">${money(income[i])}</span></div>`).join('')}
       <div class="small muted" style="margin-top:6px">${occ} occupied, ${res} reserved, ${total-occ-res} open. Full house at list price: ${money(potential)}/mo.</div></div>
     ${ttlockCard()}
+    ${groupmeCard()}
     <h3>Settings <span class="small muted" style="text-transform:none;letter-spacing:0">· app version ${APP_VERSION}</span></h3>
     <div class="card stack">
       <label class="f">WordPress API key (for the website hookup)<input id="st-wp" value="${esc(d.settings.wp_api_key||'')}"></label>
@@ -567,9 +571,26 @@ function keySentSheet(t, email, detail){
   sheet(`<h2>Door key sent</h2><div class="stack">
     <div class="small muted" style="white-space:pre-line">${esc(detail||'')}</div>
     <div class="card small">${esc(S.keyMsg)}</div>
-    ${t.phone?`<a class="btn pri" href="${gvUrl(t.phone)}" target="_blank" rel="noopener" data-act="keymsgcopy" data-id="x">Text via Google Voice</a><div class="small muted">Google Voice opens with the message copied. Tap the message box and paste.</div>`:`<button class="btn" data-act="keymsgcopy" data-id="x">Copy message</button>`}
+    ${t.phone?`<button class="btn" data-act="copynum" data-id="${t.id}">Copy number ${esc(fmtPhone(t.phone))}</button><a class="btn pri" href="${gvUrl(t.phone)}" target="_blank" rel="noopener" data-act="keymsgcopy" data-id="x">Copy message + open Google Voice</a><div class="small muted">Google Voice opens with the message copied. Tap the message box and paste.</div>`:`<button class="btn" data-act="keymsgcopy" data-id="x">Copy message</button>`}
   </div>`); wire();
 }
+// ---------- GroupMe ----------
+const gmConnected = ()=>!!(S.data.settings.groupme_connected);
+function groupmeCard(){
+  if(gmConnected()) return `<h3>GroupMe</h3><div class="card stack"><div class="small">Connected to <b>${esc(S.data.settings.groupme_connected)}</b>. Tenants are added at move-in and removed at move-out.</div>
+    <details><summary class="small muted">Reconnect</summary><div style="margin-top:8px">${gmForm()}</div></details></div>`;
+  return `<h3>GroupMe</h3><div class="card">${gmForm()}</div>`;
+}
+function gmForm(){ return `<div class="stack"><div class="small muted">On dev.groupme.com, sign in and tap <b>Access Token</b> (top right). Paste it here. It's saved on the server only.</div>
+  <label class="f">GroupMe access token<input id="gm-token" type="password" autocomplete="off"></label>
+  <div id="gm-err" class="small" style="color:var(--bad)" hidden></div><div id="gm-pick"></div>
+  <button class="btn pri" data-act="gmconnect" data-id="">Connect GroupMe</button></div>`; }
+function groupmeRow(t){
+  if(!gmConnected()||t.status==='Moved Out'&&!t.groupme_added) return '';
+  return `<div class="row small" style="margin-top:6px"><span class="grow">GroupMe: ${t.groupme_added?'in the group':'not added'}</span>
+    ${t.groupme_added?`<button class="btn sm danger" data-act="gmremove" data-id="${t.id}">Remove</button>`:(t.status!=='Moved Out'?`<button class="btn sm" data-act="gmadd" data-id="${t.id}">Add to group</button>`:'')}</div>`;
+}
+
 function ttlockCard(){
   const d=S.data;
   const form=`<div class="stack">
@@ -610,6 +631,15 @@ const ACT = {
   prorate:()=>{ const r=prorated(Number($('tf-rent').value), $('tf-in').value); if(!r) return toast('Set rent and move-in first'); $('tf-first').value=r.amt; $('tf-first-hint').textContent=`${r.days} days × $${(Number($('tf-rent').value)/30).toFixed(2)}/day`; },
   fullmonth:()=>{ $('tf-first').value=''; $('tf-first-hint').textContent='Full rent for the move-in month.'; },
   agropen:(id)=>openLead(id),
+  gmconnect:async(groupId,el)=>{ const token=$('gm-token').value.trim(); const err=$('gm-err'); if(!token){ err.textContent='Paste the token.'; err.hidden=false; return; }
+    el.disabled=true; el.textContent='Connecting…';
+    try{ const out=await serverCall('groupme/connect',{token, group_id:groupId||undefined});
+      if(out.choose){ $('gm-pick').innerHTML='<div class="small muted">Which group is the house?</div>'+out.groups.map(g=>`<button class="btn sm" style="margin:4px 4px 0 0" data-act="gmconnect" data-id="${esc(g.id)}">${esc(g.name)}</button>`).join(''); wire(); el.disabled=false; el.textContent='Connect GroupMe'; return; }
+      toast(out.message); await load(); }
+    catch(e){ err.textContent=e.message; err.hidden=false; el.disabled=false; el.textContent='Connect GroupMe'; } },
+  gmadd:async(id,el)=>{ el.disabled=true; el.textContent='Adding…'; try{ const out=await serverCall('groupme',{action:'add',tenant_id:id,welcome:true}); toast(out.message); }catch(e){ toast('Error: '+e.message); } await load(); openTenant(id); },
+  gmremove:(id)=>confirmSheet('Remove them from the GroupMe?',async()=>{ closeSheet(); try{ const out=await serverCall('groupme',{action:'remove',tenant_id:id}); toast(out.message); }catch(e){ toast('Error: '+e.message); } await load(); }),
+  copynum:async(id)=>{ const p=(tenantById(id)||S.data.leads.find(x=>x.id===id)||{}).phone; const n=fmtPhone(p); try{ await navigator.clipboard.writeText(n); toast('Number copied: '+n); }catch(e){ prompt('Copy:', n); } },
   ttcbcopy:async()=>{ try{ await navigator.clipboard.writeText(TTLOCK_CALLBACK); toast('Callback URL copied'); }catch(e){ prompt('Copy this:', TTLOCK_CALLBACK); } },
   keymsgcopy:()=>{ try{ navigator.clipboard.writeText(S.keyMsg||'').then(()=>toast('Message copied'),()=>{}); }catch(e){} },
   ttconnect:async(x,el)=>{
@@ -712,11 +742,13 @@ const ACT = {
   movein:(id)=>{ const t=tenantById(id); sheet(`<h2>Move in ${esc(t.name)}</h2><div class="stack">
       <div class="small muted">Bed <span class="mono">${esc(t.bed_id||'none yet')}</span>. This sets them Active as of today.</div>
       ${!t.bed_id?`<div class="pill bad">Assign a bed first (Edit tenant)</div>`:''}
+      ${gmConnected()&&!t.groupme_added?(t.phone?`<label class="chk"><input type="checkbox" id="mi-gm" checked> Add to GroupMe and post a welcome</label>`:`<div class="pill warn">Add their phone to add them to GroupMe</div>`):''}
       ${ttConnected()&&!activeKeys(t.id).length?(t.email?`<label class="chk"><input type="checkbox" id="mi-key" checked> Send door key to ${esc(t.email)}</label>`:`<div class="pill warn">Add their email to send a door key</div>`):''}
-      <div class="card small">Then, by hand:<br>${ttConnected()?'':`· Text them to install TTLock and make an account with ${esc(t.email||'their email')}, then send their eKey.<br>`}· Add them to the DFW CRASHPADS GroupMe.<br>Tick the boxes on their card when done.</div>
+      ${ttConnected()&&gmConnected()?'':`<div class="card small">Then, by hand:<br>${ttConnected()?'':`· Text them to install TTLock and make an account with ${esc(t.email||'their email')}, then send their eKey.<br>`}${gmConnected()?'':'· Add them to the DFW CRASHPADS GroupMe.<br>'}Tick the boxes on their card when done.</div>`}
       <button class="btn pri" data-act="moveinconfirm" data-id="${id}" ${!t.bed_id?'disabled':''}>Mark moved in</button></div>`); wire(); },
-  moveinconfirm:async(id)=>{ const sendKey=$('mi-key')&&$('mi-key').checked; const t=tenantById(id); closeSheet();
+  moveinconfirm:async(id)=>{ const sendKey=$('mi-key')&&$('mi-key').checked; const addGm=$('mi-gm')&&$('mi-gm').checked; const t=tenantById(id); closeSheet();
     await run(sb.from('cp_tenants').update({status:'Active',move_in:t.move_in||today()}).eq('id',id),'Moved in');
+    if(addGm){ try{ const out=await serverCall('groupme',{action:'add',tenant_id:id,welcome:true}); toast(out.message); }catch(e){ toast('Moved in, but GroupMe failed: '+e.message); } }
     if(sendKey){ try{ const out=await serverCall('ttlock',{action:'sendkey',tenant_id:id}); await load(); keySentSheet(tenantById(id), t.email.toLowerCase(), out.message); return; }catch(e){ toast('Moved in, but the door key failed: '+e.message); } }
     openTenant(id); },
   notice:(id)=>{ const t=tenantById(id); const def=iso(new Date(new Date().getFullYear(),new Date().getMonth()+1,0)); sheet(`<h2>Log notice</h2><div class="stack"><label class="f">Last night<input id="nt-date" type="date" value="${def}"></label><label class="f">What they said<input id="nt-text" placeholder="Texted: moving out end of month"></label><button class="btn pri" data-act="noticesave" data-id="${id}">Save notice</button></div>`); wire(); },
@@ -726,9 +758,10 @@ const ACT = {
     await sb.from('cp_cleaning').insert({needed_on:iso(next),bed_id:t.bed_id,task:'Strip after move-out',tenant_id:id,tenant_name:t.name,notes:`${t.name} leaves ${fmtD(out)}`});
     if(txt) await sb.from('cp_contact_log').insert({tenant_id:id,who:t.name,channel:'Text',summary:txt,tag:'notice',key_date:out});
     toast('Notice logged'); await load(); openTenant(id); },
-  moveout:(id)=>{ const t=tenantById(id); sheet(`<h2>Move out ${esc(t.name)}</h2><div class="stack"><div class="small">Sets them Moved Out and frees <span class="mono">${esc(t.bed_id||'')}</span>.</div><div class="card small">These stay on Today under <b>Move-out follow-ups</b> until you tick them off:${t.fee_paid_on&&!t.fee_refunded_on&&!t.fee_kept?'<br>· Refund the $150 (within 30 days if they gave notice by the 15th)':''}${t.groupme_added?'<br>· Remove from GroupMe':''}${t.ttlock_account&&!(ttConnected()&&activeKeys(t.id).length)?'<br>· Turn off their TTLock key':''}</div>${ttConnected()&&activeKeys(t.id).length?'<div class="small">Their door key is removed automatically.</div>':''}<button class="btn pri" data-act="moveoutconfirm" data-id="${id}">Mark moved out</button></div>`); wire(); },
-  moveoutconfirm:async(id)=>{ const t=tenantById(id); const hadKeys=ttConnected()&&activeKeys(id).length; closeSheet();
+  moveout:(id)=>{ const t=tenantById(id); sheet(`<h2>Move out ${esc(t.name)}</h2><div class="stack"><div class="small">Sets them Moved Out and frees <span class="mono">${esc(t.bed_id||'')}</span>.</div><div class="card small">These stay on Today under <b>Move-out follow-ups</b> until you tick them off:${t.fee_paid_on&&!t.fee_refunded_on&&!t.fee_kept?'<br>· Refund the $150 (within 30 days if they gave notice by the 15th)':''}${t.groupme_added&&!gmConnected()?'<br>· Remove from GroupMe':''}${t.ttlock_account&&!(ttConnected()&&activeKeys(t.id).length)?'<br>· Turn off their TTLock key':''}</div>${ttConnected()&&activeKeys(t.id).length?'<div class="small">Their door key is removed automatically.</div>':''}${gmConnected()&&t.groupme_added?'<div class="small">They are removed from GroupMe automatically.</div>':''}<button class="btn pri" data-act="moveoutconfirm" data-id="${id}">Mark moved out</button></div>`); wire(); },
+  moveoutconfirm:async(id)=>{ const t=tenantById(id); const hadKeys=ttConnected()&&activeKeys(id).length; const inGm=gmConnected()&&t.groupme_added; closeSheet();
     await run(sb.from('cp_tenants').update({status:'Moved Out',move_out:t.move_out||today()}).eq('id',id),'Moved out');
+    if(inGm){ try{ await serverCall('groupme',{action:'remove',tenant_id:id}); }catch(e){ toast('Moved out, but GroupMe removal failed: '+e.message); } }
     if(hadKeys){ try{ await serverCall('ttlock',{action:'removekey',tenant_id:id}); toast('Moved out. Door key removed.'); }catch(e){ toast('Moved out, but removing the door key failed: '+e.message); } await load(); } },
   clearflag:async(arg)=>{ const [id,k]=arg.split('|'); await run(sb.from('cp_tenants').update({[k]:false}).eq('id',id),'Checked off'); if($('sheet')&&S.detail===id) openTenant(id); },
   assign:(bedId)=>{ const cands=S.data.tenants.filter(t=>t.status!=='Moved Out'&&t.bed_id!==bedId); const b=S.data.beds.find(x=>x.id===bedId);

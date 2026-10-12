@@ -1338,6 +1338,14 @@ test('the self-check sets the Pilot Condition on a no-ring day', () => {
   ctx.updateOuraTopSection = realUpd; ctx.loadFatigueCalibration = realLoad;
   ctx.ST.readiness = null;
 });
+test('steps come from Apple Health on a no-ring day', () => {
+  ringState(yesterdayStr, 68); ctx.ST.ouraSteps = 0; ctx.ST.healthkit = { stepsToday: 1840 };
+  assertEqual(ctx.todayStepCount(), 1840, 'phone count wins when the ring has no data');
+  ringState(todayStr, 68);
+  assertEqual(ctx.todayStepCount(), 0, 'ring count stands when the ring has today\'s data');
+  ctx.ST.ouraSteps = null; assertEqual(ctx.todayStepCount(), 1840, 'phone fills in when the ring has no count');
+  ctx.ST.healthkit = null; ctx.ST.ouraSteps = null;
+});
 
 console.log('\n' + '─'.repeat(50));
 console.log(passed + ' passed, ' + failed + ' failed');

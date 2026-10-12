@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.31 / 20260916_4
+ * Version/build: fcf-v5.44.32 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.31';
+const FCF_VERSION = 'fcf-v5.44.32';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -14050,6 +14050,24 @@ function checkForNapRecovery(currentSleepScore, ouraDate) {
   return null;
 }
 
+// Steps for the Today header. Oura is the usual source, so the count sits
+// beside readiness, sleep and activity from the same device. On a morning
+// with no ring data (see ouraMissingToday) the ring is probably not being
+// worn, and its count would sit at 0 all day while the phone keeps
+// counting, so Apple Health is used instead. When both have a number and
+// the ring is missing, the larger one wins: a ring left on the charger
+// never over-counts.
+function todayStepCount() {
+  const oura = ST.ouraSteps ?? null;
+  const hk = ST.healthkit?.stepsToday ?? null;
+  if (ouraMissingToday()) {
+    if (hk === null) return oura;
+    if (oura === null) return hk;
+    return Math.max(hk, oura);
+  }
+  return oura ?? hk ?? null;
+}
+
 function getTodayContext() {
   const now = new Date();
   // BUG FIX: was hardcoded to ST.flightSchedule regardless of the
@@ -14076,7 +14094,7 @@ function getTodayContext() {
             // yet. Two devices will rarely agree exactly; this just picks
             // one source of truth rather than silently swapping between
             // them depending on which happened to sync most recently.
-            steps: ST.ouraSteps ?? ST.healthkit?.stepsToday ?? null,
+            steps: todayStepCount(),
             napDetected: checkForNapRecovery(sleepScore, ST.ouraData?.date ?? null) },
     nutrition: { consumed, goals: g, mealCount: meals.length,
                  proteinPct: g && g.protein ? Math.round((consumed.protein / g.protein) * 100) : null,

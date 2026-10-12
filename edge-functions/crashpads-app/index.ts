@@ -4,8 +4,13 @@
 //   GET  /            -> redirects to the phone app (Supabase can't serve HTML)
 //   POST /setup       -> one-time manager account setup
 //   POST /agreement   -> phone app: send / status / resend a rental agreement (manager sign-in required)
+//   POST /ttlock/connect  -> phone app: exchange the TTLock app login for a token (password is never stored)
+//   POST /ttlock          -> phone app: locks / sendkey / removekey / setlock (manager sign-in required)
+//   POST /ttlock/callback -> TTLock pushes door events here (set as the Callback URL on open.ttlock.com)
 //   POST /            -> WordPress webhook: new applications and signed agreements (website key required)
 import { createClient } from "npm:@supabase/supabase-js@2.49.4";
+import { crypto } from "jsr:@std/crypto@1";
+import { encodeHex } from "jsr:@std/encoding@1/hex";
 
 const APP_URL = "https://flightcrew.fit/crashpads/";
 const CORS = {
@@ -30,15 +35,21 @@ async function setting(db: DB, key: string) {
   return data?.value ? String(data.value) : "";
 }
 
-/** Phone app -> website: send, check, or resend an agreement for one lead. */
-async function agreement(req: Request, d: Record<string, unknown>, db: DB) {
-  // Who is asking? Must be a signed-in manager.
+/** Returns an error Response unless the caller is a signed-in manager. */
+async function requireManager(req: Request, db: DB): Promise<Response | null> {
   const jwt = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
   const { data: u } = jwt ? await db.auth.getUser(jwt) : { data: null };
   const email = u?.user?.email?.toLowerCase();
   if (!email) return json(401, { ok: false, message: "Sign in again." });
   const { data: mgr } = await db.from("cp_managers").select("email").ilike("email", email).maybeSingle();
   if (!mgr) return json(403, { ok: false, message: "This account isn't a manager." });
+  return null;
+}
+
+/** Phone app -> website: send, check, or resend an agreement for one lead. */
+async function agreement(req: Request, d: Record<string, unknown>, db: DB) {
+  const denied = await requireManager(req, db);
+  if (denied) return denied;
 
   const key = await setting(db, "wp_api_key");
   if (!key) return json(503, { ok: false, message: "Save the WordPress API key under More > Settings first." });
@@ -116,6 +127,166 @@ async function agreement(req: Request, d: Record<string, unknown>, db: DB) {
   return json(200, { ok: true, url: out.url, sent_to: out.sent_to || to });
 }
 
+
+// ---------------- TTLock ----------------
+// Docs: https://euopen.ttlock.com/document (OAuth password grant; every call is form-encoded with clientId, accessToken, date).
+const TTLOCK_HOSTS = ["https://euapi.ttlock.com", "https://api.ttlock.com"];
+const md5 = async (s: string) => encodeHex(await crypto.subtle.digest("MD5", new TextEncoder().encode(s)));
+
+async function ttForm(url: string, body: Record<string, unknown>) {
+  const f = new URLSearchParams();
+  for (const [k, v] of Object.entries(body)) if (v !== undefined && v !== null) f.set(k, String(v));
+  const r = await fetch(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: f });
+  let out: any = null;
+  try { out = await r.json(); } catch { out = { errcode: -1, errmsg: `TTLock said HTTP ${r.status}` }; }
+  return out;
+}
+
+/** Valid access token, refreshing it when it is within a day of expiring. */
+async function ttAuth(db: DB) {
+  const { data: a } = await db.from("cp_ttlock_auth").select("*").eq("id", 1).maybeSingle();
+  if (!a?.access_token) throw new Error("TTLock isn't connected yet. Connect it under More.");
+  if (a.expires_at && new Date(a.expires_at).getTime() - Date.now() > 86400000) return a;
+  const t = await ttForm(`${a.api_host}/oauth2/token`, { clientId: a.client_id, clientSecret: a.client_secret, grant_type: "refresh_token", refresh_token: a.refresh_token });
+  if (!t?.access_token) throw new Error(`TTLock refresh failed: ${t?.errmsg || t?.description || "unknown"}. Reconnect under More.`);
+  const upd = { access_token: t.access_token, refresh_token: t.refresh_token || a.refresh_token, expires_at: new Date(Date.now() + (Number(t.expires_in) || 7776000) * 1000).toISOString() };
+  await db.from("cp_ttlock_auth").update(upd).eq("id", 1);
+  return { ...a, ...upd };
+}
+
+async function ttCall(db: DB, path: string, params: Record<string, unknown>) {
+  const a = await ttAuth(db);
+  const out = await ttForm(`${a.api_host}/v3/${path}`, { clientId: a.client_id, accessToken: a.access_token, date: Date.now(), ...params });
+  if (out && typeof out.errcode === "number" && out.errcode !== 0) throw new Error(`TTLock ${path}: ${out.errmsg || out.description || "error " + out.errcode} (${out.errcode})`);
+  return out;
+}
+
+async function ttRefreshLocks(db: DB) {
+  const out = await ttCall(db, "lock/list", { pageNo: 1, pageSize: 100 });
+  const list = Array.isArray(out?.list) ? out.list : [];
+  for (const l of list) {
+    await db.from("cp_locks").upsert({ lock_id: l.lockId, name: l.lockAlias || l.lockName, has_gateway: l.hasGateway === 1, battery: l.electricQuantity ?? null, updated_at: new Date().toISOString() }, { onConflict: "lock_id", ignoreDuplicates: false });
+  }
+  const { data } = await db.from("cp_locks").select("*").order("name");
+  return data ?? [];
+}
+
+// Dates for keys: DFW is Central time; -06:00 is midnight CST / 1 am CDT, early enough for a red-eye arrival.
+const centralMs = (day: string, hhmm = "00:00") => Date.parse(`${day}T${hhmm}:00-06:00`);
+
+async function ttlockConnect(req: Request, d: Record<string, unknown>, db: DB) {
+  const denied = await requireManager(req, db);
+  if (denied) return denied;
+  const clientId = String(d.client_id ?? "").trim(), clientSecret = String(d.client_secret ?? "").trim();
+  const username = String(d.username ?? "").trim(), password = String(d.password ?? "");
+  if (!clientId || !clientSecret || !username || !password) return json(400, { ok: false, message: "Fill in all four fields." });
+  const hashed = await md5(password); // TTLock wants the MD5 of the password; the password itself is never saved
+  let lastErr = "";
+  for (const host of TTLOCK_HOSTS) {
+    const t = await ttForm(`${host}/oauth2/token`, { clientId, clientSecret, username, password: hashed });
+    if (t?.access_token) {
+      await db.from("cp_ttlock_auth").upsert({ id: 1, client_id: clientId, client_secret: clientSecret, api_host: host, ttlock_username: username, access_token: t.access_token, refresh_token: t.refresh_token, expires_at: new Date(Date.now() + (Number(t.expires_in) || 7776000) * 1000).toISOString(), connected_at: new Date().toISOString() });
+      const locks = await ttRefreshLocks(db);
+      return json(200, { ok: true, locks, message: `Connected. Found ${locks.length} lock${locks.length === 1 ? "" : "s"}.` });
+    }
+    lastErr = t?.errmsg || t?.description || t?.error || JSON.stringify(t).slice(0, 160);
+  }
+  return json(400, { ok: false, message: `TTLock didn't accept that login: ${lastErr}. Use the email/phone and password you sign into the TTLock phone app with (not the developer site).` });
+}
+
+async function ttlock(req: Request, d: Record<string, unknown>, db: DB) {
+  const denied = await requireManager(req, db);
+  if (denied) return denied;
+  const action = String(d.action ?? "status");
+
+  if (action === "status") {
+    const { data: a } = await db.from("cp_ttlock_auth").select("ttlock_username, api_host, connected_at, expires_at").eq("id", 1).maybeSingle();
+    const { data: locks } = await db.from("cp_locks").select("*").order("name");
+    return json(200, { ok: true, connected: !!a, account: a?.ttlock_username ?? null, locks: locks ?? [] });
+  }
+  if (action === "locks") return json(200, { ok: true, locks: await ttRefreshLocks(db) });
+  if (action === "setlock") {
+    await db.from("cp_locks").update({ give_tenants: !!d.give_tenants }).eq("lock_id", Number(d.lock_id));
+    return json(200, { ok: true });
+  }
+
+  const { data: t } = await db.from("cp_tenants").select("*").eq("id", String(d.tenant_id ?? "")).maybeSingle();
+  if (!t) return json(404, { ok: false, message: "Tenant not found." });
+
+  if (action === "sendkey") {
+    const to = String(d.email ?? t.email ?? "").trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(to)) return json(400, { ok: false, message: "This tenant needs an email first (Edit tenant)." });
+    const { data: locks } = await db.from("cp_locks").select("*").eq("give_tenants", true);
+    if (!locks?.length) return json(400, { ok: false, message: "No locks are set to give tenants keys. Check More > TTLock." });
+    const today = new Date().toISOString().slice(0, 10);
+    const start = t.move_in && t.move_in > today ? centralMs(t.move_in) : Date.now() - 300000;
+    const end = t.move_out ? centralMs(t.move_out, "14:00") + 86400000 : Date.now() + 10 * 365 * 86400000;
+    const results: string[] = [];
+    for (const l of locks) {
+      try {
+        const out = await ttCall(db, "key/send", {
+          lockId: l.lock_id, receiverUsername: to, keyName: `${t.name}${t.bed_id ? " " + t.bed_id : ""}`.slice(0, 50),
+          startDate: start, endDate: end, createUser: 1, remarks: "DFW Crashpads door key",
+        });
+        await db.from("cp_door_keys").update({ removed_at: new Date().toISOString(), note: "replaced" }).eq("tenant_id", t.id).eq("lock_id", l.lock_id).is("removed_at", null);
+        await db.from("cp_door_keys").insert({ tenant_id: t.id, tenant_name: t.name, lock_id: l.lock_id, key_id: out?.keyId ?? null, receiver: to });
+        results.push(`${l.name}: sent`);
+      } catch (e) { results.push(`${l.name}: ${(e as Error).message}`); }
+    }
+    const okCount = results.filter((r) => r.endsWith(": sent")).length;
+    if (okCount) {
+      await db.from("cp_tenants").update({ ttlock_account: true, email: t.email || to }).eq("id", t.id);
+      await db.from("cp_contact_log").insert({ tenant_id: t.id, who: t.name, channel: "TTLock", summary: `Door key sent to ${to} (${results.join("; ")})` });
+    }
+    return json(okCount ? 200 : 502, { ok: okCount > 0, message: results.join("\n"), password_hint: to.slice(-6) });
+  }
+
+  if (action === "removekey") {
+    const { data: keys } = await db.from("cp_door_keys").select("*").eq("tenant_id", t.id).is("removed_at", null);
+    const results: string[] = [];
+    for (const k of keys ?? []) {
+      try {
+        if (k.key_id) await ttCall(db, "key/delete", { keyId: k.key_id });
+        await db.from("cp_door_keys").update({ removed_at: new Date().toISOString() }).eq("id", k.id);
+        results.push(`lock ${k.lock_id}: removed`);
+      } catch (e) {
+        const msg = (e as Error).message;
+        // Key already gone on TTLock's side counts as removed.
+        if (/not exist|does not exist|-1003|-4043/i.test(msg)) { await db.from("cp_door_keys").update({ removed_at: new Date().toISOString(), note: "already gone" }).eq("id", k.id); results.push(`lock ${k.lock_id}: already gone`); }
+        else results.push(`lock ${k.lock_id}: ${msg}`);
+      }
+    }
+    const { data: left } = await db.from("cp_door_keys").select("id").eq("tenant_id", t.id).is("removed_at", null);
+    if (!left?.length) await db.from("cp_tenants").update({ ttlock_account: false }).eq("id", t.id);
+    if (results.length) await db.from("cp_contact_log").insert({ tenant_id: t.id, who: t.name, channel: "TTLock", summary: `Door key removed (${results.join("; ")})` });
+    return json(left?.length ? 502 : 200, { ok: !left?.length, message: results.join("\n") || "No active keys on file." });
+  }
+
+  return json(400, { ok: false, message: "Unknown action." });
+}
+
+/** TTLock pushes door events here as form fields: lockId, notifyType, records (JSON array), admin, lockMac. */
+async function ttlockCallback(req: Request, db: DB) {
+  const raw = await req.text();
+  const form = new URLSearchParams(raw);
+  let records: any[] = [];
+  try { records = JSON.parse(form.get("records") ?? "[]"); } catch { /* not JSON */ }
+  if (!Array.isArray(records) || !records.length) return new Response("success");
+  const { data: known } = await db.from("cp_locks").select("lock_id");
+  const knownIds = new Set((known ?? []).map((k: any) => Number(k.lock_id)));
+  const rows = records
+    .filter((r) => knownIds.size === 0 || knownIds.has(Number(r.lockId)))
+    .map((r) => ({
+      lock_id: Number(r.lockId) || null, record_type: Number(r.recordType) || null, success: r.success === 1 || r.success === true,
+      username: r.username ?? null, keyboard_pwd: r.keyboardPwd ? "set" : null,
+      lock_at: r.lockDate ? new Date(Number(r.lockDate)).toISOString() : null,
+      server_at: r.serverDate ? new Date(Number(r.serverDate)).toISOString() : null,
+      battery: r.electricQuantity ?? null, raw: { ...r, keyboardPwd: undefined },
+    }));
+  if (rows.length) await db.from("cp_lock_events").insert(rows);
+  return new Response("success");
+}
+
 Deno.serve(async (req) => {
   const url = new URL(req.url);
   const path = url.pathname.replace(/^\/app/, "") || "/";
@@ -126,9 +297,19 @@ Deno.serve(async (req) => {
     return Response.redirect(APP_URL, 302);
   }
 
+  if (path === "/ttlock/callback") {
+    try { return await ttlockCallback(req, admin()); }
+    catch (e) { console.error("ttlock callback", e); return new Response("success"); }
+  }
+
   let d: Record<string, unknown> = {};
   try { d = await req.json(); } catch { return json(400, { ok: false, message: "Send JSON." }); }
   const db = admin();
+
+  if (path === "/ttlock/connect" || path === "/ttlock") {
+    try { return path === "/ttlock" ? await ttlock(req, d, db) : await ttlockConnect(req, d, db); }
+    catch (e) { return json(500, { ok: false, message: String((e as Error)?.message ?? e) }); }
+  }
 
   if (path === "/agreement") {
     try { return await agreement(req, d, db); }

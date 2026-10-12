@@ -160,7 +160,7 @@ document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ checkUp
 // ---------- self-update ----------
 // GitHub Pages lets phones keep the page for 10 minutes. On open and on return to the app,
 // ask for the latest copy directly; if the version differs, reload onto it.
-const APP_VERSION = '2026.10.12-9';
+const APP_VERSION = '2026.10.12-10';
 async function checkUpdate(){
   try{
     const r = await fetch(location.pathname+'?check='+Date.now(), { cache:'no-store' });
@@ -173,7 +173,7 @@ checkUpdate();
 // ---------- data ----------
 async function load(){
   const m = iso(S.month);
-  const [beds, tenants, payments, leads, cleaning, contacts, rent, settings, locks, doorkeys, nightly, doorlog] = await Promise.all([
+  const [beds, tenants, payments, leads, cleaning, contacts, rent, settings, locks, doorkeys, nightly, doorlog, inbox] = await Promise.all([
     sb.from('cp_bed_status').select('*'),
     sb.from('cp_tenants').select('*').order('name'),
     sb.from('cp_payments').select('*').order('received_on',{ascending:false}).order('created_at',{ascending:false}).limit(400),
@@ -186,10 +186,11 @@ async function load(){
     sb.from('cp_door_keys').select('*').order('sent_at',{ascending:false}),
     sb.rpc('cp_nightly_by_month'),
     sb.from('cp_lock_events').select('username,lock_at,success').eq('success',true).order('lock_at',{ascending:false}).limit(400),
+    sb.from('cp_payment_inbox').select('*').eq('status','review').order('received_on',{ascending:false}),
   ]);
   const err = [beds,tenants,payments,leads,cleaning,contacts,rent,settings,locks,doorkeys].find(r=>r.error);
   if(err){ toast('Load failed: '+err.error.message); if(/JWT|auth/i.test(err.error.message)) sb.auth.signOut(); return; }
-  S.data = { at:Date.now(), beds:beds.data, tenants:tenants.data, payments:payments.data, leads:leads.data, cleaning:cleaning.data, contacts:contacts.data, rent:rent.data, settings:Object.fromEntries(settings.data.map(s=>[s.key,s.value])), locks:locks.data||[], doorkeys:doorkeys.data||[], nightly:(nightly&&!nightly.error&&nightly.data)||[], doorlog:(doorlog&&!doorlog.error&&doorlog.data)||[] };
+  S.data = { at:Date.now(), beds:beds.data, tenants:tenants.data, payments:payments.data, leads:leads.data, cleaning:cleaning.data, contacts:contacts.data, rent:rent.data, settings:Object.fromEntries(settings.data.map(s=>[s.key,s.value])), locks:locks.data||[], doorkeys:doorkeys.data||[], nightly:(nightly&&!nightly.error&&nightly.data)||[], doorlog:(doorlog&&!doorlog.error&&doorlog.data)||[], inbox:(inbox&&!inbox.error&&inbox.data)||[] };
   render();
 }
 const T = ()=>S.data.tenants.find(t=>t.id===S.detail);
@@ -240,6 +241,18 @@ const contactRow = (t)=>`<div class="stack" style="gap:6px">
   ${t.phone?`<div class="row small"><span class="mono muted grow" style="overflow-wrap:anywhere">${esc(fmtPhone(t.phone))}</span><button class="btn sm" data-act="copy" data-id="${esc(fmtPhone(t.phone))}">Copy</button></div>`:''}
   ${t.email?`<div class="row small"><span class="mono muted grow" style="overflow-wrap:anywhere">${esc(t.email)}</span><button class="btn sm" data-act="copy" data-id="${esc(t.email)}">Copy</button></div>`:'<div class="small muted">No email on file.</div>'}
 </div>`;
+
+// Which beds are free on the 1st of a given month (someone whose stay covers that day blocks it).
+function openOn(monthDate){
+  const first=iso(monthDate); const last=iso(new Date(monthDate.getFullYear(),monthDate.getMonth()+1,0));
+  const busy=new Set(S.data.tenants.filter(t=>t.bed_id&&t.status!=='Moved Out'&&(
+      (t.status==='Active'&&(!t.move_out||t.move_out>=first)) ||
+      (t.status==='Reserved'&&(!t.move_in||t.move_in<=last)&&(!t.move_out||t.move_out>=first)) )).map(t=>t.bed_id));
+  return S.data.beds.filter(b=>!busy.has(b.id));
+}
+// Tenants who've been here 60+ days and haven't been asked for a review. Shown on Today; "Asked" clears it.
+function reviewAsks(){ return S.data.tenants.filter(t=>t.status==='Active'&&!t.review_asked&&t.move_in&&daysSince(t.move_in)>=60); }
+function reviewMsg(t){ const first=String(t.name||'').trim().split(' ')[0]; const link=S.data.settings.review_link||''; return `Hi ${first}, glad to have you at the crashpad. If you have a minute, a quick Google review helps a lot with keeping the house full of good crew:${link?' '+link:''} Thanks!`; }
 
 // Before someone moves in: what's still missing. Drives Today and the tenant card.
 function moveinTodo(t){
@@ -315,6 +328,8 @@ function vToday(){
     ${leaving.length?`<div><h3>Moving out</h3><div class="list">${leaving.map(t=>`<div class="card tap row" data-tenant="${t.id}"><span class="grow"><b>${esc(t.name)}</b> <span class="mono muted small">${esc(t.bed_id||'')}</span><div class="small muted">Last night ${fmtD(t.move_out)}</div></span>${t.move_out<td?`<button class="btn sm" data-act="moveout" data-id="${t.id}">Moved out</button>`:''}</div>`).join('')}</div></div>`:''}
     ${followups.length?`<div><h3>Move-out follow-ups</h3><div class="list">${followups.map(t=>`<div class="card"><div class="row tap" data-tenant="${t.id}"><span class="grow"><b>${esc(t.name)}</b> <span class="mono muted small">${esc(t.bed_id||'')}</span><div class="small muted">Left ${fmtD(t.move_out)}${daysSince(t.move_out)>0?' · '+daysSince(t.move_out)+' days ago':''}</div></span></div><div style="margin-top:6px">${moveoutTodo(t).map(i=>`<div class="row" style="padding:3px 0"><span class="grow small">${i.label}</span><button class="btn sm ${i.pri?'pri':''}" data-act="${i.act}" data-id="${i.id}">${i.btn}</button></div>`).join('')}</div></div>`).join('')}</div></div>`:''}
     ${cleaning.length?`<div><h3>For Will (cleaning)</h3><div class="card"><div class="list">${cleaning.map(c=>`<div class="row"><span class="mono">${esc(c.bed_id||'')}</span><span class="grow small">${esc(c.task)}${c.tenant_name?' · '+esc(c.tenant_name):''} · by ${fmtD(c.needed_on)}</span><button class="btn sm" data-act="cleandone" data-id="${c.id}">Done</button></div>`).join('')}</div><div class="row" style="margin-top:8px"><button class="btn sm" data-act="cleantext" data-id="x">Copy text for Will</button></div></div></div>`:''}
+    ${d.inbox.length?`<div><h3>Payments to review</h3><div class="list">${d.inbox.map(p=>{const t=p.suggested_tenant_id?tenantById(p.suggested_tenant_id):null;return `<div class="card"><div class="row"><span class="grow"><b>${money(p.amount)}</b> <span class="small muted">${esc(p.method||'')} · ${fmtD(p.received_on)} · from ${esc(p.payer||'?')}</span><div class="small">${t?`Looks like <b>${esc(t.name)}</b>${t.bed_id?' · '+t.bed_id:''} · ${esc(p.suggested_type||'Rent')}${p.suggested_month?' for '+monthLabel(new Date(p.suggested_month+'T12:00:00')):''}`:'<span style="color:var(--warn)">No tenant matched</span>'}${p.note?' · '+esc(p.note):''}</div></span></div><div class="row" style="margin-top:6px">${t?`<button class="btn sm pri" data-act="inboxaccept" data-id="${p.id}">Yes, log it</button>`:''}<button class="btn sm" data-act="inboxedit" data-id="${p.id}">${t?'Change':'Pick tenant'}</button><button class="btn sm" data-act="inboxdismiss" data-id="${p.id}">Not rent</button></div></div>`;}).join('')}</div></div>`:''}
+    ${reviewAsks().length?`<div><h3>Ask for a review</h3><div class="list">${reviewAsks().map(t=>`<div class="card row"><span class="grow"><b>${esc(t.name)}</b> <span class="mono muted small">${esc(t.bed_id||'')}</span><div class="small muted">Here ${daysSince(t.move_in)} days</div></span><button class="btn sm" data-act="reviewtext" data-id="${t.id}">Text</button><button class="btn sm" data-act="flagon" data-id="${t.id}|review_asked">Asked</button></div>`).join('')}</div></div>`:''}
     ${newLeads.length?`<div><h3>Open leads</h3><div class="list">${newLeads.map(l=>leadCard(l)).join('')}</div></div>`:''}
     ${paid.length?`<div><h3>Paid ${monthLabel(S.month)}</h3><div class="card small muted">${paid.map(r=>esc(r.name)).join(', ')}</div></div>`:''}
   </div>`;
@@ -323,7 +338,14 @@ function vToday(){
 // ---------- Beds ----------
 function vBeds(){
   const d=S.data; const rooms=[...new Set(d.beds.map(b=>b.room))];
-  return `<div class="stack">${rooms.map(r=>`<div><h3>${esc(r)}</h3><div class="list">${d.beds.filter(b=>b.room===r).map(b=>`<div class="card tap row" data-bed="${b.id}"><span class="mono">${b.id}</span><span class="grow small">${esc(b.category)} · ${money(b.list_price)}${b.tenant_name?`<div>${esc(b.tenant_name)}${b.rent&&b.rent!==b.list_price?` <span class="muted">(${money(b.rent)})</span>`:''}${b.reserved_move_in?` <span class="muted">from ${fmtD(b.reserved_move_in)}</span>`:''}${b.active_move_out?` <span class="muted">until ${fmtD(b.active_move_out)}</span>`:''}</div>`:''}</span>${bedPill(b.status)}</div>`).join('')}</div></div>`).join('')}</div>`;
+  const months=[0,1,2,3,4,5].map(n=>addMonths(firstOfMonth(new Date()),n));
+  const sel=S.availMonth||iso(months[0]); const selDate=new Date(sel+'T12:00:00');
+  const open=openOn(selDate); const byCat={}; open.forEach(b=>{ (byCat[b.category]=byCat[b.category]||[]).push(b.id); });
+  return `<div class="stack">
+    <div class="card"><h3>Open on the 1st of</h3>
+      <div class="tabs" style="margin-top:6px">${months.map(m=>`<button class="btn sm ${iso(m)===sel?'on':''}" data-act="availmonth" data-id="${iso(m)}">${monthLabel(m).replace(' 20',' ')} <span class="muted">${openOn(m).length}</span></button>`).join('')}</div>
+      <div class="small" style="margin-top:8px">${open.length?Object.entries(byCat).map(([c,ids])=>`<div><b>${esc(c)}</b> <span class="mono">${ids.join(', ')}</span></div>`).join(''):'Full that month.'}</div>
+      <div class="small muted" style="margin-top:4px">Counts beds with no one staying on the 1st. Someone who gave notice frees their bed the next month.</div></div>${rooms.map(r=>`<div><h3>${esc(r)}</h3><div class="list">${d.beds.filter(b=>b.room===r).map(b=>`<div class="card tap row" data-bed="${b.id}"><span class="mono">${b.id}</span><span class="grow small">${esc(b.category)} · ${money(b.list_price)}${b.tenant_name?`<div>${esc(b.tenant_name)}${b.rent&&b.rent!==b.list_price?` <span class="muted">(${money(b.rent)})</span>`:''}${b.reserved_move_in?` <span class="muted">from ${fmtD(b.reserved_move_in)}</span>`:''}${b.active_move_out?` <span class="muted">until ${fmtD(b.active_move_out)}</span>`:''}</div>`:''}</span>${bedPill(b.status)}</div>`).join('')}</div></div>`).join('')}</div>`;
 }
 function openBed(id){
   const b=S.data.beds.find(x=>x.id===id);
@@ -612,6 +634,7 @@ function vMore(){
     <div class="card stack">
       <label class="f">WordPress API key (for the website hookup)<input id="st-wp" value="${esc(d.settings.wp_api_key||'')}"></label>
       <label class="f">Cleaner phone<input id="st-cphone" value="${esc(d.settings.cleaner_phone||'')}"></label>
+      <label class="f">Google review link (for the review request text)<input id="st-review" value="${esc(d.settings.review_link||'')}" placeholder="https://g.page/r/..."></label>
       <button class="btn" data-act="settingssave" data-id="x">Save settings</button>
       <hr class="hr">
       <label class="f">New password<input id="st-pass" type="password" autocomplete="new-password"></label>
@@ -709,6 +732,17 @@ const ACT = {
   agropen:(id)=>openLead(id),
   tenantedit:(id)=>{ openTenant(id); const det=document.querySelector('.sheet details:last-of-type'); if(det){ det.open=true; det.scrollIntoView({block:'start'}); } },
   flagon:async(arg)=>{ const [id,k]=arg.split('|'); await run(sb.from('cp_tenants').update({[k]:true}).eq('id',id),'Marked'); },
+  reviewtext:(id)=>{ const t=tenantById(id); S.keyMsg=reviewMsg(t);
+    sheet(`<h2>Review request</h2><div class="stack"><div class="card small">${esc(S.keyMsg)}</div>${S.data.settings.review_link?'':'<div class="small" style="color:var(--warn)">Add your Google review link under More > Settings so the text includes it.</div>'}
+      ${t.phone?`<button class="btn" data-act="copynum" data-id="${t.id}">Copy number ${esc(fmtPhone(t.phone))}</button><a class="btn pri" href="${gvUrl(t.phone)}" target="_blank" rel="noopener" data-act="keymsgcopy" data-id="x">Copy message + open Google Voice</a>`:`<button class="btn" data-act="keymsgcopy" data-id="x">Copy message</button>`}
+      <button class="btn sm" data-act="reviewasked" data-id="${t.id}">Mark as asked</button></div>`); wire(); },
+  reviewasked:async(id)=>{ closeSheet(); await run(sb.from('cp_tenants').update({review_asked:true}).eq('id',id),'Marked as asked'); },
+  inboxaccept:async(id)=>{ const p=S.data.inbox.find(x=>x.id===id); const t=tenantById(p.suggested_tenant_id); if(!t) return;
+    await run(sb.from('cp_payments').insert({tenant_id:t.id,tenant_name:t.name,amount:Number(p.amount),method:p.method||'Other',for_month:p.suggested_month||iso(firstOfMonth(new Date())),type:p.suggested_type||'Rent',received_on:p.received_on||today(),note:'From email receipt'}),'Payment logged');
+    if((p.suggested_type||'Rent')==='Reservation fee'&&!t.fee_paid_on) await sb.from('cp_tenants').update({fee_paid_on:p.received_on||today()}).eq('id',t.id);
+    await run(sb.from('cp_payment_inbox').update({status:'accepted',resolved_at:new Date().toISOString()}).eq('id',id)); },
+  inboxdismiss:async(id)=>{ await run(sb.from('cp_payment_inbox').update({status:'dismissed',resolved_at:new Date().toISOString()}).eq('id',id),'Dismissed'); },
+  inboxedit:(id)=>{ const p=S.data.inbox.find(x=>x.id===id); S.inboxEdit=id; sheet(payForm(p.suggested_tenant_id||null)); $('pf-amount').value=p.amount; if(p.received_on) $('pf-date').value=p.received_on; if(p.method&&PAY_METHODS.includes(p.method)) $('pf-method').value=p.method; if(p.suggested_type) $('pf-type').value=p.suggested_type; if(p.suggested_month) $('pf-month').value=p.suggested_month; wire(); },
   remind:(id)=>{ const t=tenantById(id); const r=S.data.rent.find(x=>x.tenant_id===id); if(!t||!r) return; S.keyMsg=rentMsg(t,r);
     sheet(`<h2>Rent reminder</h2><div class="stack"><div class="card small">${esc(S.keyMsg)}</div>
       ${t.phone?`<button class="btn" data-act="copynum" data-id="${t.id}">Copy number ${esc(fmtPhone(t.phone))}</button><a class="btn pri" href="${gvUrl(t.phone)}" target="_blank" rel="noopener" data-act="keymsgcopy" data-id="x">Copy message + open Google Voice</a><div class="small muted">Paste the number as the recipient, then paste the message.</div>`:`<button class="btn" data-act="keymsgcopy" data-id="x">Copy message</button><div class="small muted">No phone on file.</div>`}
@@ -766,6 +800,7 @@ const ACT = {
   agrresend:async(id,el)=>{ el.disabled=true; el.textContent='Sending…'; try{ const out=await agrCall({action:'resend',lead_id:id}); toast(out.message||'Emailed again'); }catch(e){ toast('Error: '+e.message); } el.disabled=false; el.textContent='Email again'; },
   leadsfilter:(k)=>{S.leadsFilter=k;render();},
   tenantsfilter:(k)=>{S.tenantsFilter=k;render();},
+  availmonth:(k)=>{S.availMonth=k;render();},
   month:(n)=>{S.month=addMonths(S.month,Number(n));load();},
   addlead:()=>{ sheet(`<h2>New lead</h2>${leadForm()}<div class="row" style="margin-top:10px"><button class="btn pri" data-act="leadcreate" data-id="x">Add lead</button></div>`); wire(); $('lf-name').focus(); },
   leadcreate:async()=>{ const v=readLeadForm(); if(!v.name) return toast('Name is required'); closeSheet(); await run(sb.from('cp_leads').insert({...v,status:'New'}),'Lead added'); },
@@ -854,7 +889,7 @@ const ACT = {
   bednotes:async(id)=>{ const v=$('bed-notes').value.trim()||null; closeSheet(); await run(sb.from('cp_beds').update({notes:v}).eq('id',id),'Saved'); },
   pay:(id)=>{ sheet(payForm(id||null)); wire(); },
   // Read every field BEFORE closeSheet(): it removes the inputs from the page.
-  paysave:async()=>{ const tid=$('pf-tenant').value; const t=tenantById(tid); const amt=Number($('pf-amount').value);
+  paysave:async()=>{ const fromInbox=S.inboxEdit; S.inboxEdit=null; if(fromInbox) await sb.from('cp_payment_inbox').update({status:'accepted',resolved_at:new Date().toISOString()}).eq('id',fromInbox); const tid=$('pf-tenant').value; const t=tenantById(tid); const amt=Number($('pf-amount').value);
     const method=$('pf-method').value, forMonth=$('pf-month').value, type=$('pf-type').value,
           on=$('pf-date').value||today(), note=$('pf-note').value.trim()||null;
     if(!amt) return toast('Amount?');
@@ -869,7 +904,7 @@ const ACT = {
   cleantext:async()=>{ const c=S.data.cleaning.filter(x=>!x.done); const lines=c.map(x=>`- ${x.bed_id}: ${x.task.toLowerCase()}${x.tenant_name?' ('+x.tenant_name+')':''}${x.needed_on?' by '+fmtD(x.needed_on):''}`);
     const txt=`Hey Will, for this week:\n${lines.join('\n')}\nThanks!`; try{ await navigator.clipboard.writeText(txt); toast('Copied for Will'); }catch(e){ sheet(`<h2>Text for Will</h2><textarea style="width:100%;min-height:160px">${esc(txt)}</textarea>`); }
     await sb.from('cp_cleaning').update({cleaners_notified:true}).in('id',c.map(x=>x.id)); },
-  settingssave:async()=>{ await run(sb.from('cp_settings').upsert([{key:'wp_api_key',value:$('st-wp').value.trim()},{key:'cleaner_phone',value:$('st-cphone').value.trim()}]),'Settings saved'); },
+  settingssave:async()=>{ await run(sb.from('cp_settings').upsert([{key:'wp_api_key',value:$('st-wp').value.trim()},{key:'cleaner_phone',value:$('st-cphone').value.trim()},{key:'review_link',value:$('st-review').value.trim()}]),'Settings saved'); },
   passchange:async()=>{ const p=$('st-pass').value; if(p.length<8) return toast('Use at least 8 characters'); const {error}=await sb.auth.updateUser({password:p}); toast(error?error.message:'Password changed'); $('st-pass').value=''; },
   signout:()=>sb.auth.signOut(),
 };

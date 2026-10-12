@@ -314,10 +314,79 @@ function openLead(id){
     <div class="stack" style="margin-top:10px">
       <div class="row small">${['New','Contacted','Approved','Agreement sent','Not a fit'].map(s=>`<button class="btn sm ${l.status===s?'pri':''}" data-act="leadstatus" data-id="${l.id}|${s}">${s}</button>`).join('')}</div>
       ${t?`<div class="card tap" data-tenant="${t.id}">Tenant record: <b>${esc(t.name)}</b> · ${esc(t.bed_id||t.category_hold||'no bed')} · ${t.status}</div>`:`<button class="btn pri" data-act="leadtotenant" data-id="${l.id}">Reserve a bed for ${esc(l.name.split(' ')[0])}</button>`}
+      ${l.status==='Not a fit'?'':`<div class="card" id="agr-box"><h3>Agreement</h3><div class="small muted" style="margin-top:6px">Checking the website…</div></div>`}
       <details><summary class="muted small">Edit details</summary><div style="margin-top:8px">${leadForm(l)}<div class="row" style="margin-top:8px"><button class="btn pri" data-act="leadsave" data-id="${l.id}">Save</button><button class="btn danger" data-act="leaddelete" data-id="${l.id}">Delete lead</button></div></div></details>
       <div><h3>Contact log</h3><div class="row" style="margin:6px 0"><input id="cl-text" class="grow" placeholder="What they said…" style="padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)"><button class="btn sm" data-act="leadnote" data-id="${l.id}">Add</button></div>${notes.map(n=>`<div class="small" style="padding:4px 0;border-bottom:1px solid var(--line)"><span class="muted">${fmtD(n.logged_at)}</span> ${esc(n.summary)}</div>`).join('')}</div>
     </div>`);
   wire();
+  if(S.agrJust&&S.agrJust.id===l.id){ const j=S.agrJust; S.agrJust=null; agrShow(l.id,j.a,true); }
+  else if(l.status!=='Not a fit') agrLoad(l.id);
+}
+
+// ---------- Agreements (sent through the website; server route /app/agreement) ----------
+async function agrCall(body){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session) throw new Error('Sign in again.');
+  const r = await fetch(SUPABASE_URL+'/functions/v1/app/agreement', { method:'POST', headers:{ 'content-type':'application/json', 'authorization':'Bearer '+session.access_token, 'apikey':SUPABASE_KEY }, body:JSON.stringify(body) });
+  let out={}; try{ out=await r.json(); }catch(e){}
+  if(!r.ok || !out.ok) throw new Error(out.message || ('Server said HTTP '+r.status));
+  return out;
+}
+function agrBox(html){ const b=$('agr-box'); if(b){ b.innerHTML='<h3>Agreement</h3><div style="margin-top:8px">'+html+'</div>'; wire(); } }
+async function agrLoad(leadId){
+  try{
+    const out = await agrCall({ action:'status', lead_id:leadId });
+    if(out.agreement) agrShow(leadId, out.agreement); else agrForm(leadId);
+  }catch(e){
+    agrBox(`<div class="small" style="color:var(--bad)">Couldn't reach the website: ${esc(e.message)}</div><div class="row" style="margin-top:8px"><button class="btn sm" data-act="agrretry" data-id="${leadId}">Try again</button><button class="btn sm" data-act="agrformnow" data-id="${leadId}">Send one anyway</button></div>`);
+  }
+}
+function agrSmsHref(l, url){
+  if(!l.phone) return '';
+  const first=String(l.name||'').trim().split(' ')[0];
+  return 'sms:+'+phoneDigits(l.phone)+'?&body='+encodeURIComponent('Hi '+first+', here is your DFW Crashpads agreement. It takes about 5 minutes: '+url);
+}
+function agrShow(leadId, a, justSent){
+  const l=S.data.leads.find(x=>x.id===leadId); if(!l) return;
+  S.agrUrl=a.url;
+  if(a.status==='signed'){
+    agrBox(`<div><span class="pill ok">Signed</span> <span class="small muted">${esc(a.signed_at||'')}</span></div>
+      <div class="small muted" style="margin-top:4px">${esc(a.bed_id||a.category||'')} · ${money(a.rent)}/mo · move-in ${fmtD(a.move_in)}</div>
+      <div class="row" style="margin-top:8px"><a class="btn sm pri" target="_blank" rel="noopener" href="${esc(a.url)}">Open signed copy</a></div>`);
+    return;
+  }
+  agrBox(`<div><span class="pill info">${justSent?'Sent':'Waiting for signature'}</span> <span class="small muted">${esc(a.sent_at||'just now')}${a.sent_to?' to '+esc(a.sent_to):''}</span></div>
+    ${a.rent?`<div class="small muted" style="margin-top:4px">${esc(a.bed_id||a.category||'')} · ${money(a.rent)}/mo · move-in ${fmtD(a.move_in)}</div>`:''}
+    <div class="row" style="margin-top:8px">
+      ${l.phone?`<a class="btn sm pri" href="${agrSmsHref(l,a.url)}">Text them the link</a>`:''}
+      <a class="btn sm" target="_blank" rel="noopener" href="${esc(a.url)}">Open</a>
+      <button class="btn sm" data-act="agrcopy" data-id="x">Copy link</button>
+      ${l.wp_lead_id?`<button class="btn sm" data-act="agrresend" data-id="${leadId}">Email again</button>`:''}
+    </div>`);
+}
+function agrForm(leadId){
+  const l=S.data.leads.find(x=>x.id===leadId); if(!l) return;
+  const t=l.tenant_id?tenantById(l.tenant_id):null;
+  const beds=S.data.beds;
+  const bedNow=(t&&t.bed_id)||'';
+  const cat=(t&&t.category_hold)||l.bed_category||'';
+  const bedOpts=`<option value="">No bed yet (hold a category)</option>`+beds.filter(b=>b.status==='Open'||b.id===bedNow).map(b=>`<option value="${b.id}" data-price="${b.list_price}" data-cat="${esc(b.category)}" ${b.id===bedNow?'selected':''}>${b.id} · ${esc(b.category)} · ${money(b.list_price)}</option>`).join('');
+  const rent=(t&&t.rent)||(bedNow?(beds.find(b=>b.id===bedNow)||{}).list_price:'')||'';
+  agrBox(`<div class="stack">
+    <label class="f">Their email<input id="ag-email" type="email" inputmode="email" value="${esc((t&&t.email)||l.email||'')}" placeholder="name@example.com"></label>
+    <div class="grid2">
+      <label class="f">Bed<select id="ag-bed">${bedOpts}</select></label>
+      <label class="f">Category (if no bed)<select id="ag-cat"><option value="">Any</option>${['Top bunk','Bottom bunk','Semi-private','Private'].map(o=>`<option ${cat===o?'selected':''}>${o}</option>`).join('')}</select></label>
+    </div>
+    <div class="grid2">
+      <label class="f">Rent $/mo<input id="ag-rent" inputmode="numeric" value="${esc(rent)}"></label>
+      <label class="f">Move-in<input id="ag-move" type="date" value="${esc((t&&t.move_in)||l.desired_start||'')}"></label>
+    </div>
+    <div id="ag-err" class="small" style="color:var(--bad)" hidden></div>
+    <button class="btn pri" data-act="agrsend" data-id="${leadId}">Send agreement</button>
+    <div class="small muted">Emails a private signing link. After they sign, they show as Reserved with the contract box checked.</div>
+  </div>`);
+  const sel=$('ag-bed'); if(sel) sel.onchange=()=>{ const o=sel.options[sel.selectedIndex]; if(o&&o.dataset.price){ $('ag-rent').value=o.dataset.price; $('ag-cat').value=o.dataset.cat; } };
 }
 
 // ---------- Tenants ----------
@@ -368,6 +437,7 @@ function openTenant(id){
       <div class="row">
         <button class="btn pri" data-act="pay" data-id="${t.id}">Log payment</button>
         ${t.status==='Reserved'?`<button class="btn" data-act="movein" data-id="${t.id}">Move in</button>`:''}
+        ${!t.contract_signed&&t.status!=='Moved Out'&&S.data.leads.find(x=>x.tenant_id===t.id)?`<button class="btn" data-act="agropen" data-id="${S.data.leads.find(x=>x.tenant_id===t.id).id}">Agreement</button>`:''}
         ${t.status==='Active'&&!t.move_out?`<button class="btn" data-act="notice" data-id="${t.id}">Log notice</button>`:''}
         ${t.status==='Active'&&t.move_out?`<button class="btn" data-act="moveout" data-id="${t.id}">Moved out</button>`:''}
         ${!t.fee_paid_on&&t.status!=='Moved Out'?`<button class="btn" data-act="feepaid" data-id="${t.id}">$150 fee received</button>`:''}
@@ -458,6 +528,27 @@ function vMore(){
 
 // ---------- actions ----------
 const ACT = {
+  agropen:(id)=>openLead(id),
+  agrretry:(id)=>{ agrBox('<div class="small muted">Checking the website…</div>'); agrLoad(id); },
+  agrformnow:(id)=>agrForm(id),
+  agrcopy:async()=>{ try{ await navigator.clipboard.writeText(S.agrUrl||''); toast('Link copied'); }catch(e){ prompt('Copy this link:', S.agrUrl||''); } },
+  agrsend:async(id,el)=>{
+    const err=$('ag-err'); const show=(m)=>{ err.textContent=m; err.hidden=false; };
+    const body={ action:'send', lead_id:id, email:$('ag-email').value.trim(), bed_id:$('ag-bed').value, category:$('ag-cat').value, rent:Number($('ag-rent').value)||0, move_in:$('ag-move').value };
+    if(!/^\S+@\S+\.\S+$/.test(body.email)) return show('Add their email.');
+    if(!body.bed_id && !body.category) return show('Pick a bed or a category.');
+    if(!body.rent) return show('Add the monthly rent.');
+    if(!body.move_in) return show('Add the move-in date.');
+    el.disabled=true; el.textContent='Sending…';
+    try{
+      const out=await agrCall(body);
+      S.agrJust={ id, a: out.already ? out.agreement : { url:out.url, sent_to:out.sent_to, bed_id:body.bed_id, category:body.category, rent:body.rent, move_in:body.move_in, status:'sent' } };
+      await load();
+      openLead(id);
+      toast(out.already ? 'Already sent earlier. Showing that one.' : 'Agreement sent');
+    }catch(e){ el.disabled=false; el.textContent='Send agreement'; show(e.message); }
+  },
+  agrresend:async(id,el)=>{ el.disabled=true; el.textContent='Sending…'; try{ const out=await agrCall({action:'resend',lead_id:id}); toast(out.message||'Emailed again'); }catch(e){ toast('Error: '+e.message); } el.disabled=false; el.textContent='Email again'; },
   leadsfilter:(k)=>{S.leadsFilter=k;render();},
   tenantsfilter:(k)=>{S.tenantsFilter=k;render();},
   month:(n)=>{S.month=addMonths(S.month,Number(n));load();},

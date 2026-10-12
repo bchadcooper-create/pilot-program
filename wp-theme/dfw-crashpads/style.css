@@ -3,7 +3,7 @@ Theme Name: DFW Crashpads
 Theme URI: https://dfwcrashpads.com
 Author: DFW Crashpads, LLC
 Description: Conversion-focused theme for the DFW Crashpads crew housing website. Edit prices, availability, photos, reviews, and contact details under Appearance > Customize.
-Version: 1.2.0
+Version: 1.3.0
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
@@ -235,3 +235,7 @@ p { margin: 0 0 1em; }
 .entry img { border-radius: var(--radius); }
 .entry .wp-block-image { margin: 1.5em 0; }
 .alignwide { max-width: var(--max); }
+
+/* Guide links in the footer, same column style as contact links. */
+.footer-guides { display: flex; flex-direction: column; gap: 6px; }
+.footer-guides a { color: inherit; }

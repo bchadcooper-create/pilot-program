@@ -558,10 +558,35 @@ add_filter( 'wpseo_opengraph_desc', 'dfw_yoast_description', 20 );
 add_filter( 'wpseo_twitter_description', 'dfw_yoast_description', 20 );
 
 /**
+ * Sitemap hygiene for Yoast: leave out pages that are noindex anyway
+ * (thank-you, sign, the HTML sitemap page) and the empty category/author lists.
+ */
+function dfw_sitemap_exclude_pages( $ids ) {
+	foreach ( array( 'thank-you', 'apply-thank-you', 'sign', 'sitemap' ) as $slug ) {
+		$p = get_page_by_path( $slug );
+		if ( $p ) { $ids[] = $p->ID; }
+	}
+	return $ids;
+}
+add_filter( 'wpseo_exclude_from_sitemap_by_post_ids', 'dfw_sitemap_exclude_pages' );
+add_filter( 'wpseo_sitemap_exclude_taxonomy', function ( $exclude, $tax ) { return in_array( $tax, array( 'category', 'post_tag', 'post_format' ), true ) ? true : $exclude; }, 10, 2 );
+add_filter( 'wpseo_sitemap_exclude_author', '__return_true' );
+
+/** Guide pages (the SEO landing pages), for the footer and for cross-links. */
+function dfw_guide_pages() {
+	$out = array();
+	foreach ( array( 'crashpad-near-dfw-airport', 'crashpad-for-dfw-based-airline-crews', 'cold-bed-crashpad-guide' ) as $slug ) {
+		$p = get_page_by_path( $slug );
+		if ( $p && 'publish' === $p->post_status ) { $out[] = $p; }
+	}
+	return $out;
+}
+
+/**
  * Keep the signing page and thank-you page out of search results.
  */
 function dfw_noindex_private_pages() {
-	if ( is_page( array( 'sign', 'thank-you', 'apply-thank-you' ) ) ) {
+	if ( is_page( array( 'sign', 'thank-you', 'apply-thank-you', 'sitemap' ) ) ) {
 		echo '<meta name="robots" content="noindex, nofollow">' . "\n";
 	}
 }

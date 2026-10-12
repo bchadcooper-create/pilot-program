@@ -155,7 +155,20 @@ $('li-go').onclick = async ()=>{
 $('li-pass').addEventListener('keydown',e=>{ if(e.key==='Enter') $('li-go').click(); });
 sb.auth.onAuthStateChange((_e, session)=>{ if(session){ $('login').hidden=true; $('shell').hidden=false; load(); } else { $('shell').hidden=true; $('login').hidden=false; } });
 $('refresh').onclick = ()=>load();
-document.addEventListener('visibilitychange',()=>{ if(!document.hidden && S.data && Date.now()-S.data.at>60000) load(); });
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ checkUpdate(); if(S.data && Date.now()-S.data.at>60000) load(); } });
+
+// ---------- self-update ----------
+// GitHub Pages lets phones keep the page for 10 minutes. On open and on return to the app,
+// ask for the latest copy directly; if the version differs, reload onto it.
+const APP_VERSION = '2026.10.12-3';
+async function checkUpdate(){
+  try{
+    const r = await fetch(location.pathname+'?check='+Date.now(), { cache:'no-store' });
+    const m = (await r.text()).match(/const APP_VERSION = '([^']+)'/);
+    if(m && m[1]!==APP_VERSION){ toast('Updating the app…'); setTimeout(()=>location.replace(location.pathname+'?v='+encodeURIComponent(m[1])), 600); }
+  }catch(e){}
+}
+checkUpdate();
 
 // ---------- data ----------
 async function load(){
@@ -515,7 +528,7 @@ function vMore(){
     <div class="card"><div class="small muted" style="margin-bottom:6px">Income by month (all payment types except refunds)</div>
       ${months.map((m,i)=>`<div class="row small" style="margin:3px 0"><span style="width:56px">${monthLabel(m).replace(' 20',' ')}</span><div class="bar grow"><i style="width:${100*income[i]/max}%"></i></div><span class="mono" style="width:56px;text-align:right">${money(income[i])}</span></div>`).join('')}
       <div class="small muted" style="margin-top:6px">${occ} occupied, ${res} reserved, ${total-occ-res} open. Full house at list price: ${money(potential)}/mo.</div></div>
-    <h3>Settings</h3>
+    <h3>Settings <span class="small muted" style="text-transform:none;letter-spacing:0">· app version ${APP_VERSION}</span></h3>
     <div class="card stack">
       <label class="f">WordPress API key (for the website hookup)<input id="st-wp" value="${esc(d.settings.wp_api_key||'')}"></label>
       <label class="f">Cleaner phone<input id="st-cphone" value="${esc(d.settings.cleaner_phone||'')}"></label>

@@ -160,7 +160,7 @@ document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ checkUp
 // ---------- self-update ----------
 // GitHub Pages lets phones keep the page for 10 minutes. On open and on return to the app,
 // ask for the latest copy directly; if the version differs, reload onto it.
-const APP_VERSION = '2026.10.12-4';
+const APP_VERSION = '2026.10.12-5';
 async function checkUpdate(){
   try{
     const r = await fetch(location.pathname+'?check='+Date.now(), { cache:'no-store' });
@@ -429,6 +429,9 @@ function tenantForm(t={}){
       <label class="f">Hold category (no bed yet)<select id="tf-hold"><option value="">None</option>${['Top bunk','Bottom bunk','Semi-private','Private'].map(o=>`<option ${t.category_hold===o?'selected':''}>${o}</option>`).join('')}</select></label>
     </div>
     <div class="grid2"><label class="f">Move-in<input id="tf-in" type="date" value="${esc(t.move_in||'')}"></label><label class="f">Move-out (last night)<input id="tf-out" type="date" value="${esc(t.move_out||'')}"></label></div>
+    <div class="grid2"><label class="f">First month $ (blank = full rent)<input id="tf-first" inputmode="numeric" value="${esc(t.first_month_due??'')}" placeholder="full rent"></label>
+      <div style="display:flex;align-items:flex-end;gap:6px"><button class="btn sm" type="button" data-act="prorate" data-id="x">Prorate</button><button class="btn sm" type="button" data-act="fullmonth" data-id="x">Full</button></div></div>
+    <div class="small muted" id="tf-first-hint"></div>
     <div class="grid2"><label class="f">Phone<input id="tf-phone" inputmode="tel" value="${esc(t.phone||'')}"></label><label class="f">Email<input id="tf-email" inputmode="email" value="${esc(t.email||'')}"></label></div>
     <div class="grid2"><label class="f">Airline<input id="tf-airline" value="${esc(t.airline||'')}"></label><label class="f">Payment code<input id="tf-code" value="${esc(t.payment_code||'')}" placeholder="auto from bed"></label></div>
     <div class="grid2"><label class="f">Fee paid on<input id="tf-fee" type="date" value="${esc(t.fee_paid_on||'')}"></label><label class="f">Fee refunded on<input id="tf-refund" type="date" value="${esc(t.fee_refunded_on||'')}"></label></div>
@@ -438,7 +441,7 @@ function tenantForm(t={}){
 }
 function readTenantForm(){
   const bed=$('tf-bed').value||null;
-  return { name:$('tf-name').value.trim(), bed_id:bed, rent:Number($('tf-rent').value)||0, status:$('tf-status').value, category_hold:bed?null:($('tf-hold').value||null), move_in:$('tf-in').value||null, move_out:$('tf-out').value||null, phone:fmtPhone($('tf-phone').value)||null, email:$('tf-email').value.trim()||null, airline:$('tf-airline').value.trim()||null, payment_code:($('tf-code').value.trim()||(bed?bed.replace('-',''):null)), fee_paid_on:$('tf-fee').value||null, fee_refunded_on:$('tf-refund').value||null, contract_url:$('tf-contract').value.trim()||null, notes:$('tf-notes').value.trim()||null };
+  return { name:$('tf-name').value.trim(), bed_id:bed, rent:Number($('tf-rent').value)||0, status:$('tf-status').value, category_hold:bed?null:($('tf-hold').value||null), move_in:$('tf-in').value||null, move_out:$('tf-out').value||null, first_month_due:($('tf-first').value.trim()===''?null:Math.round(Number($('tf-first').value))||null), phone:fmtPhone($('tf-phone').value)||null, email:$('tf-email').value.trim()||null, airline:$('tf-airline').value.trim()||null, payment_code:($('tf-code').value.trim()||(bed?bed.replace('-',''):null)), fee_paid_on:$('tf-fee').value||null, fee_refunded_on:$('tf-refund').value||null, contract_url:$('tf-contract').value.trim()||null, notes:$('tf-notes').value.trim()||null };
 }
 function openTenant(id){
   S.detail=id; const t=T(); if(!t) return;
@@ -545,7 +548,11 @@ function vMore(){
 
 // ---------- actions ----------
 const PAY_METHODS = ['Venmo','Zelle','Apple Pay','Cash App','PayPal','Cash','Other'];
+// Move-in month prorated at rent / 30 per day, move-in date through month end (never more than the rent).
+function prorated(rent, moveIn){ if(!rent||!moveIn) return null; const d=new Date(moveIn+'T12:00:00'); const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate(); const days=last-d.getDate()+1; return { amt:Math.min(rent,Math.round(rent*days/30)), days }; }
 const ACT = {
+  prorate:()=>{ const r=prorated(Number($('tf-rent').value), $('tf-in').value); if(!r) return toast('Set rent and move-in first'); $('tf-first').value=r.amt; $('tf-first-hint').textContent=`${r.days} days × $${(Number($('tf-rent').value)/30).toFixed(2)}/day`; },
+  fullmonth:()=>{ $('tf-first').value=''; $('tf-first-hint').textContent='Full rent for the move-in month.'; },
   agropen:(id)=>openLead(id),
   agrretry:(id)=>{ agrBox('<div class="small muted">Checking the website…</div>'); agrLoad(id); },
   agrformnow:(id)=>agrForm(id),

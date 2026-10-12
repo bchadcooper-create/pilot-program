@@ -1,8 +1,11 @@
 -- DFW Crashpads: rent owed per tenant for a month (Supabase project uvkkfkaqlhvmyacxwoey).
--- Applied 2026-10-12 as migration cp_rent_for_month_prorate_move_in.
--- Move-in month is prorated per the agreement: monthly rent / 30 per day, move-in date through month end,
--- capped at the monthly rent, and due on the move-in date (late after max(move-in, the 5th)).
+-- Current version: migration cp_tenants_first_month_due_optional (2026-10-12).
+-- Proration is optional per tenant: cp_tenants.first_month_due is what they owe for the move-in month
+-- (the app's Prorate button fills rent / 30 per day); blank means the full monthly rent.
+-- The move-in month is due on the move-in date (late after max(move-in, the 5th)).
 -- `rent` in the result is the amount due for that month, not the monthly rate.
+alter table public.cp_tenants add column if not exists first_month_due integer;
+
 CREATE OR REPLACE FUNCTION public.cp_rent_for_month(p_month date)
  RETURNS TABLE(tenant_id uuid, name text, bed_id text, status text, rent integer, move_in date, move_out date, paid numeric, owed numeric, rent_status text)
  LANGUAGE sql STABLE SET search_path TO 'public'
@@ -13,9 +16,8 @@ AS $function$
   ),
   base as (
     select t.*,
-      case when t.move_in > m.first and t.move_in <= m.last
-           then least(t.rent, round(t.rent * ((m.last - t.move_in) + 1) / 30.0))::int
-           else t.rent end as due,
+      case when t.move_in >= m.first and t.move_in <= m.last and t.first_month_due is not null
+           then t.first_month_due else t.rent end as due,
       case when t.move_in > m.first and t.move_in <= m.last
            then greatest(t.move_in, m.first + 4) else m.first + 4 end as late_after,
       coalesce((select sum(p.amount) from public.cp_payments p

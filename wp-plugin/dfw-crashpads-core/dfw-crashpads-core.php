@@ -2,7 +2,7 @@
 /**
  * Plugin Name: DFW Crashpads Core
  * Description: Application form, lead storage, e-signed agreements, email and Google Sheet notifications, availability API for the phone app, and photo privacy (strips hidden location data from uploads). Companion to the DFW Crashpads theme.
- * Version: 1.7.0
+ * Version: 1.7.1
  * Author: DFW Crashpads, LLC
  * Requires at least: 6.0
  * Requires PHP: 7.4
@@ -77,6 +77,7 @@ $GLOBALS['dfw_core_fields'] = array(
 	'phone'    => 'Mobile phone',
 	'airline'  => 'Airline',
 	'position' => 'Position',
+	'sex'      => 'Sex',
 	'start'    => 'Move-in date',
 	'bed'      => 'Bed preference',
 	'source'   => 'How they found us',
@@ -218,6 +219,14 @@ function dfw_core_form_shortcode() {
 				<div class="choice-row">
 					<?php foreach ( array( 'Pilot', 'Other airline crew' ) as $opt ) : ?>
 						<label><input type="radio" name="dfw[position]" value="<?php echo esc_attr( $opt ); ?>" <?php checked( $v( 'position' ) ? $v( 'position' ) : 'Pilot', $opt ); ?>> <?php echo esc_html( $opt ); ?></label>
+					<?php endforeach; ?>
+				</div>
+			</fieldset>
+			<fieldset class="field full choice">
+				<legend>Sex <span class="muted">(optional, helps us match rooms)</span></legend>
+				<div class="choice-row">
+					<?php foreach ( array( 'Male', 'Female' ) as $opt ) : ?>
+						<label><input type="radio" name="dfw[sex]" value="<?php echo esc_attr( $opt ); ?>" <?php checked( $v( 'sex' ), $opt ); ?>> <?php echo esc_html( $opt ); ?></label>
 					<?php endforeach; ?>
 				</div>
 			</fieldset>

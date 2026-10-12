@@ -477,7 +477,7 @@ Deno.serve(async (req) => {
   const { error } = await db.from("cp_leads").insert({
     received_at: d.submitted ? new Date(String(d.submitted)).toISOString() : new Date().toISOString(),
     name: String(d.name ?? "").trim() || "(no name)", email: d.email || null, phone: fmtPhone(d.phone),
-    airline: d.airline || null, position: d.position || null, desired_start: d.start || null,
+    airline: d.airline || null, position: d.position || null, sex: d.sex || null, desired_start: d.start || null,
     bed_category: d.bed && d.bed !== "Any available" ? d.bed : null, status: "New",
     notes: notes.join(" | ") || null, source: d.source || null, wp_lead_id: Number(d.lead_id) || null,
   });

@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.30 / 20260916_4
+ * Version/build: fcf-v5.44.31 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.30';
+const FCF_VERSION = 'fcf-v5.44.31';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -3399,8 +3399,11 @@ async function bootAppInner() {
   if (mostRecentOura) {
     ST.ouraScore = mostRecentOura.readiness_score ?? null;
     ST.ouraData  = mostRecentOura;
-    if (ST.ouraScore !== null) {
+    // Yesterday's score must not set today's condition (see ouraRowIsToday).
+    if (ST.ouraScore !== null && ouraRowIsToday()) {
       ST.fatigue = ST.ouraScore >= 70 ? 'go' : ST.ouraScore >= 60 ? 'marginal' : 'nogo';
+    } else if (ST.readiness) {
+      ST.fatigue = ST.readiness <= 2 ? 'nogo' : ST.readiness === 3 ? 'marginal' : 'go';
     }
   }
   ST.lastSession = lastSession;
@@ -6065,6 +6068,12 @@ async function loadFatigueCalibration(ctx) {
       // fatigue instead) — readiness being null alone doesn't
       // distinguish those two cases on its own.
       ouraConnected: !!ST.ouraConnected,
+      // True when Oura is connected but has nothing for last night (ring
+      // not worn or not synced). readiness and sleepScore are null then,
+      // and selfReportedFatigue plus manualCondition carry what the user
+      // tapped on the Today card instead.
+      ringDataMissingToday: ouraMissingToday(),
+      manualCondition: ouraMissingToday() && ST.readiness ? ST.fatigue : null,
       // Null when home or under 1 hr off local; see buildBodyClockHTML.
       bodyClock: bodyClockForAI(),
     };
@@ -6321,6 +6330,23 @@ async function loadCalendarRange() {
 // Workout" silently did nothing.
 function localDateStr(d) {
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+// BUG FIX (reported: slept without the ring, Oura itself showed no
+// readiness or sleep, and Today still showed yesterday's 68 and 50 with
+// the coach reading them as today's). The boot load and the sync both fall
+// back to the most recent Oura row when today's is missing, which is right
+// for showing SOMETHING, but nothing downstream knew the row was old. Every
+// reader of ST.ouraData checks this first: true only when the row is for
+// today's local date. On a no-ring morning the tiles, the Pilot Condition
+// and the coach all treat readiness as unknown and ask instead.
+function ouraRowIsToday() {
+  return !!(ST.ouraData && ST.ouraData.date === localDateStr(new Date()));
+}
+// Oura is connected but has nothing for last night (ring not worn, not
+// charged, or the app has not synced yet).
+function ouraMissingToday() {
+  return !!ST.ouraConnected && !ouraRowIsToday();
 }
 
 // Does a saved session fall on the same LOCAL calendar day as `now`?
@@ -7946,7 +7972,7 @@ async function renderPreflight(p) {
       '<div class="env-btn '+(ST.fatigue==='nogo'?'sel':'')+'" onclick="ST.fatigue=\'nogo\';renderPage()"><div class="ei">'+statusDot('nogo', 18)+'</div><div class="el">NO-GO</div><div style="font-size:0.5625rem;color:var(--muted);margin-top:2px">Mobility only</div></div>' +
       '</div>';
 
-    if (ST.ouraConnected) {
+    if (ST.ouraConnected && ouraRowIsToday()) {
       // Oura path: readiness score auto-suggests; the three buttons ARE the override.
       parts.push(condBtns);
     } else {
@@ -7968,7 +7994,7 @@ async function renderPreflight(p) {
       parts.push('<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);cursor:pointer" onclick="haptic(\'light\');ST.showCondOverride=!ST.showCondOverride;renderPage()">'+(ST.showCondOverride?'HIDE':'OVERRIDE')+'</div>');
       parts.push('</div>');
       if (ST.showCondOverride) parts.push(condBtns);
-      parts.push('<div style="font-size:0.625rem;color:var(--muted);line-height:1.5">Connect your Oura Ring in Profile and this is set automatically from your readiness score each morning.</div>');
+      parts.push('<div style="font-size:0.625rem;color:var(--muted);line-height:1.5">' + (ST.ouraConnected ? 'Oura has no readiness score for today yet, so this self-check sets your condition. Sync below once the ring has data.' : 'Connect your Oura Ring in Profile and this is set automatically from your readiness score each morning.') + '</div>');
     }
 
     if (ST.fatigue === 'marginal') {
@@ -12562,7 +12588,11 @@ async function syncOuraData(force) {
     ST.ouraLastSync = Date.now();
     const condition = score >= 70 ? 'go' : score >= 60 ? 'marginal' : 'nogo';
     const label     = statusDot(condition)+' '+(condition==='go'?'GO':condition==='marginal'?'MARGINAL':'NO-GO');
-    ST.fatigue    = condition;
+    const rowIsToday = readinessItem.day === today;
+    // A fallback row from yesterday keeps the tiles populated for the
+    // readers that want history, but it does not get to set today's
+    // condition (see ouraRowIsToday).
+    if (rowIsToday) ST.fatigue = condition;
     ST.ouraScore  = score;
     // daily_activity was already being fetched for its score; steps and
     // active calories were being discarded. Held in state only (not a new
@@ -12582,7 +12612,9 @@ async function syncOuraData(force) {
       // — a manual "Sync Now" tap always shows it, since that's a
       // deliberate action expecting confirmation.
       const alreadyShownToday = localStorage.getItem(OURA_TOAST_KEY) === today;
-      if (force || !alreadyShownToday) {
+      if (!rowIsToday) {
+        if (force) showBigToast('Oura has nothing for last night yet.\nLatest data is from '+readinessItem.day+'.','info');
+      } else if (force || !alreadyShownToday) {
         const sleepScoreStr = row.sleep_score ? String(row.sleep_score) : '–';
         showBigToast('Oura synced\nReadiness: '+score+' → '+label+'\nSleep Score: '+sleepScoreStr,'ok');
         localStorage.setItem(OURA_TOAST_KEY, today);
@@ -13172,8 +13204,14 @@ function renderDevices(p) {
     const scoreLabel = statusDot(scoreCondition)+' '+(scoreCondition==='go'?'GO':scoreCondition==='marginal'?'MARGINAL':'NO-GO');
     parts.push('<div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:8px;padding:12px;margin-bottom:12px">');
     parts.push('<div class="fb"><span style="font-size:0.75rem;color:var(--muted)">Connected ✓</span><button class="btn-ghost" style="font-size:0.6875rem;padding:4px 8px" onclick="disconnectOura()">Disconnect</button></div>');
-    parts.push('<div class="fb mt8"><span style="font-size:0.8125rem">Today\'s Readiness</span><span style="font-family:var(--mono);font-size:1.125rem;font-weight:700;color:'+scoreColor+'">'+ST.ouraScore+'</span></div>');
-    parts.push('<div style="font-size:0.75rem;color:'+scoreColor+';font-weight:600;margin-top:2px">Pilot Condition → '+scoreLabel+'</div>');
+    if (ouraRowIsToday()) {
+      parts.push('<div class="fb mt8"><span style="font-size:0.8125rem">Today\'s Readiness</span><span style="font-family:var(--mono);font-size:1.125rem;font-weight:700;color:'+scoreColor+'">'+ST.ouraScore+'</span></div>');
+      parts.push('<div style="font-size:0.75rem;color:'+scoreColor+';font-weight:600;margin-top:2px">Pilot Condition → '+scoreLabel+'</div>');
+    } else {
+      // Yesterday's row is labelled as such; it does not set today's condition.
+      parts.push('<div class="fb mt8"><span style="font-size:0.8125rem">Readiness ('+(ST.ouraData?.date || 'earlier')+')</span><span style="font-family:var(--mono);font-size:1.125rem;font-weight:700;color:var(--muted)">'+ST.ouraScore+'</span></div>');
+      parts.push('<div style="font-size:0.75rem;color:var(--amber);font-weight:600;margin-top:2px">No ring data for last night. Use the self-check above.</div>');
+    }
     if (ST.ouraData) {
       const hrv = ST.ouraData.hrv_balance || '–';
       parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px">');
@@ -14022,12 +14060,15 @@ function getTodayContext() {
   const consumed = sumMealNutrients(meals.flatMap(m => m.meal_data?.items || []));
   const g = ST.nutritionGoals && ST.nutritionGoals.mode !== 'none' ? ST.nutritionGoals : null;
   const workoutToday = (ST.sessionCache || []).some(s => isSessionOnLocalDay(s, now));
-  const sleepScore = ST.ouraData?.sleep_score ?? null;
+  // A row from an earlier day is not today's readiness (see ouraRowIsToday).
+  const fresh = ouraRowIsToday();
+  const sleepScore = fresh ? (ST.ouraData?.sleep_score ?? null) : null;
   return {
     now, hour: now.getHours(),
     sched,
-    oura: { readiness: ST.ouraScore ?? null, sleep: sleepScore,
-            activity: ST.ouraData?.activity_score ?? null,
+    oura: { readiness: fresh ? (ST.ouraScore ?? null) : null, sleep: sleepScore,
+            activity: fresh ? (ST.ouraData?.activity_score ?? null) : null,
+            missingToday: ouraMissingToday(),
             // Prefer Oura's step count (consistent with readiness/sleep/
             // activity, all Oura-exclusive metrics on this same row) —
             // fall back to HealthKit's count only when Oura has no value
@@ -14442,7 +14483,9 @@ function buildOuraTopSectionHTML(ctx) {
   if (ctx.oura.steps !== null) parts.push('<span style="font-family:var(--mono);font-size:0.75rem;color:var(--text)">'+ctx.oura.steps.toLocaleString()+' <span style="font-size:0.5625rem;color:var(--muted);letter-spacing:.1em">STEPS</span></span>');
   parts.push('</div>');
 
-  if (ST.ouraConnected && ctx.oura.readiness !== null) {
+  if (ctx.oura.missingToday) {
+    parts.push(noRingDataCardHtml());
+  } else if (ST.ouraConnected && ctx.oura.readiness !== null) {
     parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">');
     [['READINESS',ctx.oura.readiness,'gold'],['SLEEP',ctx.oura.sleep,'blue'],['ACTIVITY',ctx.oura.activity,'teal']].forEach(([l,v,col]) => {
       const vc = v===null?'var(--muted)':v>=85?'var(--green)':v>=70?'var(--text)':v>=60?'var(--amber)':'var(--red)';
@@ -14482,6 +14525,37 @@ function buildOuraTopSectionHTML(ctx) {
     parts.push('<div id="ruleBriefCard">' + ruleCard + '</div>');
   }
   return parts.join('');
+}
+
+// Shown in place of the readiness tiles when Oura is connected but has no
+// data for last night. Says so plainly, offers a re-sync, and asks for the
+// 1 to 5 self-check so the Pilot Condition and the coach have something
+// real to work from instead of yesterday's numbers.
+function noRingDataCardHtml() {
+  const lastDay = ST.ouraData?.date ? new Date(ST.ouraData.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : null;
+  const condMeta = { go: [statusDot('go'), 'GO: full protocol'], marginal: [statusDot('marginal'), 'MARGINAL: light only'], nogo: [statusDot('nogo'), 'NO-GO: mobility only'] }[ST.fatigue] || [statusDot('go'), 'GO: full protocol'];
+  const p = [];
+  p.push('<div class="card mb12" id="noRingCard" style="border-left:3px solid var(--amber)">');
+  p.push('<div class="fb" style="align-items:center;margin-bottom:6px"><div style="font-size:1.0625rem;font-weight:600;letter-spacing:-.01em">No ring data for last night</div>');
+  p.push('<button class="btn btn-outline" style="padding:6px 10px;font-size:0.6875rem" onclick="haptic(\'light\');syncOuraData(true)">↻ Sync Oura</button></div>');
+  p.push('<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6;margin-bottom:10px">Oura has no readiness or sleep score for today' + (lastDay ? ', the latest is from ' + lastDay : '') + '. If you wore the ring, open the Oura app so it syncs, then tap Sync. Otherwise tell us how recovered you feel so today\'s plan is based on you, not on yesterday.</div>');
+  p.push('<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);letter-spacing:0.05em;margin-bottom:6px">1 = BARELY RECOVERED · 5 = FULLY RECOVERED</div>');
+  p.push('<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:8px">');
+  for (let i = 1; i <= 5; i++) p.push('<div class="env-btn" style="padding:8px 2px' + (ST.readiness === i ? ';border-color:var(--gold);background:rgba(212,175,55,0.08)' : '') + '" onclick="setReadinessFromToday(' + i + ')"><div style="font-size:0.9375rem;font-weight:700">' + i + '</div></div>');
+  p.push('</div>');
+  if (ST.readiness) p.push('<div style="font-size:0.75rem">Pilot Condition: <strong>' + condMeta[0] + ' ' + condMeta[1] + '</strong></div>');
+  p.push('</div>');
+  return p.join('');
+}
+// The Today card's picker: same as setReadiness, then the coach is asked
+// again with the self-report instead of a full page rebuild.
+function setReadinessFromToday(n) {
+  haptic('light');
+  ST.readiness = n;
+  persistDailyInputs();
+  ST.fatigue = n <= 2 ? 'nogo' : n === 3 ? 'marginal' : 'go';
+  updateOuraTopSection();
+  if (isPro()) loadFatigueCalibration(getTodayContext());
 }
 
 // Called after a fresh Oura sync completes. Only touches the DOM

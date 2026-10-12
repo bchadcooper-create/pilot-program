@@ -1303,6 +1303,42 @@ test('cardio machines get a real calorie rate, not the 2.8 stretch-and-hold rate
   assertEqual(met('Upright Bike'), 4.8, 'Upright Bike MET');
 });
 
+console.log('\nNo ring data (reported: slept without the ring, Today still showed yesterday\'s 68 and 50):');
+const todayStr = ctx.localDateStr(new Date());
+const yesterdayStr = ctx.localDateStr(new Date(Date.now() - 86400000));
+function ringState(date, readiness) {
+  ctx.ST.ouraConnected = true; ctx.ST.ouraScore = readiness; ctx.ST.readiness = null; ctx.ST.fatigue = 'go';
+  ctx.ST.ouraData = { date, readiness_score: readiness, sleep_score: 50, activity_score: 91 };
+}
+test('yesterday\'s row is not today\'s readiness', () => {
+  ringState(yesterdayStr, 68);
+  assertEqual(ctx.ouraRowIsToday(), false, 'row is stale'); assertEqual(ctx.ouraMissingToday(), true, 'ring missing today');
+  const c = ctx.getTodayContext();
+  assertEqual(c.oura.readiness, null, 'readiness unknown'); assertEqual(c.oura.sleep, null, 'sleep unknown'); assertEqual(c.oura.missingToday, true, 'flag set');
+  ringState(todayStr, 68);
+  const f = ctx.getTodayContext();
+  assertEqual(f.oura.readiness, 68, 'today\'s row still counts'); assertEqual(f.oura.missingToday, false, 'flag clear');
+});
+test('the Today card asks instead of showing stale tiles, with a Sync button', () => {
+  ringState(yesterdayStr, 68);
+  const html = ctx.buildOuraTopSectionHTML(ctx.getTodayContext());
+  assertEqual(/No ring data for last night/.test(html), true, 'says so');
+  assertEqual(/syncOuraData\(true\)/.test(html), true, 'sync button');
+  assertEqual(/setReadinessFromToday\(3\)/.test(html), true, 'self-check picker');
+  assertEqual(/>68</.test(html), false, 'no stale 68 tile');
+  ringState(todayStr, 68);
+  const fresh = ctx.buildOuraTopSectionHTML(ctx.getTodayContext());
+  assertEqual(/No ring data/.test(fresh), false, 'tiles back when the row is today\'s'); assertEqual(/>68</.test(fresh), true, 'shows 68');
+});
+test('the self-check sets the Pilot Condition on a no-ring day', () => {
+  ringState(yesterdayStr, 85);
+  const realUpd = ctx.updateOuraTopSection, realLoad = ctx.loadFatigueCalibration; ctx.updateOuraTopSection = () => {}; ctx.loadFatigueCalibration = () => {};
+  ctx.setReadinessFromToday(2); assertEqual(ctx.ST.fatigue, 'nogo', '2 -> nogo');
+  ctx.setReadinessFromToday(4); assertEqual(ctx.ST.fatigue, 'go', '4 -> go');
+  ctx.updateOuraTopSection = realUpd; ctx.loadFatigueCalibration = realLoad;
+  ctx.ST.readiness = null;
+});
+
 console.log('\n' + '─'.repeat(50));
 console.log(passed + ' passed, ' + failed + ' failed');
 if (failed > 0) process.exit(1);

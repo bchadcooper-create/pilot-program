@@ -58,7 +58,7 @@ const WEEKLY_SUMMARY_PROMPT_VERSION = 5; // v5: sees exercises/sets/daysAgo, nev
 // (added the same day this constant was) doesn't keep serving a
 // pre-fix response — that field didn't exist in the context sent to
 // earlier cached responses, so their advice can't reflect it either.
-const FATIGUE_CALIBRATION_PROMPT_VERSION = 7; // v7: workout-already-logged and legs-flown guidance; // v6: plain-words opener, house style; // v5: bodyClock awareness (v4: Sonnet 5)
+const FATIGUE_CALIBRATION_PROMPT_VERSION = 8; // v8: ring data missing today, use the self-check; // v7: workout-already-logged and legs-flown guidance; // v6: plain-words opener, house style; // v5: bodyClock awareness (v4: Sonnet 5)
 // BUG FIX (found while updating this prompt): fuel_logistics' cache key
 // (below) never had a prompt-version component at all, unlike the other
 // two cached modes — so a stale response from before this exact prompt
@@ -207,6 +207,13 @@ this basis, a day off is a completely normal, common state and deserves a normal
 on their readiness/recovery signal and recent training load, the same way you would for anyone without a job
 that has "trip days" at all. Only treat something as genuinely missing if the readiness signal itself is null
 AND there's no selfReportedFatigue value either, even then, say so plainly and briefly, not as an error.
+
+ringDataMissingToday: true means their Oura ring has nothing for last night (not worn, not charged, or not
+synced yet), so readiness and sleepScore are null on purpose and yesterday's numbers are NOT available to you.
+If selfReportedFatigue is present (1 = barely recovered, 5 = fully recovered) with manualCondition (go, marginal
+or nogo), base the call on that and open with it, for example "Ring didn't sync, going on your 4 out of 5,
+full send". If both are null, your whole reply is one short line asking them to rate how recovered they feel on
+the card, nothing else, no training call.
 
 You will also receive minutesActuallyFreeBeforeNeedingToLeave, this already accounts for getting from a
 layover hotel back to the airport (transport, security, crew report time), which the raw gap to departure
@@ -428,7 +435,8 @@ Deno.serve(async (req) => {
     // over) — ouraConnected is what actually distinguishes the two, not
     // readiness alone.
     let fatigueCacheKey: string | null = null;
-    if (mode === 'fatigue_calibration' && !(context.ouraConnected && context.readiness === null)) {
+    const ringMissingNoSelfReport = !!context.ringDataMissingToday && context.selfReportedFatigue == null;
+    if (mode === 'fatigue_calibration' && !ringMissingNoSelfReport && !(context.ouraConnected && context.readiness === null && !context.ringDataMissingToday)) {
       // BUG FIX (reported: re-uploaded a corrected ICS after Apple Calendar
       // reverted to showing no flights — Today's Schedule updated
       // correctly, but this note kept saying "enjoy your day off" from
@@ -489,7 +497,8 @@ Deno.serve(async (req) => {
         // scores are now part of the key: a new readiness or sleep score
         // is a new answer. One extra low-cost call on mornings where the
         // ring syncs after the first open.
-        + '_r' + (context.readiness ?? 'null') + '_s' + (context.sleepScore ?? 'null');
+        + '_r' + (context.readiness ?? 'null') + '_s' + (context.sleepScore ?? 'null')
+        + '_m' + (context.ringDataMissingToday ? (context.selfReportedFatigue ?? 'x') : 0);
       const { data: cached } = await supabase
         .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
       const cachedKey = cached?.profile_data?.fatigueCalibrationCacheKey;

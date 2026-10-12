@@ -96,6 +96,15 @@ async function agreement(req: Request, d: Record<string, unknown>, db: DB) {
     return json(200, { ok: true, message: "Emailed again.", url: out?.url });
   }
 
+  if (action === "cancel") {
+    if (!lead.wp_lead_id) return json(400, { ok: false, message: "No agreement on the website for this lead." });
+    const { code, out } = await wp("POST", { lead_id: lead.wp_lead_id, cancel: 1, reason: "Revised from the phone app" });
+    if (code !== 200 || !out?.ok) return json(502, { ok: false, message: out?.message || `Website said HTTP ${code}` });
+    await db.from("cp_leads").update({ status: "Approved" }).eq("id", lead.id);
+    await db.from("cp_contact_log").insert({ lead_id: lead.id, tenant_id: lead.tenant_id, who: lead.name, channel: "Email", summary: "Agreement cancelled (to be revised)" });
+    return json(200, { ok: true, message: "Cancelled." });
+  }
+
   if (action !== "send") return json(400, { ok: false, message: "Unknown action." });
 
   // Send. Validate before touching the website.

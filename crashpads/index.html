@@ -160,7 +160,7 @@ document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ checkUp
 // ---------- self-update ----------
 // GitHub Pages lets phones keep the page for 10 minutes. On open and on return to the app,
 // ask for the latest copy directly; if the version differs, reload onto it.
-const APP_VERSION = '2026.10.12-10';
+const APP_VERSION = '2026.10.12-11';
 async function checkUpdate(){
   try{
     const r = await fetch(location.pathname+'?check='+Date.now(), { cache:'no-store' });
@@ -463,7 +463,7 @@ function agrShow(leadId, a, justSent){
     </div>
     ${l.phone?`<div class="small muted" style="margin-top:6px">Google Voice opens with the message copied. Tap the message box and paste.</div>`:''}
     <div class="row" style="margin-top:6px">
-      ${l.wp_lead_id?`<button class="btn sm" data-act="agrresend" data-id="${leadId}">Email again</button>`:''}
+      ${l.wp_lead_id?`<button class="btn sm" data-act="agrresend" data-id="${leadId}">Email again</button><button class="btn sm danger" data-act="agrcancel" data-id="${leadId}">Cancel and revise</button>`:''}
     </div>`);
 }
 function agrForm(leadId){
@@ -797,6 +797,9 @@ const ACT = {
       toast(out.already ? 'Already sent earlier. Showing that one.' : 'Agreement sent');
     }catch(e){ el.disabled=false; el.textContent='Send agreement'; show(e.message); }
   },
+  agrcancel:(id)=>confirmSheet('Cancel this agreement? Their current link stops working, and you can send a revised one right after.',async()=>{ closeSheet();
+    try{ await agrCall({action:'cancel',lead_id:id}); toast('Cancelled. Send the revised one.'); }catch(e){ toast('Error: '+e.message); }
+    await load(); openLead(id); }),
   agrresend:async(id,el)=>{ el.disabled=true; el.textContent='Sending…'; try{ const out=await agrCall({action:'resend',lead_id:id}); toast(out.message||'Emailed again'); }catch(e){ toast('Error: '+e.message); } el.disabled=false; el.textContent='Email again'; },
   leadsfilter:(k)=>{S.leadsFilter=k;render();},
   tenantsfilter:(k)=>{S.tenantsFilter=k;render();},

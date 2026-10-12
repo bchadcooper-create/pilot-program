@@ -550,6 +550,10 @@ function dfw_yoast_description( $desc ) {
 	if ( is_front_page() ) {
 		$ours = dfw_mod( 'dfw_meta_description' );
 		if ( $ours ) { return wp_strip_all_tags( $ours ); }
+	} elseif ( is_singular() && ! $desc ) {
+		// Pages carry their search description in the excerpt field.
+		$ex = get_the_excerpt();
+		if ( $ex ) { return wp_strip_all_tags( $ex ); }
 	}
 	return $desc;
 }

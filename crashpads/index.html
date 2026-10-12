@@ -160,7 +160,7 @@ document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ checkUp
 // ---------- self-update ----------
 // GitHub Pages lets phones keep the page for 10 minutes. On open and on return to the app,
 // ask for the latest copy directly; if the version differs, reload onto it.
-const APP_VERSION = '2026.10.12-3';
+const APP_VERSION = '2026.10.12-4';
 async function checkUpdate(){
   try{
     const r = await fetch(location.pathname+'?check='+Date.now(), { cache:'no-store' });
@@ -466,7 +466,7 @@ function openTenant(id){
         ${t.contract_url?`<div class="small"><a href="${esc(t.contract_url)}" target="_blank" rel="noopener">Signed agreement</a></div>`:''}
       </div>
       ${t.notes?`<div class="small muted">${esc(t.notes)}</div>`:''}
-      <div><h3>Payments</h3>${pays.length?`<table><tr><th>Date</th><th>For</th><th>Type</th><th class="r">Amount</th></tr>${pays.map(p=>`<tr><td>${fmtD(p.received_on)}</td><td>${p.for_month?monthLabel(new Date(p.for_month+'T12:00:00')):''}</td><td class="small">${esc(p.type)}${p.method&&p.method!=='Other'?' · '+esc(p.method):''}</td><td class="r mono">${money(p.amount)}</td></tr>`).join('')}</table>`:'<div class="muted small">None yet.</div>'}</div>
+      <div><h3>Payments</h3>${pays.length?`<table><tr><th>Date</th><th>For</th><th>Type</th><th class="r">Amount</th></tr>${pays.map(p=>`<tr data-act="payedit" data-id="${p.id}" style="cursor:pointer"><td>${fmtD(p.received_on)}</td><td>${p.for_month?monthLabel(new Date(p.for_month+'T12:00:00')):''}</td><td class="small">${esc(p.type)}${p.method&&p.method!=='Other'?' · '+esc(p.method):' · <span class="muted">method?</span>'}</td><td class="r mono">${money(p.amount)}</td></tr>`).join('')}</table>`:'<div class="muted small">None yet.</div>'}</div>
       <div><h3>Contact log</h3><div class="row" style="margin:6px 0"><input id="cl-text" class="grow" placeholder="What they said…" style="padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)"><button class="btn sm" data-act="tenantnote" data-id="${t.id}">Add</button></div>${notes.map(n=>`<div class="small" style="padding:4px 0;border-bottom:1px solid var(--line)"><span class="muted">${fmtD(n.logged_at)}</span> ${esc(n.summary)}</div>`).join('')}</div>
       <details><summary class="muted small">Edit tenant</summary><div style="margin-top:8px">${tenantForm(t)}<div class="row" style="margin-top:8px"><button class="btn pri" data-act="tenantsave" data-id="${t.id}">Save</button><button class="btn danger" data-act="tenantdelete" data-id="${t.id}">Delete</button></div></div></details>
     </div>`);
@@ -485,7 +485,7 @@ function vMoney(){
     <div class="card"><div class="row"><span class="grow">Rent collected</span><span class="mono">${money(got)} / ${money(expected)}</span></div><div class="bar" style="margin-top:6px"><i style="width:${expected?Math.min(100,100*got/expected):0}%"></i></div>
       <div class="small muted" style="margin-top:6px">${cur.filter(r=>r.rent_status==='paid').length} paid · ${cur.filter(r=>r.rent_status==='due').length} due · ${cur.filter(r=>r.rent_status==='late').length} late · other money this month ${money(monthPays.filter(p=>p.type!=='Rent').reduce((a,p)=>a+Number(p.amount),0))}</div></div>
     <table><tr><th>Tenant</th><th>Bed</th><th class="r">Paid</th><th></th></tr>${cur.map(r=>`<tr data-tenant="${r.tenant_id}" style="cursor:pointer"><td>${esc(r.name)}</td><td class="mono">${esc(r.bed_id||'')}</td><td class="r mono">${money(r.paid)}<span class="muted">/${money(r.rent)}</span></td><td class="r">${statusPill(r.rent_status)}</td></tr>`).join('')}</table>
-    <div><h3>Recent payments</h3><table><tr><th>Date</th><th>Who</th><th>For</th><th class="r">Amt</th></tr>${recent.map(p=>`<tr><td>${fmtD(p.received_on)}</td><td>${esc(p.tenant_name||'')}<div class="small muted">${esc(p.type)} · ${esc(p.method)}</div></td><td class="small">${p.for_month?monthLabel(new Date(p.for_month+'T12:00:00')):''}</td><td class="r mono">${money(p.amount)} <button class="btn sm" data-act="paydelete" data-id="${p.id}" title="Delete">&times;</button></td></tr>`).join('')}</table></div>
+    <div><h3>Recent payments</h3><table><tr><th>Date</th><th>Who</th><th>For</th><th class="r">Amt</th></tr>${recent.map(p=>`<tr data-act="payedit" data-id="${p.id}" style="cursor:pointer"><td>${fmtD(p.received_on)}</td><td>${esc(p.tenant_name||'')}<div class="small muted">${esc(p.type)} · ${esc(p.method)}</div></td><td class="small">${p.for_month?monthLabel(new Date(p.for_month+'T12:00:00')):''}</td><td class="r mono">${money(p.amount)} <button class="btn sm" data-act="paydelete" data-id="${p.id}" title="Delete">&times;</button></td></tr>`).join('')}</table></div>
   </div>`;
 }
 function payForm(tenantId){
@@ -495,7 +495,7 @@ function payForm(tenantId){
   return `<h2>Log payment</h2><div class="stack">
     <label class="f">Tenant<select id="pf-tenant">${d.tenants.filter(x=>x.status!=='Moved Out'||x.id===tenantId).map(x=>`<option value="${x.id}" ${x.id===tenantId?'selected':''}>${esc(x.name)}${x.bed_id?' · '+x.bed_id:''}</option>`).join('')}</select></label>
     <div class="grid2"><label class="f">Amount $<input id="pf-amount" inputmode="decimal" value="${t?t.rent:''}"></label><label class="f">Received<input id="pf-date" type="date" value="${today()}"></label></div>
-    <div class="grid2"><label class="f">Type<select id="pf-type">${['Rent','Reservation fee','Late fee','Refund','Other'].map(o=>`<option>${o}</option>`).join('')}</select></label><label class="f">Method<select id="pf-method">${['Venmo','Zelle','Apple Pay','Cash App','PayPal','Cash','Other'].map(o=>`<option>${o}</option>`).join('')}</select></label></div>
+    <div class="grid2"><label class="f">Type<select id="pf-type">${['Rent','Reservation fee','Late fee','Refund','Other'].map(o=>`<option>${o}</option>`).join('')}</select></label><label class="f">Method<select id="pf-method">${PAY_METHODS.map(o=>`<option>${o}</option>`).join('')}</select></label></div>
     <label class="f">For month<select id="pf-month">${months.map(m=>`<option value="${iso(m)}" ${iso(m)===iso(def)?'selected':''}>${monthLabel(m)}</option>`).join('')}</select></label>
     <label class="f">Note<input id="pf-note"></label>
     <button class="btn pri" data-act="paysave" data-id="x">Save payment</button>
@@ -544,6 +544,7 @@ function vMore(){
 }
 
 // ---------- actions ----------
+const PAY_METHODS = ['Venmo','Zelle','Apple Pay','Cash App','PayPal','Cash','Other'];
 const ACT = {
   agropen:(id)=>openLead(id),
   agrretry:(id)=>{ agrBox('<div class="small muted">Checking the website…</div>'); agrLoad(id); },
@@ -593,10 +594,28 @@ const ACT = {
   tenantdelete:(id)=>confirmSheet('Delete this tenant and their payment links? Payments stay in the log under their name.',async()=>{ closeSheet(); await run(sb.from('cp_tenants').delete().eq('id',id),'Deleted'); }),
   tenantnote:async(id)=>{ const txt=$('cl-text').value.trim(); if(!txt) return; const t=tenantById(id); await run(sb.from('cp_contact_log').insert({tenant_id:id,who:t.name,channel:'Text',summary:txt}),'Logged'); openTenant(id); },
   flag:async(arg,el)=>{ const [id,k]=arg.split('|'); await run(sb.from('cp_tenants').update({[k]:el.checked}).eq('id',id)); },
-  feepaid:async(id)=>{ closeSheet(); const t=tenantById(id); await run(sb.from('cp_tenants').update({fee_paid_on:today()}).eq('id',id)); await run(sb.from('cp_payments').insert({tenant_id:id,tenant_name:t.name,amount:150,method:'Other',for_month:iso(firstOfMonth(t.move_in?new Date(t.move_in+'T12:00:00'):new Date())),type:'Reservation fee',note:'Marked from the app'}),'Fee recorded'); openTenant(id); },
+  feepaid:(id)=>{ const t=tenantById(id); sheet(`<h2>$150 fee from ${esc(t.name.split(' ')[0])}</h2><div class="stack">
+      <label class="f">Received<input id="fee-date" type="date" value="${today()}"></label>
+      <div class="small muted">How did they pay?</div>
+      <div class="grid2">${PAY_METHODS.map(m=>`<button class="btn" data-act="feesave" data-id="${id}|${m}">${m}</button>`).join('')}</div></div>`); wire(); },
+  feesave:async(arg)=>{ const [id,method]=arg.split('|'); const t=tenantById(id); const on=$('fee-date').value||today(); closeSheet();
+    await run(sb.from('cp_tenants').update({fee_paid_on:on}).eq('id',id));
+    await run(sb.from('cp_payments').insert({tenant_id:id,tenant_name:t.name,amount:150,method,received_on:on,for_month:iso(firstOfMonth(t.move_in?new Date(t.move_in+'T12:00:00'):new Date())),type:'Reservation fee',note:'Reservation fee'}),'Fee recorded ('+method+')'); openTenant(id); },
+  // Tap any payment to fix its method, amount, date, type or month.
+  payedit:(id)=>{ const p=S.data.payments.find(x=>x.id===id); if(!p) return;
+    const now=firstOfMonth(new Date()); const months=[-3,-2,-1,0,1,2].map(n=>iso(addMonths(now,n))); if(p.for_month&&!months.includes(p.for_month)) months.unshift(p.for_month);
+    sheet(`<h2>Edit payment</h2><div class="stack"><div class="small muted">${esc(p.tenant_name||'')}</div>
+      <div class="grid2"><label class="f">Amount $<input id="pe-amount" inputmode="decimal" value="${esc(p.amount)}"></label><label class="f">Received<input id="pe-date" type="date" value="${esc(p.received_on||'')}"></label></div>
+      <div class="grid2"><label class="f">Method<select id="pe-method">${PAY_METHODS.map(o=>`<option ${p.method===o?'selected':''}>${o}</option>`).join('')}</select></label><label class="f">Type<select id="pe-type">${['Rent','Reservation fee','Late fee','Refund','Other'].map(o=>`<option ${p.type===o?'selected':''}>${o}</option>`).join('')}</select></label></div>
+      <label class="f">For month<select id="pe-month">${months.map(m=>`<option value="${m}" ${p.for_month===m?'selected':''}>${monthLabel(new Date(m+'T12:00:00'))}</option>`).join('')}</select></label>
+      <label class="f">Note<input id="pe-note" value="${esc(p.note||'')}"></label>
+      <div class="row"><button class="btn pri" data-act="paysaveedit" data-id="${id}">Save</button><button class="btn danger" data-act="paydelete" data-id="${id}">Delete</button></div></div>`); wire(); },
+  paysaveedit:async(id)=>{ const p=S.data.payments.find(x=>x.id===id); const amt=Number($('pe-amount').value); if(!amt) return toast('Amount?');
+    const v={amount:amt,received_on:$('pe-date').value||p.received_on,method:$('pe-method').value,type:$('pe-type').value,for_month:$('pe-month').value,note:$('pe-note').value.trim()||null};
+    closeSheet(); await run(sb.from('cp_payments').update(v).eq('id',id),'Payment updated'); if(p.tenant_id&&S.tab==='tenants') openTenant(p.tenant_id); },
   feerefund:(id)=>{ const t=tenantById(id); sheet(`<h2>Refund ${esc(t.name)}</h2><div class="stack">
       <div class="grid2"><label class="f">Amount $<input id="rf-amt" inputmode="decimal" value="150"></label><label class="f">Sent on<input id="rf-date" type="date" value="${today()}"></label></div>
-      <label class="f">How<select id="rf-method">${['Venmo','Zelle','Apple Pay','Cash App','PayPal','Cash','Other'].map(o=>`<option>${o}</option>`).join('')}</select></label>
+      <label class="f">How<select id="rf-method">${PAY_METHODS.map(o=>`<option>${o}</option>`).join('')}</select></label>
       <label class="f">Note<input id="rf-note" placeholder="Optional"></label>
       <button class="btn pri" data-act="feerefundsave" data-id="${id}">Log the refund</button>
       <hr class="hr">

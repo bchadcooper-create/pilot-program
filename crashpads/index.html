@@ -160,7 +160,7 @@ document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ checkUp
 // ---------- self-update ----------
 // GitHub Pages lets phones keep the page for 10 minutes. On open and on return to the app,
 // ask for the latest copy directly; if the version differs, reload onto it.
-const APP_VERSION = '2026.10.12-7';
+const APP_VERSION = '2026.10.12-8';
 async function checkUpdate(){
   try{
     const r = await fetch(location.pathname+'?check='+Date.now(), { cache:'no-store' });
@@ -173,7 +173,7 @@ checkUpdate();
 // ---------- data ----------
 async function load(){
   const m = iso(S.month);
-  const [beds, tenants, payments, leads, cleaning, contacts, rent, settings, locks, doorkeys] = await Promise.all([
+  const [beds, tenants, payments, leads, cleaning, contacts, rent, settings, locks, doorkeys, nightly] = await Promise.all([
     sb.from('cp_bed_status').select('*'),
     sb.from('cp_tenants').select('*').order('name'),
     sb.from('cp_payments').select('*').order('received_on',{ascending:false}).order('created_at',{ascending:false}).limit(400),
@@ -184,10 +184,11 @@ async function load(){
     sb.from('cp_settings').select('*'),
     sb.from('cp_locks').select('*').order('name'),
     sb.from('cp_door_keys').select('*').order('sent_at',{ascending:false}),
+    sb.rpc('cp_nightly_by_month'),
   ]);
   const err = [beds,tenants,payments,leads,cleaning,contacts,rent,settings,locks,doorkeys].find(r=>r.error);
   if(err){ toast('Load failed: '+err.error.message); if(/JWT|auth/i.test(err.error.message)) sb.auth.signOut(); return; }
-  S.data = { at:Date.now(), beds:beds.data, tenants:tenants.data, payments:payments.data, leads:leads.data, cleaning:cleaning.data, contacts:contacts.data, rent:rent.data, settings:Object.fromEntries(settings.data.map(s=>[s.key,s.value])), locks:locks.data||[], doorkeys:doorkeys.data||[] };
+  S.data = { at:Date.now(), beds:beds.data, tenants:tenants.data, payments:payments.data, leads:leads.data, cleaning:cleaning.data, contacts:contacts.data, rent:rent.data, settings:Object.fromEntries(settings.data.map(s=>[s.key,s.value])), locks:locks.data||[], doorkeys:doorkeys.data||[], nightly:(nightly&&!nightly.error&&nightly.data)||[] };
   render();
 }
 const T = ()=>S.data.tenants.find(t=>t.id===S.detail);
@@ -532,6 +533,7 @@ function vMore(){
   const avgT=tenure.length?(tenure.reduce((a,b)=>a+b,0)/tenure.length):0;
   return `<div class="stack">
     <h3>Stats</h3>
+    ${nightlyCard()}
     <div class="tiles">
       <div class="tile"><div class="n">${Math.round(100*occ/total)}%</div><div class="l">Occupancy</div></div>
       <div class="tile"><div class="n">${churn}%</div><div class="l">Churn 90d</div></div>
@@ -574,6 +576,16 @@ function keySentSheet(t, email, detail){
     ${t.phone?`<button class="btn" data-act="copynum" data-id="${t.id}">Copy number ${esc(fmtPhone(t.phone))}</button><a class="btn pri" href="${gvUrl(t.phone)}" target="_blank" rel="noopener" data-act="keymsgcopy" data-id="x">Copy message + open Google Voice</a><div class="small muted">Google Voice opens with the message copied. Tap the message box and paste.</div>`:`<button class="btn" data-act="keymsgcopy" data-id="x">Copy message</button>`}
   </div>`); wire();
 }
+// ---------- Average nightly (from TTLock unlocks) ----------
+function nightlyCard(){
+  const n=S.data.nightly; if(!n.length) return '';
+  const max=Math.max(1,...n.map(r=>Number(r.avg_guests)));
+  return `<div class="card"><div class="row"><span class="grow"><b>Average nightly</b></span><span class="mono" style="font-size:20px">${Number(n[0].avg_guests).toFixed(1)}</span></div>
+    <div class="small muted" style="margin:2px 0 8px">Unique tenants who unlocked the front door each day, averaged by month. Housekeeping and family excluded.</div>
+    ${n.map(r=>`<div class="row small" style="margin:3px 0"><span style="width:56px">${monthLabel(new Date(r.month+'T12:00:00')).replace(' 20',' ')}</span><div class="bar grow"><i style="width:${100*Number(r.avg_guests)/max}%"></i></div><span class="mono" style="width:76px;text-align:right">${Number(r.avg_guests).toFixed(1)} <span class="muted">/ ${r.max_guests}</span></span></div>`).join('')}
+    <div class="small muted" style="margin-top:6px">Right column: average / busiest day. ${n[0].days<28?`${monthLabel(new Date(n[0].month+'T12:00:00'))} so far: ${n[0].days} days.`:''}</div></div>`;
+}
+
 // ---------- GroupMe ----------
 const gmConnected = ()=>!!(S.data.settings.groupme_connected);
 function groupmeCard(){

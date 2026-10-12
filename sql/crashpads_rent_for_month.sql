@@ -38,3 +38,9 @@ AS $function$
   from base b
   order by b.bed_id nulls last, b.name;
 $function$;
+
+-- ---------------------------------------------------------------------------
+-- Average nightly (migration cp_lock_nightly, 2026-10-12): see cp_lock_nightly
+-- (backfill from TTLock unlock records, 2026-04-11 to 2026-10-11) and
+-- cp_nightly_by_month(), which adds live days from cp_lock_events.
+-- Exclusions (housekeeping, owner, family) live in cp_settings 'nightly_exclude'.

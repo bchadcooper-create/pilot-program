@@ -160,7 +160,7 @@ document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ checkUp
 // ---------- self-update ----------
 // GitHub Pages lets phones keep the page for 10 minutes. On open and on return to the app,
 // ask for the latest copy directly; if the version differs, reload onto it.
-const APP_VERSION = '2026.10.12-8';
+const APP_VERSION = '2026.10.12-9';
 async function checkUpdate(){
   try{
     const r = await fetch(location.pathname+'?check='+Date.now(), { cache:'no-store' });
@@ -173,7 +173,7 @@ checkUpdate();
 // ---------- data ----------
 async function load(){
   const m = iso(S.month);
-  const [beds, tenants, payments, leads, cleaning, contacts, rent, settings, locks, doorkeys, nightly] = await Promise.all([
+  const [beds, tenants, payments, leads, cleaning, contacts, rent, settings, locks, doorkeys, nightly, doorlog] = await Promise.all([
     sb.from('cp_bed_status').select('*'),
     sb.from('cp_tenants').select('*').order('name'),
     sb.from('cp_payments').select('*').order('received_on',{ascending:false}).order('created_at',{ascending:false}).limit(400),
@@ -185,10 +185,11 @@ async function load(){
     sb.from('cp_locks').select('*').order('name'),
     sb.from('cp_door_keys').select('*').order('sent_at',{ascending:false}),
     sb.rpc('cp_nightly_by_month'),
+    sb.from('cp_lock_events').select('username,lock_at,success').eq('success',true).order('lock_at',{ascending:false}).limit(400),
   ]);
   const err = [beds,tenants,payments,leads,cleaning,contacts,rent,settings,locks,doorkeys].find(r=>r.error);
   if(err){ toast('Load failed: '+err.error.message); if(/JWT|auth/i.test(err.error.message)) sb.auth.signOut(); return; }
-  S.data = { at:Date.now(), beds:beds.data, tenants:tenants.data, payments:payments.data, leads:leads.data, cleaning:cleaning.data, contacts:contacts.data, rent:rent.data, settings:Object.fromEntries(settings.data.map(s=>[s.key,s.value])), locks:locks.data||[], doorkeys:doorkeys.data||[], nightly:(nightly&&!nightly.error&&nightly.data)||[] };
+  S.data = { at:Date.now(), beds:beds.data, tenants:tenants.data, payments:payments.data, leads:leads.data, cleaning:cleaning.data, contacts:contacts.data, rent:rent.data, settings:Object.fromEntries(settings.data.map(s=>[s.key,s.value])), locks:locks.data||[], doorkeys:doorkeys.data||[], nightly:(nightly&&!nightly.error&&nightly.data)||[], doorlog:(doorlog&&!doorlog.error&&doorlog.data)||[] };
   render();
 }
 const T = ()=>S.data.tenants.find(t=>t.id===S.detail);
@@ -240,6 +241,40 @@ const contactRow = (t)=>`<div class="stack" style="gap:6px">
   ${t.email?`<div class="row small"><span class="mono muted grow" style="overflow-wrap:anywhere">${esc(t.email)}</span><button class="btn sm" data-act="copy" data-id="${esc(t.email)}">Copy</button></div>`:'<div class="small muted">No email on file.</div>'}
 </div>`;
 
+// Before someone moves in: what's still missing. Drives Today and the tenant card.
+function moveinTodo(t){
+  const todo=[]; const d=S.data;
+  if(!t.bed_id) todo.push({label:'Pick a bed', act:'tenantedit', id:t.id, btn:'Edit'});
+  if(!t.contract_signed){ const l=d.leads.find(x=>x.tenant_id===t.id); todo.push(l?{label:l.status==='Agreement sent'?'Waiting for signature':'Send the agreement', act:'agropen', id:l.id, btn:l.status==='Agreement sent'?'Open':'Send'}:{label:'Agreement not signed', act:'flagon', id:t.id+'|contract_signed', btn:'Signed'}); }
+  if(!t.fee_paid_on) todo.push({label:'$150 reservation fee', act:'feepaid', id:t.id, btn:'Received'});
+  const bedTask=d.cleaning.find(c=>c.tenant_id===t.id&&!c.done&&c.task==='Make bed for move-in');
+  if(bedTask) todo.push({label:`Bed ${bedTask.bed_id} not made yet (Will)`, act:'cleandone', id:bedTask.id, btn:'Done'});
+  if(ttConnected()&&!activeKeys(t.id).length) todo.push(t.email?{label:'Door key', act:'keysend', id:t.id, btn:'Send'}:{label:'Door key (needs email)', act:'tenantedit', id:t.id, btn:'Edit'});
+  if(gmConnected()&&!t.groupme_added) todo.push(t.phone?{label:'GroupMe', act:'gmadd', id:t.id, btn:'Add'}:{label:'GroupMe (needs phone)', act:'tenantedit', id:t.id, btn:'Edit'});
+  return todo;
+}
+// Last successful unlock by this person (TTLock events since the hookup).
+function lastAtDoor(t){
+  const emails=new Set(S.data.doorkeys.filter(k=>k.tenant_id===t.id).map(k=>String(k.receiver).toLowerCase())); if(t.email) emails.add(t.email.toLowerCase());
+  const e=S.data.doorlog.find(x=>x.username&&emails.has(String(x.username).toLowerCase()));
+  return e?new Date(e.lock_at):null;
+}
+function fmtWhen(d){ return d.toLocaleString('en-US',{timeZone:'America/Chicago',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}); }
+// Rent reminder, ready to paste into Google Voice.
+function rentMsg(t, r){
+  const first=String(t.name||'').trim().split(' ')[0]; const st=S.data.settings;
+  const late=r.rent_status==='late';
+  return `Hi ${first}, ${late?'rent for':'a reminder that rent for'} ${monthLabel(S.month)} ${late?'is past due':'is due on the 1st'}: $${Number(r.owed).toLocaleString()}${Number(r.paid)>0?' remaining':''}. Zelle ${st.zelle||''} or Apple Pay ${st.apple_pay||''}, and please put ${t.payment_code||'your bed'} in the note. ${late?'Late fee is $10 plus $5/day after the 5th. ':''}Thanks!`;
+}
+// Leads that share a phone or email with another lead or tenant.
+function dupOf(l){
+  const ph=phoneDigits(l.phone), em=(l.email||'').toLowerCase();
+  const other=S.data.leads.find(x=>x.id!==l.id&&((ph&&phoneDigits(x.phone)===ph)||(em&&(x.email||'').toLowerCase()===em)));
+  if(other) return {kind:'lead', name:other.name, status:other.status, id:other.id};
+  const t=S.data.tenants.find(x=>x.id!==l.tenant_id&&x.status!=='Moved Out'&&((ph&&phoneDigits(x.phone)===ph)||(em&&(x.email||'').toLowerCase()===em)));
+  return t?{kind:'tenant', name:t.name, status:t.status, id:t.id}:null;
+}
+
 // What's still open after someone moves out. Drives the Today list and the tenant card.
 function moveoutTodo(t){
   const todo=[];
@@ -275,8 +310,8 @@ function vToday(){
       <div class="tile"><div class="n" style="color:var(--bad)">${late.length}</div><div class="l">Late</div></div>
       <div class="tile"><div class="n">${money(cur.reduce((a,r)=>a+Number(r.paid),0))}</div><div class="l">${monthLabel(S.month)} in</div></div>
     </div>
-    ${late.length||due.length?`<div><h3>Rent ${monthLabel(S.month)}</h3><div class="list">${[...late,...due].map(r=>`<div class="card tap row" data-tenant="${r.tenant_id}"><span class="grow"><b>${esc(r.name)}</b> <span class="mono muted small">${esc(r.bed_id||'')}</span><div class="small muted">Owes ${money(r.owed)} of ${money(r.rent)}</div></span>${statusPill(r.rent_status)}<button class="btn sm" data-act="pay" data-id="${r.tenant_id}">Paid</button></div>`).join('')}</div></div>`:''}
-    ${reserved.length?`<div><h3>Reserved, not moved in</h3><div class="list">${reserved.map(t=>{const miss=[];if(!t.bed_id)miss.push('needs bed');if(!t.fee_paid_on)miss.push('needs $150 fee');if(!t.contract_signed)miss.push('needs signature');return `<div class="card tap row" data-tenant="${t.id}"><span class="grow"><b>${esc(t.name)}</b> <span class="mono muted small">${esc(t.bed_id||t.category_hold||'')}</span><div class="small muted">Move-in ${fmtD(t.move_in)||'TBD'}${miss.length?' · '+miss.join(', '):''}</div></span>${(t.move_in&&t.move_in<=td)?`<button class="btn sm pri" data-act="movein" data-id="${t.id}">Move in</button>`:''}</div>`;}).join('')}</div></div>`:''}
+    ${late.length||due.length?`<div><h3>Rent ${monthLabel(S.month)}</h3><div class="list">${[...late,...due].map(r=>`<div class="card tap row" data-tenant="${r.tenant_id}"><span class="grow"><b>${esc(r.name)}</b> <span class="mono muted small">${esc(r.bed_id||'')}</span><div class="small muted">Owes ${money(r.owed)} of ${money(r.rent)}</div></span>${statusPill(r.rent_status)}<button class="btn sm" data-act="remind" data-id="${r.tenant_id}">Remind</button><button class="btn sm" data-act="pay" data-id="${r.tenant_id}">Paid</button></div>`).join('')}</div></div>`:''}
+    ${reserved.length?`<div><h3>Coming in</h3><div class="list">${reserved.sort((a,b)=>(a.move_in||'9').localeCompare(b.move_in||'9')).map(t=>{const todo=moveinTodo(t);const dd=t.move_in?Math.ceil((new Date(t.move_in+'T12:00:00')-new Date(td+'T12:00:00'))/86400000):null;return `<div class="card"><div class="row tap" data-tenant="${t.id}"><span class="grow"><b>${esc(t.name)}</b> <span class="mono muted small">${esc(t.bed_id||t.category_hold||'')}</span><div class="small muted">${t.move_in?(dd<0?'Was due '+fmtD(t.move_in):dd===0?'Arrives today':dd===1?'Arrives tomorrow':'Arrives '+fmtD(t.move_in)+' ('+dd+' days)'):'Move-in TBD'}${todo.length?'':' · all set'}</div></span>${(t.move_in&&t.move_in<=td)?`<button class="btn sm pri" data-act="movein" data-id="${t.id}">Move in</button>`:''}</div>${todo.length?`<div style="margin-top:6px">${todo.map(i=>`<div class="row" style="padding:3px 0"><span class="grow small">${i.label}</span><button class="btn sm" data-act="${i.act}" data-id="${i.id}">${i.btn}</button></div>`).join('')}</div>`:''}</div>`;}).join('')}</div></div>`:''}
     ${leaving.length?`<div><h3>Moving out</h3><div class="list">${leaving.map(t=>`<div class="card tap row" data-tenant="${t.id}"><span class="grow"><b>${esc(t.name)}</b> <span class="mono muted small">${esc(t.bed_id||'')}</span><div class="small muted">Last night ${fmtD(t.move_out)}</div></span>${t.move_out<td?`<button class="btn sm" data-act="moveout" data-id="${t.id}">Moved out</button>`:''}</div>`).join('')}</div></div>`:''}
     ${followups.length?`<div><h3>Move-out follow-ups</h3><div class="list">${followups.map(t=>`<div class="card"><div class="row tap" data-tenant="${t.id}"><span class="grow"><b>${esc(t.name)}</b> <span class="mono muted small">${esc(t.bed_id||'')}</span><div class="small muted">Left ${fmtD(t.move_out)}${daysSince(t.move_out)>0?' · '+daysSince(t.move_out)+' days ago':''}</div></span></div><div style="margin-top:6px">${moveoutTodo(t).map(i=>`<div class="row" style="padding:3px 0"><span class="grow small">${i.label}</span><button class="btn sm ${i.pri?'pri':''}" data-act="${i.act}" data-id="${i.id}">${i.btn}</button></div>`).join('')}</div></div>`).join('')}</div></div>`:''}
     ${cleaning.length?`<div><h3>For Will (cleaning)</h3><div class="card"><div class="list">${cleaning.map(c=>`<div class="row"><span class="mono">${esc(c.bed_id||'')}</span><span class="grow small">${esc(c.task)}${c.tenant_name?' · '+esc(c.tenant_name):''} · by ${fmtD(c.needed_on)}</span><button class="btn sm" data-act="cleandone" data-id="${c.id}">Done</button></div>`).join('')}</div><div class="row" style="margin-top:8px"><button class="btn sm" data-act="cleantext" data-id="x">Copy text for Will</button></div></div></div>`:''}
@@ -305,9 +340,12 @@ function openBed(id){
 }
 
 // ---------- Leads ----------
+const RANK={'New':0,'Not a fit':0,'Contacted':1,'Approved':2,'Agreement sent':3,'Signed':4};
 function leadCard(l){
   const p={New:'bad',Contacted:'warn',Approved:'info','Agreement sent':'info',Signed:'ok','Not a fit':'muted'}[l.status]||'muted';
-  return `<div class="card tap" data-lead="${l.id}"><div class="row"><b class="grow">${esc(l.name)}</b><span class="pill ${p}">${esc(l.status)}</span></div><div class="small muted">${esc(l.position||'')}${l.airline?' · '+esc(l.airline):''}${l.bed_category?' · wants '+esc(l.bed_category):''}${l.desired_start?' · from '+fmtD(l.desired_start):''} · ${fmtD(l.received_at)}</div></div>`;
+  const dup=l.status==='Not a fit'?null:dupOf(l);
+  const sentNote=l.status==='Agreement sent'?(()=>{const c=S.data.contacts.find(x=>x.lead_id===l.id&&/^Agreement sent/.test(x.summary||''));const n=c?daysSince(c.logged_at):null;return n==null?'':` · waiting ${n===0?'since today':n+' day'+(n===1?'':'s')}`;})():'';
+  return `<div class="card tap" data-lead="${l.id}"><div class="row"><b class="grow">${esc(l.name)}</b><span class="pill ${p}">${esc(l.status)}</span></div><div class="small muted">${esc(l.position||'')}${l.airline?' · '+esc(l.airline):''}${l.bed_category?' · wants '+esc(l.bed_category):''}${l.desired_start?' · from '+fmtD(l.desired_start):''} · ${fmtD(l.received_at)}${sentNote}</div>${dup?`<div class="row small" style="margin-top:6px"><span class="grow" style="color:var(--warn)">Same ${l.phone&&dup.kind==='lead'&&phoneDigits(l.phone)===phoneDigits((S.data.leads.find(x=>x.id===dup.id)||{}).phone)?'phone':'contact'} as ${esc(dup.name)} (${esc(dup.status)})</span>${dup.kind==='lead'&&!l.tenant_id&&(RANK[l.status]||0)<=(RANK[dup.status]||0)?`<button class="btn sm" data-act="leaddelete" data-id="${l.id}">Delete this one</button>`:''}</div>`:''}</div>`;
 }
 function vLeads(){
   const d=S.data;
@@ -355,6 +393,23 @@ async function serverCall(route, body){
   if(!r.ok || !out.ok) throw new Error(out.message || ('Server said HTTP '+r.status));
   return out;
 }
+// The agreement is the reservation: make the tenant record match what was sent.
+async function holdBed(leadId, b){
+  const l=S.data.leads.find(x=>x.id===leadId); if(!l) return;
+  const hold={ bed_id:b.bed_id||null, rent:b.rent, move_in:b.move_in, email:b.email, category_hold:b.bed_id?null:(b.category||null), payment_code:b.bed_id?b.bed_id.replace('-',''):null };
+  let tid=l.tenant_id;
+  try{
+    if(!tid){ const same=S.data.tenants.find(x=>x.status!=='Moved Out'&&x.name.trim().toLowerCase()===l.name.trim().toLowerCase()); if(same) tid=same.id; }
+    if(tid) await sb.from('cp_tenants').update(hold).eq('id',tid);
+    else { const {data}=await sb.from('cp_tenants').insert({name:l.name,status:'Reserved',phone:l.phone,airline:l.airline,...hold}).select('id').single(); tid=data&&data.id; }
+    if(tid){
+      await sb.from('cp_leads').update({tenant_id:tid}).eq('id',leadId);
+      if(b.bed_id){ const task=S.data.cleaning.find(c=>c.tenant_id===tid&&!c.done&&c.task==='Make bed for move-in');
+        if(task) await sb.from('cp_cleaning').update({bed_id:b.bed_id,needed_on:b.move_in,notes:`${l.name} arrives ${fmtD(b.move_in)}`}).eq('id',task.id);
+        else await sb.from('cp_cleaning').insert({needed_on:b.move_in,bed_id:b.bed_id,task:'Make bed for move-in',tenant_id:tid,tenant_name:l.name,notes:`${l.name} arrives ${fmtD(b.move_in)}`}); }
+    }
+  }catch(e){ console.error('holdBed',e); }
+}
 function agrBox(html){ const b=$('agr-box'); if(b){ b.innerHTML='<h3>Agreement</h3><div style="margin-top:8px">'+html+'</div>'; wire(); } }
 async function agrLoad(leadId){
   try{
@@ -393,8 +448,9 @@ function agrForm(leadId){
   const l=S.data.leads.find(x=>x.id===leadId); if(!l) return;
   const t=l.tenant_id?tenantById(l.tenant_id):null;
   const beds=S.data.beds;
-  const bedNow=(t&&t.bed_id)||'';
   const cat=(t&&t.category_hold)||l.bed_category||'';
+  // Pre-pick: the tenant's bed, else the first open bed in the category they asked for.
+  const bedNow=(t&&t.bed_id)||(cat?((beds.find(b=>b.status==='Open'&&b.category===cat)||{}).id||''):'');
   const bedOpts=`<option value="">No bed yet (hold a category)</option>`+beds.filter(b=>b.status==='Open'||b.id===bedNow).map(b=>`<option value="${b.id}" data-price="${b.list_price}" data-cat="${esc(b.category)}" ${b.id===bedNow?'selected':''}>${b.id} · ${esc(b.category)} · ${money(b.list_price)}</option>`).join('');
   const rent=(t&&t.rent)||(bedNow?(beds.find(b=>b.id===bedNow)||{}).list_price:'')||'';
   agrBox(`<div class="stack">
@@ -472,6 +528,9 @@ function openTenant(id){
         ${t.status==='Moved Out'&&t.fee_paid_on&&!t.fee_refunded_on&&!t.fee_kept?`<button class="btn" data-act="feerefund" data-id="${t.id}">Refund $150</button>`:''}
       </div>
       ${moveoutTodo(t).length&&t.status==='Moved Out'?`<div class="card"><h3>Still to do</h3>${moveoutTodo(t).map(i=>`<div class="row" style="padding:3px 0"><span class="grow small">${i.label}</span><button class="btn sm ${i.pri?'pri':''}" data-act="${i.act}" data-id="${i.id}">${i.btn}</button></div>`).join('')}</div>`:''}
+      ${t.status==='Reserved'&&moveinTodo(t).length?`<div class="card"><h3>Before move-in</h3>${moveinTodo(t).map(i=>`<div class="row" style="padding:3px 0"><span class="grow small">${i.label}</span><button class="btn sm" data-act="${i.act}" data-id="${i.id}">${i.btn}</button></div>`).join('')}</div>`:''}
+      ${r&&t.status==='Active'&&r.owed>0?`<div class="row"><button class="btn sm" data-act="remind" data-id="${t.id}">Text a rent reminder</button></div>`:''}
+      ${lastAtDoor(t)?`<div class="small muted">Last at the door: ${fmtWhen(lastAtDoor(t))}</div>`:''}
       ${doorKeyCard(t)}
       ${groupmeRow(t)}
       <div class="card">${flags.map(([k,l])=>`<label class="chk"><input type="checkbox" data-act="flag" data-id="${t.id}|${k}" ${t[k]?'checked':''}> ${l}</label>`).join('')}
@@ -503,11 +562,16 @@ function vMoney(){
 }
 function payForm(tenantId){
   const d=S.data; const t=tenantId?tenantById(tenantId):null;
-  const now=new Date(); const def = now.getDate()>=20 ? addMonths(firstOfMonth(now),1) : firstOfMonth(now);
+  const now=new Date(); let def = now.getDate()>=20 ? addMonths(firstOfMonth(now),1) : firstOfMonth(now);
   const months=[-2,-1,0,1,2].map(n=>addMonths(firstOfMonth(now),n));
+  if(!months.some(m=>iso(m)===iso(S.month))) months.push(S.month);
+  const r=t?d.rent.find(x=>x.tenant_id===t.id):null;
+  // Someone still owes for the month on screen: that month, that amount.
+  const amt=(r&&Number(r.owed)>0)?Number(r.owed):(t?t.rent:'');
+  if(r&&Number(r.owed)>0) def=S.month;
   return `<h2>Log payment</h2><div class="stack">
     <label class="f">Tenant<select id="pf-tenant">${d.tenants.filter(x=>x.status!=='Moved Out'||x.id===tenantId).map(x=>`<option value="${x.id}" ${x.id===tenantId?'selected':''}>${esc(x.name)}${x.bed_id?' · '+x.bed_id:''}</option>`).join('')}</select></label>
-    <div class="grid2"><label class="f">Amount $<input id="pf-amount" inputmode="decimal" value="${t?t.rent:''}"></label><label class="f">Received<input id="pf-date" type="date" value="${today()}"></label></div>
+    <div class="grid2"><label class="f">Amount $<input id="pf-amount" inputmode="decimal" value="${amt}"></label><label class="f">Received<input id="pf-date" type="date" value="${today()}"></label></div>
     <div class="grid2"><label class="f">Type<select id="pf-type">${['Rent','Reservation fee','Late fee','Refund','Other'].map(o=>`<option>${o}</option>`).join('')}</select></label><label class="f">Method<select id="pf-method">${PAY_METHODS.map(o=>`<option>${o}</option>`).join('')}</select></label></div>
     <label class="f">For month<select id="pf-month">${months.map(m=>`<option value="${iso(m)}" ${iso(m)===iso(def)?'selected':''}>${monthLabel(m)}</option>`).join('')}</select></label>
     <label class="f">Note<input id="pf-note"></label>
@@ -643,6 +707,13 @@ const ACT = {
   prorate:()=>{ const r=prorated(Number($('tf-rent').value), $('tf-in').value); if(!r) return toast('Set rent and move-in first'); $('tf-first').value=r.amt; $('tf-first-hint').textContent=`${r.days} days × $${(Number($('tf-rent').value)/30).toFixed(2)}/day`; },
   fullmonth:()=>{ $('tf-first').value=''; $('tf-first-hint').textContent='Full rent for the move-in month.'; },
   agropen:(id)=>openLead(id),
+  tenantedit:(id)=>{ openTenant(id); const det=document.querySelector('.sheet details:last-of-type'); if(det){ det.open=true; det.scrollIntoView({block:'start'}); } },
+  flagon:async(arg)=>{ const [id,k]=arg.split('|'); await run(sb.from('cp_tenants').update({[k]:true}).eq('id',id),'Marked'); },
+  remind:(id)=>{ const t=tenantById(id); const r=S.data.rent.find(x=>x.tenant_id===id); if(!t||!r) return; S.keyMsg=rentMsg(t,r);
+    sheet(`<h2>Rent reminder</h2><div class="stack"><div class="card small">${esc(S.keyMsg)}</div>
+      ${t.phone?`<button class="btn" data-act="copynum" data-id="${t.id}">Copy number ${esc(fmtPhone(t.phone))}</button><a class="btn pri" href="${gvUrl(t.phone)}" target="_blank" rel="noopener" data-act="keymsgcopy" data-id="x">Copy message + open Google Voice</a><div class="small muted">Paste the number as the recipient, then paste the message.</div>`:`<button class="btn" data-act="keymsgcopy" data-id="x">Copy message</button><div class="small muted">No phone on file.</div>`}
+      <button class="btn sm" data-act="remindlog" data-id="${t.id}">Log that I sent it</button></div>`); wire(); },
+  remindlog:async(id)=>{ const t=tenantById(id); closeSheet(); await run(sb.from('cp_contact_log').insert({tenant_id:id,who:t.name,channel:'Text',summary:`Rent reminder sent for ${monthLabel(S.month)}`,tag:'reminder'}),'Logged'); },
   gmconnect:async(groupId,el)=>{ const token=$('gm-token').value.trim(); const err=$('gm-err'); if(!token){ err.textContent='Paste the token.'; err.hidden=false; return; }
     el.disabled=true; el.textContent='Connecting…';
     try{ const out=await serverCall('groupme/connect',{token, group_id:groupId||undefined});
@@ -685,6 +756,7 @@ const ACT = {
     el.disabled=true; el.textContent='Sending…';
     try{
       const out=await agrCall(body);
+      if(!out.already) await holdBed(id, body);
       S.agrJust={ id, a: out.already ? out.agreement : { url:out.url, sent_to:out.sent_to, bed_id:body.bed_id, category:body.category, rent:body.rent, move_in:body.move_in, status:'sent' } };
       await load();
       openLead(id);

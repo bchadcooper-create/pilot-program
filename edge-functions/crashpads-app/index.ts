@@ -123,10 +123,28 @@ async function agreement(req: Request, d: Record<string, unknown>, db: DB) {
   });
   if (code !== 200 || !out?.ok) return json(502, { ok: false, message: out?.message || `Website said HTTP ${code}` });
 
-  await db.from("cp_leads").update({ status: "Agreement sent", email: to, wp_lead_id: Number(out.lead_id) || lead.wp_lead_id }).eq("id", lead.id);
-  if (lead.tenant_id) await db.from("cp_tenants").update({ email: to }).eq("id", lead.tenant_id);
-  await db.from("cp_contact_log").insert({ lead_id: lead.id, tenant_id: lead.tenant_id, who: lead.name, channel: "Email", summary: `Agreement sent to ${to}: ${bedId || category}, $${rent}/mo, move-in ${moveIn}` });
-  return json(200, { ok: true, url: out.url, sent_to: out.sent_to || to });
+  // The agreement is the reservation: hold the bed in the app the moment it goes out.
+  const hold: Record<string, unknown> = { bed_id: bedId || null, rent, move_in: moveIn, email: to, category_hold: bedId ? null : (category || null), payment_code: bedId ? bedId.replace("-", "") : null };
+  let tenantId: string | null = lead.tenant_id;
+  if (tenantId) {
+    await db.from("cp_tenants").update(hold).eq("id", tenantId);
+  } else {
+    const { data: same } = await db.from("cp_tenants").select("id").ilike("name", lead.name).neq("status", "Moved Out").limit(1);
+    if (same?.length) { tenantId = same[0].id; await db.from("cp_tenants").update(hold).eq("id", tenantId); }
+    else {
+      const { data: ins } = await db.from("cp_tenants").insert({ name: lead.name, status: "Reserved", phone: lead.phone, airline: lead.airline, ...hold }).select("id").single();
+      tenantId = ins?.id ?? null;
+    }
+  }
+  if (tenantId && bedId) {
+    // One open make-bed task per tenant, pointed at this bed and date.
+    const { data: task } = await db.from("cp_cleaning").select("id").eq("tenant_id", tenantId).eq("task", "Make bed for move-in").eq("done", false).limit(1);
+    if (task?.length) await db.from("cp_cleaning").update({ bed_id: bedId, needed_on: moveIn, notes: `${lead.name} arrives ${moveIn}` }).eq("id", task[0].id);
+    else await db.from("cp_cleaning").insert({ needed_on: moveIn, bed_id: bedId, task: "Make bed for move-in", tenant_id: tenantId, tenant_name: lead.name, notes: `${lead.name} arrives ${moveIn}` });
+  }
+  await db.from("cp_leads").update({ status: "Agreement sent", email: to, tenant_id: tenantId, wp_lead_id: Number(out.lead_id) || lead.wp_lead_id }).eq("id", lead.id);
+  await db.from("cp_contact_log").insert({ lead_id: lead.id, tenant_id: tenantId, who: lead.name, channel: "Email", summary: `Agreement sent to ${to}: ${bedId || category}, $${rent}/mo, move-in ${moveIn}` });
+  return json(200, { ok: true, url: out.url, sent_to: out.sent_to || to, tenant_id: tenantId });
 }
 
 

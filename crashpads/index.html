@@ -137,6 +137,8 @@ function today(){ return iso(new Date()); }
 function fmtD(s){ if(!s) return ''; const [y,m,d]=String(s).slice(0,10).split('-'); return `${Number(m)}/${Number(d)}/${String(y).slice(2)}`; }
 function monthLabel(d){ return d.toLocaleString('en-US',{month:'short',year:'numeric'}); }
 function addMonths(d,n){ return new Date(d.getFullYear(), d.getMonth()+n, 1); }
+// Texts go out from the Google Voice business number, not the phone's own Messages app.
+function gvUrl(p){ return 'https://voice.google.com/u/0/messages?itemId=t.'+encodeURIComponent('+'+phoneDigits(p)); }
 function phoneDigits(p){ const d=String(p||'').replace(/\D/g,''); return d.length===10?'1'+d:d; }
 function fmtPhone(p){ let d=String(p||'').replace(/\D/g,''); if(d.length===11&&d[0]==='1') d=d.slice(1); return d.length===10?`(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`:(p||''); }
 let toastT; function toast(m){ let t=document.querySelector('.toast'); if(!t){t=document.createElement('div');t.className='toast';document.body.appendChild(t);} t.textContent=m; clearTimeout(toastT); toastT=setTimeout(()=>t.remove(),2600); }
@@ -217,7 +219,7 @@ const statusPill = (s)=>({paid:'<span class="pill ok">Paid</span>',due:'<span cl
 const bedPill = (s)=>({Open:'<span class="pill ok">Open</span>',Reserved:'<span class="pill info">Reserved</span>',Occupied:'<span class="pill muted">Occupied</span>'}[s]||'');
 // Phone and email each get a Copy button; the email goes into GroupMe and TTLock by hand.
 const contactRow = (t)=>`<div class="stack" style="gap:6px">
-  <div class="row small">${t.phone?`<a class="btn sm" href="tel:+${phoneDigits(t.phone)}">Call</a><a class="btn sm" href="sms:+${phoneDigits(t.phone)}">Text</a>`:''}${t.email?`<a class="btn sm" href="mailto:${esc(t.email)}">Email</a>`:''}</div>
+  <div class="row small">${t.phone?`<a class="btn sm" href="tel:+${phoneDigits(t.phone)}">Call</a><a class="btn sm" href="${gvUrl(t.phone)}" target="_blank" rel="noopener">Text</a>`:''}${t.email?`<a class="btn sm" href="mailto:${esc(t.email)}">Email</a>`:''}</div>
   ${t.phone?`<div class="row small"><span class="mono muted grow" style="overflow-wrap:anywhere">${esc(fmtPhone(t.phone))}</span><button class="btn sm" data-act="copy" data-id="${esc(fmtPhone(t.phone))}">Copy</button></div>`:''}
   ${t.email?`<div class="row small"><span class="mono muted grow" style="overflow-wrap:anywhere">${esc(t.email)}</span><button class="btn sm" data-act="copy" data-id="${esc(t.email)}">Copy</button></div>`:'<div class="small muted">No email on file.</div>'}
 </div>`;
@@ -341,10 +343,9 @@ async function agrLoad(leadId){
     agrBox(`<div class="small" style="color:var(--bad)">Couldn't reach the website: ${esc(e.message)}</div><div class="row" style="margin-top:8px"><button class="btn sm" data-act="agrretry" data-id="${leadId}">Try again</button><button class="btn sm" data-act="agrformnow" data-id="${leadId}">Send one anyway</button></div>`);
   }
 }
-function agrSmsHref(l, url){
-  if(!l.phone) return '';
+function agrMsg(l, url){
   const first=String(l.name||'').trim().split(' ')[0];
-  return 'sms:+'+phoneDigits(l.phone)+'?&body='+encodeURIComponent('Hi '+first+', here is your DFW Crashpads agreement. It takes about 5 minutes: '+url);
+  return 'Hi '+first+', here is your DFW Crashpads agreement. It takes about 5 minutes: '+url;
 }
 function agrShow(leadId, a, justSent){
   const l=S.data.leads.find(x=>x.id===leadId); if(!l) return;
@@ -358,9 +359,12 @@ function agrShow(leadId, a, justSent){
   agrBox(`<div><span class="pill info">${justSent?'Sent':'Waiting for signature'}</span> <span class="small muted">${esc(a.sent_at||'just now')}${a.sent_to?' to '+esc(a.sent_to):''}</span></div>
     ${a.rent?`<div class="small muted" style="margin-top:4px">${esc(a.bed_id||a.category||'')} · ${money(a.rent)}/mo · move-in ${fmtD(a.move_in)}</div>`:''}
     <div class="row" style="margin-top:8px">
-      ${l.phone?`<a class="btn sm pri" href="${agrSmsHref(l,a.url)}">Text them the link</a>`:''}
+      ${l.phone?`<a class="btn sm pri" href="${gvUrl(l.phone)}" target="_blank" rel="noopener" data-act="agrgv" data-id="${leadId}">Text via Google Voice</a>`:''}
       <a class="btn sm" target="_blank" rel="noopener" href="${esc(a.url)}">Open</a>
       <button class="btn sm" data-act="agrcopy" data-id="x">Copy link</button>
+    </div>
+    ${l.phone?`<div class="small muted" style="margin-top:6px">Google Voice opens with the message copied. Tap the message box and paste.</div>`:''}
+    <div class="row" style="margin-top:6px">
       ${l.wp_lead_id?`<button class="btn sm" data-act="agrresend" data-id="${leadId}">Email again</button>`:''}
     </div>`);
 }
@@ -531,6 +535,8 @@ const ACT = {
   agropen:(id)=>openLead(id),
   agrretry:(id)=>{ agrBox('<div class="small muted">Checking the website…</div>'); agrLoad(id); },
   agrformnow:(id)=>agrForm(id),
+  // Runs inside the tap so iOS allows both the copy and opening Google Voice.
+  agrgv:(id)=>{ const l=S.data.leads.find(x=>x.id===id); const msg=agrMsg(l,S.agrUrl||''); try{ navigator.clipboard.writeText(msg).then(()=>toast('Message copied. Paste it in Google Voice.'),()=>{}); }catch(e){} },
   agrcopy:async()=>{ try{ await navigator.clipboard.writeText(S.agrUrl||''); toast('Link copied'); }catch(e){ prompt('Copy this link:', S.agrUrl||''); } },
   agrsend:async(id,el)=>{
     const err=$('ag-err'); const show=(m)=>{ err.textContent=m; err.hidden=false; };
@@ -567,7 +573,10 @@ const ACT = {
       toast('Reserved'); await load(); openTenant(data.id);
     }catch(e){ toast('Error: '+e.message); }
   },
-  tenantsave:async(id)=>{ const v=readTenantForm(); closeSheet(); await run(sb.from('cp_tenants').update(v).eq('id',id),'Saved'); openTenant(id); },
+  tenantsave:async(id)=>{ const v=readTenantForm(); const before=tenantById(id)||{}; closeSheet();
+    // Moved to another bed or date before move-in? Move their open make-bed task too, so Will preps the right bed.
+    if(v.bed_id&&(v.bed_id!==before.bed_id||v.move_in!==before.move_in)) await sb.from('cp_cleaning').update({bed_id:v.bed_id,needed_on:v.move_in||before.move_in}).eq('tenant_id',id).eq('task','Make bed for move-in').eq('done',false);
+    await run(sb.from('cp_tenants').update(v).eq('id',id),'Saved'); openTenant(id); },
   tenantdelete:(id)=>confirmSheet('Delete this tenant and their payment links? Payments stay in the log under their name.',async()=>{ closeSheet(); await run(sb.from('cp_tenants').delete().eq('id',id),'Deleted'); }),
   tenantnote:async(id)=>{ const txt=$('cl-text').value.trim(); if(!txt) return; const t=tenantById(id); await run(sb.from('cp_contact_log').insert({tenant_id:id,who:t.name,channel:'Text',summary:txt}),'Logged'); openTenant(id); },
   flag:async(arg,el)=>{ const [id,k]=arg.split('|'); await run(sb.from('cp_tenants').update({[k]:el.checked}).eq('id',id)); },

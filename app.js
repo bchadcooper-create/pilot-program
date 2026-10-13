@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.33 / 20260916_4
+ * Version/build: fcf-v5.44.34 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.33';
+const FCF_VERSION = 'fcf-v5.44.34';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -3374,13 +3374,33 @@ let _bootSideEffectsScheduled = false;
 // there's always something to show immediately; the existing delayed
 // live sync still runs afterward and overwrites this with same-day
 // data once it succeeds, same as before.
+// BUG FIX (reported: in airplane mode the Today card said "No ring data
+// for last night" although the ring had synced that morning). This read
+// needs the database, so with no connection it returned nothing and the
+// app treated today as unsynced. The latest row is also kept on the
+// device (written here and by syncOuraData) and used when the database
+// cannot be reached.
+const OURA_ROW_CACHE_KEY = 'fcf_oura_row';
+function cacheOuraRow(row) {
+  try { if (row) localStorage.setItem(OURA_ROW_CACHE_KEY, JSON.stringify({ userId: ST.user?.id || null, row })); } catch (e) {}
+}
+function cachedOuraRow() {
+  try {
+    const c = JSON.parse(localStorage.getItem(OURA_ROW_CACHE_KEY) || 'null');
+    return c && c.row && (!c.userId || c.userId === ST.user?.id) ? c.row : null;
+  } catch (e) { return null; }
+}
 async function hydrateOuraFromRecent() {
   if (!ST.user) return null;
   try {
     const { data } = await SB.from('oura_daily').select('*')
       .eq('user_id', ST.user.id).order('date', { ascending: false }).limit(1);
-    return data?.[0] || null;
-  } catch (e) { return null; }
+    const row = data?.[0] || null;
+    if (row) { cacheOuraRow(row); return row; }
+  } catch (e) { /* offline or slow: fall through to the device copy */ }
+  const local = cachedOuraRow();
+  if (local) return local;
+  return null;
 }
 
 async function bootAppInner() {
@@ -12600,6 +12620,7 @@ async function syncOuraData(force) {
     ST.ouraSteps  = activityItem?.steps ?? null;
     ST.ouraActiveCal = activityItem?.active_calories ?? null;
     ST.ouraData   = row;
+    cacheOuraRow(row);
 
     // If there's an activity diagnostic to report, show THAT (as a modal
     // that stays until dismissed) instead of the generic success toast —
@@ -14554,9 +14575,13 @@ function noRingDataCardHtml() {
   const condMeta = { go: [statusDot('go'), 'GO: full protocol'], marginal: [statusDot('marginal'), 'MARGINAL: light only'], nogo: [statusDot('nogo'), 'NO-GO: mobility only'] }[ST.fatigue] || [statusDot('go'), 'GO: full protocol'];
   const p = [];
   p.push('<div class="card mb12" id="noRingCard" style="border-left:3px solid var(--amber)">');
-  p.push('<div class="fb" style="align-items:center;margin-bottom:6px"><div style="font-size:1.0625rem;font-weight:600;letter-spacing:-.01em">No ring data for last night</div>');
+  const offlineTitle = typeof navigator !== 'undefined' && navigator.onLine === false;
+  p.push('<div class="fb" style="align-items:center;margin-bottom:6px"><div style="font-size:1.0625rem;font-weight:600;letter-spacing:-.01em">' + (offlineTitle ? 'Ring scores unavailable offline' : 'No ring data for last night') + '</div>');
   p.push('<button class="btn btn-outline" style="padding:6px 10px;font-size:0.6875rem" onclick="haptic(\'light\');syncOuraData(true)">↻ Sync Oura</button></div>');
-  p.push('<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6;margin-bottom:10px">Oura has no readiness or sleep score for today' + (lastDay ? ', the latest is from ' + lastDay : '') + '. If you wore the ring, open the Oura app so it syncs, then tap Sync. Otherwise tell us how recovered you feel so today\'s plan is based on you, not on yesterday.</div>');
+  const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+  p.push('<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6;margin-bottom:10px">' + (offline
+    ? 'You\'re offline, so today\'s ring scores can\'t be fetched right now. Tell us how recovered you feel and the plan will use that until you reconnect.'
+    : 'Oura has no readiness or sleep score for today' + (lastDay ? ', the latest is from ' + lastDay : '') + '. If you wore the ring, open the Oura app so it syncs, then tap Sync. Otherwise tell us how recovered you feel so today\'s plan is based on you, not on yesterday.') + '</div>');
   p.push('<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);letter-spacing:0.05em;margin-bottom:6px">1 = BARELY RECOVERED · 5 = FULLY RECOVERED</div>');
   p.push('<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:8px">');
   for (let i = 1; i <= 5; i++) p.push('<div class="env-btn" style="padding:8px 2px' + (ST.readiness === i ? ';border-color:var(--gold);background:rgba(212,175,55,0.08)' : '') + '" onclick="setReadinessFromToday(' + i + ')"><div style="font-size:0.9375rem;font-weight:700">' + i + '</div></div>');

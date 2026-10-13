@@ -1346,6 +1346,17 @@ test('steps come from Apple Health on a no-ring day', () => {
   ctx.ST.ouraSteps = null; assertEqual(ctx.todayStepCount(), 1840, 'phone fills in when the ring has no count');
   ctx.ST.healthkit = null; ctx.ST.ouraSteps = null;
 });
+test('the latest ring row is kept on the device for offline opens', () => {
+  ctx.ST.user = ctx.ST.user || { id: 'u1' };
+  const store = {}; const realLS = ctx.localStorage;
+  ctx.localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } };
+  const row = { date: todayStr, readiness_score: 77, sleep_score: 81, activity_score: 60 };
+  ctx.cacheOuraRow(row);
+  assertEqual(ctx.cachedOuraRow().readiness_score, 77, 'round trip');
+  ctx.ST.ouraData = ctx.cachedOuraRow(); ctx.ST.ouraConnected = true;
+  assertEqual(ctx.ouraRowIsToday(), true, 'a cached row for today counts as today');
+  ctx.ST.ouraData = null; ctx.localStorage = realLS;
+});
 
 console.log('\n' + '─'.repeat(50));
 console.log(passed + ' passed, ' + failed + ' failed');

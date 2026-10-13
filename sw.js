@@ -1,6 +1,6 @@
 // Flight Crew Fitness — Service Worker
-// Version: 5.44.33
-const CACHE = 'fcf-v5.44.33';
+// Version: 5.44.34
+const CACHE = 'fcf-v5.44.34';
 const CORE = [
   './',
   './index.html',

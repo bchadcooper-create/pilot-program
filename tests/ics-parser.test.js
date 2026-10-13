@@ -1358,6 +1358,94 @@ test('the latest ring row is kept on the device for offline opens', () => {
   ctx.ST.ouraData = null; ctx.localStorage = realLS;
 });
 
-console.log('\n' + '─'.repeat(50));
-console.log(passed + ' passed, ' + failed + ' failed');
-if (failed > 0) process.exit(1);
+// ─── Med check-offs survive an offline open ───
+function memStore() {
+  const store = {};
+  return { store, ls: { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } } };
+}
+test('offline med taps collapse to the latest one per dose and overlay the screen', () => {
+  const realLS = ctx.localStorage; const m = memStore(); ctx.localStorage = m.ls;
+  ctx.ST.user = { id: 'u1' };
+  ctx.queueMedOp('med_a', todayStr, '07:00', true);
+  ctx.queueMedOp('med_a', todayStr, '07:00', false);
+  ctx.queueMedOp('med_b', todayStr, '08:00', true);
+  assertEqual(ctx.pendingMedOps().length, 2, 'check then uncheck of one dose keeps only the last tap');
+  ctx.ST.medsTakenToday = { 'med_a|07:00': true };
+  ctx.applyPendingMedOps(todayStr);
+  assertEqual(!!ctx.ST.medsTakenToday['med_a|07:00'], false, 'later uncheck wins');
+  assertEqual(!!ctx.ST.medsTakenToday['med_b|08:00'], true, 'offline check shows');
+  ctx.dropPendingMedOp('med_b', todayStr, '08:00');
+  assertEqual(ctx.pendingMedOps().length, 1, 'a newer online tap removes the queued one');
+  ctx.localStorage = realLS;
+});
+test('the device copy of check-offs only answers for the same user and day', () => {
+  const realLS = ctx.localStorage; const m = memStore(); ctx.localStorage = m.ls;
+  ctx.ST.user = { id: 'u1' }; ctx.ST.medsTakenDate = todayStr; ctx.ST.medsTakenToday = { 'med_a|07:00': true };
+  ctx.cacheMedsTaken();
+  assertEqual(!!ctx.cachedMedsTaken(todayStr)['med_a|07:00'], true, 'round trip');
+  assertEqual(ctx.cachedMedsTaken(yesterdayStr), null, 'yesterday\'s copy is not today\'s');
+  ctx.ST.user = { id: 'u2' };
+  assertEqual(ctx.cachedMedsTaken(todayStr), null, 'another account never sees it');
+  ctx.localStorage = realLS;
+});
+test('a dropped connection is told apart from a server refusal', () => {
+  assertEqual(ctx.isConnectionError(new Error('timeout')), true, 'timeout');
+  assertEqual(ctx.isConnectionError({ message: 'TypeError: Load failed' }), true, 'Safari fetch failure');
+  assertEqual(ctx.isConnectionError({ message: 'TypeError: Failed to fetch' }), true, 'Chrome fetch failure');
+  assertEqual(ctx.isConnectionError({ message: 'new row violates row-level security policy' }), false, 'RLS refusal is not offline');
+});
+
+// Async cases run after the synchronous ones, before the summary.
+const asyncTests = [];
+function testAsync(name, fn) { asyncTests.push([name, fn]); }
+
+testAsync('an offline open shows the morning check-offs, and reconnecting sends offline taps', async () => {
+  const realLS = ctx.localStorage; const m = memStore(); ctx.localStorage = m.ls;
+  const SBc = vm.runInContext('SB', ctx); const realFrom = SBc.from;
+  ctx.ST.user = { id: 'u1' };
+  // Morning, online: server has two doses; the device copy saves them.
+  const serverRows = [{ med_id: 'med_a', time: '07:00' }, { med_id: 'med_b', time: '07:00' }];
+  const sent = [];
+  const online = () => {
+    const qb = {}; let op = 'select', payload = null;
+    ['eq','gte','lte','order','limit'].forEach(k => { qb[k] = () => qb; });
+    qb.select = () => { op = 'select'; return qb; };
+    qb.upsert = (p) => { op = 'upsert'; payload = p; return qb; };
+    qb.delete = () => { op = 'delete'; return qb; };
+    qb.then = (res) => { if (op === 'upsert') { sent.push(payload); serverRows.push({ med_id: payload.med_id, time: payload.time }); } res({ data: op === 'select' ? serverRows.slice() : null, error: null }); };
+    return qb;
+  };
+  const offline = () => { const qb = {}; ['select','upsert','delete','eq','gte','lte','order','limit'].forEach(k => { qb[k] = () => qb; }); qb.then = (res) => res({ data: null, error: { message: 'TypeError: Load failed' } }); return qb; };
+  SBc.from = online;
+  await ctx.loadMedsTakenToday();
+  assertEqual(Object.keys(ctx.ST.medsTakenToday).length, 2, 'online load has both doses');
+  // Airplane mode, app reopened: server unreachable.
+  SBc.from = offline; ctx.navigator.onLine = false;
+  await ctx.loadMedsTakenToday();
+  assertEqual(Object.keys(ctx.ST.medsTakenToday).length, 2, 'offline open still shows both doses');
+  // Tap a third dose offline: stays checked, queued.
+  const realToast = ctx.showToast, realHaptic = ctx.haptic, realRefresh = ctx.refreshMedsSection;
+  let toasts = 0; ctx.showToast = () => { toasts++; }; ctx.haptic = () => {}; ctx.refreshMedsSection = () => {};
+  await ctx.toggleMedTaken('med_c', '08:00');
+  assertEqual(toasts, 1, 'one "saved on this phone" notice');
+  ctx.showToast = realToast; ctx.haptic = realHaptic; ctx.refreshMedsSection = realRefresh;
+  assertEqual(!!ctx.ST.medsTakenToday['med_c|08:00'], true, 'offline tap stays checked');
+  assertEqual(ctx.pendingMedOps().length, 1, 'offline tap queued');
+  // Back online: the queued tap is sent, then the server read includes it.
+  SBc.from = online; ctx.navigator.onLine = true;
+  await ctx.loadMedsTakenToday();
+  assertEqual(sent.length, 1, 'queued tap sent once');
+  assertEqual(ctx.pendingMedOps().length, 0, 'queue emptied');
+  assertEqual(Object.keys(ctx.ST.medsTakenToday).length, 3, 'all three doses after reconnecting');
+  SBc.from = realFrom; ctx.localStorage = realLS;
+});
+
+(async () => {
+  for (const [name, fn] of asyncTests) {
+    try { await fn(); passed++; console.log('  ✓ ' + name); }
+    catch (e) { failed++; console.log('  ✗ ' + name); console.log('      ' + e.message); }
+  }
+  console.log('\n' + '─'.repeat(50));
+  console.log(passed + ' passed, ' + failed + ' failed');
+  if (failed > 0) process.exit(1);
+})();

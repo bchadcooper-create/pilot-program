@@ -1,9 +1,9 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.34 / 20260916_4
+ * Version/build: fcf-v5.44.35 / 20260916_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.34';
+const FCF_VERSION = 'fcf-v5.44.35';
 const FCF_BUILD   = '20260916_4';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
@@ -4649,17 +4649,136 @@ async function deleteMedication(id) {
 }
 
 // ── Taken log (medication_logs) ───────────────────────────────────────────
+// BUG FIX (reported: opened the app in airplane mode and the morning's
+// check-offs were gone, though the server still had all three). Two
+// device-side stores close the gap:
+//   fcf_meds_taken   today's check-offs as last seen, shown when the
+//                    server can't be reached
+//   fcf_meds_pending taps made offline, sent once the connection is back
+const MEDS_TAKEN_CACHE_KEY = 'fcf_meds_taken';
+const MEDS_PENDING_KEY = 'fcf_meds_pending';
+
+function readLocalJSON(key, fallback) {
+  try { const v = JSON.parse(localStorage.getItem(key) || 'null'); return v == null ? fallback : v; }
+  catch (e) { return fallback; }
+}
+function writeLocalJSON(key, v) {
+  try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) { /* storage full or blocked: the server copy still stands */ }
+}
+
+function cacheMedsTaken() {
+  if (!ST.user || !ST.medsTakenDate) return;
+  writeLocalJSON(MEDS_TAKEN_CACHE_KEY, { user: ST.user.id, date: ST.medsTakenDate, keys: Object.keys(ST.medsTakenToday || {}) });
+}
+
+function cachedMedsTaken(today) {
+  const c = readLocalJSON(MEDS_TAKEN_CACHE_KEY, null);
+  if (!c || !ST.user || c.user !== ST.user.id || c.date !== today || !Array.isArray(c.keys)) return null;
+  const out = {};
+  c.keys.forEach(k => { out[k] = true; });
+  return out;
+}
+
+function pendingMedOps() {
+  const list = readLocalJSON(MEDS_PENDING_KEY, []);
+  return Array.isArray(list) ? list : [];
+}
+
+// Only the latest tap per dose matters, so a check then uncheck made
+// offline collapses to one entry instead of replaying both.
+function queueMedOp(medId, date, time, taken) {
+  const list = pendingMedOps().filter(o => !(o.user === ST.user.id && o.med_id === medId && o.date === date && o.time === time));
+  list.push({ id: newMedId(), user: ST.user.id, med_id: medId, date, time, taken, at: new Date().toISOString() });
+  writeLocalJSON(MEDS_PENDING_KEY, list);
+}
+
+function dropPendingMedOp(medId, date, time) {
+  const list = pendingMedOps();
+  const kept = list.filter(o => !(ST.user && o.user === ST.user.id && o.med_id === medId && o.date === date && o.time === time));
+  if (kept.length !== list.length) writeLocalJSON(MEDS_PENDING_KEY, kept);
+}
+
+// Taps still waiting to send win over what the server or the device copy
+// says, because they are newer.
+function applyPendingMedOps(today) {
+  if (!ST.user) return;
+  pendingMedOps().forEach(o => {
+    if (o.user !== ST.user.id || o.date !== today) return;
+    const key = o.med_id + '|' + o.time;
+    if (o.taken) ST.medsTakenToday[key] = true; else delete ST.medsTakenToday[key];
+  });
+}
+
+// A dropped connection, as opposed to the server refusing the write.
+function isConnectionError(e) {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+  const msg = String((e && (e.message || e.details)) || e || '');
+  return /timeout|failed to fetch|load failed|network|offline|internet connection/i.test(msg);
+}
+
+async function sendMedOp(o) {
+  if (o.taken) {
+    // ignoreDuplicates makes this INSERT ... ON CONFLICT DO NOTHING. A
+    // plain upsert is ON CONFLICT DO UPDATE, which Postgres checks
+    // against an UPDATE policy this table doesn't have, so re-checking a
+    // dose already saved (from another device, or after an offline boot)
+    // failed with a row-level security error. "Already recorded" is
+    // exactly the outcome wanted here, so doing nothing is correct.
+    const { error } = await withTimeout(SB.from('medication_logs').upsert(
+      { user_id: ST.user.id, med_id: o.med_id, date: o.date, time: o.time, taken_at: o.at || new Date().toISOString() },
+      { onConflict: 'user_id,med_id,date,time', ignoreDuplicates: true }));
+    if (error) throw error;
+  } else {
+    const { error } = await withTimeout(SB.from('medication_logs').delete()
+      .eq('user_id', ST.user.id).eq('med_id', o.med_id).eq('date', o.date).eq('time', o.time));
+    if (error) throw error;
+  }
+}
+
+let _medFlush = null;
+function flushPendingMedOps() {
+  if (!ST.user) return Promise.resolve();
+  if (_medFlush) return _medFlush;
+  _medFlush = (async () => {
+    const mine = pendingMedOps().filter(o => o.user === ST.user.id);
+    if (!mine.length || navigator.onLine === false) return;
+    const done = new Set();
+    for (const o of mine) {
+      try { await sendMedOp(o); done.add(o.id); }
+      catch (e) {
+        if (isConnectionError(e)) break; // still offline: keep the rest for next time
+        console.warn('Server refused a queued med check-off, dropping it:', e);
+        done.add(o.id);
+      }
+    }
+    // Re-read so a tap made while this was sending isn't overwritten.
+    if (done.size) writeLocalJSON(MEDS_PENDING_KEY, pendingMedOps().filter(o => !done.has(o.id)));
+  })().finally(() => { _medFlush = null; });
+  return _medFlush;
+}
+
 async function loadMedsTakenToday() {
   const today = localDateStr(new Date());
   ST.medsTakenDate = today;
   ST.medsTakenToday = {};
   if (!ST.user) return;
+  let fromServer = false;
   try {
+    // Send offline taps first so the read below already includes them.
+    await flushPendingMedOps();
     const { data, error } = await withTimeout(SB.from('medication_logs').select('med_id,time')
       .eq('user_id', ST.user.id).eq('date', today));
     if (error) throw error;
     (data || []).forEach(r => { ST.medsTakenToday[r.med_id + '|' + r.time] = true; });
-  } catch (e) { /* table missing or offline: check-offs just start empty */ }
+    fromServer = true;
+  } catch (e) {
+    // Offline or table missing: show what this phone last saw today.
+    ST.medsTakenToday = cachedMedsTaken(today) || {};
+  }
+  applyPendingMedOps(today);
+  // Only a server answer replaces the device copy, so a failed read can't
+  // wipe it.
+  if (fromServer) cacheMedsTaken();
 }
 
 // Doses with a save still in flight. A second tap on the same dose is
@@ -4678,31 +4797,36 @@ async function toggleMedTaken(medId, time) {
   haptic(nowTaken ? 'medium' : 'light');
   refreshMedsSection();
   if (!ST.user) return;
+  cacheMedsTaken();
+  // This tap supersedes any older offline tap on the same dose.
+  dropPendingMedOp(medId, today, time);
+  if (navigator.onLine === false) { queueOfflineMedTap(medId, today, time, nowTaken); return; }
   _medToggleInFlight.add(key);
   try {
-    if (nowTaken) {
-      // ignoreDuplicates makes this INSERT ... ON CONFLICT DO NOTHING. A
-      // plain upsert is ON CONFLICT DO UPDATE, which Postgres checks
-      // against an UPDATE policy this table doesn't have, so re-checking a
-      // dose already saved (from another device, or after an offline boot)
-      // failed with a row-level security error. "Already recorded" is
-      // exactly the outcome wanted here, so doing nothing is correct.
-      const { error } = await withTimeout(SB.from('medication_logs').upsert(
-        { user_id: ST.user.id, med_id: medId, date: today, time, taken_at: new Date().toISOString() },
-        { onConflict: 'user_id,med_id,date,time', ignoreDuplicates: true }));
-      if (error) throw error;
-    } else {
-      const { error } = await withTimeout(SB.from('medication_logs').delete()
-        .eq('user_id', ST.user.id).eq('med_id', medId).eq('date', today).eq('time', time));
-      if (error) throw error;
-    }
+    await sendMedOp({ med_id: medId, date: today, time, taken: nowTaken });
   } catch (e) {
-    // Roll back so the screen never claims a check-off the server rejected.
-    if (nowTaken) delete ST.medsTakenToday[key]; else ST.medsTakenToday[key] = true;
-    refreshMedsSection();
-    showBigToast('Could not save that check-off. Try again in a moment.', 'warn');
+    if (isConnectionError(e)) {
+      // No signal (airplane mode on a trip): keep the check and send it later.
+      queueOfflineMedTap(medId, today, time, nowTaken);
+    } else {
+      // Roll back so the screen never claims a check-off the server rejected.
+      if (nowTaken) delete ST.medsTakenToday[key]; else ST.medsTakenToday[key] = true;
+      cacheMedsTaken();
+      refreshMedsSection();
+      showBigToast('Could not save that check-off. Try again in a moment.', 'warn');
+    }
   } finally {
     _medToggleInFlight.delete(key);
+  }
+}
+
+// One notice per offline stretch, not one per tap.
+let _medOfflineNoticeShown = false;
+function queueOfflineMedTap(medId, date, time, taken) {
+  queueMedOp(medId, date, time, taken);
+  if (!_medOfflineNoticeShown) {
+    _medOfflineNoticeShown = true;
+    showToast('Saved on this phone. It will sync when you are back online.');
   }
 }
 
@@ -4996,10 +5120,17 @@ async function syncPendingBioEntries() {
 // regardless of the exact mechanism: refreshing "offline fallback" data
 // makes no sense to do at all if the app was never actually offline this
 // session, so there's no real downside to adding this check either way.
-let _wasEverOffline = false;
+// BUG FIX: an app that opened already offline never gets an "offline"
+// event, so this flag stayed false and the refresh below never ran after
+// reconnecting (reported: med check-offs missing after an airplane-mode
+// open). Start true when the app boots without a connection, and also
+// refresh whenever the profile came from the device copy.
+let _wasEverOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
 async function refreshOnReconnect() {
-  if (!_wasEverOffline) return;
+  if (!_wasEverOffline && !ST.profileFromCache) return;
   _wasEverOffline = false;
+  _medOfflineNoticeShown = false;
+  loadMedsTakenToday().then(refreshMedsSection).catch(e => console.warn('Reloading med check-offs failed:', e));
   ST.calendarSessions = {};
   try {
     // Re-fetch the profile too — if the app booted offline it hydrated from

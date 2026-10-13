@@ -1,6 +1,6 @@
 // Flight Crew Fitness — Service Worker
-// Version: 5.44.36
-const CACHE = 'fcf-v5.44.36';
+// Version: 5.44.37
+const CACHE = 'fcf-v5.44.37';
 const CORE = [
   './',
   './index.html',
@@ -64,6 +64,7 @@ self.addEventListener('fetch', e => {
   // Always pass these through to network directly — never cache or clone their responses
   const isPassthrough = (
     url.pathname.startsWith('/crashpads/') ||   // separate app hosted under this site; never cache it
+    url.pathname.startsWith('/blog/') ||        // static marketing pages; always fresh, never part of the offline app
     url.hostname.includes('supabase.co') ||
     url.hostname.includes('jsdelivr.net') ||
     url.hostname.includes('googleapis.com') ||

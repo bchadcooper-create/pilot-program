@@ -1,10 +1,13 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.35 / 20260916_4
+ * Version/build: fcf-v5.44.36 / 20261013_1
  */
 
-const FCF_VERSION = 'fcf-v5.44.35';
-const FCF_BUILD   = '20260916_4';
+const FCF_VERSION = 'fcf-v5.44.36';
+const FCF_BUILD   = '20261013_1';
+// Signed-out landing page markup, served in index.html for SEO. Read once
+// here, before any render touches #mainPage.
+const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
 
 // ─── TEXT SIZE ───────────────────────────────────────────────────────────────
 // Every font-size in index.html and app.js is in rem, so scaling the root
@@ -1901,67 +1904,10 @@ async function doSignOut() {
 
 // ─── LANDING PAGE ─────────────────────────────────────────────────────────────
 function renderLanding(root) {
-  const parts = [];
-  parts.push('<div class="landing">');
-
-  parts.push('<div class="landing-hero">');
-  parts.push('<div class="fb" style="align-items:flex-start"><div class="landing-logo">✈ FLIGHT CREW FITNESS</div>');
-  parts.push('<div id="zuluClock" style="font-family:var(--mono);font-size:0.6875rem;color:var(--muted);letter-spacing:0.05em;white-space:nowrap"></div></div>');
-  parts.push('<div class="landing-tag">BUILT FOR PILOTS, BY THE REALITIES OF FLYING</div>');
-  parts.push('<div class="landing-h1">Train hard between <span class="accent">duty days</span>, not despite them.</div>');
-  parts.push('<div class="landing-sub">A workout system that adapts to your gym access, your fatigue level, and your schedule, whether you\'re home, on layover, or stuck with nothing but a hotel room.</div>');
-  parts.push('<div class="landing-cta">');
-  parts.push('<button class="btn btn-gold" onclick="ST.showLanding=false;ST.authMode=\'signup\';renderRoot()">Get Started Free</button>');
-  parts.push('<button class="btn btn-outline mt8" onclick="ST.showLanding=false;ST.authMode=\'signin\';renderRoot()">I have an account</button>');
-  parts.push('</div>');
-  parts.push('</div>');
-
-  parts.push('<div class="landing-section">');
-  parts.push('<div class="landing-section-title">Why pilots need a different program</div>');
-
-  const features = [
-    ['🌍','Environment-aware workouts','Every session adapts automatically to Commercial Gym, Hotel Gym, Hotel Room, or just resistance bands. No equipment excuses.'],
-    ['🚦','Fatigue-gated intensity','A pilot condition toggle (Go / Marginal / No-Go) reduces or removes heavy lifting when you\'re running on insufficient rest, auto-set from Apple Health if you sync a wearable, or a 15-second self-check if you don\'t.'],
-    ['⌚','Wearable auto-sync','Connect once via Apple Health and your daily readiness, sleep, HRV, resting heart rate, steps, and workouts drive your training automatically. It works with Apple Watch, Oura, Whoop, Garmin, or anything else that writes to Health. Connect Oura directly for its own full readiness score.'],
-    ['🏆','Leaderboards, scored fairly','Compete on bench, squat, deadlift, and more against fellow pilots, ranked by DOTS score, which adjusts for bodyweight and sex, so a 160 lb first officer and a 220 lb captain are compared on equal footing, not just raw weight. Opt-in only: no call sign, nothing is shared.'],
-    ['🎖️','Badges for reaching goals','Hit a personal record, a training streak, or a milestone and it gets recognized automatically, pulled from your real logged history, not just a login count.'],
-    ['🩹','Injury-aware programming','Flag a sore shoulder or knee and the app automatically swaps in a safer alternative where one exists, or flags the exercise so you can decide, instead of just handing you the same plan regardless.'],
-    ['⏱️','Fits the time you actually have','Tell it how much time you\'ve got and it trims the session to fit, protecting your warmup and cooldown, never your actual lift.'],
-    ['🎯','Goal-driven programming','Seven mission objectives (from Vertical Jump to Glute Emphasis to Overall Strength), each with real, distinct exercise programming behind it, not just a label.'],
-    ['💧','Hydration math built in','0.3L per flight hour, with a sensible floor on no-fly days. The app tells you exactly how much to drink and when.'],
-    ['🛫','Aviation-phased structure','Every workout follows Taxi (warmup) → Takeoff (heavy) → En Route (volume) → Landing (decompression): a logical, recoverable structure, not just a random exercise list.'],
-    ['📊','Real biometric tracking','Weight, waist, blood pressure, and fasting glucose, with the actual clinical protocol for measuring each one correctly.'],
-    ['💊','Meds and supplements on schedule','Log anything you take, from creatine to prescriptions, with the dose and times. Check doses off on your Today screen, get a phone reminder when one is due, and include the history in your data export for AI analysis. Private to your account.'],
-    ['📶','Works with no signal','Keeps working with zero connectivity: at altitude, in a dead-zone layover hotel, wherever.'],
-  ];
-  features.forEach(([icon,title,desc]) => {
-    parts.push('<div class="feature-row"><div class="feature-icon">'+icon+'</div><div class="feature-text"><h4>'+title+'</h4><p>'+desc+'</p></div></div>');
-  });
-  parts.push('</div>');
-
-  parts.push('<div class="landing-section" style="background:var(--bg2)">');
-  parts.push('<div class="landing-quote">"The biggest mistake I see in shift-work athletes is treating every day the same. Your training should respond to how you actually feel, not an arbitrary schedule." (Sports medicine consensus on fatigue-informed training)</div>');
-  parts.push('<div class="landing-stat-row">');
-  parts.push('<div class="landing-stat"><div class="num">9</div><div class="lbl">Mission Profiles</div></div>');
-  parts.push('<div class="landing-stat"><div class="num">7</div><div class="lbl">Goal Tracks</div></div>');
-  parts.push('<div class="landing-stat"><div class="num">102</div><div class="lbl">Wisdom Briefings</div></div>');
-  parts.push('</div>');
-  parts.push('</div>');
-
-  parts.push('<div class="landing-section">');
-  parts.push('<div class="landing-section-title">How it works</div>');
-  parts.push('<div class="feature-row"><div class="feature-icon">1️⃣</div><div class="feature-text"><h4>Preflight</h4><p>Set your environment, log your hydration, and tell the app how you\'re actually feeling today.</p></div></div>');
-  parts.push('<div class="feature-row"><div class="feature-icon">2️⃣</div><div class="feature-text"><h4>Flight</h4><p>Work through your generated plan phase by phase, with rest timers that chime when they\'re done and a form guide on every exercise: built-in animations where we have them, a YouTube search where we don\'t.</p></div></div>');
-  parts.push('<div class="feature-row"><div class="feature-icon">3️⃣</div><div class="feature-text"><h4>Trends</h4><p>Log your biometrics and watch your progress chart itself over weeks and months.</p></div></div>');
-  parts.push('</div>');
-
-  parts.push('<div class="landing-footer">');
-  parts.push('<button class="btn btn-gold" onclick="ST.showLanding=false;ST.authMode=\'signup\';renderRoot()">Create Your Free Account</button>');
-  parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-top:14px;line-height:1.6">Flight Crew Fitness is a training tool, not medical advice.<br>Consult a physician before beginning any new exercise program.</div>');
-  parts.push('</div>');
-
-  parts.push('</div>');
-  root.innerHTML = parts.join('');
+  // The landing markup lives in index.html (inside #mainPage) so search
+  // engines and link previews see it without running this script. It is
+  // captured below at load time, before the first render replaces it.
+  root.innerHTML = STATIC_LANDING_HTML;
 
   const tickZulu = () => {
     const el = document.getElementById('zuluClock');

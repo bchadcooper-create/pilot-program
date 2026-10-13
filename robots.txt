@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Disallow: /guides/
+Disallow: /crashpads/
+Disallow: /edge-functions/
+Disallow: /sql/
+Disallow: /test/
+Disallow: /tests/
+Disallow: /ios-scaffold/
+Disallow: /wp-plugin/
+Disallow: /wp-theme/
+Disallow: /docs/
+
+Sitemap: https://flightcrew.fit/sitemap.xml

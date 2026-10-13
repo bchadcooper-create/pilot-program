@@ -1,6 +1,6 @@
 // Flight Crew Fitness — Service Worker
-// Version: 5.44.32
-const CACHE = 'fcf-v5.44.32';
+// Version: 5.44.33
+const CACHE = 'fcf-v5.44.33';
 const CORE = [
   './',
   './index.html',
@@ -17,6 +17,23 @@ const CDN_LIBS = [
   'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js',
 ];
 const isCdnLib = url => CDN_LIBS.includes(url.href);
+
+// BUG FIX (reported: "black screen that never fills in" in airplane mode on
+// the iPhone, with the web copy saved and the app opened online that
+// morning). In a desktop browser a request with no network fails at once,
+// and the handlers below fall back to the saved copy. On the phone the same
+// request can sit there, so the page waits on index.html or app.js and the
+// screen stays dark. Two changes: when the device says it is offline the
+// saved copy answers first and the network is not asked at all; otherwise
+// the network gets a few seconds and the saved copy answers if it is slower.
+const NETWORK_WAIT_MS = 6000;
+const deviceOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false;
+function fetchWithTimeout(request, ms) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('network timeout')), ms);
+    fetch(request).then(r => { clearTimeout(t); resolve(r); }, e => { clearTimeout(t); reject(e); });
+  });
+}
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -60,8 +77,12 @@ self.addEventListener('fetch', e => {
   // requests these without CORS, so the live response can be opaque
   // (status 0); that is still a valid copy to keep.
   if (isCdnLib(url)) {
+    if (deviceOffline()) {
+      e.respondWith(caches.match(url.href).then(hit => hit || fetch(e.request)));
+      return;
+    }
     e.respondWith(
-      fetch(e.request).then(res => {
+      fetchWithTimeout(e.request, NETWORK_WAIT_MS).then(res => {
         if (res.ok || res.type === 'opaque') {
           const resClone = res.clone();
           caches.open(CACHE).then(c => c.put(url.href, resClone));
@@ -87,8 +108,14 @@ self.addEventListener('fetch', e => {
   );
 
   if (isCoreFile) {
+    const fromCache = () => caches.match(e.request, { ignoreSearch: true })
+      .then(hit => hit || (e.request.mode === 'navigate' ? caches.match('./index.html') : undefined));
+    if (deviceOffline()) {
+      e.respondWith(fromCache().then(hit => hit || fetch(e.request)));
+      return;
+    }
     e.respondWith(
-      fetch(e.request).then(res => {
+      fetchWithTimeout(e.request, NETWORK_WAIT_MS).then(res => {
         if (res.status === 200) {
           const resClone = res.clone();
           caches.open(CACHE).then(c => c.put(e.request, resClone));
@@ -97,8 +124,7 @@ self.addEventListener('fetch', e => {
       // ignoreSearch: index.html asks for app.js?v=<build>, but the install
       // step saves plain app.js. An exact match would miss it offline and
       // the app would never start. Navigations fall back to index.html.
-      }).catch(() => caches.match(e.request, { ignoreSearch: true })
-        .then(hit => hit || (e.request.mode === 'navigate' ? caches.match('./index.html') : undefined)))
+      }).catch(() => fromCache())
     );
     return;
   }

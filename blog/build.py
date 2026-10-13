@@ -71,7 +71,7 @@ header.top .wrap{display:flex;align-items:center;justify-content:space-between;h
 .logo{font-family:var(--mono);color:var(--gold);letter-spacing:.12em;text-decoration:none;font-size:.9375rem;white-space:nowrap}
 .logo:hover{color:var(--gold2)}
 nav.topnav a{color:var(--muted);text-decoration:none;font-size:.8125rem;margin-left:18px;font-weight:600}
-nav.topnav a.cta{background:var(--gold-grad);color:#080d17;padding:8px 14px;border-radius:8px;letter-spacing:.04em;text-transform:uppercase;font-size:.75rem}
+nav.topnav a.cta{background:var(--gold-grad);color:#080d17;padding:8px 14px;border-radius:8px;letter-spacing:.04em;text-transform:uppercase;font-size:.75rem;white-space:nowrap}
 nav.topnav a:hover{color:#fff}
 nav.topnav a.cta:hover{color:#080d17;filter:brightness(1.08)}
 .crumbs{font-size:.75rem;color:var(--muted);margin:22px 0 6px;font-family:var(--mono);letter-spacing:.04em}
@@ -152,7 +152,7 @@ footer.bottom{border-top:1px solid var(--border);margin-top:50px;padding:28px 0 
 footer.bottom a{color:var(--muted);text-decoration:none;margin-right:16px}
 footer.bottom a:hover{color:var(--gold)}
 .intro{font-size:1.125rem;color:var(--text)}
-@media (max-width:600px){h1{font-size:1.75rem}body{font-size:1rem}nav.topnav a:not(.cta){display:none}.card.feat h3{font-size:1.375rem}}
+@media (max-width:600px){.logo{font-size:.8125rem;letter-spacing:.08em}h1{font-size:1.75rem}body{font-size:1rem}nav.topnav a:not(.cta){display:none}.card.feat h3{font-size:1.375rem}}
 """
 
 HEAD = """<!DOCTYPE html>

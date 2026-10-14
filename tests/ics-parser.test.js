@@ -1529,6 +1529,25 @@ test('today\'s steps are saved without a write on every redraw', () => {
   SBc.from = realFrom; ctx.awardBadges = realAward; ctx.ST.stepGoal = null; ctx.ST.goal = 'longevity'; ctx.ST.stepHistory = {};
 });
 
+test('Run: one outdoor run in every environment, never trimmed by readiness, treadmill one tap away', () => {
+  const sv = { mg: ctx.ST.muscleGroup, f: ctx.ST.fatigue, l: ctx.ST.level };
+  ctx.ST.muscleGroup = 'Run';
+  ['comm', 'hotel', 'room', 'band'].forEach(env => {
+    ['go', 'marginal', 'nogo'].forEach(f => {
+      ctx.ST.fatigue = f; ctx.ST.level = 'intermediate';
+      const wk = ctx.getFilteredWorkout(ctx.WORKOUTS[env]['Run']);
+      assertEqual(wk.enroute.map(e => e.name).join(), 'Outdoor Run', env + ' / ' + f + ' keeps the outdoor run');
+    });
+  });
+  assertEqual(ctx.getAlternates('Outdoor Run').some(a => a.name === 'Treadmill Zone 2 Run'), true, 'treadmill is an alternate');
+  assertEqual(ctx.getAlternates('Treadmill Zone 2 Run')[0].name, 'Outdoor Run', 'and back again');
+  const runIds = vm.runInContext('RUNNING_EXERCISES', ctx);
+  ['comm', 'hotel', 'room'].forEach(env => assertEqual(runIds.includes(ctx.WORKOUTS[env]['Run'].enroute[0].id), true, env + ' run counts for the leaderboard'));
+  const tread = ctx.buildExerciseCatalog().find(e => e.name === 'Treadmill Zone 2 Run');
+  assertEqual(runIds.includes(tread.id), true, 'a swapped-in treadmill run counts too');
+  ctx.ST.muscleGroup = sv.mg; ctx.ST.fatigue = sv.f; ctx.ST.level = sv.l;
+});
+
 // Async cases run after the synchronous ones, before the summary.
 const asyncTests = [];
 function testAsync(name, fn) { asyncTests.push([name, fn]); }

@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.40 / 20261014_2
+ * Version/build: fcf-v5.44.41 / 20261014_3
  */
 
-const FCF_VERSION = 'fcf-v5.44.40';
-const FCF_BUILD   = '20261014_2';
+const FCF_VERSION = 'fcf-v5.44.41';
+const FCF_BUILD   = '20261014_3';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -1189,7 +1189,9 @@ function getFilteredWorkout(rawWk) {
   // A walk is already the easy option for a hard day, so low readiness
   // never removes the walk itself (NO-GO empties en route for every other
   // group, which would leave a walk session with no walk in it).
-  if (ST.muscleGroup === 'Walk') {
+  // Same for a run the member chose: low readiness must not leave a Run
+  // session with no run in it (or the wrong kind of run).
+  if (ST.muscleGroup === 'Walk' || ST.muscleGroup === 'Run') {
     return { taxi: rawWk.taxi, takeoff: [], enroute: rawWk.enroute, landing: rawWk.landing };
   }
   if (ST.fatigue === 'nogo') {
@@ -2904,9 +2906,13 @@ WORKOUTS.comm['Run'] = {
     ex('c_rn_t2','Walking High Knees','2x20yd',2,'Gentle pace, drive knees up. Raises heart rate and primes hip flexors.',false,'reps_only'),
   ],
   takeoff: [],
+  // One run, not a list (reported: on a MARGINAL day the trim kept the
+  // treadmill and dropped the outdoor run, so a pilot standing outside his
+  // hotel had no outdoor option). Outdoor is the default everywhere; the
+  // treadmill is one tap away under Alternate, and both ids count for the
+  // running leaderboard.
   enroute: [
-    ex('c_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace: speak in full sentences. Log distance for the leaderboard.',true,'timed_distance'),
-    ex('c_ca_er5','Outdoor Run','20-40 min',1,'Any pace, any route. Log distance for the leaderboard.',true,'timed_distance'),
+    ex('c_ca_er5','Outdoor Run','20-40 min',1,'Any pace, any route. Log distance for the leaderboard. On a treadmill instead? Tap Alternate.',true,'timed_distance'),
   ],
   landing: [
     ex('c_rn_l1','Standing Calf Stretch','2x30s/leg',2,'Wall lean, back leg straight. Runners load calves heavily.',true,'timed_bilateral'),
@@ -2918,8 +2924,7 @@ WORKOUTS.hotel['Run'] = {
   taxi: WORKOUTS.comm['Run'].taxi,
   takeoff: [],
   enroute: [
-    ex('h_ca_er1','Treadmill Zone 2 Run','20 min',1,'Conversational pace. Log distance for the leaderboard.',true,'timed_distance'),
-    ex('h_ca_er5','Outdoor Run','20-40 min',1,'Any pace, any route. Log distance for the leaderboard.',true,'timed_distance'),
+    ex('h_ca_er5','Outdoor Run','20-40 min',1,'Any pace, any route. Log distance for the leaderboard. On the hotel treadmill instead? Tap Alternate.',true,'timed_distance'),
   ],
   landing: WORKOUTS.comm['Run'].landing,
 };
@@ -9213,6 +9218,7 @@ const ALTERNATES = {
     {name:'Rowing Machine Intervals',target:'6×500m',note:'Full-body, non-impact substitute.',inputType:'reps_only'},
   ],
   'Treadmill Zone 2 Run': [
+    {name:'Outdoor Run',target:'20-40 min',note:'Same run outside. Any pace, any route. Log distance for the leaderboard.',inputType:'timed_distance'},
     {name:'Stationary Bike Intervals',target:'20 min',note:'Same aerobic zone, lower impact.',inputType:'timed'},
     {name:'Walking',target:'30-45 min',note:'Zone 1-2 substitute: easier recovery day option.',inputType:'timed'},
     {name:'Recumbent Bike',target:'20-30 min',note:'Same aerobic zone, zero impact, back supported.',inputType:'timed'},
@@ -9581,6 +9587,9 @@ const ALTERNATES = {
     {name:'Upright Bike',target:'20-30 min',note:'Lower effort per minute, zero impact.',inputType:'timed'},
     {name:'Treadmill',target:'30 min',note:'Incline walk is the closest match.',inputType:'timed'},
     {name:'Recumbent Bike',target:'20-30 min',note:'Back supported, easiest on the joints.',inputType:'timed'},
+  ],
+  'Outdoor Run': [
+    {name:'Treadmill Zone 2 Run',target:'20-40 min',note:'Same run indoors. Conversational pace. Log distance for the leaderboard.',inputType:'timed_distance'},
   ],
   'Recumbent Bike': [
     {name:'Upright Bike',target:'20-30 min',note:'Same cardio, sitting upright.',inputType:'timed'},

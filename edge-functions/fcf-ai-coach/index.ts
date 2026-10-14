@@ -58,7 +58,7 @@ const WEEKLY_SUMMARY_PROMPT_VERSION = 5; // v5: sees exercises/sets/daysAgo, nev
 // (added the same day this constant was) doesn't keep serving a
 // pre-fix response — that field didn't exist in the context sent to
 // earlier cached responses, so their advice can't reflect it either.
-const FATIGUE_CALIBRATION_PROMPT_VERSION = 8; // v8: ring data missing today, use the self-check; // v7: workout-already-logged and legs-flown guidance; // v6: plain-words opener, house style; // v5: bodyClock awareness (v4: Sonnet 5)
+const FATIGUE_CALIBRATION_PROMPT_VERSION = 9; // v9: Walking First plan; // v8: ring data missing today, use the self-check; // v7: workout-already-logged and legs-flown guidance; // v6: plain-words opener, house style; // v5: bodyClock awareness (v4: Sonnet 5)
 // BUG FIX (found while updating this prompt): fuel_logistics' cache key
 // (below) never had a prompt-version component at all, unlike the other
 // two cached modes — so a stale response from before this exact prompt
@@ -176,7 +176,9 @@ your job easier.
 
 trainingGoal tells you how to read weightTrend, and you must read it that way: 'muscle' means weight going UP is
 the plan working (talk about it as progress, not a warning); 'fatloss' means weight going down is the goal and
-up is worth a nudge; 'longevity' and 'jump' mean weight is a minor signal unless the move is large. Never
+up is worth a nudge; 'longevity' and 'jump' mean weight is a minor signal unless the move is large; 'walking' (Walking First) means a
+daily step goal (dailyStepGoal) plus about two short strength sessions a week, so weight going down is the goal,
+logged walks are real training, and two strength sessions a week is the plan, never a shortfall. Never
 default to treating weight gain as a problem.
 
 Use this structure, a positive, then a critique, then a positive (the "sandwich"):
@@ -214,6 +216,14 @@ If selfReportedFatigue is present (1 = barely recovered, 5 = fully recovered) wi
 or nogo), base the call on that and open with it, for example "Ring didn't sync, going on your 4 out of 5,
 full send". If both are null, your whole reply is one short line asking them to rate how recovered they feel on
 the card, nothing else, no training call.
+
+walkingPlan is null for most people. When present, their objective is Walking First: they are building up from
+a heavier starting point, walking is their main work toward walkingPlan.dailyStepGoal steps a day, and about two
+short, seated or supported strength sessions a week round it out. walkingPlan.todaysPlan says which today is.
+On 'Walk' the call is about getting their steps (a walk, or short walks between legs and around the layover);
+never send them to the gym or call for a hard session. On 'Starter Strength' the call is that short, easy machine
+session. Never push intensity, never describe their training as light or too little, and do not bring up body
+weight.
 
 You will also receive minutesActuallyFreeBeforeNeedingToLeave, this already accounts for getting from a
 layover hotel back to the airport (transport, security, crew report time), which the raw gap to departure
@@ -498,7 +508,9 @@ Deno.serve(async (req) => {
         // is a new answer. One extra low-cost call on mornings where the
         // ring syncs after the first open.
         + '_r' + (context.readiness ?? 'null') + '_s' + (context.sleepScore ?? 'null')
-        + '_m' + (context.ringDataMissingToday ? (context.selfReportedFatigue ?? 'x') : 0);
+        + '_m' + (context.ringDataMissingToday ? (context.selfReportedFatigue ?? 'x') : 0)
+        // Walking First: which kind of day it is and the goal both change the call.
+        + '_g' + (context.walkingPlan ? String(context.walkingPlan.todaysPlan).charAt(0) + (context.walkingPlan.dailyStepGoal ?? '') : 0);
       const { data: cached } = await supabase
         .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
       const cachedKey = cached?.profile_data?.fatigueCalibrationCacheKey;

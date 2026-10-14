@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.37 / 20261013_2
+ * Version/build: fcf-v5.44.38 / 20261013_3
  */
 
-const FCF_VERSION = 'fcf-v5.44.37';
-const FCF_BUILD   = '20261013_2';
+const FCF_VERSION = 'fcf-v5.44.38';
+const FCF_BUILD   = '20261013_3';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -210,7 +210,8 @@ const ST = {
   waterIn: 0,
   waterInRaw: '',
   muscleGroup: 'Lower Body',
-  goal: 'longevity', // 'jump' | 'muscle' | 'longevity' | 'fatloss'
+  goal: 'longevity', // 'jump' | 'muscle' | 'longevity' | 'fatloss' | 'walking' | ...
+  stepGoal: null,    // persistent (profile): daily step goal for Walking First
   fatigue: 'go',
   level: 'intermediate',
   workout: null,
@@ -260,6 +261,12 @@ const GOALS = {
   muscle:   { label: 'Muscle Gain',      icon: '💪', desc: 'Bodybuilding-style hypertrophy training',   order: ['Lower Body','Upper Push','Upper Pull','Full Body'] },
   longevity:{ label: 'General Health',  icon: '🌿', desc: 'Joint-friendly, sustainable, long-term health', order: ['Lower Body','Upper Pull','Cardio','Longevity','Upper Push'] },
   fatloss:  { label: 'Weight Loss',     icon: '🔥', desc: 'Higher-volume, metabolic conditioning focus', order: ['Lower Body','Cardio','Upper Push','Upper Pull','Full Body'] },
+  // Owner request (Oct 13): a first officer down from 300+ lb felt the gym
+  // was too much for his body yet and was walking 10,000 steps a day
+  // instead. Walking is the main work here: a daily step goal the user
+  // picks, plus two short, seated or supported strength sessions a week.
+  // The order is not a rotation; walkingFirstNext() picks the day.
+  walking:  { label: 'Walking First',   icon: '🚶', desc: 'Daily step goal, plus two short, low-impact gym sessions a week', order: ['Starter Strength'] },
   chest:    { label: 'Chest & Shoulders', icon: '🏋️', desc: 'Pressing emphasis: Upper Push comes around twice per rotation', suggestFor: 'male', order: ['Upper Push','Lower Body','Upper Push','Upper Pull','Full Body'] },
   glute:    { label: 'Glute Emphasis',   icon: '🍑', desc: 'Glute-focused programming: Lower Body comes around twice per rotation', suggestFor: 'female', order: ['Lower Body','Upper Push','Lower Body','Upper Pull','Full Body'] },
   strength: { label: 'Overall Strength', icon: '⚡', desc: 'Heavy low-rep compounds plus explosive power work', order: ['Lower Body','Upper Push','Upper Pull','Power / Plyo','Full Body'] },
@@ -440,7 +447,7 @@ function updateHydrationUI() {
   persistDailyInputs();
 }
 
-const MUSCLE_GROUPS = ['Lower Body','Upper Push','Upper Pull','Power / Plyo','Full Body','Longevity','Stretch','Cardio','Run'];
+const MUSCLE_GROUPS = ['Lower Body','Upper Push','Upper Pull','Power / Plyo','Full Body','Longevity','Stretch','Cardio','Run','Walk','Starter Strength'];
 
 // ─── EXERCISE BUILDER ─────────────────────────────────────────────────────────
 // rest: suggested rest in seconds for the heaviest set in this exercise (phase-aware default applied separately)
@@ -1179,6 +1186,12 @@ function getFilteredWorkout(rawWk) {
   // usage rather than calendar date (which would drift out of sync with
   // real training frequency if sessions get skipped or bunched up).
   const rotationIndex = (ST.sessionCache || []).filter(s => s.muscle_group === ST.muscleGroup).length;
+  // A walk is already the easy option for a hard day, so low readiness
+  // never removes the walk itself (NO-GO empties en route for every other
+  // group, which would leave a walk session with no walk in it).
+  if (ST.muscleGroup === 'Walk') {
+    return { taxi: rawWk.taxi, takeoff: [], enroute: rawWk.enroute, landing: rawWk.landing };
+  }
   if (ST.fatigue === 'nogo') {
     return { taxi: rawWk.taxi, takeoff: [], enroute: [], landing: rawWk.landing };
   }
@@ -1266,6 +1279,7 @@ function lastMajorSessions(limit) {
 // actual fix, and it makes the recovery guard unnecessary — following the
 // rotation never repeats a group anyway.
 function getRecommendedNext() {
+  if (ST.goal === 'walking') return walkingFirstNext();
   const order = (GOALS[ST.goal] || GOALS.longevity).order;
   const majors = order.filter(g => !NON_ROTATING_GROUPS.has(g));
   if (!majors.length) return order[0];
@@ -2919,6 +2933,129 @@ WORKOUTS.room['Run'] = {
 // shares the same content as the other three rather than being duplicated.
 WORKOUTS.band['Run'] = WORKOUTS.room['Run'];
 
+// ─── WALKING FIRST: Walk and Starter Strength ────────────────────────────────
+// Built for someone heavy and new to the gym who is nervous it is too much
+// for their body (owner request, Oct 13). Everything is seated, supported,
+// or holding on to something, with light loads and two sets.
+//
+// Movements already in the catalog keep their own id, name and input type,
+// so history lands on the same exercise. Only the target, set count and
+// coaching note are changed for this audience.
+function starterFrom(id, target, sets, note) {
+  for (const envW of Object.values(WORKOUTS)) {
+    for (const mgW of Object.values(envW)) {
+      for (const ph of ['taxi', 'takeoff', 'enroute', 'landing']) {
+        const found = (mgW[ph] || []).find(e => e.id === id);
+        if (found) return { ...found, target, sets, note };
+      }
+    }
+  }
+  throw new Error('starterFrom: no catalog exercise with id ' + id);
+}
+
+const SS_SIT_TO_STAND = ex('ss_sts','Sit-to-Stand','2×10',2,'Sit on a sturdy chair or bench, feet flat. Lean forward and stand up, using your hands only if you need to, then sit back down slowly. Hold a dumbbell at your chest once 2×12 feels easy.');
+const SS_GLUTE_BRIDGE = ex('ss_gb','Glute Bridge','2×12',2,'Lie on your back, knees bent, feet flat. Squeeze your glutes and lift your hips until your body is straight from knees to shoulders, then lower slowly. Doing it on the bed is fine if the floor is hard to get down to.',false,'reps_only');
+const SS_ARM_CIRCLES = ex('ss_ac','Seated Arm Circles','30s each way',1,'Sit tall, arms out to the sides, small circles forward and then back. Warms the shoulders before pressing and rowing.',true,'timed');
+const SS_MARCH = ex('ss_mip','March in Place','2 min',1,'Lift your knees to a comfortable height and swing your arms. Hold a wall or chair if you like.',true,'timed');
+const SS_COOLDOWN = starterFrom('c_ca_l1','5 min',1,'Easy pace. Let your breathing settle.');
+const SS_CALF_STRETCH = WORKOUTS.comm['Run'].landing[0];
+const SS_HAM_STRETCH = WORKOUTS.comm['Run'].landing[1];
+
+WORKOUTS.comm['Starter Strength'] = {
+  taxi: [
+    starterFrom('c_ca_er7','5 min',1,'Easy warm-up. Seat set so the knee stays slightly bent at the far pedal. Light resistance, steady pace.'),
+    SS_ARM_CIRCLES,
+  ],
+  takeoff: [
+    starterFrom('c_lb_er2','2×12',2,'Start light: a weight you could press 15 times. Feet flat and shoulder-width, lower until your knees reach about 90 degrees, then press through your whole foot. Your back stays supported the whole time.'),
+    starterFrom('c_up_er12','2×12',2,'Set the seat so the handles line up with mid-chest. Press out smoothly, stop just short of locking your elbows, and control it back.'),
+  ],
+  enroute: [
+    starterFrom('c_ul_er8','2×12',2,'Chest against the pad. Pull the handles to your ribs, squeeze your shoulder blades together, then let the weight back slowly.'),
+    starterFrom('c_ca_er2','2×8/leg',2,'Use a low step (6 to 8 inches) beside a rail or rack and hold on. Step up with your whole foot, stand tall, step down slowly. Go higher only once this feels easy.'),
+    starterFrom('c_lb_er6','2×12',2,'Pad just above your heels. Curl down smoothly, pause, and return slowly.'),
+    starterFrom('c_ul_er1','2×12',2,'Thighs under the pad. Pull the bar to your upper chest, elbows down and back, then let it rise under control.'),
+  ],
+  landing: [SS_COOLDOWN, SS_HAM_STRETCH, SS_CALF_STRETCH],
+};
+WORKOUTS.hotel['Starter Strength'] = {
+  taxi: [
+    starterFrom('c_ca_t1','5 min',1,'Treadmill or hallway. Start slow and build to a comfortable pace.'),
+    SS_ARM_CIRCLES,
+  ],
+  takeoff: [
+    SS_SIT_TO_STAND,
+    ex('ss_ipu','Incline Push-Up (Bench)','2×8',2,'Hands on a sturdy bench or counter, body in a straight line. Lower your chest toward the edge and push back up. The higher the surface, the easier it is.',false,'reps_only'),
+  ],
+  enroute: [
+    starterFrom('h_ul_to2','2×10/side',2,'One hand and one knee on a bench, back flat. Pull the dumbbell to your hip and lower it slowly. Start light.'),
+    starterFrom('c_ca_er2','2×8/leg',2,'Use a low step or the bottom stair and hold a rail. Step up with your whole foot, stand tall, step down slowly.'),
+    SS_GLUTE_BRIDGE,
+  ],
+  landing: [SS_COOLDOWN, SS_HAM_STRETCH, SS_CALF_STRETCH],
+};
+WORKOUTS.room['Starter Strength'] = {
+  taxi: [SS_MARCH, SS_ARM_CIRCLES],
+  takeoff: [
+    SS_SIT_TO_STAND,
+    ex('ss_wpu','Wall Push-Up','2×10',2,'Hands on the wall at shoulder height, feet a step back. Bend your elbows to bring your chest toward the wall, then push away.',false,'reps_only'),
+  ],
+  enroute: [
+    SS_GLUTE_BRIDGE,
+    starterFrom('c_lb_er3','2×15',2,'Hold a wall or counter for balance. Rise onto your toes, pause, and lower slowly.'),
+  ],
+  landing: [SS_HAM_STRETCH, SS_CALF_STRETCH],
+};
+WORKOUTS.band['Starter Strength'] = {
+  taxi: [SS_MARCH, SS_ARM_CIRCLES],
+  takeoff: [
+    SS_SIT_TO_STAND,
+    starterFrom('b_up_er1','2×10/side',2,'Anchor the band behind you at chest height and face away from it. Press forward smoothly and control the return. Step closer to the anchor to make it easier.'),
+  ],
+  enroute: [
+    starterFrom('b_ul_er3','2×10/side',2,'Anchor the band low, staggered stance. Row toward your hip with the elbow close to your body.'),
+    SS_GLUTE_BRIDGE,
+  ],
+  landing: [SS_HAM_STRETCH, SS_CALF_STRETCH],
+};
+
+// The walk is the session. Same in every environment: outdoors, a hotel
+// hallway, or a treadmill all work.
+WORKOUTS.comm['Walk'] = {
+  taxi: [
+    ex('wk_ac','Ankle Circles','30s/side',1,'Hold a wall or chair, lift one foot and draw slow circles both ways. Wakes up the ankles before you walk.',true,'timed_bilateral'),
+    starterFrom('c_rn_t1','2x10/leg',2,'Hold a wall or rail and swing each leg gently, front to back and then side to side. Small swings are fine.'),
+  ],
+  takeoff: [],
+  enroute: [
+    starterFrom('c_ca_er3','30 min',1,'Your main work today. Any pace you can hold while still talking, outdoors or on a treadmill. Splitting it into shorter walks is fine: every step counts toward your step goal. Log distance if you tracked it.'),
+  ],
+  landing: [SS_CALF_STRETCH, SS_HAM_STRETCH],
+};
+WORKOUTS.hotel['Walk'] = WORKOUTS.comm['Walk'];
+WORKOUTS.room['Walk']  = WORKOUTS.comm['Walk'];
+WORKOUTS.band['Walk']  = WORKOUTS.comm['Walk'];
+
+// Walking First picks the day instead of rotating: a short strength session
+// when there have been fewer than two in the last 7 days and the last was
+// at least two days ago (48 hours to recover), otherwise a walk.
+const STARTER_STRENGTH_PER_WEEK = 2;
+const WALKING_FIRST_NON_STRENGTH = new Set(['Cardio', 'Stretch']);
+function walkingFirstNext(now) {
+  now = now || new Date();
+  const dayNum = d => Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / 864e5);
+  const today = dayNum(now);
+  const strengthDays = (ST.sessionCache || [])
+    .filter(s => isRotationStep(s) && !WALKING_FIRST_NON_STRENGTH.has(s.muscle_group))
+    .map(s => new Date(s.date)).filter(d => !isNaN(d.getTime()))
+    .map(dayNum);
+  if (!strengthDays.length) return 'Starter Strength';
+  const inLastWeek = strengthDays.filter(d => today - d < 7).length;
+  const daysSinceLast = today - Math.max(...strengthDays);
+  if (inLastWeek >= STARTER_STRENGTH_PER_WEEK || daysSinceLast < 2) return 'Walk';
+  return 'Starter Strength';
+}
+
 function renderPage() {
   const p = document.getElementById('mainPage');
   if (!p) return;
@@ -3038,6 +3175,7 @@ function applyProfileToState(profile) {
   // reads ST.ouraToken anymore.
   if (profile.level) ST.level = profile.level;
   if (profile.goal)  ST.goal  = profile.goal;
+  ST.stepGoal = cleanStepGoal(profile.stepGoal);
   ST.customExercises = (profile.customExercises || []).map(ce => {
     if (ce?.exercise) {
       ce.exercise.name = sanitizeUserText(ce.exercise.name);
@@ -5975,6 +6113,7 @@ async function loadProgressionAnalytics() {
       // Goal decides how a weight trend should be read: up is progress for
       // 'muscle', a warning for 'fatloss', neutral-ish for the others.
       trainingGoal: ST.goal || 'longevity',
+      dailyStepGoal: activeStepGoal(),
       sessionKey: weeklyCoachSessionKey(sessions),
       sessionsByEnvironment: weeklyCoachEnvironments(sessions),
       sessions: sessionsWithTripContext,
@@ -6173,6 +6312,9 @@ async function loadFatigueCalibration(ctx) {
       manualCondition: ouraMissingToday() && ST.readiness ? ST.fatigue : null,
       // Null when home or under 1 hr off local; see buildBodyClockHTML.
       bodyClock: bodyClockForAI(),
+      // Walking First only: the step goal and whether today is a walk day
+      // or one of the two short strength days.
+      walkingPlan: activeStepGoal() ? { dailyStepGoal: activeStepGoal(), todaysPlan: walkingFirstNext() } : null,
     };
     const ctxKey = JSON.stringify(context);
     const card0 = document.getElementById('aiFatigueCard');
@@ -6501,7 +6643,7 @@ function buildCalendarHTML(rangeData) {
       // One icon, as requested — but it represents the TRAINING session
       // where there is one, so a leg day isn't hidden behind a walk that
       // happened to be logged first. A count marks days holding more.
-      const ICONS = {'Lower Body':'🦵','Upper Push':'💪','Upper Pull':'🎯','Power / Plyo':'⚡','Full Body':'🔥','Longevity':'🌿','Stretch':'🧘','Cardio':'❤️','Run':'🏃','Walk':'🚶'};
+      const ICONS = {'Lower Body':'🦵','Upper Push':'💪','Upper Pull':'🎯','Power / Plyo':'⚡','Full Body':'🔥','Longevity':'🌿','Stretch':'🧘','Cardio':'❤️','Run':'🏃','Walk':'🚶','Starter Strength':'🌱'};
       const primary = day.sessions.find(isRotationStep) || day.sessions[0];
       const icon = ICONS[primary.muscle_group] || '✓';
       const extra = day.sessions.length > 1
@@ -8282,9 +8424,85 @@ async function saveGoalLevel() {
     const profile = (await dbGetProfile()) || {};
     profile.goal = ST.goal;
     profile.level = ST.level;
+    profile.stepGoal = ST.stepGoal;
     profile.customExercises = ST.customExercises;
     await dbSetProfile(profile);
   } catch (e) { showBigToast('Saved on this device, but could not sync.', 'warn'); }
+}
+
+// ─── DAILY STEP GOAL (Walking First) ─────────────────────────────────────────
+// The user picks the number: the owner walked 10,000 a day at his heaviest,
+// and someone else may start at 7,000. 7,000 is the starting suggestion.
+const STEP_GOAL_DEFAULT = 7000;
+const STEP_GOAL_CHOICES = [5000, 7000, 8000, 10000, 12000];
+function cleanStepGoal(n) {
+  n = Math.round(Number(n));
+  if (!isFinite(n) || n < 1000 || n > 50000) return null;
+  return Math.round(n / 100) * 100;
+}
+// The goal Today measures against, or null when the objective isn't
+// Walking First.
+function activeStepGoal() {
+  return ST.goal === 'walking' ? (ST.stepGoal || STEP_GOAL_DEFAULT) : null;
+}
+
+function selectGoal(gid) {
+  syncBodyMetricsFieldsToState();
+  ST.goal = gid;
+  if (gid === 'walking' && !ST.stepGoal) ST.stepGoal = STEP_GOAL_DEFAULT;
+  ST.muscleGroup = getRecommendedNext();
+  saveGoalLevel();
+  renderPage();
+}
+
+function setStepGoal(n) {
+  const clean = cleanStepGoal(n);
+  if (!clean) { showToast('Pick a goal between 1,000 and 50,000 steps.'); return; }
+  syncBodyMetricsFieldsToState();
+  ST.stepGoal = clean;
+  saveGoalLevel();
+  renderPage();
+  showToast('Daily step goal set to ' + clean.toLocaleString() + '.');
+}
+
+function renderStepGoalPicker() {
+  const goal = activeStepGoal();
+  const parts = [];
+  parts.push('<div class="divider"></div>');
+  parts.push('<div class="section-label" style="margin-top:0">DAILY STEP GOAL</div>');
+  parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;line-height:1.5">Walking is the main work. Pick a number you can hit most days and raise it when it starts to feel easy. Today shows your progress.</div>');
+  parts.push('<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">');
+  STEP_GOAL_CHOICES.forEach(n => {
+    parts.push('<div class="env-btn '+(goal===n?'sel':'')+'" style="padding:10px 2px" onclick="haptic(\'selection\');setStepGoal('+n+')"><div class="el">'+(n/1000)+'K</div></div>');
+  });
+  parts.push('</div>');
+  const custom = STEP_GOAL_CHOICES.includes(goal) ? '' : String(goal);
+  parts.push('<div style="display:flex;gap:8px;align-items:center;margin-top:8px">');
+  parts.push('<div class="field" style="flex:1;margin:0"><input id="stepGoalCustom" type="number" inputmode="numeric" min="1000" max="50000" step="500" placeholder="Other, e.g. 6500" value="'+custom+'"></div>');
+  parts.push('<button class="btn btn-outline" style="width:auto;margin:0;padding:10px 16px" onclick="setStepGoal(document.getElementById(\'stepGoalCustom\').value)">Set</button>');
+  parts.push('</div>');
+  return parts.join('');
+}
+
+// Today: steps against the goal, under the date line.
+function stepGoalProgressHtml(steps) {
+  const goal = activeStepGoal();
+  if (!goal) return '';
+  if (steps === null || steps === undefined) {
+    return '<div style="font-size:0.6875rem;color:var(--muted);margin:-6px 0 14px;line-height:1.5">🚶 Step goal '+goal.toLocaleString()+'. Steps show here from Apple Health in the iOS app, or from an Oura ring.</div>';
+  }
+  const pct = Math.min(100, Math.round(steps / goal * 100));
+  const done = steps >= goal;
+  const color = done ? 'var(--green)' : 'var(--gold)';
+  return '<div style="margin:-6px 0 16px">' +
+    '<div class="fb" style="align-items:baseline;margin-bottom:6px">' +
+      '<span style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.14em;color:var(--muted)">🚶 STEP GOAL</span>' +
+      '<span style="font-family:var(--mono);font-size:0.75rem;color:'+(done?'var(--green)':'var(--text)')+'">'+(done?'✓ ':'')+steps.toLocaleString()+' / '+goal.toLocaleString()+'</span>' +
+    '</div>' +
+    '<div style="height:6px;border-radius:3px;background:rgba(255,255,255,0.08);overflow:hidden">' +
+      '<div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:3px"></div>' +
+    '</div>' +
+  '</div>';
 }
 
 // Merge built-in + custom exercises for a given env/muscleGroup
@@ -13043,13 +13261,14 @@ function renderProfile(p) {
     // Sex-tagged emphasis goals only show for the matching profile (or if already selected)
     if (g.suggestFor && g.suggestFor !== ST.sex && ST.goal !== gid) return;
     const suggested = g.suggestFor && g.suggestFor === ST.sex;
-    parts.push('<div class="env-btn '+(ST.goal===gid?'sel':'')+'" style="position:relative" onclick="syncBodyMetricsFieldsToState();ST.goal=\''+gid+'\';ST.muscleGroup=getRecommendedNext();saveGoalLevel();renderPage()">');
+    parts.push('<div class="env-btn '+(ST.goal===gid?'sel':'')+'" style="position:relative" onclick="selectGoal(\''+gid+'\')">');
     if (suggested) parts.push('<div style="position:absolute;top:4px;right:4px;font-family:var(--mono);font-size:0.4375rem;letter-spacing:0.06em;color:var(--gold);border:1px solid var(--gold);border-radius:4px;padding:1px 4px">SUGGESTED</div>');
     parts.push('<div class="ei">'+g.icon+'</div><div class="el">'+g.label+'</div>');
     parts.push('<div style="font-size:0.5625rem;color:var(--muted);margin-top:3px;line-height:1.3">'+g.desc+'</div>');
     parts.push('</div>');
   });
   parts.push('</div>');
+  if (ST.goal === 'walking') parts.push(renderStepGoalPicker());
   parts.push('</div>');
 
   // Fitness level
@@ -13062,7 +13281,13 @@ function renderProfile(p) {
   parts.push('</div>');
   const freq = FREQUENCY_GUIDE[ST.level];
   parts.push('<div class="divider"></div>');
-  parts.push('<div style="font-size:0.6875rem;color:var(--muted);line-height:1.6"><strong style="color:var(--text)">'+freq.days+' days/week</strong> recommended: '+freq.split+'. '+freq.note+'</div>');
+  if (ST.goal === 'walking') {
+    // Walking First sets its own week, so the lifting split guide would
+    // contradict it.
+    parts.push('<div style="font-size:0.6875rem;color:var(--muted);line-height:1.6"><strong style="color:var(--text)">Walk every day</strong> toward your step goal, plus <strong style="color:var(--text)">2 short strength sessions a week</strong>, at least two days apart. Start at Beginner: it keeps each session to a handful of seated or supported moves.</div>');
+  } else {
+    parts.push('<div style="font-size:0.6875rem;color:var(--muted);line-height:1.6"><strong style="color:var(--text)">'+freq.days+' days/week</strong> recommended: '+freq.split+'. '+freq.note+'</div>');
+  }
   parts.push('</div>');
 
   // ── Fuel plan ────────────────────────────────────────────────────────────
@@ -14295,6 +14520,22 @@ function buildTodayBriefing(ctx) {
       action:{ label:'Start a session', fn:"switchTab('preflight')" } };
   }
 
+  // 3b. Walking First on a walk day: the step goal is the mission.
+  const stepGoal = activeStepGoal();
+  if (stepGoal && !training.workoutToday && walkingFirstNext(ctx.now) === 'Walk') {
+    const steps = oura.steps;
+    const startWalk = { label:'Start a walk', fn:"selectMissionProfile('Walk');switchTab('preflight')" };
+    if (steps !== null && steps >= stepGoal) {
+      return { tone:'go', headline:'Step goal done',
+        body:steps.toLocaleString()+' steps, past your '+stepGoal.toLocaleString()+' goal. That is the main work for today. Anything more is a bonus.',
+        action:null };
+    }
+    return { tone:'go', headline:'Walk day',
+      body:(steps !== null ? steps.toLocaleString()+' of '+stepGoal.toLocaleString()+' steps so far. ' : 'Today\'s target is '+stepGoal.toLocaleString()+' steps. ')+
+        'Short walks add up: the terminal, the hotel hallway, a lap around the block between legs all count.',
+      action: startWalk };
+  }
+
   // 4. Already trained — shift to completing the day well.
   if (training.workoutToday) {
     // BUG FIX: was comparing protein-so-far against 75% of the FULL day's
@@ -14566,7 +14807,13 @@ function buildTodayGaps(ctx) {
   else if (ST.trackNutrition && nutrition.goals && nutrition.proteinPct !== null && nutrition.proteinPct < 70 && hour >= 15) {
     gaps.push({ icon:'🥩', text:'Protein at '+nutrition.proteinPct+'% of target', fn:"switchTab('nutrition')" });
   }
-  if (!training.workoutToday && hour >= 18) gaps.push({ icon:'💪', text:'No session logged today', fn:"switchTab('preflight')" });
+  const stepGoal = activeStepGoal();
+  const steps = ctx.oura ? ctx.oura.steps : null;
+  if (stepGoal && steps !== null && steps < stepGoal && hour >= 15) {
+    gaps.push({ icon:'🚶', text:(stepGoal - steps).toLocaleString()+' steps to your goal', fn:"selectMissionProfile('Walk');switchTab('preflight')" });
+  }
+  // Walking First: a walk day isn't a missed session.
+  else if (!training.workoutToday && hour >= 18 && !(stepGoal && walkingFirstNext(ctx.now) === 'Walk')) gaps.push({ icon:'💪', text:'No session logged today', fn:"switchTab('preflight')" });
   // Uses the same hydroStatus() the workout hydration gate reads from —
   // previously this used a hardcoded "under 1.5L after 2pm" check that
   // ignored the real, flight-hours-aware target entirely. On a no-fly day
@@ -14596,8 +14843,10 @@ function buildOuraTopSectionHTML(ctx) {
 
   parts.push('<div class="fb" style="align-items:baseline;margin-bottom:14px">');
   parts.push('<span style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.14em;color:var(--muted)">'+ctx.now.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'}).toUpperCase()+'</span>');
-  if (ctx.oura.steps !== null) parts.push('<span style="font-family:var(--mono);font-size:0.75rem;color:var(--text)">'+ctx.oura.steps.toLocaleString()+' <span style="font-size:0.5625rem;color:var(--muted);letter-spacing:.1em">STEPS</span></span>');
+  // With a step goal the progress bar below carries the count instead.
+  if (ctx.oura.steps !== null && !activeStepGoal()) parts.push('<span style="font-family:var(--mono);font-size:0.75rem;color:var(--text)">'+ctx.oura.steps.toLocaleString()+' <span style="font-size:0.5625rem;color:var(--muted);letter-spacing:.1em">STEPS</span></span>');
   parts.push('</div>');
+  parts.push(stepGoalProgressHtml(ctx.oura.steps));
 
   if (ctx.oura.missingToday) {
     parts.push(noRingDataCardHtml());

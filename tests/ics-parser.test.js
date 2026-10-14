@@ -1395,6 +1395,79 @@ test('a dropped connection is told apart from a server refusal', () => {
   assertEqual(ctx.isConnectionError({ message: 'new row violates row-level security policy' }), false, 'RLS refusal is not offline');
 });
 
+// ─── Walking First (owner request, Oct 13: a heavy FO walking 10k a day, nervous about the gym) ───
+console.log('\nWalking First objective:');
+const isoDaysAgo = n => { const d = new Date(); d.setDate(d.getDate() - n); d.setHours(10, 0, 0, 0); return d.toISOString(); };
+test('Walk and Starter Strength exist in every environment and are pickable', () => {
+  ['comm', 'hotel', 'room', 'band'].forEach(env => {
+    const walk = ctx.WORKOUTS[env]['Walk'], ss = ctx.WORKOUTS[env]['Starter Strength'];
+    assertEqual(!!walk && walk.enroute.some(e => e.name === 'Walking'), true, env + ' Walk has the walk');
+    assertEqual(!!ss && ss.takeoff.length >= 2 && ss.enroute.length >= 2, true, env + ' Starter Strength has work');
+  });
+  const groups = vm.runInContext('MUSCLE_GROUPS', ctx);
+  assertEqual(groups.includes('Walk') && groups.includes('Starter Strength'), true, 'both in the Mission Profile picker');
+  assertEqual(!!vm.runInContext('GOALS', ctx).walking, true, 'Walking First is a Mission Objective');
+});
+test('reused machines keep their catalog id and input type, so history stays attached', () => {
+  const lp = ctx.WORKOUTS.comm['Starter Strength'].takeoff[0];
+  assertEqual(lp.id + ' ' + lp.name + ' ' + lp.inputType, 'c_lb_er2 Leg Press reps_weight', 'Leg Press');
+  assertEqual(lp.target, '2×12', 'lighter target for this plan');
+  const orig = ctx.WORKOUTS.comm['Lower Body'].enroute.find(e => e.id === 'c_lb_er2');
+  assertEqual(orig.target !== '2×12', true, 'the Lower Body Leg Press is unchanged');
+});
+test('Walking First: two short strength days a week, two days apart, walks otherwise', () => {
+  const saved = ctx.ST.sessionCache;
+  const s = (n, mg, extra) => Object.assign({ date: isoDaysAgo(n), muscle_group: mg }, extra || {});
+  ctx.ST.sessionCache = [];
+  assertEqual(ctx.walkingFirstNext(), 'Starter Strength', 'nothing logged yet: start with strength');
+  ctx.ST.sessionCache = [s(1, 'Starter Strength')];
+  assertEqual(ctx.walkingFirstNext(), 'Walk', 'strength yesterday: walk today');
+  ctx.ST.sessionCache = [s(2, 'Starter Strength')];
+  assertEqual(ctx.walkingFirstNext(), 'Starter Strength', 'two days later: strength again');
+  ctx.ST.sessionCache = [s(2, 'Starter Strength'), s(5, 'Starter Strength')];
+  assertEqual(ctx.walkingFirstNext(), 'Walk', 'two this week already: walk');
+  ctx.ST.sessionCache = [s(3, 'Starter Strength'), s(9, 'Starter Strength'), s(0, 'Walk'), s(1, 'Cardio', { importedFromOura: true })];
+  assertEqual(ctx.walkingFirstNext(), 'Starter Strength', 'walks and ring-imported cardio do not count as strength');
+  ctx.ST.goal = 'walking';
+  ctx.ST.sessionCache = [s(1, 'Lower Body')];
+  assertEqual(ctx.getRecommendedNext(), 'Walk', 'the recommended profile follows the same rule');
+  ctx.ST.goal = 'longevity'; ctx.ST.sessionCache = saved;
+});
+test('a NO-GO day never removes the walk from a walk session', () => {
+  const sv = { mg: ctx.ST.muscleGroup, f: ctx.ST.fatigue };
+  ctx.ST.muscleGroup = 'Walk'; ctx.ST.fatigue = 'nogo';
+  const wk = ctx.getFilteredWorkout(ctx.WORKOUTS.comm['Walk']);
+  assertEqual(wk.enroute.length, 1, 'walk kept'); assertEqual(wk.enroute[0].name, 'Walking', 'it is the walk');
+  ctx.ST.muscleGroup = sv.mg; ctx.ST.fatigue = sv.f;
+});
+test('the step goal: picked by the user, 7,000 to start, only for Walking First', () => {
+  assertEqual(ctx.cleanStepGoal(6540), 6500, 'rounded to the nearest 100');
+  assertEqual(ctx.cleanStepGoal(500), null, 'too low refused'); assertEqual(ctx.cleanStepGoal('abc'), null, 'not a number refused');
+  ctx.ST.goal = 'fatloss'; ctx.ST.stepGoal = 10000;
+  assertEqual(ctx.activeStepGoal(), null, 'other objectives show no step goal');
+  ctx.ST.goal = 'walking'; ctx.ST.stepGoal = null;
+  assertEqual(ctx.activeStepGoal(), 7000, 'starts at 7,000');
+  ctx.ST.stepGoal = 10000;
+  assertEqual(ctx.activeStepGoal(), 10000, 'uses the picked goal');
+  const real = { s: ctx.syncBodyMetricsFieldsToState, g: ctx.saveGoalLevel, r: ctx.renderPage };
+  ctx.syncBodyMetricsFieldsToState = () => {}; ctx.saveGoalLevel = () => {}; ctx.renderPage = () => {};
+  ctx.ST.goal = 'longevity'; ctx.ST.stepGoal = null; ctx.selectGoal('walking');
+  assertEqual(ctx.ST.stepGoal, 7000, 'choosing Walking First sets 7,000 if nothing was picked');
+  ctx.syncBodyMetricsFieldsToState = real.s; ctx.saveGoalLevel = real.g; ctx.renderPage = real.r;
+  ctx.ST.goal = 'longevity'; ctx.ST.stepGoal = null;
+});
+test('Today shows steps against the goal, and what is left late in the day', () => {
+  ctx.ST.goal = 'walking'; ctx.ST.stepGoal = 7000;
+  const part = ctx.stepGoalProgressHtml(4210);
+  assertEqual(/4,210 \/ 7,000/.test(part), true, 'count against goal');
+  assertEqual(/✓/.test(ctx.stepGoalProgressHtml(7300)), true, 'check mark once reached');
+  assertEqual(/Apple Health/.test(ctx.stepGoalProgressHtml(null)), true, 'says where steps come from when there are none');
+  const gaps = ctx.buildTodayGaps({ nutrition: {}, training: { workoutToday: false }, hour: 16, now: new Date(), oura: { steps: 4210 } });
+  assertEqual(gaps.some(g => g.text === '2,790 steps to your goal'), true, 'steps left in the still-open list');
+  ctx.ST.goal = 'longevity'; ctx.ST.stepGoal = null;
+  assertEqual(ctx.stepGoalProgressHtml(4210), '', 'nothing for other objectives');
+});
+
 // Async cases run after the synchronous ones, before the summary.
 const asyncTests = [];
 function testAsync(name, fn) { asyncTests.push([name, fn]); }

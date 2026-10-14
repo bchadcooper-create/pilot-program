@@ -58,7 +58,7 @@ const WEEKLY_SUMMARY_PROMPT_VERSION = 5; // v5: sees exercises/sets/daysAgo, nev
 // (added the same day this constant was) doesn't keep serving a
 // pre-fix response — that field didn't exist in the context sent to
 // earlier cached responses, so their advice can't reflect it either.
-const FATIGUE_CALIBRATION_PROMPT_VERSION = 10; // v10: pilotCondition is the ceiling; // v9: Walking First plan; // v8: ring data missing today, use the self-check; // v7: workout-already-logged and legs-flown guidance; // v6: plain-words opener, house style; // v5: bodyClock awareness (v4: Sonnet 5)
+const FATIGUE_CALIBRATION_PROMPT_VERSION = 11; // v11: never a second workout; // v10: pilotCondition is the ceiling; // v9: Walking First plan; // v8: ring data missing today, use the self-check; // v7: workout-already-logged and legs-flown guidance; // v6: plain-words opener, house style; // v5: bodyClock awareness (v4: Sonnet 5)
 // BUG FIX (found while updating this prompt): fuel_logistics' cache key
 // (below) never had a prompt-version component at all, unlike the other
 // two cached modes — so a stale response from before this exact prompt
@@ -250,8 +250,8 @@ The day moves on and this note is re-asked as it does, so answer for RIGHT NOW, 
 flight carries alreadyFlown; if every flight today is flown, do not talk about getting to report or leaving
 for the airport, that is behind them. If workoutLoggedToday is true, the training call is already settled:
 say the work is done in a few words and give one useful note for the rest of the day instead (protect sleep,
-eat, an easy walk on a long layover, whatever fits), never a second workout unless readiness is high and
-there is a real reason.
+eat, an easy walk on a long layover, whatever fits). Never suggest a second workout, whatever the numbers;
+one session a day is the plan.
 
 Tell them straight, like a coach would in person, and give the one reason why, not generic "listen to your
 body" filler. If everything looks fine, say so with confidence, don't manufacture caution just to sound

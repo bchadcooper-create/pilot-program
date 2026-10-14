@@ -1551,6 +1551,20 @@ test('Run: one outdoor run in every environment, never trimmed by readiness, tre
   ctx.ST.muscleGroup = sv.mg; ctx.ST.fatigue = sv.f; ctx.ST.level = sv.l;
 });
 
+test('after a workout is logged today, the Today card no longer offers another one', () => {
+  const realPro = ctx.isPro; const sv = ctx.ST.workout;
+  ctx.ST.workout = null;
+  const base = ctx.getTodayContext();
+  const withTraining = done => Object.assign({}, base, { training: Object.assign({}, base.training, { workoutToday: done }) });
+  ctx.isPro = () => true;
+  assertEqual(/Start a workout/.test(ctx.buildOuraTopSectionHTML(withTraining(false))), true, 'Pro: offered before training');
+  assertEqual(/Start a workout/.test(ctx.buildOuraTopSectionHTML(withTraining(true))), false, 'Pro: not offered once trained');
+  ctx.isPro = () => false;
+  const html = ctx.buildOuraTopSectionHTML(withTraining(true));
+  assertEqual(/switchTab\('preflight'\)/.test(html), false, 'free: no workout button once trained');
+  ctx.isPro = realPro; ctx.ST.workout = sv;
+});
+
 // Async cases run after the synchronous ones, before the summary.
 const asyncTests = [];
 function testAsync(name, fn) { asyncTests.push([name, fn]); }

@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.42 / 20261014_4
+ * Version/build: fcf-v5.44.43 / 20261014_5
  */
 
-const FCF_VERSION = 'fcf-v5.44.42';
-const FCF_BUILD   = '20261014_4';
+const FCF_VERSION = 'fcf-v5.44.43';
+const FCF_BUILD   = '20261014_5';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -15094,10 +15094,15 @@ function buildOuraTopSectionHTML(ctx) {
   // the rule-based card. The rule-based card is still drawn for Pro, hidden,
   // and shown only if the coach cannot answer (no connection, an error),
   // so the spot is never left empty.
+  // Once a workout is logged today, neither card offers another one
+  // (owner, Oct 14: "we shouldn't be encouraging two workouts in one day
+  // from the AI"). A second session is still one tap away on ADD (+).
+  const doneToday = !!(ctx.training && ctx.training.workoutToday);
+  const ruleAction = brief.action && !(doneToday && /preflight/.test(brief.action.fn)) ? brief.action : null;
   const ruleCard = '<div class="card mb12" style="border-left:3px solid '+toneColor+'">' +
     '<div style="font-size:1.0625rem;font-weight:600;letter-spacing:-.01em;margin-bottom:7px">'+brief.headline+'</div>' +
     '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.65">'+brief.body+'</div>' +
-    (brief.action ? '<button class="btn btn-gold" style="margin-top:14px" onclick="'+brief.action.fn+'">'+brief.action.label+'</button>' : '') +
+    (ruleAction ? '<button class="btn btn-gold" style="margin-top:14px" onclick="'+ruleAction.fn+'">'+ruleAction.label+'</button>' : '') +
     '</div>';
   const fatMemo = _aiLoadMemo.fatigue;
   const coachFailed = !!(fatMemo && fatMemo.result && fatMemo.result.error);
@@ -15106,6 +15111,7 @@ function buildOuraTopSectionHTML(ctx) {
     // could contradict what the coach just said.
     const startBtn = ST.workout
       ? '<button class="btn btn-gold" style="margin-top:14px" onclick="engageWorkout()">↩ Return to workout</button>'
+      : doneToday ? ''
       : '<button class="btn btn-gold" style="margin-top:14px" onclick="switchTab(\'preflight\')">Start a workout</button>';
     let coach = aiCoachCard('aiFatigueCard', 'aiFatigueText', 'AI COACH', 'amber',
       fatMemo && fatMemo.result && !fatMemo.result.error ? fatMemo.result.text : null, startBtn);

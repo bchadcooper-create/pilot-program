@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.39 / 20261014_1
+ * Version/build: fcf-v5.44.40 / 20261014_2
  */
 
-const FCF_VERSION = 'fcf-v5.44.39';
-const FCF_BUILD   = '20261014_1';
+const FCF_VERSION = 'fcf-v5.44.40';
+const FCF_BUILD   = '20261014_2';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -6264,6 +6264,13 @@ async function loadFatigueCalibration(ctx) {
       currentLocalTime: fmtLocalForAI(now),
       timezone: localTimezoneName(),
       readiness: ctx.oura.readiness ?? null,
+      // The call the app itself shows (Pilot Condition: go / marginal /
+      // nogo). BUG FIX (reported: readiness 68, Pilot Condition MARGINAL,
+      // and the coach said "Full send... readiness is sitting fine at 68").
+      // The coach only ever saw the raw number and had no idea where the
+      // app draws its lines, so it could out-push the screen. It is the
+      // ceiling for the coach's call now (see the fatigue prompt).
+      pilotCondition: ST.fatigue || null,
       sleepScore: ctx.oura.sleep ?? null,
       sleepHours: ST.sleepHours ?? null,
       selfReportedFatigue: ST.readiness ?? null, // 1-5 scale, used when no Oura connected

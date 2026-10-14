@@ -58,7 +58,7 @@ const WEEKLY_SUMMARY_PROMPT_VERSION = 5; // v5: sees exercises/sets/daysAgo, nev
 // (added the same day this constant was) doesn't keep serving a
 // pre-fix response — that field didn't exist in the context sent to
 // earlier cached responses, so their advice can't reflect it either.
-const FATIGUE_CALIBRATION_PROMPT_VERSION = 9; // v9: Walking First plan; // v8: ring data missing today, use the self-check; // v7: workout-already-logged and legs-flown guidance; // v6: plain-words opener, house style; // v5: bodyClock awareness (v4: Sonnet 5)
+const FATIGUE_CALIBRATION_PROMPT_VERSION = 10; // v10: pilotCondition is the ceiling; // v9: Walking First plan; // v8: ring data missing today, use the self-check; // v7: workout-already-logged and legs-flown guidance; // v6: plain-words opener, house style; // v5: bodyClock awareness (v4: Sonnet 5)
 // BUG FIX (found while updating this prompt): fuel_logistics' cache key
 // (below) never had a prompt-version component at all, unlike the other
 // two cached modes — so a stale response from before this exact prompt
@@ -197,6 +197,14 @@ headers, no bold text, no jargon, no hedging phrases like "I want to flag" or "t
   fatigue_calibration: `You're a strength coach passing a pilot or flight crew member one quick line before they
 train today, this is a text message, not a briefing. Give the call (full send, dial it back, or take the day)
 and the ONE reason why, tied to their actual trip. That's it.
+
+pilotCondition is the app's own call, shown on the user's screen right above your note: go, marginal or nogo.
+It comes from readiness (70 and up is go, 60 to 69 is marginal, under 60 is nogo) or from their self-check or
+their own manual setting. Your call may never be stronger than pilotCondition. Only go allows "Full send". On
+marginal, the most you may say is "Dial it back": a moderate session, lighter loads or fewer sets, no max
+efforts. On nogo, say "Take the day", or offer only an easy walk or mobility. A readiness in the 60s is below
+par: never call it fine, solid or good. Time available never upgrades the call; plenty of time on a marginal
+day is still a dial-it-back day.
 
 You will receive today's readiness/recovery signal, their current trip day (which day of a multi-day pairing
 today is, day 2 of a 4-day trip, for example), today's flights with LOCAL departure/arrival times already
@@ -510,7 +518,10 @@ Deno.serve(async (req) => {
         + '_r' + (context.readiness ?? 'null') + '_s' + (context.sleepScore ?? 'null')
         + '_m' + (context.ringDataMissingToday ? (context.selfReportedFatigue ?? 'x') : 0)
         // Walking First: which kind of day it is and the goal both change the call.
-        + '_g' + (context.walkingPlan ? String(context.walkingPlan.todaysPlan).charAt(0) + (context.walkingPlan.dailyStepGoal ?? '') : 0);
+        + '_g' + (context.walkingPlan ? String(context.walkingPlan.todaysPlan).charAt(0) + (context.walkingPlan.dailyStepGoal ?? '') : 0)
+        // The app's call can change without the score changing (the user
+        // adjusts Pilot Condition by hand), and the note must follow it.
+        + '_c' + (context.pilotCondition ?? 'x');
       const { data: cached } = await supabase
         .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
       const cachedKey = cached?.profile_data?.fatigueCalibrationCacheKey;

@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.41 / 20261014_3
+ * Version/build: fcf-v5.44.42 / 20261014_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.41';
-const FCF_BUILD   = '20261014_3';
+const FCF_VERSION = 'fcf-v5.44.42';
+const FCF_BUILD   = '20261014_4';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -5657,8 +5657,60 @@ function requestNativeRepaint() {
 }
 
 window.addEventListener('fcf:healthkit', (e) => {
-  ST.healthkit = e.detail || {};
+  const prev = ST.healthkit || {};
+  const next = e.detail || {};
+  ST.healthkit = next;
+  // A refresh where only the step count moved (the common case: every
+  // time the app comes back to the screen) redraws just the Today top
+  // card. A full renderPage() rebuilds the whole tab and jumps the
+  // scroll position (owner: "don't refresh the entire page, just draw
+  // that card").
+  const sansSteps = o => JSON.stringify(Object.assign({}, o, { stepsToday: null }));
+  if (_bootRenderDone && sansSteps(prev) === sansSteps(next)) {
+    if (prev.stepsToday !== next.stepsToday) updateOuraTopSection();
+    return;
+  }
   requestNativeRepaint();
+});
+
+// ─── FRESH STEP COUNTS ──────────────────────────────────────────────────────
+// BUG FIX (reported: Today showed 1,432 steps at 11:45 while Apple Health
+// and Oura both showed about 5,500). Both counts were only read when the
+// app cold-launched. Oura was then never re-read once the morning's row
+// arrived (the retry stops when today's activity score exists, which is
+// right for readiness and sleep but not for steps, which climb all day),
+// and Apple Health was only re-read from the Connected Devices page.
+// Now, every time the app opens or comes back to the screen: ask the
+// iPhone for Apple Health again, and re-read today's Oura steps (at most
+// every 10 minutes). Each answer redraws only the Today top card.
+const OURA_STEPS_REFRESH_MS = 10 * 60 * 1000;
+let _ouraStepsFetchedAt = 0;
+async function refreshOuraSteps() {
+  if (!ST.ouraConnected || !ST.ouraAccessToken) return;
+  if (Date.now() - _ouraStepsFetchedAt < OURA_STEPS_REFRESH_MS) return;
+  _ouraStepsFetchedAt = Date.now();
+  try {
+    const today = localDateStr(new Date());
+    const end = localDateStr(new Date(Date.now() + 86400000));
+    const activity = await ouraFetch('daily_activity?start_date=' + today + '&end_date=' + end);
+    const item = activity?.data?.find(d => d.day === today);
+    if (!item || item.steps == null) return;
+    if (item.steps !== ST.ouraSteps) {
+      ST.ouraSteps = item.steps;
+      ST.ouraActiveCal = item.active_calories ?? ST.ouraActiveCal;
+      updateOuraTopSection();
+    }
+  } catch (e) { _ouraStepsFetchedAt = 0; /* offline or token issue: try again next time */ }
+}
+
+function refreshStepCounts() {
+  if (typeof FCFBridge !== 'undefined' && FCFBridge.isNative && FCFBridge.syncHealthKit) {
+    try { FCFBridge.syncHealthKit(); } catch (e) { /* older shell: the boot read still stands */ }
+  }
+  refreshOuraSteps();
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && ST.user) refreshStepCounts();
 });
 
 // ─── RUN AND WALK DISTANCE FROM APPLE HEALTH ────────────────────────────────
@@ -14555,15 +14607,15 @@ function checkForNapRecovery(currentSleepScore, ouraDate) {
 // counting, so Apple Health is used instead. When both have a number and
 // the ring is missing, the larger one wins: a ring left on the charger
 // never over-counts.
+// The larger of Oura and Apple Health. Both only go up during a day, so
+// the larger one is the one read most recently (reported: a morning Oura
+// read of 1,432 was shown at noon while Apple Health already had 5,502).
 function todayStepCount() {
   const oura = ST.ouraSteps ?? null;
   const hk = ST.healthkit?.stepsToday ?? null;
-  if (ouraMissingToday()) {
-    if (hk === null) return oura;
-    if (oura === null) return hk;
-    return Math.max(hk, oura);
-  }
-  return oura ?? hk ?? null;
+  if (hk === null) return oura;
+  if (oura === null) return hk;
+  return Math.max(hk, oura);
 }
 
 function getTodayContext() {

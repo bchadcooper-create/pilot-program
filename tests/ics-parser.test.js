@@ -1341,8 +1341,11 @@ test('the self-check sets the Pilot Condition on a no-ring day', () => {
 test('steps come from Apple Health on a no-ring day', () => {
   ringState(yesterdayStr, 68); ctx.ST.ouraSteps = 0; ctx.ST.healthkit = { stepsToday: 1840 };
   assertEqual(ctx.todayStepCount(), 1840, 'phone count wins when the ring has no data');
-  ringState(todayStr, 68);
-  assertEqual(ctx.todayStepCount(), 0, 'ring count stands when the ring has today\'s data');
+  ringState(todayStr, 68); ctx.ST.ouraSteps = 1432; ctx.ST.healthkit = { stepsToday: 5502 };
+  assertEqual(ctx.todayStepCount(), 5502, 'the fresher (larger) count wins even when the ring has today\'s data');
+  ctx.ST.ouraSteps = 5573;
+  assertEqual(ctx.todayStepCount(), 5573, 'and the ring wins when it is ahead');
+  ctx.ST.healthkit = { stepsToday: 1840 }; ctx.ST.ouraSteps = 0;
   ctx.ST.ouraSteps = null; assertEqual(ctx.todayStepCount(), 1840, 'phone fills in when the ring has no count');
   ctx.ST.healthkit = null; ctx.ST.ouraSteps = null;
 });

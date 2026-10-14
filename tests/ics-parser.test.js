@@ -1440,11 +1440,24 @@ test('a NO-GO day never removes the walk from a walk session', () => {
   assertEqual(wk.enroute.length, 1, 'walk kept'); assertEqual(wk.enroute[0].name, 'Walking', 'it is the walk');
   ctx.ST.muscleGroup = sv.mg; ctx.ST.fatigue = sv.f;
 });
-test('the step goal: picked by the user, 7,000 to start, only for Walking First', () => {
+test('the step goal: picked by the user, 7,000 to start on Walking First, optional on the rest', () => {
   assertEqual(ctx.cleanStepGoal(6540), 6500, 'rounded to the nearest 100');
   assertEqual(ctx.cleanStepGoal(500), null, 'too low refused'); assertEqual(ctx.cleanStepGoal('abc'), null, 'not a number refused');
-  ctx.ST.goal = 'fatloss'; ctx.ST.stepGoal = 10000;
-  assertEqual(ctx.activeStepGoal(), null, 'other objectives show no step goal');
+  ctx.ST.goal = 'fatloss'; ctx.ST.stepGoal = null;
+  assertEqual(ctx.activeStepGoal(), null, 'other objectives: off until turned on');
+  ctx.ST.stepGoal = 10000;
+  assertEqual(ctx.activeStepGoal(), 10000, 'other objectives: on once a goal is picked');
+  const realR = { s: ctx.syncBodyMetricsFieldsToState, g: ctx.saveGoalLevel, r: ctx.renderPage, t: ctx.showToast };
+  ctx.syncBodyMetricsFieldsToState = () => {}; ctx.saveGoalLevel = () => {}; ctx.renderPage = () => {}; ctx.showToast = () => {};
+  ctx.setStepGoal(null);
+  assertEqual(ctx.activeStepGoal(), null, 'Off turns it off');
+  ctx.ST.goal = 'walking'; ctx.ST.stepGoal = 8000; ctx.setStepGoal(null);
+  assertEqual(ctx.activeStepGoal(), 8000, 'Walking First has no Off');
+  ctx.syncBodyMetricsFieldsToState = realR.s; ctx.saveGoalLevel = realR.g; ctx.renderPage = realR.r; ctx.showToast = realR.t;
+  const html = ctx.renderStepGoalPicker();
+  assertEqual(/>OFF</.test(html), false, 'no Off button on Walking First');
+  ctx.ST.goal = 'fatloss';
+  assertEqual(/>OFF</.test(ctx.renderStepGoalPicker()), true, 'Off button on other objectives');
   ctx.ST.goal = 'walking'; ctx.ST.stepGoal = null;
   assertEqual(ctx.activeStepGoal(), 7000, 'starts at 7,000');
   ctx.ST.stepGoal = 10000;
@@ -1466,6 +1479,54 @@ test('Today shows steps against the goal, and what is left late in the day', () 
   assertEqual(gaps.some(g => g.text === '2,790 steps to your goal'), true, 'steps left in the still-open list');
   ctx.ST.goal = 'longevity'; ctx.ST.stepGoal = null;
   assertEqual(ctx.stepGoalProgressHtml(4210), '', 'nothing for other objectives');
+});
+
+test('step streak: days in a row at the goal, today in progress does not break it', () => {
+  const t = todayStr, d = n => ctx.shiftDateStr(t, -n);
+  const h = {}; h[d(1)] = { steps: 8000, goal: 7000 }; h[d(2)] = { steps: 7100, goal: 7000 }; h[d(3)] = { steps: 6000, goal: 7000 };
+  h[t] = { steps: 3000, goal: 7000 };
+  let r = ctx.stepStreak(h, t, 7000);
+  assertEqual(r.count + ' ' + r.todayMet, '2 false', 'two days through yesterday, today still going');
+  h[t] = { steps: 7200, goal: 7000 };
+  r = ctx.stepStreak(h, t, 7000);
+  assertEqual(r.count + ' ' + r.todayMet, '3 true', 'today counts once met');
+  h[d(2)] = { steps: 7100, goal: 9000 };
+  assertEqual(ctx.stepStreak(h, t, 7000).count, 2, 'judged against that day\'s goal');
+  const oura = {}; oura[d(1)] = { steps: 7500, goal: null };
+  assertEqual(ctx.stepStreak(oura, t, 7000).count, 1, 'Oura-filled days use the current goal');
+});
+test('Five-Day Stride badge: earned by the longest run, and the line on Today counts down to it', () => {
+  const t = todayStr, d = n => ctx.shiftDateStr(t, -n);
+  const h = {};
+  [10, 9, 8, 7, 6].forEach(n => { h[d(n)] = { steps: 9000, goal: 7000 }; });
+  h[d(3)] = { steps: 9000, goal: 7000 };
+  assertEqual(ctx.bestStepStreak(h, 7000), 5, 'an old 5-day run still counts');
+  const stats = ctx.computeBadgeStats([], [], h, 7000);
+  const badge = vm.runInContext('BADGES', ctx).find(b => b.id === 'step_streak_5');
+  assertEqual(!!badge && badge.check(stats), true, 'badge check passes at 5');
+  assertEqual(badge.check(ctx.computeBadgeStats([], [], {}, 7000)), false, 'not without history');
+  ctx.ST.goal = 'fatloss'; ctx.ST.stepGoal = 7000; ctx.ST.badges = {};
+  const s3 = {}; s3[d(2)] = { steps: 8000, goal: 7000 }; s3[d(1)] = { steps: 8000, goal: 7000 }; s3[t] = { steps: 7500, goal: 7000 };
+  ctx.ST.stepHistory = s3;
+  assertEqual(/3 days in a row at your goal · 2 more for the Five-Day Stride badge/.test(ctx.stepStreakLineHtml()), true, 'countdown to the badge');
+  ctx.ST.stepHistory = {}; ctx.ST.stepGoal = null; ctx.ST.goal = 'longevity';
+});
+test('today\'s steps are saved without a write on every redraw', () => {
+  const SBc = vm.runInContext('SB', ctx); const realFrom = SBc.from; const writes = [];
+  SBc.from = () => { const qb = {}; qb.upsert = (p) => { writes.push(p); return qb; }; qb.then = (res) => res({ data: null, error: null }); return qb; };
+  const realAward = ctx.awardBadges; let awards = 0; ctx.awardBadges = () => { awards++; };
+  ctx.ST.user = { id: 'u1' }; ctx.ST.goal = 'fatloss'; ctx.ST.stepGoal = 7000; ctx.ST.stepHistory = {};
+  ctx.noteStepsToday(4000); ctx.noteStepsToday(4100); ctx.noteStepsToday(4200);
+  assertEqual(writes.length, 1, 'small changes do not write again');
+  ctx.noteStepsToday(4400);
+  assertEqual(writes.length, 2, '250 more steps writes');
+  ctx.noteStepsToday(7050);
+  assertEqual(writes.length + ' ' + awards, '3 1', 'meeting the goal writes and checks badges once');
+  assertEqual(writes[2].goal + ' ' + writes[2].steps, '7000 7050', 'saves the day\'s goal with the count');
+  ctx.notePastOuraSteps([{ day: ctx.shiftDateStr(todayStr, -1), steps: 9100 }, { day: todayStr, steps: 7050 }], todayStr);
+  const past = writes[3];
+  assertEqual(Array.isArray(past) && past.length === 1 && !('goal' in past[0]), true, 'Oura fills earlier days only, without touching their goal');
+  SBc.from = realFrom; ctx.awardBadges = realAward; ctx.ST.stepGoal = null; ctx.ST.goal = 'longevity'; ctx.ST.stepHistory = {};
 });
 
 // Async cases run after the synchronous ones, before the summary.

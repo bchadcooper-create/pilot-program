@@ -77,6 +77,31 @@ const check = (name, cond, got) => { console.log((cond ? 'PASS ' : 'FAIL ') + na
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'today.png') });
   check('the coach is told the walking plan', !!coachCtx && !!coachCtx.walkingPlan && coachCtx.walkingPlan.todaysPlan === 'Walk' && coachCtx.walkingPlan.dailyStepGoal === 7000, coachCtx && coachCtx.walkingPlan);
 
+  // Optional step goal on another objective, and the streak line on Today.
+  await page.evaluate(() => { ST.goal = 'fatloss'; ST.stepGoal = null; switchTab('profile'); });
+  await page.waitForTimeout(600);
+  const offSel = await page.evaluate(() => { const b = [...document.querySelectorAll('.env-btn')].find(e => e.textContent.trim() === 'OFF'); return b ? b.classList.contains('sel') : null; });
+  check('other objectives: step goal is optional and starts Off', offSel === true, offSel);
+  await page.locator('.env-btn', { hasText: /^8K$/ }).first().click(); await page.waitForTimeout(400);
+  check('Weight Loss member can turn on an 8,000 goal', await page.evaluate(() => activeStepGoal()) === 8000);
+  if (SHOTS) {
+    await page.evaluate(() => document.getElementById('stepGoalCustom').scrollIntoView({ block: 'center' }));
+    await page.waitForTimeout(300); await page.screenshot({ path: path.join(SHOTS, 'profile-optional.png') });
+  }
+  const streak = await page.evaluate(() => {
+    const t = localDateStr(new Date());
+    ST.stepHistory = {}; ST.stepHistory[shiftDateStr(t, -2)] = { steps: 9000, goal: 8000 }; ST.stepHistory[shiftDateStr(t, -1)] = { steps: 8400, goal: 8000 };
+    ST.ouraSteps = 8600; ST.healthkit = null; ST.badges = Object.assign({}, ST.badges); delete ST.badges.step_streak_5;
+    window.awardBadges = async () => {}; // no badge writes to the test account
+    SB_from_real = SB.from; SB.from = function (t) { return t === 'daily_steps' ? { upsert: () => Promise.resolve({ error: null }) } : SB_from_real.apply(SB, arguments); };
+    return buildOuraTopSectionHTML(getTodayContext());
+  });
+  check('Today shows the streak and the badge countdown', /3 days in a row at your goal · 2 more for the Five-Day Stride badge/.test(streak), streak.replace(/<[^>]+>/g, ' ').slice(0, 300));
+  await page.evaluate(() => switchTab('today')); await page.waitForTimeout(1000);
+  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'today-streak.png') });
+  const badge = await page.evaluate(() => BADGES.find(b => b.id === 'step_streak_5'));
+  check('Five-Day Stride badge exists', !!badge && badge.title === 'Five-Day Stride', badge);
+
   // Preflight: both sessions build in every environment.
   for (const mg of ['Walk', 'Starter Strength']) {
     for (const env of ['comm', 'hotel', 'room', 'band']) {

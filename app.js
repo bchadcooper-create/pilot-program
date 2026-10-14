@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.38 / 20261013_3
+ * Version/build: fcf-v5.44.39 / 20261014_1
  */
 
-const FCF_VERSION = 'fcf-v5.44.38';
-const FCF_BUILD   = '20261013_3';
+const FCF_VERSION = 'fcf-v5.44.39';
+const FCF_BUILD   = '20261014_1';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -2226,15 +2226,17 @@ const BADGES = [
   // earned it keeps the stored record; it is simply no longer shown.
   { id:'all_weather',  icon:'🌍', title:'All-Weather',      desc:'Trained in 3 different environments (room, gym, or bands)', check:s => s.envsTrained >= 3 },
   { id:'early_bird',   icon:'🌅', title:'Early Bird',       desc:'Logged a workout before 6 AM, 5 times',  check:s => s.earlyBirdCount >= 5 },
+  { id:'step_streak_5',icon:'👟', title:'Five-Day Stride',  desc:'Hit your daily step goal 5 days in a row (set one in Pilot Profile)', check:s => s.bestStepStreak >= 5 },
   { id:'top_gun',      icon:'🎖️', title:'Top Gun',          desc:'Hold the #1 spot on any leaderboard',    check:null, live:true },
   { id:'debrief',      icon:'💬', title:'Debrief',          desc:'Sent feedback to help improve the app',  check:null, live:true },
   { id:'recruiter',    icon:'📡', title:'Recruiter',        desc:'Shared Flight Crew Fitness with someone (self-reported)', check:null, live:true },
 ];
 
 // Pure computation over session + biometric history — testable, no I/O.
-function computeBadgeStats(sessions, bioRows) {
+function computeBadgeStats(sessions, bioRows, stepHistory, stepGoal) {
   const stats = { totalSessions: 0, best7Day: 0, best28Day: 0, prCount: 0, weightLost: 0, bioStreak: 0,
-    totalSets: 0, maxSetsInSession: 0, envsTrained: 0, earlyBirdCount: 0 };
+    totalSets: 0, maxSetsInSession: 0, envsTrained: 0, earlyBirdCount: 0,
+    bestStepStreak: bestStepStreak(stepHistory || {}, stepGoal || null) };
   const sorted = (sessions||[]).filter(s => s?.date).slice().sort((a,b) => new Date(a.date) - new Date(b.date));
   stats.totalSessions = sorted.length;
 
@@ -2344,7 +2346,7 @@ async function checkTopGunBadge() {
 async function awardBadges() {
   try {
     const bio = await fetchBioRows();
-    const stats = computeBadgeStats(ST.sessionCache || [], bio);
+    const stats = computeBadgeStats(ST.sessionCache || [], bio, ST.stepHistory, activeStepGoal());
     const fresh = BADGES.filter(b => !b.live && !ST.badges[b.id] && b.check(stats));
     if (fresh.length) {
       fresh.forEach(b => { ST.badges[b.id] = new Date().toISOString(); });
@@ -3496,7 +3498,8 @@ async function bootAppInner() {
     loadSessionCache().catch(e => { console.warn('loadSessionCache failed:', e); return []; }),
     loadSubscription().catch(e => { console.warn('loadSubscription failed:', e); return null; }),
     hydrateOuraFromRecent(),
-    loadMedsTakenToday()
+    loadMedsTakenToday(),
+    loadStepHistory()
   ]);
 
   applyProfileToState(profile);
@@ -4200,7 +4203,8 @@ async function performAccountDeletion() {
       // fails partway. Each is allowed to fail independently — a missing
       // table must not strand someone half-deleted with no way to retry.
       const tables = ['workout_sessions','meal_logs','weight_log','oura_daily',
-                      'daily_inputs','food_photo_usage','photo_quota_weekly','medication_logs'];
+                      'daily_inputs','food_photo_usage','photo_quota_weekly','medication_logs',
+                      'daily_steps'];
       for (const t of tables) {
         try { await SB.from(t).delete().eq('user_id', uid); } catch(e) {}
       }
@@ -6314,7 +6318,7 @@ async function loadFatigueCalibration(ctx) {
       bodyClock: bodyClockForAI(),
       // Walking First only: the step goal and whether today is a walk day
       // or one of the two short strength days.
-      walkingPlan: activeStepGoal() ? { dailyStepGoal: activeStepGoal(), todaysPlan: walkingFirstNext() } : null,
+      walkingPlan: isWalkingFirst() ? { dailyStepGoal: activeStepGoal(), todaysPlan: walkingFirstNext() } : null,
     };
     const ctxKey = JSON.stringify(context);
     const card0 = document.getElementById('aiFatigueCard');
@@ -8430,9 +8434,11 @@ async function saveGoalLevel() {
   } catch (e) { showBigToast('Saved on this device, but could not sync.', 'warn'); }
 }
 
-// ─── DAILY STEP GOAL (Walking First) ─────────────────────────────────────────
+// ─── DAILY STEP GOAL ─────────────────────────────────────────────────────────
 // The user picks the number: the owner walked 10,000 a day at his heaviest,
 // and someone else may start at 7,000. 7,000 is the starting suggestion.
+// Built into Walking First (always on there) and optional for every other
+// objective (owner, Oct 13: "Let's add that as an option").
 const STEP_GOAL_DEFAULT = 7000;
 const STEP_GOAL_CHOICES = [5000, 7000, 8000, 10000, 12000];
 function cleanStepGoal(n) {
@@ -8440,11 +8446,13 @@ function cleanStepGoal(n) {
   if (!isFinite(n) || n < 1000 || n > 50000) return null;
   return Math.round(n / 100) * 100;
 }
-// The goal Today measures against, or null when the objective isn't
-// Walking First.
+// The goal Today measures against, or null when there isn't one. Walking
+// First always has one; other objectives only when the member turned it on.
 function activeStepGoal() {
-  return ST.goal === 'walking' ? (ST.stepGoal || STEP_GOAL_DEFAULT) : null;
+  if (ST.goal === 'walking') return ST.stepGoal || STEP_GOAL_DEFAULT;
+  return ST.stepGoal || null;
 }
+function isWalkingFirst() { return ST.goal === 'walking'; }
 
 function selectGoal(gid) {
   syncBodyMetricsFieldsToState();
@@ -8456,6 +8464,16 @@ function selectGoal(gid) {
 }
 
 function setStepGoal(n) {
+  if (n === null) {
+    // Off. Walking First has no Off: the step goal is the plan there.
+    if (isWalkingFirst()) return;
+    syncBodyMetricsFieldsToState();
+    ST.stepGoal = null;
+    saveGoalLevel();
+    renderPage();
+    showToast('Daily step goal turned off.');
+    return;
+  }
   const clean = cleanStepGoal(n);
   if (!clean) { showToast('Pick a goal between 1,000 and 50,000 steps.'); return; }
   syncBodyMetricsFieldsToState();
@@ -8469,14 +8487,21 @@ function renderStepGoalPicker() {
   const goal = activeStepGoal();
   const parts = [];
   parts.push('<div class="divider"></div>');
-  parts.push('<div class="section-label" style="margin-top:0">DAILY STEP GOAL</div>');
-  parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;line-height:1.5">Walking is the main work. Pick a number you can hit most days and raise it when it starts to feel easy. Today shows your progress.</div>');
-  parts.push('<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">');
-  STEP_GOAL_CHOICES.forEach(n => {
+  parts.push('<div class="section-label" style="margin-top:0">DAILY STEP GOAL'+(isWalkingFirst() ? '' : ' <span style="color:var(--muted)">· OPTIONAL</span>')+'</div>');
+  parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;line-height:1.5">'+(isWalkingFirst()
+    ? 'Walking is the main work. Pick a number you can hit most days and raise it when it starts to feel easy.'
+    : 'Add a daily step target on top of your training.')+' Today shows your progress and your streak; 5 days in a row earns a badge.</div>');
+  const chips = isWalkingFirst() ? STEP_GOAL_CHOICES : [null].concat(STEP_GOAL_CHOICES);
+  parts.push('<div style="display:grid;grid-template-columns:repeat('+chips.length+',1fr);gap:6px">');
+  chips.forEach(n => {
+    if (n === null) {
+      parts.push('<div class="env-btn '+(!goal?'sel':'')+'" style="padding:10px 2px" onclick="haptic(\'selection\');setStepGoal(null)"><div class="el">OFF</div></div>');
+      return;
+    }
     parts.push('<div class="env-btn '+(goal===n?'sel':'')+'" style="padding:10px 2px" onclick="haptic(\'selection\');setStepGoal('+n+')"><div class="el">'+(n/1000)+'K</div></div>');
   });
   parts.push('</div>');
-  const custom = STEP_GOAL_CHOICES.includes(goal) ? '' : String(goal);
+  const custom = !goal || STEP_GOAL_CHOICES.includes(goal) ? '' : String(goal);
   parts.push('<div style="display:flex;gap:8px;align-items:center;margin-top:8px">');
   parts.push('<div class="field" style="flex:1;margin:0"><input id="stepGoalCustom" type="number" inputmode="numeric" min="1000" max="50000" step="500" placeholder="Other, e.g. 6500" value="'+custom+'"></div>');
   parts.push('<button class="btn btn-outline" style="width:auto;margin:0;padding:10px 16px" onclick="setStepGoal(document.getElementById(\'stepGoalCustom\').value)">Set</button>');
@@ -8502,7 +8527,138 @@ function stepGoalProgressHtml(steps) {
     '<div style="height:6px;border-radius:3px;background:rgba(255,255,255,0.08);overflow:hidden">' +
       '<div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:3px"></div>' +
     '</div>' +
+    stepStreakLineHtml() +
   '</div>';
+}
+
+// ─── STEP STREAK ─────────────────────────────────────────────────────────────
+// Days in a row at the step goal (owner, Oct 13: a 5-day streak earns an
+// award). Each day's count is saved to daily_steps; Oura members also get
+// the past week filled in from Oura's daily_activity on every sync. Apple
+// Health only reports today's count, so for those members a day is saved
+// when the app is opened that day.
+//
+// ST.stepHistory: { 'YYYY-MM-DD': { steps, goal } }. goal is the goal on
+// that day; rows filled in from Oura for past days have none and are judged
+// against the current goal.
+const STEP_HISTORY_CACHE_KEY = 'fcf_step_history';
+const STEP_STREAK_BADGE_DAYS = 5;
+if (!ST.stepHistory) ST.stepHistory = {};
+
+function stepDayMet(history, date, currentGoal) {
+  const r = history[date];
+  if (!r) return false;
+  const g = r.goal || currentGoal;
+  return !!g && r.steps >= g;
+}
+
+function shiftDateStr(dateStr, days) {
+  const d = new Date(dateStr + 'T12:00:00'); // midday: no DST edge
+  d.setDate(d.getDate() + days);
+  return localDateStr(d);
+}
+
+// Current streak. Today still in progress doesn't break it: until today's
+// goal is met, the streak runs through yesterday.
+function stepStreak(history, todayStr, currentGoal) {
+  const todayMet = stepDayMet(history, todayStr, currentGoal);
+  let d = todayMet ? todayStr : shiftDateStr(todayStr, -1);
+  let count = 0;
+  while (stepDayMet(history, d, currentGoal)) { count++; d = shiftDateStr(d, -1); }
+  return { count, todayMet };
+}
+
+// Longest run anywhere in the saved history (for the badge).
+function bestStepStreak(history, currentGoal) {
+  const days = Object.keys(history || {}).filter(d => stepDayMet(history, d, currentGoal)).sort();
+  let best = 0, run = 0, prev = null;
+  days.forEach(d => {
+    run = (prev && shiftDateStr(prev, 1) === d) ? run + 1 : 1;
+    best = Math.max(best, run);
+    prev = d;
+  });
+  return best;
+}
+
+function stepStreakLineHtml() {
+  const goal = activeStepGoal();
+  if (!goal) return '';
+  const { count, todayMet } = stepStreak(ST.stepHistory || {}, localDateStr(new Date()), goal);
+  const badgeLeft = !(ST.badges && ST.badges.step_streak_5) && count < STEP_STREAK_BADGE_DAYS
+    ? ' · ' + (STEP_STREAK_BADGE_DAYS - count) + ' more for the Five-Day Stride badge' : '';
+  let text;
+  if (todayMet && count >= 2) text = '🔥 ' + count + ' days in a row at your goal' + badgeLeft;
+  else if (todayMet) text = 'Goal hit today. Do it again tomorrow to start a streak.';
+  else if (count >= 1) text = '🔥 ' + count + '-day streak. Hit your goal today to make it ' + (count + 1) + '.';
+  else return '';
+  return '<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">' + text + '</div>';
+}
+
+function cacheStepHistory() {
+  if (ST.user) writeLocalJSON(STEP_HISTORY_CACHE_KEY, { user: ST.user.id, history: ST.stepHistory || {} });
+}
+
+async function loadStepHistory() {
+  if (!ST.user) return;
+  try {
+    const since = localDateStr(new Date(Date.now() - 60 * 86400000));
+    const { data, error } = await withTimeout(SB.from('daily_steps').select('date,steps,goal')
+      .eq('user_id', ST.user.id).gte('date', since));
+    if (error) throw error;
+    const h = {};
+    (data || []).forEach(r => { h[r.date] = { steps: r.steps, goal: r.goal }; });
+    ST.stepHistory = h;
+    cacheStepHistory();
+  } catch (e) {
+    // Offline: what this phone last saw.
+    const c = readLocalJSON(STEP_HISTORY_CACHE_KEY, null);
+    ST.stepHistory = (c && c.user === ST.user.id && c.history) || {};
+  }
+}
+
+// Saves today's count. Called whenever Today draws the step bar, so it is
+// throttled: a write when the day, the goal, or the goal being met changes,
+// or the count has grown by 250 since the last write. The table keeps the
+// larger count for a day (see sql/daily_steps.sql).
+let _lastStepWrite = null;
+function noteStepsToday(steps) {
+  const goal = activeStepGoal();
+  if (!goal || steps == null || !ST.user) return;
+  const today = localDateStr(new Date());
+  if (!ST.stepHistory) ST.stepHistory = {};
+  const prev = ST.stepHistory[today];
+  const wasMet = stepDayMet(ST.stepHistory, today, goal) && !!prev && prev.goal === goal;
+  const best = Math.max(steps, prev ? prev.steps : 0);
+  ST.stepHistory[today] = { steps: best, goal };
+  const nowMet = best >= goal;
+  const last = _lastStepWrite;
+  const due = !last || last.date !== today || last.goal !== goal || best - last.steps >= 250 || (nowMet && last.steps < goal);
+  if (!due) return;
+  _lastStepWrite = { date: today, steps: best, goal };
+  cacheStepHistory();
+  withTimeout(SB.from('daily_steps').upsert({ user_id: ST.user.id, date: today, steps: best, goal, source: 'app' }, { onConflict: 'user_id,date' }))
+    .then(({ error }) => { if (error) throw error; })
+    .catch(e => { _lastStepWrite = null; console.warn('Saving today\'s steps failed, will retry:', e); });
+  if (nowMet && !wasMet) awardBadges();
+}
+
+// Oura's final counts for earlier days. Sent without a goal column, so a
+// goal already saved for that day is left alone.
+function notePastOuraSteps(activityRows, today) {
+  if (!activeStepGoal() || !ST.user || !Array.isArray(activityRows)) return;
+  const rows = activityRows
+    .filter(d => d && d.day && d.day < today && Number.isFinite(d.steps))
+    .map(d => ({ user_id: ST.user.id, date: d.day, steps: d.steps, source: 'oura' }));
+  if (!rows.length) return;
+  if (!ST.stepHistory) ST.stepHistory = {};
+  rows.forEach(r => {
+    const prev = ST.stepHistory[r.date];
+    ST.stepHistory[r.date] = { steps: Math.max(r.steps, prev ? prev.steps : 0), goal: prev ? prev.goal : null };
+  });
+  cacheStepHistory();
+  withTimeout(SB.from('daily_steps').upsert(rows, { onConflict: 'user_id,date' }))
+    .then(({ error }) => { if (error) throw error; awardBadges(); })
+    .catch(e => console.warn('Saving past Oura steps failed:', e));
 }
 
 // Merge built-in + custom exercises for a given env/muscleGroup
@@ -12833,7 +12989,9 @@ async function syncOuraData(force) {
     const [readiness, sleep, activity] = await Promise.all([
       ouraFetch('daily_readiness?start_date='+yesterday+'&end_date='+fetchEnd).catch(()=>null),
       ouraFetch('daily_sleep?start_date='+yesterday+'&end_date='+fetchEnd).catch(()=>null),
-      ouraFetch('daily_activity?start_date='+yesterday+'&end_date='+fetchEnd).catch(()=>null),
+      // A week back (only activity) so the step streak has Oura's final
+      // counts for earlier days; today's row is still matched by day below.
+      ouraFetch('daily_activity?start_date='+localDateStr(new Date(Date.now()-6*86400000))+'&end_date='+fetchEnd).catch(()=>null),
     ]);
     // Awaited now rather than fire-and-forget (see the removed renderPage()
     // call inside this function for why) — this does mean syncOuraData
@@ -12851,6 +13009,7 @@ async function syncOuraData(force) {
     const readinessItem = readiness?.data?.find(d => d.day === today) ?? readiness?.data?.[readiness.data.length-1];
     const sleepItem     = sleep?.data?.find(d => d.day === today) ?? sleep?.data?.[sleep.data.length-1];
     const activityItem  = activity?.data?.find(d => d.day === today) ?? null; // no same-day fallback for steps specifically — that's the exact bug being fixed
+    notePastOuraSteps(activity?.data, today);
 
     // Diagnostic for a manual Sync Now when activity data still doesn't
     // show up — rather than guess a third time whether this is a stale
@@ -13268,7 +13427,7 @@ function renderProfile(p) {
     parts.push('</div>');
   });
   parts.push('</div>');
-  if (ST.goal === 'walking') parts.push(renderStepGoalPicker());
+  parts.push(renderStepGoalPicker());
   parts.push('</div>');
 
   // Fitness level
@@ -14522,7 +14681,7 @@ function buildTodayBriefing(ctx) {
 
   // 3b. Walking First on a walk day: the step goal is the mission.
   const stepGoal = activeStepGoal();
-  if (stepGoal && !training.workoutToday && walkingFirstNext(ctx.now) === 'Walk') {
+  if (isWalkingFirst() && !training.workoutToday && walkingFirstNext(ctx.now) === 'Walk') {
     const steps = oura.steps;
     const startWalk = { label:'Start a walk', fn:"selectMissionProfile('Walk');switchTab('preflight')" };
     if (steps !== null && steps >= stepGoal) {
@@ -14813,7 +14972,7 @@ function buildTodayGaps(ctx) {
     gaps.push({ icon:'🚶', text:(stepGoal - steps).toLocaleString()+' steps to your goal', fn:"selectMissionProfile('Walk');switchTab('preflight')" });
   }
   // Walking First: a walk day isn't a missed session.
-  else if (!training.workoutToday && hour >= 18 && !(stepGoal && walkingFirstNext(ctx.now) === 'Walk')) gaps.push({ icon:'💪', text:'No session logged today', fn:"switchTab('preflight')" });
+  if (!training.workoutToday && hour >= 18 && !(isWalkingFirst() && walkingFirstNext(ctx.now) === 'Walk')) gaps.push({ icon:'💪', text:'No session logged today', fn:"switchTab('preflight')" });
   // Uses the same hydroStatus() the workout hydration gate reads from —
   // previously this used a hardcoded "under 1.5L after 2pm" check that
   // ignored the real, flight-hours-aware target entirely. On a no-fly day
@@ -14846,6 +15005,7 @@ function buildOuraTopSectionHTML(ctx) {
   // With a step goal the progress bar below carries the count instead.
   if (ctx.oura.steps !== null && !activeStepGoal()) parts.push('<span style="font-family:var(--mono);font-size:0.75rem;color:var(--text)">'+ctx.oura.steps.toLocaleString()+' <span style="font-size:0.5625rem;color:var(--muted);letter-spacing:.1em">STEPS</span></span>');
   parts.push('</div>');
+  noteStepsToday(ctx.oura.steps);
   parts.push(stepGoalProgressHtml(ctx.oura.steps));
 
   if (ctx.oura.missingToday) {

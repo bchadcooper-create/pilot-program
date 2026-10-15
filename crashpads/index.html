@@ -160,7 +160,7 @@ document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ checkUp
 // ---------- self-update ----------
 // GitHub Pages lets phones keep the page for 10 minutes. On open and on return to the app,
 // ask for the latest copy directly; if the version differs, reload onto it.
-const APP_VERSION = '2026.10.12-12';
+const APP_VERSION = '2026.10.15-1';
 async function checkUpdate(){
   try{
     const r = await fetch(location.pathname+'?check='+Date.now(), { cache:'no-store' });
@@ -423,6 +423,9 @@ async function holdBed(leadId, b){
   let tid=l.tenant_id;
   try{
     if(!tid){ const same=S.data.tenants.find(x=>x.status!=='Moved Out'&&x.name.trim().toLowerCase()===l.name.trim().toLowerCase()); if(same) tid=same.id; }
+    // If the move-in month was prorated, recompute it for the new rent and date (a revised agreement used to keep the old amount).
+    const prev=tid?S.data.tenants.find(x=>x.id===tid):null;
+    if(prev&&prev.first_month_due!=null&&(Number(prev.rent)!==Number(b.rent)||prev.move_in!==b.move_in)){ const r=prorated(Number(b.rent),b.move_in); hold.first_month_due=r?r.amt:null; }
     if(tid) await sb.from('cp_tenants').update(hold).eq('id',tid);
     else { const {data}=await sb.from('cp_tenants').insert({name:l.name,status:'Reserved',phone:l.phone,airline:l.airline,...hold}).select('id').single(); tid=data&&data.id; }
     if(tid){
@@ -607,7 +610,7 @@ function vMore(){
   const d=S.data;
   const total=d.beds.length, occ=d.beds.filter(b=>b.status==='Occupied').length, res=d.beds.filter(b=>b.status==='Reserved').length;
   const now=firstOfMonth(new Date());
-  const months=[-5,-4,-3,-2,-1,0].map(n=>addMonths(now,n));
+  const months=[0,-1,-2,-3,-4,-5].map(n=>addMonths(now,n)); // newest first, same as Average nightly
   const income=months.map(m=>{const k=iso(m);return d.payments.filter(p=>p.for_month===k&&p.type!=='Refund').reduce((a,p)=>a+Number(p.amount),0);});
   const max=Math.max(1,...income);
   const since=iso(addMonths(now,-3));

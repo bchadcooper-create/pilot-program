@@ -38,7 +38,11 @@ First class unless noted.
 - First class: first-class privileges 12 months (under 40 at exam) or 6 months (40 and over); then second-class 12 months; then third-class 60 months (under 40) or 24 months (40 and over).
 - Second class: 12 months second-class; then third-class 60 or 24.
 - Third class: 60 or 24.
-- Which class is needed: ATP privileges and Part 121 PIC need first; commercial privileges (most Part 135 and Part 91 commercial flying) need second; private and student need third or BasicMed. Part 135 PICs in operations that require an ATP need first class. The app asks what the pilot flies under and tracks the matching class, defaulting to first.
+- Which class is needed (14 CFR 61.23(a)): the app asks the pilot's seat (added Oct 16 2026, v5.44.45).
+  - Captain (Part 121, or any ATP pilot in command): first class, (a)(1)(i).
+  - Part 121 first officer: at least second class, (a)(2)(i). First class instead if the operation is flag or supplemental needing three or more pilots (a)(1)(ii), or the pilot is 60 or over (a)(1)(iii), or the airline requires it by company policy (pilot ticks a box).
+  - Other (charter, corporate, instructor, private): the class the pilot picks.
+  - The certificate page and the home tile key on the privilege line the seat needs. Example: a 45-year-old FO with a first-class exam in June loses first-class privileges Dec 31 but keeps flying on second-class until June 30 next year; June 30 is the date shown. The ECG card tells an FO that a second-class exam has no ECG and it only matters to keep first-class privileges.
 
 ## Medication lookup (FAA DNI/DNF tables)
 

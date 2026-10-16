@@ -18,7 +18,8 @@
     "e2e:distance": "node tests/e2e/health-distance.js",
     "e2e:coachcard": "node tests/e2e/one-coach-card.js",
     "e2e:machines": "node tests/e2e/gym-machines.js",
-    "e2e:walking": "node tests/e2e/walking-first.js"
+    "e2e:walking": "node tests/e2e/walking-first.js",
+    "e2e:medical": "node tests/e2e/medical.js"
   },
   "dependencies": {
     "@capacitor/app": "^7.0.0",

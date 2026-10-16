@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.43 / 20261014_5
+ * Version/build: fcf-v5.44.44 / 20261016_1
  */
 
-const FCF_VERSION = 'fcf-v5.44.43';
-const FCF_BUILD   = '20261014_5';
+const FCF_VERSION = 'fcf-v5.44.44';
+const FCF_BUILD   = '20261016_1';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -2168,7 +2168,7 @@ function switchTab(tab) {
   const prevTab = ST.tab;
   if (ST.tab === 'fuelplan' && tab !== 'fuelplan') { ST.fuelPlanDraftSynced = false; ST.manualTargetsOpen = false; ST.manualTargetsWarning = null; }
   ST.tab = tab;
-  const MORE_SUBVIEWS = ['profile','wisdom','devices','data','badges','superuser'];
+  const MORE_SUBVIEWS = ['profile','wisdom','devices','data','badges','superuser','medical'];
   const hl = MORE_SUBVIEWS.includes(tab) ? 'more' : tab;
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === hl));
   const tabbar = document.getElementById('tabbar');
@@ -3121,6 +3121,7 @@ function renderPage() {
   else if (ST.tab === 'fuelplan')    renderNutritionGoalsSetup(p);
   else if (ST.tab === 'badges')      renderBadges(p);
   else if (ST.tab === 'superuser')   renderSuperUser(p);
+  else if (ST.tab === 'medical')     renderMedical(p);
   else if (ST.tab === 'debrief')     renderDebrief(p);
 }
 
@@ -13559,6 +13560,483 @@ function renderProfile(p) {
 }
 
 // ─── MORE MENU + SUB-VIEWS ───────────────────────────────────────────────────
+// ─── FAA MEDICAL READINESS ──────────────────────────────────────────────────
+// Preparation and early warning for the FAA medical, never a verdict (spec:
+// docs/medical-readiness-spec.md). Owner request, Oct 16 2026. Gated to the
+// owner's account while it is tested; Pro members after the AME review.
+//
+// Privacy: everything the pilot enters here (certificate dates, birth date,
+// vision results) lives on this phone only (localStorage). Nothing is saved
+// to the server, sent to the AI coach, or included in the data export.
+const MEDICAL_OWNER_IDS = ['7e41ca46-6e00-4c54-bc3f-2e45d923fe0b'];
+const MEDICAL_STORE_KEY = 'fcf_medical_v1';
+const MEDICAL_GUIDE_CHECKED = 'October 16, 2026';
+const FAA_STANDARDS_URL = 'https://www.faa.gov/ame_guide/standards';
+const FAA_DNI_DNF_URL = 'https://www.faa.gov/ame_guide/pharm/dni_dnf';
+
+function medicalEnabled() {
+  return !!(ST.user && MEDICAL_OWNER_IDS.includes(ST.user.id));
+}
+
+function medicalRecord() {
+  if (!ST.medical) {
+    const saved = readLocalJSON(MEDICAL_STORE_KEY, null);
+    // Tied to the signed-in account: another account on the same phone
+    // starts clean rather than seeing someone else's dates.
+    const mine = saved && ST.user && saved.user === ST.user.id ? saved : null;
+    ST.medical = mine || { user: ST.user ? ST.user.id : null, cls: 1, examDate: '', dob: '', hadEcg: null, lastEcg: '', pinHash: '', accepted: false, vision: {} };
+  }
+  return ST.medical;
+}
+function saveMedicalRecord() { writeLocalJSON(MEDICAL_STORE_KEY, medicalRecord()); }
+function deleteMedicalRecord() {
+  try { localStorage.removeItem(MEDICAL_STORE_KEY); } catch (e) {}
+  ST.medical = null; ST.medicalUnlocked = false; ST.medicalView = 'home';
+}
+
+// ── Dates: 14 CFR 61.23(d). Privileges run to the end of the Nth month after
+// the month of the exam.
+function medicalEndOfMonthPlus(dateStr, months) {
+  const [y, m] = dateStr.split('-').map(Number);
+  const d = new Date(y, m - 1 + months + 1, 0); // day 0 of the following month = last day
+  return localDateStr(d);
+}
+function medicalAgeOn(dobStr, onStr) {
+  if (!dobStr || !onStr) return null;
+  const [by, bm, bd] = dobStr.split('-').map(Number), [y, m, d] = onStr.split('-').map(Number);
+  let age = y - by; if (m < bm || (m === bm && d < bd)) age--;
+  return age;
+}
+// Which privileges a certificate carries and when each ends.
+function medicalPrivileges(cls, examDate, dob) {
+  if (!examDate || !dob) return [];
+  const age = medicalAgeOn(dob, examDate);
+  const under40 = age < 40;
+  const out = [];
+  if (cls === 1) out.push({ cls: 1, label: 'First-class (ATP) privileges', ends: medicalEndOfMonthPlus(examDate, under40 ? 12 : 6) });
+  if (cls <= 2) out.push({ cls: 2, label: 'Second-class (commercial) privileges', ends: medicalEndOfMonthPlus(examDate, 12) });
+  out.push({ cls: 3, label: 'Third-class (private) privileges', ends: medicalEndOfMonthPlus(examDate, under40 ? 60 : 24) });
+  return out;
+}
+function medicalDaysUntil(dateStr, today) {
+  const t = today || localDateStr(new Date());
+  return Math.round((new Date(dateStr + 'T12:00:00') - new Date(t + 'T12:00:00')) / 86400000);
+}
+// First class only: an ECG at the first exam at or after 35, then annually
+// from 40. "Annually" in practice means at the exam that falls a year after
+// the last ECG.
+function medicalEcgDue(rec, nextExamDate) {
+  if (rec.cls !== 1 || !rec.dob || !nextExamDate) return null;
+  const age = medicalAgeOn(rec.dob, nextExamDate);
+  if (age < 35) return { due: false, why: 'No ECG before 35.' };
+  if (age < 40) return rec.hadEcg ? { due: false, why: 'One ECG between 35 and 40 is already on file.' } : { due: true, why: 'First ECG: required at the first exam at or after age 35.' };
+  if (!rec.lastEcg) return { due: true, why: 'Annual from 40, and no ECG date is recorded here.' };
+  const months = (new Date(nextExamDate) - new Date(rec.lastEcg)) / (30.44 * 86400000);
+  return months >= 11.5 ? { due: true, why: 'Annual from 40: the last one was ' + Math.round(months) + ' months before this exam.' } : { due: false, why: 'Last ECG was ' + Math.round(months) + ' months ago; the next one is a year after it.' };
+}
+
+// ── Medications (FAA DNI/DNF tables). Not all-inclusive; the footer says so.
+// bucket: 'dni' AME cannot issue without FAA clearance; 'dnf' do not fly for
+// the wait time; 'ok' generally accepted, still reported on MedXPress;
+// 'si' special issuance path (allowed only through the FAA process).
+const FAA_MEDS = [
+  // Generally accepted
+  { g: 'finasteride', b: 'Propecia, Proscar', k: 'ok', n: 'Generally accepted for hair loss or prostate. Report it on MedXPress.' },
+  { g: 'minoxidil (topical)', b: 'Rogaine foam or liquid', k: 'ok', n: 'Topical use is generally accepted.' },
+  { g: 'minoxidil (oral)', b: 'Loniten, low-dose oral minoxidil', k: 'ok', flag: true, n: 'Oral minoxidil is a blood pressure medication. Generally accepted as an antihypertensive, but talk to your AME before starting it, and expect blood pressure questions.' },
+  { g: 'atorvastatin', b: 'Lipitor', k: 'ok', n: 'Statins are accepted. Report on MedXPress.' },
+  { g: 'rosuvastatin', b: 'Crestor', k: 'ok', n: 'Statins are accepted. Report on MedXPress.' },
+  { g: 'simvastatin', b: 'Zocor', k: 'ok', n: 'Statins are accepted. Report on MedXPress.' },
+  { g: 'lisinopril', b: 'Zestril, Prinivil', k: 'ok', n: 'ACE inhibitors are accepted for blood pressure. The AME will want your readings controlled and may ask for a short status note from your doctor.' },
+  { g: 'losartan', b: 'Cozaar', k: 'ok', n: 'ARBs are accepted for blood pressure. Same controlled-BP expectation.' },
+  { g: 'amlodipine', b: 'Norvasc', k: 'ok', n: 'Calcium channel blockers are accepted.' },
+  { g: 'hydrochlorothiazide', b: 'HCTZ, Microzide', k: 'ok', n: 'Thiazide diuretics are accepted.' },
+  { g: 'metoprolol', b: 'Lopressor, Toprol-XL', k: 'ok', n: 'Beta blockers are accepted for blood pressure. Tell the AME what it is prescribed for.' },
+  { g: 'metformin', b: 'Glucophage', k: 'ok', flag: true, n: 'Accepted, but a diabetes diagnosis itself needs FAA review and paperwork (A1c, doctor status report). Diet-controlled diabetes is simpler. Talk to your AME before your exam.' },
+  { g: 'semaglutide', b: 'Ozempic, Wegovy, Rybelsus', k: 'ok', flag: true, n: 'GLP-1 drugs are being accepted with conditions (stable dose, no significant side effects). The rules here have moved more than once; confirm the current wait and paperwork with your AME before your exam.' },
+  { g: 'tirzepatide', b: 'Mounjaro, Zepbound', k: 'ok', flag: true, n: 'Same as semaglutide: accepted with conditions, confirm with your AME.' },
+  { g: 'testosterone', b: 'AndroGel, Testim, cypionate injections', k: 'ok', flag: true, n: 'Testosterone replacement is accepted with documentation of the reason and labs. Bring the prescribing doctor\'s note.' },
+  { g: 'levothyroxine', b: 'Synthroid', k: 'ok', n: 'Accepted once the dose is stable. Bring a recent TSH.' },
+  { g: 'omeprazole', b: 'Prilosec', k: 'ok', n: 'Accepted.' },
+  { g: 'pantoprazole', b: 'Protonix', k: 'ok', n: 'Accepted.' },
+  { g: 'loratadine', b: 'Claritin', k: 'ok', n: 'Non-sedating antihistamine, accepted. Avoid the "D" versions right before flying if they make you jittery.' },
+  { g: 'fexofenadine', b: 'Allegra', k: 'ok', n: 'Non-sedating antihistamine, accepted.' },
+  { g: 'cetirizine', b: 'Zyrtec', k: 'ok', flag: true, n: 'Accepted, but it can be mildly sedating. Try it on a day off first.' },
+  { g: 'fluticasone (nasal)', b: 'Flonase', k: 'ok', n: 'Nasal steroid sprays are accepted.' },
+  { g: 'albuterol', b: 'ProAir, Ventolin', k: 'ok', flag: true, n: 'Accepted for mild, well-controlled asthma. Bring a status note if asthma is new.' },
+  { g: 'ibuprofen', b: 'Advil, Motrin', k: 'ok', n: 'Accepted.' },
+  { g: 'acetaminophen', b: 'Tylenol', k: 'ok', n: 'Accepted. Watch for combination products that add diphenhydramine ("PM" versions).' },
+  { g: 'naproxen', b: 'Aleve', k: 'ok', n: 'Accepted.' },
+  { g: 'allopurinol', b: 'Zyloprim', k: 'ok', n: 'Accepted for gout.' },
+  { g: 'tamsulosin', b: 'Flomax', k: 'ok', n: 'Accepted. Some pilots get lightheaded at first; start on a day off.' },
+  { g: 'sildenafil', b: 'Viagra', k: 'ok', wait: '6 hours', n: 'Accepted with a 6-hour wait before flying (FAA guidance for the shorter-acting ED drugs).' },
+  { g: 'tadalafil', b: 'Cialis', k: 'ok', wait: '36 hours', n: 'Accepted with a wait before flying; the FAA has used 36 hours for tadalafil. Confirm with your AME.' },
+  { g: 'varenicline', b: 'Chantix', k: 'ok', n: 'Allowed for stopping smoking.' },
+  { g: 'melatonin', b: '', k: 'ok', flag: true, n: 'Not on the FAA no-fly list, but it is a sleep aid; the FAA expects you not to fly while it is active. Low dose, the night before, is the common practice.' },
+  { g: 'creatine', b: '', k: 'ok', n: 'A supplement, not a medication. Nothing to report.' },
+  { g: 'caffeine', b: '', k: 'ok', n: 'Nothing to report.' },
+  // Special issuance path
+  { g: 'sertraline', b: 'Zoloft', k: 'si', n: 'One of the SSRIs the FAA allows, but only through a HIMS AME after at least 3 months stable on it alone. The AME cannot issue in the office. Call your AME before you start it.' },
+  { g: 'fluoxetine', b: 'Prozac', k: 'si', n: 'Same SSRI special issuance path as sertraline.' },
+  { g: 'citalopram', b: 'Celexa', k: 'si', n: 'Same SSRI special issuance path as sertraline.' },
+  { g: 'escitalopram', b: 'Lexapro', k: 'si', n: 'Same SSRI special issuance path as sertraline.' },
+  { g: 'bupropion', b: 'Wellbutrin', k: 'si', n: 'Added to the FAA antidepressant path in 2023. Same HIMS AME process and 3-month stable period.' },
+  { g: 'insulin', b: 'all insulins', k: 'si', n: 'Insulin-treated diabetes needs an FAA special issuance with a monitoring protocol. Possible for first class since 2019, but it is a process, not an office issue.' },
+  // Do Not Issue
+  { g: 'clonidine', b: 'Catapres', k: 'dni', n: 'Centrally acting blood pressure drug. The AME cannot issue; ask your doctor about an accepted alternative.' },
+  { g: 'methyldopa', b: 'Aldomet', k: 'dni', n: 'Centrally acting blood pressure drug. The AME cannot issue.' },
+  { g: 'phentermine', b: 'Adipex', k: 'dni', n: 'Weight loss stimulant. The AME cannot issue while you take it.' },
+  { g: 'naltrexone + bupropion', b: 'Contrave', k: 'dni', n: 'Weight loss combination. The AME cannot issue.' },
+  { g: 'methylphenidate', b: 'Ritalin, Concerta', k: 'dni', n: 'ADHD stimulants are disqualifying while in use, and an ADHD history has its own FAA review. Talk to your AME before anything is prescribed.' },
+  { g: 'amphetamine salts', b: 'Adderall', k: 'dni', n: 'Same as methylphenidate.' },
+  { g: 'alprazolam', b: 'Xanax', k: 'dnf', wait: 'see note', n: 'Benzodiazepine. Do not fly while it is active, and routine use means the AME defers. Occasional use needs the 5-half-lives wait (several days for some).' },
+  { g: 'lorazepam', b: 'Ativan', k: 'dnf', wait: 'see note', n: 'Same as alprazolam.' },
+  { g: 'topiramate', b: 'Topamax', k: 'dni', n: 'Seizure medication, even when prescribed for migraine. The AME cannot issue.' },
+  { g: 'gabapentin', b: 'Neurontin', k: 'dni', n: 'Treated as a seizure medication by the FAA even for nerve pain. The AME cannot issue without FAA review.' },
+  { g: 'prednisone (over 20 mg/day)', b: '', k: 'dni', n: 'High-dose steroids: the AME cannot issue. Short courses at or under 20 mg/day are handled case by case.' },
+  { g: 'oxybutynin', b: 'Ditropan', k: 'dni', n: 'Overactive bladder drug on the FAA list. Ask about mirabegron (Myrbetriq) instead.' },
+  { g: 'medical marijuana / THC / CBD with THC', b: '', k: 'dni', n: 'Disqualifying regardless of state law. CBD products can also cause a positive drug test.' },
+  { g: 'mefloquine', b: 'Lariam', k: 'dni', n: 'This malaria drug is not accepted. Most other malaria drugs are.' },
+  { g: 'nitroglycerin', b: 'Nitrostat, Imdur', k: 'dni', n: 'Angina treatment: angina itself is disqualifying until the FAA reviews it.' },
+  // Do Not Fly, wait times
+  { g: 'diphenhydramine', b: 'Benadryl, ZzzQuil, Tylenol PM, Advil PM, Unisom SleepGels', k: 'dnf', wait: '60 hours', n: 'Sedating antihistamine. The FAA wait is 60 hours after the last dose. It hides in many "PM" and "nighttime" products.' },
+  { g: 'doxylamine', b: 'Unisom SleepTabs, NyQuil', k: 'dnf', wait: '60 hours (treat like diphenhydramine)', n: 'Sedating antihistamine sleep aid. Same category as diphenhydramine.' },
+  { g: 'chlorpheniramine', b: 'Chlor-Trimeton, Coricidin', k: 'dnf', wait: '5 x half-life, about 2 to 3 days', n: 'Sedating antihistamine.' },
+  { g: 'zolpidem', b: 'Ambien', k: 'dnf', wait: '24 hours (FAA guidance for zolpidem)', n: 'Sleep aid. Occasional use for a time-zone problem is tolerated with the wait; routine use means the AME defers.' },
+  { g: 'eszopiclone', b: 'Lunesta', k: 'dnf', wait: '30 hours', n: 'Sleep aid, same handling as zolpidem with a longer wait.' },
+  { g: 'cyclobenzaprine', b: 'Flexeril', k: 'dnf', wait: '5 x half-life, several days', n: 'Muscle relaxant. Do not fly while it is active.' },
+  { g: 'carisoprodol', b: 'Soma', k: 'dnf', wait: '5 x half-life', n: 'Muscle relaxant. Do not fly while it is active.' },
+  { g: 'hydrocodone', b: 'Vicodin, Norco', k: 'dnf', wait: '5 x half-life, and until the condition allows', n: 'Narcotic pain reliever. Short use after a procedure is tolerated with the wait; the AME notes it. Chronic use is disqualifying.' },
+  { g: 'oxycodone', b: 'Percocet, OxyContin', k: 'dnf', wait: '5 x half-life, and until the condition allows', n: 'Same as hydrocodone.' },
+  { g: 'tramadol', b: 'Ultram', k: 'dnf', wait: '5 x half-life', n: 'Non-narcotic but on the FAA do-not-fly list.' },
+  { g: 'kratom', b: '', k: 'dnf', n: 'On the FAA do-not-fly supplement list.' },
+  { g: 'kava', b: '', k: 'dnf', n: 'On the FAA do-not-fly supplement list.' },
+  { g: 'valerian', b: '', k: 'dnf', n: 'On the FAA do-not-fly supplement list.' },
+  { g: 'dextromethorphan', b: 'Robitussin DM, Delsym', k: 'dnf', wait: 'until symptoms and effects clear, 5 x dosing interval', n: 'Cough suppressant with a drowsiness warning. The label rule applies: no flying with a "may cause drowsiness" medication active.' },
+  { g: 'pseudoephedrine', b: 'Sudafed', k: 'ok', flag: true, n: 'Accepted, but a cold bad enough to need it is itself a reason not to fly (ear and sinus blocks). Avoid combination products with sedating antihistamines.' },
+];
+const MED_BUCKETS = {
+  ok:  { label: 'Generally accepted', color: 'var(--green)', short: 'OK' },
+  si:  { label: 'Special issuance path', color: 'var(--amber)', short: 'SI' },
+  dnf: { label: 'Do Not Fly (wait time)', color: 'var(--amber)', short: 'WAIT' },
+  dni: { label: 'Do Not Issue', color: 'var(--red)', short: 'DNI' },
+};
+function medSearch(q) {
+  const s = String(q || '').trim().toLowerCase();
+  if (!s) return [];
+  return FAA_MEDS.filter(m => m.g.toLowerCase().includes(s) || m.b.toLowerCase().includes(s)).slice(0, 12);
+}
+
+// ── Biometrics against the lines an AME uses.
+function medicalBioFlags(row, heightIn) {
+  const flags = [];
+  if (!row) return flags;
+  const sys = row.systolic_bp, dia = row.diastolic_bp;
+  if (sys != null && dia != null) {
+    if (sys > 155 || dia > 95) flags.push({ tone: 'red', title: 'Blood pressure ' + sys + '/' + dia, body: 'Above the FAA working ceiling of 155/95. The AME can retake it after you rest, but a reading like this usually means starting or adjusting treatment with your doctor first, then bringing a status note.' });
+    else if (sys >= 140 || dia >= 90) flags.push({ tone: 'amber', title: 'Blood pressure ' + sys + '/' + dia, body: 'Under the FAA ceiling of 155/95 but in the range an AME notices. Worth a few home readings before your exam; if they stay here, see your doctor first.' });
+    else flags.push({ tone: 'green', title: 'Blood pressure ' + sys + '/' + dia, body: 'Comfortably under the FAA ceiling of 155/95.' });
+  }
+  const g = row.fasting_glucose;
+  if (g != null) {
+    if (g >= 126) flags.push({ tone: 'red', title: 'Fasting glucose ' + g, body: 'In the diabetes range (126 and over). A diabetes diagnosis needs FAA paperwork before the exam, not at it. See your doctor and call your AME.' });
+    else if (g >= 100) flags.push({ tone: 'amber', title: 'Fasting glucose ' + g, body: 'Prediabetes range (100 to 125). Not an FAA issue by itself, and the exam urine test only shows glucose when it is well above this. A good time to work on it.' });
+    else flags.push({ tone: 'green', title: 'Fasting glucose ' + g, body: 'Normal fasting range.' });
+  }
+  if (row.weight_lb && heightIn) {
+    const bmi = Math.round(703 * row.weight_lb / (heightIn * heightIn) * 10) / 10;
+    if (bmi >= 40) flags.push({ tone: 'red', title: 'BMI ' + bmi, body: 'At 40 and over the AME must start the FAA sleep apnea screening. Expect a sleep study requirement unless one is already on file.' });
+    else if (bmi >= 35) flags.push({ tone: 'amber', title: 'BMI ' + bmi, body: 'The AME will ask about snoring, daytime sleepiness and neck size with sleep apnea in mind. If you have symptoms, a sleep study before the exam saves time.' });
+    else if (bmi >= 30) flags.push({ tone: 'amber', title: 'BMI ' + bmi, body: 'Noted on the exam, not an issue by itself. Blood pressure and glucose are what the AME watches alongside it.' });
+    else flags.push({ tone: 'green', title: 'BMI ' + bmi, body: 'Nothing here draws attention.' });
+  }
+  return flags;
+}
+
+// ── Near-vision check geometry. A 20/20 letter subtends 5 minutes of arc;
+// at 16 inches (406.4 mm) that is 0.591 mm tall. 20/40 is twice that.
+const VISION_LINES = [100, 70, 50, 40, 30, 25, 20];
+const SLOAN = ['C','D','H','K','N','O','R','S','V','Z'];
+const CREDIT_CARD_MM = 85.6;
+function visionLetterMm(denominator, distanceMm) {
+  return distanceMm * Math.tan(5 / 60 * Math.PI / 180) * denominator / 20;
+}
+function visionLineLetters(seed) {
+  // Stable per session so the lines do not reshuffle on every redraw.
+  const out = [];
+  let x = seed;
+  for (let i = 0; i < 5; i++) { x = (x * 9301 + 49297) % 233280; out.push(SLOAN[x % SLOAN.length]); }
+  return out.join(' ');
+}
+
+// ── PIN: hashed on the device. The phone lock is the real protection; this
+// stops a glance over the shoulder or a borrowed phone.
+async function medicalHash(pin) {
+  const data = new TextEncoder().encode('fcf-med|' + pin);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function medicalSetPin() {
+  const el = document.getElementById('medPinNew'); const pin = (el?.value || '').trim();
+  if (!/^\d{4,6}$/.test(pin)) { showToast('Use 4 to 6 digits.'); return; }
+  medicalRecord().pinHash = await medicalHash(pin); saveMedicalRecord(); ST.medicalUnlocked = true;
+  showToast('PIN set. It is asked for each time the app opens.'); renderPage();
+}
+async function medicalClearPin() {
+  medicalRecord().pinHash = ''; saveMedicalRecord(); showToast('PIN removed.'); renderPage();
+}
+async function medicalUnlock() {
+  const el = document.getElementById('medPinEntry'); const pin = (el?.value || '').trim();
+  if (await medicalHash(pin) === medicalRecord().pinHash) { ST.medicalUnlocked = true; renderPage(); }
+  else { showToast('That PIN did not match.'); if (el) el.value = ''; }
+}
+
+function medicalSetView(v) { ST.medicalView = v; renderPage(); window.scrollTo(0, 0); }
+function medicalSave(field, value) { medicalRecord()[field] = value; saveMedicalRecord(); }
+function medicalSaveCert() {
+  const g = id => document.getElementById(id);
+  const rec = medicalRecord();
+  rec.cls = parseInt(g('medCls')?.value) || 1;
+  rec.examDate = g('medExam')?.value || '';
+  rec.dob = g('medDob')?.value || '';
+  rec.hadEcg = g('medHadEcg') ? g('medHadEcg').checked : rec.hadEcg;
+  rec.lastEcg = g('medLastEcg')?.value || '';
+  saveMedicalRecord(); showToast('Saved on this phone.'); renderPage();
+}
+function medicalAccept() { medicalRecord().accepted = true; saveMedicalRecord(); renderPage(); }
+
+const MED_DISCLAIMER = 'This section helps you prepare for your FAA medical. It is not the exam, not medical advice, and it never decides whether you pass. Only an Aviation Medical Examiner can do that. What you enter here stays on this phone.';
+
+function medCard(title, inner, sub) {
+  return '<div class="card mb12"><div class="section-label" style="margin-top:0">' + title + '</div>' + (sub ? '<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;line-height:1.5">' + sub + '</div>' : '') + inner + '</div>';
+}
+function medFlagHtml(f) {
+  const col = f.tone === 'red' ? 'var(--red)' : f.tone === 'amber' ? 'var(--amber)' : 'var(--green)';
+  return '<div style="border-left:3px solid ' + col + ';padding:8px 12px;margin-bottom:10px"><div style="font-size:0.875rem;font-weight:600">' + f.title + '</div><div style="font-size:0.75rem;color:var(--muted);line-height:1.55;margin-top:2px">' + f.body + '</div></div>';
+}
+function medFooter() {
+  return '<div style="font-size:0.625rem;color:var(--muted);line-height:1.6;margin-top:16px">A screening aid, not the exam. The exam is done by an AME under FAA standards. Checked against the FAA AME Guide on ' + MEDICAL_GUIDE_CHECKED + '. <a href="' + FAA_STANDARDS_URL + '" ' + externalLinkAttrs() + ' style="color:var(--gold)">FAA standards</a> · <a href="' + FAA_DNI_DNF_URL + '" ' + externalLinkAttrs() + ' style="color:var(--gold)">FAA medication lists</a></div>';
+}
+
+function renderMedical(p) {
+  const rec = medicalRecord();
+  const parts = [moreBackLink()];
+  if (!rec.accepted) {
+    parts.push('<div class="section-label">FAA MEDICAL</div>');
+    parts.push('<div class="card mb12"><div style="font-size:1.0625rem;font-weight:600;margin-bottom:8px">Before you start</div><div style="font-size:0.8125rem;color:var(--muted);line-height:1.65">' + MED_DISCLAIMER + '</div>' +
+      '<button class="btn btn-gold mt12" onclick="medicalAccept()">I understand</button></div>');
+    p.innerHTML = parts.join(''); return;
+  }
+  if (rec.pinHash && !ST.medicalUnlocked) {
+    parts.push('<div class="section-label">FAA MEDICAL</div>');
+    parts.push('<div class="card mb12"><div style="font-size:0.875rem;margin-bottom:10px">Enter your Medical PIN</div><div class="field"><input id="medPinEntry" type="password" inputmode="numeric" maxlength="6" autocomplete="off" onkeydown="if(event.key===\'Enter\')medicalUnlock()"></div><button class="btn btn-gold" onclick="medicalUnlock()">Unlock</button></div>');
+    p.innerHTML = parts.join(''); setTimeout(() => document.getElementById('medPinEntry')?.focus(), 50); return;
+  }
+  const view = ST.medicalView || 'home';
+  // One back link: to the menu from the Medical home, to Medical from a page.
+  if (view !== 'home') parts[0] = '<button class="btn-ghost" style="font-size:0.75rem;padding:6px 0;margin-bottom:8px" onclick="medicalSetView(\'home\')">← Medical</button>';
+  const fn = { home: medHomeHtml, cert: medCertHtml, bio: medBioHtml, meds: medMedsHtml, medxpress: medXpressHtml, vision: medVisionHtml, hearing: medHearingHtml, standards: medStandardsHtml, privacy: medPrivacyHtml }[view] || medHomeHtml;
+  parts.push(fn(rec));
+  parts.push(medFooter());
+  p.innerHTML = parts.join('');
+  if (view === 'bio') medLoadLatestBio();
+  if (view === 'vision') medVisionAfterDraw();
+}
+
+function medHomeHtml(rec) {
+  const parts = ['<div class="section-label">FAA MEDICAL · PREVIEW</div>'];
+  const today = localDateStr(new Date());
+  const privs = medicalPrivileges(rec.cls, rec.examDate, rec.dob);
+  const item = (icon, title, sub, view) => '<div class="card mb12" style="cursor:pointer" onclick="medicalSetView(\'' + view + '\')"><div class="fb"><div style="display:flex;align-items:center;gap:12px"><div style="font-size:1.375rem">' + icon + '</div><div><div style="font-size:0.875rem;font-weight:600">' + title + '</div><div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">' + sub + '</div></div></div><div style="color:var(--muted)">→</div></div></div>';
+  let certSub = 'Set your class, exam date and birth date';
+  if (privs.length) {
+    const top = privs[0]; const d = medicalDaysUntil(top.ends, today);
+    certSub = d < 0 ? top.label + ' ended ' + (-d) + ' days ago' : top.label + ' end in ' + d + ' days (' + top.ends + ')';
+  }
+  parts.push(item('🪪', 'My certificate', certSub, 'cert'));
+  parts.push(item('🩺', 'My numbers vs. FAA lines', 'Blood pressure, glucose, BMI', 'bio'));
+  parts.push(item('💊', 'Medication check', 'Is it accepted, a wait, or a call to your AME first', 'meds'));
+  parts.push(item('📝', 'MedXPress prep', 'The questions that trip pilots up', 'medxpress'));
+  parts.push(item('👁️', 'Near-vision check', 'Phone-based, 16 inches, one eye at a time', 'vision'));
+  parts.push(item('👂', 'Hearing and color vision', 'What the exam does, and the AirPods Pro test', 'hearing'));
+  parts.push(item('📋', 'What the exam checks', 'First, second and third class standards', 'standards'));
+  parts.push(item('🔒', 'Privacy and PIN', rec.pinHash ? 'PIN on · data stays on this phone' : 'No PIN · data stays on this phone', 'privacy'));
+  return parts.join('');
+}
+
+function medCertHtml(rec) {
+  const parts = ['<div class="section-label">MY CERTIFICATE</div>'];
+  parts.push('<div class="card mb12">');
+  parts.push('<div class="field"><label>Class I hold or need</label><select id="medCls">' + [1, 2, 3].map(c => '<option value="' + c + '"' + (rec.cls === c ? ' selected' : '') + '>' + ['', 'First class (ATP, Part 121 PIC)', 'Second class (commercial, most Part 135 and Part 91 commercial)', 'Third class (private, student)'][c] + '</option>').join('') + '</select></div>');
+  parts.push('<div class="field"><label>Date of last exam</label><input id="medExam" type="date" value="' + (rec.examDate || '') + '"></div>');
+  parts.push('<div class="field"><label>Date of birth</label><input id="medDob" type="date" value="' + (rec.dob || '') + '"><div style="font-size:0.625rem;color:var(--muted);margin-top:4px">Needed because the rules change at 35, 40 and 50. Stays on this phone.</div></div>');
+  if (rec.cls === 1) {
+    parts.push('<div class="fb" style="padding:6px 0"><label style="font-size:0.875rem">I have had an FAA ECG before</label><input id="medHadEcg" type="checkbox" style="width:22px;height:22px"' + (rec.hadEcg ? ' checked' : '') + '></div>');
+    parts.push('<div class="field"><label>Date of last FAA ECG (if known)</label><input id="medLastEcg" type="date" value="' + (rec.lastEcg || '') + '"></div>');
+  }
+  parts.push('<button class="btn btn-gold" onclick="medicalSaveCert()">Save on this phone</button>');
+  parts.push('</div>');
+  const privs = medicalPrivileges(rec.cls, rec.examDate, rec.dob);
+  if (privs.length) {
+    const today = localDateStr(new Date());
+    let inner = '';
+    privs.forEach(pv => {
+      const d = medicalDaysUntil(pv.ends, today);
+      const col = d < 0 ? 'var(--red)' : d <= 30 ? 'var(--amber)' : 'var(--text)';
+      inner += '<div class="fb" style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-size:0.8125rem">' + pv.label + '</div><div style="font-family:var(--mono);font-size:0.75rem;color:' + col + '">' + pv.ends + (d < 0 ? ' · ended' : ' · ' + d + ' d') + '</div></div>';
+    });
+    const age = medicalAgeOn(rec.dob, rec.examDate);
+    inner += '<div style="font-size:0.6875rem;color:var(--muted);margin-top:8px;line-height:1.5">You were ' + age + ' at that exam. Privileges run to the end of the month (14 CFR 61.23). When a higher class ends, the same certificate keeps working at the next class down.</div>';
+    parts.push(medCard('WHAT THIS CERTIFICATE IS GOOD FOR', inner));
+    const next = privs[0].ends;
+    const ecg = medicalEcgDue(rec, next);
+    if (ecg) parts.push(medCard('ECG AT YOUR NEXT FIRST-CLASS EXAM', '<div style="font-size:0.875rem;font-weight:600;color:' + (ecg.due ? 'var(--amber)' : 'var(--green)') + '">' + (ecg.due ? 'Expect an ECG' : 'No ECG expected') + '</div><div style="font-size:0.75rem;color:var(--muted);margin-top:2px;line-height:1.5">' + ecg.why + ' The rule: one ECG at the first exam at or after 35, then every year from 40. Plan a few extra minutes; it is done in the office.</div>'));
+    const planAhead = medicalDaysUntil(next, today);
+    if (planAhead >= 0 && planAhead <= 60) parts.push(medCard('BOOK IT', '<div style="font-size:0.8125rem;line-height:1.55">Your top privileges end in ' + planAhead + ' days. Book the exam for the last month, so the new certificate starts from the end of that month and you lose nothing. Fill in MedXPress within 60 days before the appointment.</div>'));
+  }
+  return parts.join('');
+}
+
+let _medBioRow = null;
+async function medLoadLatestBio() {
+  const box = document.getElementById('medBioBox'); if (!box || !ST.user) return;
+  try {
+    const { data } = await withTimeout(SB.from('weight_log').select('weight_lb,systolic_bp,diastolic_bp,fasting_glucose,logged_at').eq('user_id', ST.user.id).order('logged_at', { ascending: false }).limit(10));
+    // Latest value of each measure, since not every entry has every field.
+    const row = {}; (data || []).forEach(r => { ['weight_lb','systolic_bp','diastolic_bp','fasting_glucose'].forEach(k => { if (row[k] == null && r[k] != null) row[k] = r[k]; }); });
+    _medBioRow = row;
+    const flags = medicalBioFlags(row, ST.heightIn);
+    box.innerHTML = flags.length ? flags.map(medFlagHtml).join('') : '<div style="font-size:0.8125rem;color:var(--muted)">No blood pressure, glucose or weight logged yet. Log them under Trends and they show here against the FAA lines.</div>';
+  } catch (e) { box.innerHTML = '<div style="font-size:0.8125rem;color:var(--muted)">Could not load your latest numbers.</div>'; }
+}
+function medBioHtml() {
+  return '<div class="section-label">MY NUMBERS VS. FAA LINES</div>' +
+    medCard('LATEST READINGS', '<div id="medBioBox"><div style="font-size:0.8125rem;color:var(--muted)">Loading…</div></div>', 'The lines an AME works to: blood pressure 155/95, fasting glucose 100 and 126, BMI 30, 35 and 40 for sleep apnea screening. These come from what you log under Trends.') +
+    medCard('WHAT ELSE THE EXAM MEASURES', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6">Urine for glucose and protein (every exam), height and weight, pulse, a look at eyes, ears, nose, throat, heart and lungs, and the history you declared on MedXPress. Blood work is not part of the standard exam; the AME asks for it only when something above points to it.</div>');
+}
+
+function medMedsListHtml() {
+  const q = ST.medQuery || '';
+  const hits = medSearch(q);
+  let list = '';
+  if (q && !hits.length) list = '<div style="font-size:0.8125rem;color:var(--muted);padding:8px 0">Not in this list. That does not mean it is accepted or not. Check the FAA tables linked below, or ask your AME before your exam.</div>';
+  hits.forEach(m => {
+    const b = MED_BUCKETS[m.k];
+    list += '<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div class="fb" style="align-items:flex-start"><div><div style="font-size:0.875rem;font-weight:600">' + m.g + '</div>' + (m.b ? '<div style="font-size:0.6875rem;color:var(--muted)">' + m.b + '</div>' : '') + '</div><span style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.08em;color:' + b.color + ';border:1px solid ' + b.color + ';border-radius:4px;padding:2px 6px;white-space:nowrap">' + b.short + (m.flag ? ' · ASK AME' : '') + '</span></div>' +
+      (m.wait ? '<div style="font-size:0.75rem;margin-top:6px"><span style="color:var(--muted)">No-fly wait:</span> ' + m.wait + '</div>' : '') +
+      '<div style="font-size:0.75rem;color:var(--muted);line-height:1.55;margin-top:4px">' + m.n + '</div></div>';
+  });
+  return list;
+}
+function medMedsHtml() {
+  const q = ST.medQuery || '';
+  const list = medMedsListHtml();
+  return '<div class="section-label">MEDICATION CHECK</div>' +
+    '<div class="card mb12"><div class="field"><label>Medication or brand name</label><input id="medQuery" type="search" placeholder="e.g. finasteride, Benadryl, Ozempic" value="' + sanitizeUserText(q) + '" oninput="ST.medQuery=this.value;document.getElementById(\'medResults\').innerHTML=medMedsListHtml()"></div>' +
+    '<div id="medResults">' + list + '</div></div>' +
+    medCard('HOW TO READ THE TAGS', '<div style="font-size:0.75rem;line-height:1.7"><span style="color:var(--green);font-family:var(--mono)">OK</span> generally accepted; still list it on MedXPress.<br><span style="color:var(--amber);font-family:var(--mono)">WAIT</span> do not fly until the wait has passed; routine use is a problem.<br><span style="color:var(--amber);font-family:var(--mono)">SI</span> allowed only through the FAA special issuance process, usually a HIMS AME; call before you start it.<br><span style="color:var(--red);font-family:var(--mono)">DNI</span> the AME cannot issue while you take it.<br><span style="font-family:var(--mono)">ASK AME</span> accepted in general, with a wrinkle worth a call first.</div>' +
+      '<div style="font-size:0.6875rem;color:var(--muted);margin-top:10px;line-height:1.5">General FAA rule for anything sedating: wait 5 times the drug\'s longest half-life, or 5 times the dosing interval if the half-life is unknown. Any label that says "may cause drowsiness" means no flying while it is active. This list is not all-inclusive.</div>');
+}
+function medXpressHtml() {
+  const q = (n, t, body, flag) => '<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div style="font-size:0.8125rem;font-weight:600">' + n + ' · ' + t + '</div><div style="font-size:0.75rem;color:var(--muted);line-height:1.55;margin-top:3px">' + body + '</div>' + (flag ? '<div style="font-size:0.6875rem;color:var(--amber);margin-top:4px">' + flag + '</div>' : '') + '</div>';
+  return '<div class="section-label">MEDXPRESS PREP · FORM 8500-8</div>' +
+    medCard('BEFORE YOU OPEN MEDXPRESS', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6">Fill it in within 60 days of the appointment. Have ready: every medication and supplement, every doctor visit in the last 3 years (name, date, reason), and the date of your last exam. Print or screenshot the confirmation number. Nothing here is submitted for you.</div>') +
+    medCard('THE QUESTIONS THAT CAUSE TROUBLE',
+      q('17a', 'Medications', 'List everything, including over-the-counter, supplements and anything you take occasionally. Leaving one off is a bigger problem than listing it.', 'Run each one through the Medication check first.') +
+      q('17b', 'Contact lenses for near vision', 'Monovision contacts (one eye near, one far) are not accepted for flying. Bifocal or multifocal contacts need an FAA evaluation period.', '') +
+      q('18', 'Medical history', 'Any "yes" needs a short explanation in the box and often records from the treating doctor. Once answered yes, it stays yes on every future form ("previously reported, no change" is fine).', 'A new yes on heart, neurological, mental health, diabetes, sleep apnea, or substance items usually means call your AME before the appointment.') +
+      q('18v', 'Alcohol or drug arrests and convictions', 'Separate from the form, any alcohol-related motor vehicle action must be reported to the FAA Security office within 60 days. Not doing so is its own violation.', '') +
+      q('18x', 'Hospital admissions', 'Any admission needs the discharge summary. Outpatient procedures count if you were admitted.', 'Bring records.') +
+      q('19', 'Visits to health professionals, last 3 years', 'Every visit: routine physicals, urgent care, dentist is not required, therapist and counselor are. Give the name, date and reason.', 'Mental health visits are reportable and usually fine when the reason was situational; call your AME if you are unsure how to word it.') +
+      q('20', 'Exam-day items', 'Bring glasses or contacts you fly with, your current certificate, photo ID, and any records above. Skip caffeine and a big meal right before; both nudge blood pressure and pulse.', ''));
+}
+
+function medVisionHtml(rec) {
+  const v = rec.vision || {};
+  const cal = v.pxPerMm || null;
+  const parts = ['<div class="section-label">NEAR-VISION CHECK</div>'];
+  parts.push(medCard('WHAT THIS IS', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6">The first-class standard for near vision is 20/40 or better in each eye at 16 inches, with glasses if you wear them for reading. This check uses the same letter sizes. It cannot replace the AME\'s chart; it can tell you to see an optometrist before your exam instead of finding out in the chair.</div>'));
+  parts.push(medCard('STEP 1 · CALIBRATE THE SCREEN', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6;margin-bottom:10px">Set the phone to full brightness. Hold a credit card against the screen and move the slider until the bar is exactly as wide as the card.</div>' +
+    '<div id="medCalBar" style="height:40px;background:var(--gold);border-radius:4px;width:' + (cal ? Math.round(cal * CREDIT_CARD_MM) : 300) + 'px;max-width:100%;margin-bottom:10px"></div>' +
+    '<input id="medCalSlider" type="range" min="200" max="' + Math.max(400, Math.min(900, (window.innerWidth || 390) - 48)) + '" value="' + (cal ? Math.round(cal * CREDIT_CARD_MM) : 300) + '" style="width:100%" oninput="document.getElementById(\'medCalBar\').style.width=this.value+\'px\'">' +
+    '<button class="btn btn-outline mt8" onclick="medVisionSaveCal()">This matches my card</button>' +
+    (cal ? '<div style="font-size:0.6875rem;color:var(--green);margin-top:6px">Calibrated: ' + cal.toFixed(2) + ' px per mm</div>' : '')));
+  if (cal) {
+    const dist = 406.4;
+    let chart = '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6;margin-bottom:10px">Hold the phone 16 inches from your eyes (about the length of a sheet of letter paper plus a hand). Cover one eye. Read down. Tap the smallest line you read without guessing, then do the other eye.</div>';
+    chart += '<div style="background:#fff;color:#000;border-radius:8px;padding:14px 8px;text-align:center">';
+    VISION_LINES.forEach((den, i) => {
+      const mm = visionLetterMm(den, dist);
+      const px = mm * cal / 0.72; // cap height is about 0.72 em in a bold sans
+      chart += '<div style="font-family:Arial,Helvetica,sans-serif;font-weight:700;letter-spacing:0.25em;line-height:1.1;margin:' + Math.max(4, px * 0.6) + 'px 0;font-size:' + px.toFixed(2) + 'px">' + visionLineLetters(den * 7 + i) + '</div>';
+    });
+    chart += '</div>';
+    chart += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:10px">' + VISION_LINES.map(den => '<div class="env-btn" style="padding:8px 0;font-size:0.625rem" onclick="medVisionPick(' + den + ')">20/' + den + '</div>').join('') + '</div>';
+    chart += '<div class="fb" style="margin-top:10px;font-size:0.75rem"><span>Recording for:</span><span><button class="btn-ghost" style="padding:4px 8px;' + (ST.medEye !== 'left' ? 'color:var(--gold)' : '') + '" onclick="ST.medEye=\'right\';renderPage()">Right eye</button><button class="btn-ghost" style="padding:4px 8px;' + (ST.medEye === 'left' ? 'color:var(--gold)' : '') + '" onclick="ST.medEye=\'left\';renderPage()">Left eye</button></span></div>';
+    parts.push(medCard('STEP 2 · READ THE CHART', chart));
+    if (v.right || v.left) {
+      let res = '';
+      ['right', 'left'].forEach(eye => {
+        if (!v[eye]) return;
+        const ok = v[eye].den <= 40;
+        res += medFlagHtml({ tone: ok ? 'green' : 'amber', title: (eye === 'right' ? 'Right' : 'Left') + ' eye: 20/' + v[eye].den + ' at 16 in' + (v[eye].date ? ' · ' + v[eye].date : ''), body: ok ? 'Reaches the 20/40 near standard on this screen check. If it felt like a strain, an optometrist can still make the exam easier.' : 'Does not reach the 20/40 near standard on this screen check. See an optometrist before your medical; reading glasses or an updated prescription usually settle it, and the AME notes a "must have glasses for near vision" limitation.' });
+      });
+      parts.push(medCard('RESULT', res + '<button class="btn-ghost" style="font-size:0.75rem" onclick="medVisionReset()">Clear results</button>'));
+    }
+  }
+  return parts.join('');
+}
+function medVisionAfterDraw() {}
+function medVisionSaveCal() {
+  const px = parseInt(document.getElementById('medCalSlider')?.value);
+  if (!px) return;
+  const rec = medicalRecord(); rec.vision = rec.vision || {}; rec.vision.pxPerMm = px / CREDIT_CARD_MM; saveMedicalRecord();
+  showToast('Screen calibrated.'); renderPage();
+}
+function medVisionPick(den) {
+  const rec = medicalRecord(); rec.vision = rec.vision || {};
+  rec.vision[ST.medEye === 'left' ? 'left' : 'right'] = { den, date: localDateStr(new Date()) };
+  saveMedicalRecord(); haptic('light'); renderPage();
+}
+function medVisionReset() { const rec = medicalRecord(); const cal = rec.vision?.pxPerMm; rec.vision = cal ? { pxPerMm: cal } : {}; saveMedicalRecord(); renderPage(); }
+
+function medHearingHtml() {
+  return '<div class="section-label">HEARING AND COLOR VISION</div>' +
+    medCard('HEARING: WHAT THE AME DOES', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6">You stand 6 feet away with your back turned and repeat words spoken in a normal conversational voice, both ears together. If that is in doubt, an audiogram: better ear no worse than 35, 30, 30 and 40 dB at 500, 1000, 2000 and 3000 Hz (worse ear 35, 50, 50, 60). Hearing aids are allowed with a limitation.</div>') +
+    medCard('THE AIRPODS PRO HEARING TEST', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6">AirPods Pro 2 and later run a clinical-style hearing test from the iPhone Settings app (Settings, your AirPods, Take a Hearing Test). It takes about 5 minutes in a quiet room and saves an audiogram to Apple Health, with the same frequencies the FAA uses. Read the result against the thresholds above. A future app build will read that audiogram from Apple Health and do the comparison here.</div>') +
+    medCard('COLOR VISION', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6">Tested with color plates at the exam. It is a one-time question in practice: once you have passed, or hold a Letter of Evidence or SODA from an alternate test, it is settled. Phone screens are not color-accurate enough for a meaningful self-test, so there is none here. If you have never been tested and suspect a deficiency, ask your AME about the alternate tests before the exam rather than discovering it there.</div>');
+}
+
+function medStandardsHtml() {
+  const row = (k, a, b, c) => '<tr><td style="padding:6px 4px;color:var(--muted);font-size:0.6875rem">' + k + '</td><td style="padding:6px 4px;font-size:0.6875rem">' + a + '</td><td style="padding:6px 4px;font-size:0.6875rem">' + b + '</td><td style="padding:6px 4px;font-size:0.6875rem">' + c + '</td></tr>';
+  return '<div class="section-label">WHAT THE EXAM CHECKS</div>' +
+    medCard('STANDARDS BY CLASS', '<table style="width:100%;border-collapse:collapse"><tr><th></th><th style="font-size:0.625rem;color:var(--gold);text-align:left;padding:4px">1st</th><th style="font-size:0.625rem;color:var(--gold);text-align:left;padding:4px">2nd</th><th style="font-size:0.625rem;color:var(--gold);text-align:left;padding:4px">3rd</th></tr>' +
+      row('Distant vision', '20/20 each eye', '20/20 each eye', '20/40 each eye') +
+      row('Near (16 in)', '20/40', '20/40', '20/40') +
+      row('Intermediate (32 in), 50+', '20/40', '20/40', 'none') +
+      row('Color', 'colors needed for duty', 'same', 'same') +
+      row('Hearing', 'voice at 6 ft or audiogram', 'same', 'same') +
+      row('Blood pressure', '155/95 guideline', 'same', 'same') +
+      row('ECG', '35, then yearly from 40', 'none', 'none') +
+      row('Urine', 'glucose, protein', 'same', 'same') +
+      row('Valid for (under 40 / 40+)', '12 / 6 months', '12 / 12', '60 / 24') + '</table>') +
+    medCard('HISTORY THAT STOPS AN OFFICE ISSUE', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6">The AME must deny or defer to the FAA, unless the FAA has already ruled, for: diabetes needing medication to lower blood sugar, angina, treated or symptomatic coronary disease, heart attack, valve replacement, pacemaker, heart transplant, psychosis, bipolar disorder, severe personality disorder, substance dependence or abuse, epilepsy, unexplained loss of consciousness, transient loss of nervous system control. Many of these end in a special issuance rather than a denial, but the path starts before the exam, with your AME.</div>') +
+    medCard('WHICH CLASS YOU NEED', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6">First class to use ATP privileges (airline PIC, and Part 135 operations that require an ATP). Second class for commercial privileges, which covers most Part 135 and corporate Part 91 flying. Third class or BasicMed for private flying. A first-class certificate steps down to second-class privileges, then third, as it ages (see My certificate).</div>');
+}
+
+async function medicalDeleteConfirm() {
+  if (!(await appConfirm('Delete all medical data on this phone? Your Trends numbers are not affected.', 'Delete'))) return;
+  deleteMedicalRecord(); showToast('Medical data deleted from this phone.'); renderPage();
+}
+function medPrivacyHtml(rec) {
+  return '<div class="section-label">PRIVACY AND PIN</div>' +
+    medCard('WHERE THIS DATA LIVES', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6">Everything in the Medical section is stored on this phone only. It is not sent to the server, not shared with the AI coach, and not included in your data export. Deleting the app deletes it. Your Trends numbers (weight, blood pressure, glucose) are stored as before; this section only reads them.</div>' +
+      '<button class="btn btn-red-outline mt12" onclick="medicalDeleteConfirm()">Delete all medical data on this phone</button>') +
+    medCard('PIN', rec.pinHash
+      ? '<div style="font-size:0.8125rem;color:var(--muted);margin-bottom:10px">A PIN is set. It is asked for once per app open.</div><button class="btn btn-outline" onclick="medicalClearPin()">Remove PIN</button>'
+      : '<div style="font-size:0.8125rem;color:var(--muted);margin-bottom:10px">Add a 4 to 6 digit PIN to open this section. Your phone\'s lock is the real protection; this stops a glance over your shoulder.</div><div class="field"><input id="medPinNew" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="4 to 6 digits"></div><button class="btn btn-gold" onclick="medicalSetPin()">Set PIN</button>');
+}
+
 function moreBackLink() {
   return '<button class="btn-ghost" style="font-size:0.75rem;padding:6px 0;margin-bottom:8px" onclick="switchTab(\'more\')">← Menu</button>';
 }
@@ -13579,6 +14057,7 @@ function renderMore(p) {
   parts.push(item('📖','Flight Deck Wisdom','Daily training wisdom cards',"switchTab('wisdom')"));
   parts.push(item('📊','Data & Import/Export','Flight schedule import, CSV export, AI prompt',"switchTab('data')"));
   if (ST.trackNutrition) parts.push(item('🍽️','Nutrition Log','Log meals, search foods, track macros',"switchTab('nutrition')"));
+  if (medicalEnabled()) parts.push(item('🩺','FAA Medical','Certificate dates, medication check, exam prep (preview)',"switchTab('medical')"));
   if (isSuperUser()) {
     parts.push(item('🛡️','Super User','Pilot activity insights',"switchTab('superuser')"));
   }

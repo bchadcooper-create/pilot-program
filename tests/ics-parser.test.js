@@ -82,7 +82,7 @@ function loadAppJS() {
   // attach themselves automatically and are reachable as context.<name>;
   // this one extra statement is only needed to reach the `const ST` state
   // object itself from outside the sandbox for test setup/assertions.
-  vm.runInContext('this.ST = ST; this.WORKOUTS = WORKOUTS; this.CATALOG_EXTRAS = CATALOG_EXTRAS; this.INJURY_REGIONS = INJURY_REGIONS; this.ALTERNATES = ALTERNATES; this.EXERCISE_SYNONYMS = EXERCISE_SYNONYMS; this.BADGES = BADGES; this.EXERCISE_VIDEOS = EXERCISE_VIDEOS;', context);
+  vm.runInContext('this.ST = ST; this.WORKOUTS = WORKOUTS; this.CATALOG_EXTRAS = CATALOG_EXTRAS; this.INJURY_REGIONS = INJURY_REGIONS; this.ALTERNATES = ALTERNATES; this.EXERCISE_SYNONYMS = EXERCISE_SYNONYMS; this.BADGES = BADGES; this.EXERCISE_VIDEOS = EXERCISE_VIDEOS; this.FAA_MEDS = FAA_MEDS; this.SLOAN = SLOAN;', context);
   return context;
 }
 
@@ -1563,6 +1563,90 @@ test('after a workout is logged today, the Today card no longer offers another o
   const html = ctx.buildOuraTopSectionHTML(withTraining(true));
   assertEqual(/switchTab\('preflight'\)/.test(html), false, 'free: no workout button once trained');
   ctx.isPro = realPro; ctx.ST.workout = sv;
+});
+
+console.log('\nFAA Medical (owner preview):');
+test('the section is only offered to the owner account', () => {
+  const sv = ctx.ST.user;
+  ctx.ST.user = { id: '7e41ca46-6e00-4c54-bc3f-2e45d923fe0b' }; assertEqual(ctx.medicalEnabled(), true, 'owner');
+  ctx.ST.user = { id: 'u-someone-else' }; assertEqual(ctx.medicalEnabled(), false, 'anyone else');
+  ctx.ST.user = null; assertEqual(ctx.medicalEnabled(), false, 'signed out');
+  ctx.ST.user = sv;
+});
+test('certificate privileges follow 14 CFR 61.23(d), to the end of the month', () => {
+  // Exam June 10 2026, pilot born 1990 (35 at exam): first class 12 months, second 12, third 60.
+  let p = ctx.medicalPrivileges(1, '2026-06-10', '1990-09-01');
+  assertEqual(p.map(x => x.cls + ':' + x.ends).join(' '), '1:2027-06-30 2:2027-06-30 3:2031-06-30', 'under 40, first class');
+  // Same exam, born 1980 (45): first class 6 months, second 12, third 24.
+  p = ctx.medicalPrivileges(1, '2026-06-10', '1980-09-01');
+  assertEqual(p.map(x => x.cls + ':' + x.ends).join(' '), '1:2026-12-31 2:2027-06-30 3:2028-06-30', '40 and over, first class');
+  // Birthday after the exam in the same year: still 39 at exam.
+  p = ctx.medicalPrivileges(1, '2026-06-10', '1986-07-01');
+  assertEqual(p[0].ends, '2027-06-30', '39 at exam counts as under 40');
+  p = ctx.medicalPrivileges(2, '2026-01-31', '1980-01-01');
+  assertEqual(p.map(x => x.cls + ':' + x.ends).join(' '), '2:2027-01-31 3:2028-01-31', 'second class, 40+');
+  p = ctx.medicalPrivileges(3, '2026-03-05', '1995-01-01');
+  assertEqual(p.map(x => x.cls + ':' + x.ends).join(' '), '3:2031-03-31', 'third class, under 40');
+  assertEqual(ctx.medicalPrivileges(1, '', '1990-01-01').length, 0, 'nothing without an exam date');
+});
+test('ECG: once at the first exam from 35, yearly from 40, first class only', () => {
+  const r = (cls, dob, hadEcg, lastEcg) => ctx.medicalEcgDue({ cls, dob, hadEcg, lastEcg }, '2027-06-30');
+  assertEqual(r(1, '1995-01-01', false, '').due, false, 'under 35: none');
+  assertEqual(r(1, '1990-01-01', false, '').due, true, '37, never had one: due');
+  assertEqual(r(1, '1990-01-01', true, '2025-06-01').due, false, '37, had one: not due');
+  assertEqual(r(1, '1980-01-01', true, '2026-06-20').due, true, '47, last one a year ago: due');
+  assertEqual(r(1, '1980-01-01', true, '2027-01-15').due, false, '47, last one 5 months ago: not due');
+  assertEqual(r(1, '1980-01-01', true, '').due, true, '47, no date recorded: assume due');
+  assertEqual(r(2, '1980-01-01', true, ''), null, 'second class: no ECG rule');
+});
+test('medication search finds brand and generic names and tags them', () => {
+  const k = q => ctx.medSearch(q).map(m => m.g + ':' + m.k).join(' | ');
+  assertEqual(/finasteride:ok/.test(k('propecia')), true, 'brand finds finasteride, accepted');
+  assertEqual(/minoxidil \(oral\):ok/.test(k('minoxidil')) && /minoxidil \(topical\):ok/.test(k('minoxidil')), true, 'both minoxidil forms');
+  assertEqual(ctx.medSearch('minoxidil').find(m => m.g.startsWith('minoxidil (oral)')).flag, true, 'oral minoxidil carries the ask-AME flag');
+  assertEqual(/diphenhydramine:dnf/.test(k('zzzquil')), true, 'ZzzQuil is diphenhydramine, do not fly');
+  assertEqual(ctx.medSearch('benadryl')[0].wait, '60 hours', '60-hour wait');
+  assertEqual(/sertraline:si/.test(k('zoloft')), true, 'SSRI is the special issuance path');
+  assertEqual(/clonidine:dni/.test(k('clonidine')), true, 'clonidine is do not issue');
+  assertEqual(ctx.medSearch('xyzzy').length, 0, 'unknown gives nothing');
+  assertEqual(ctx.medSearch('').length, 0, 'empty gives nothing');
+  const buckets = new Set(ctx.FAA_MEDS.map(m => m.k)); ['ok','si','dnf','dni'].forEach(b => assertEqual(buckets.has(b), true, 'bucket ' + b + ' used'));
+  ctx.FAA_MEDS.forEach(m => assertEqual(/—|–/.test(m.n + m.b + (m.wait || '')), false, 'no dashes in ' + m.g));
+});
+test('biometric flags use the FAA lines (155/95, 100/126, BMI 30/35/40)', () => {
+  const f = (row, h) => ctx.medicalBioFlags(row, h).map(x => x.tone).join(',');
+  assertEqual(f({ systolic_bp: 160, diastolic_bp: 90 }), 'red', 'systolic over 155');
+  assertEqual(f({ systolic_bp: 150, diastolic_bp: 96 }), 'red', 'diastolic over 95');
+  assertEqual(f({ systolic_bp: 142, diastolic_bp: 88 }), 'amber', 'high but under the ceiling');
+  assertEqual(f({ systolic_bp: 120, diastolic_bp: 78 }), 'green', 'normal');
+  assertEqual(f({ fasting_glucose: 126 }), 'red', 'diabetes range');
+  assertEqual(f({ fasting_glucose: 104 }), 'amber', 'prediabetes range');
+  assertEqual(f({ weight_lb: 290, weight_lb: 290 }, 70), 'red', 'BMI 41.6');
+  assertEqual(f({ weight_lb: 250 }, 70), 'amber', 'BMI 35.9');
+  assertEqual(f({ weight_lb: 180 }, 70), 'green', 'BMI 25.8');
+  assertEqual(ctx.medicalBioFlags(null).length, 0, 'no row, no flags');
+});
+test('near-vision letters are sized by the 5 arc-minute rule at 16 inches', () => {
+  const mm20 = ctx.visionLetterMm(20, 406.4), mm40 = ctx.visionLetterMm(40, 406.4);
+  assertEqual(Math.abs(mm20 - 0.591) < 0.005, true, '20/20 letter is 0.59 mm, got ' + mm20.toFixed(3));
+  assertEqual(Math.abs(mm40 / mm20 - 2) < 0.001, true, '20/40 is twice 20/20');
+  assertEqual(ctx.visionLineLetters(7).split(' ').length, 5, 'five letters a line');
+  assertEqual(ctx.visionLineLetters(7), ctx.visionLineLetters(7), 'same letters on redraw');
+  ctx.visionLineLetters(7).split(' ').forEach(l => assertEqual(ctx.SLOAN.includes(l), true, 'Sloan letter ' + l));
+});
+test('medical data lives on the phone only and can be wiped', () => {
+  const realLS = ctx.localStorage; const store = {}; ctx.localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } };
+  const svUser = ctx.ST.user; ctx.ST.user = { id: 'u1' }; ctx.ST.medical = null;
+  const rec = ctx.medicalRecord(); rec.examDate = '2026-06-10'; rec.dob = '1980-09-01'; ctx.saveMedicalRecord();
+  assertEqual(JSON.parse(store.fcf_medical_v1).examDate, '2026-06-10', 'saved locally');
+  ctx.ST.user = { id: 'u2' }; ctx.ST.medical = null;
+  assertEqual(ctx.medicalRecord().examDate, '', 'another account on the phone starts clean');
+  ctx.ST.user = { id: 'u1' }; ctx.ST.medical = null;
+  assertEqual(ctx.medicalRecord().examDate, '2026-06-10', 'the owner gets it back');
+  assertEqual(Object.keys(store).join(','), 'fcf_medical_v1', 'only the local key is touched');
+  ctx.deleteMedicalRecord();
+  assertEqual('fcf_medical_v1' in store, false, 'wiped');
+  ctx.localStorage = realLS; ctx.ST.medical = null; ctx.ST.user = svUser;
 });
 
 // Async cases run after the synchronous ones, before the summary.

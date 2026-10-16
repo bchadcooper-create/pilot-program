@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.48 / 20261016_5
+ * Version/build: fcf-v5.44.49 / 20261016_6
  */
 
-const FCF_VERSION = 'fcf-v5.44.48';
-const FCF_BUILD   = '20261016_5';
+const FCF_VERSION = 'fcf-v5.44.49';
+const FCF_BUILD   = '20261016_6';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -14064,16 +14064,24 @@ function medVisionHtml(rec) {
     (cal ? '<div style="font-size:0.6875rem;color:var(--green);margin-top:6px">Calibrated: ' + cal.toFixed(2) + ' px per mm. You can turn the phone upright again for the chart.</div>' : '')));
   if (cal) {
     const dist = 406.4;
-    let chart = '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6;margin-bottom:10px">Hold the phone 16 inches from your eyes (about the length of a sheet of letter paper plus a hand). Cover one eye. Read down. Tap the smallest line you read without guessing, then do the other eye.</div>';
-    chart += '<div style="background:#fff;color:#000;border-radius:8px;padding:14px 8px;text-align:center">';
+    const eye = ST.medEye === 'left' ? 'left' : 'right';
+    const picked = v[eye] ? v[eye].den : null;
+    const eyeBtn = (e, label) => '<button class="env-btn" style="flex:1;padding:10px 0;font-size:0.8125rem' + (eye === e ? ';border-color:var(--gold);color:var(--gold);font-weight:600' : '') + '" onclick="ST.medEye=\'' + e + '\';renderPage()">' + label + (v[e] ? ' · 20/' + v[e].den : '') + '</button>';
+    let chart = '<div style="display:flex;gap:8px;margin-bottom:10px">' + eyeBtn('right', 'Right eye') + eyeBtn('left', 'Left eye') + '</div>';
+    chart += '<div style="font-size:0.8125rem;line-height:1.6;margin-bottom:10px"><b>Cover your ' + (eye === 'right' ? 'left' : 'right') + ' eye.</b> <span style="color:var(--muted)">Hold the phone 16 inches away (about a sheet of letter paper plus a hand), upright is fine. Read from the top down, then <b style="color:var(--text)">tap the smallest line you can read without guessing.</b> The score is beside each line.</span></div>';
+    chart += '<div style="background:#fff;color:#000;border-radius:8px;padding:8px 0">';
     VISION_LINES.forEach((den, i) => {
       const mm = visionLetterMm(den, dist);
       const px = mm * cal / 0.72; // cap height is about 0.72 em in a bold sans
-      chart += '<div style="font-family:Arial,Helvetica,sans-serif;font-weight:700;letter-spacing:0.25em;line-height:1.1;margin:' + Math.max(4, px * 0.6) + 'px 0;font-size:' + px.toFixed(2) + 'px">' + visionLineLetters(den * 7 + i) + '</div>';
+      const sel = picked === den;
+      const std = den === 40 ? '<div style="font-size:8px;color:#a16207;font-weight:600">FAA LINE</div>' : '';
+      chart += '<div role="button" class="med-vline" onclick="medVisionPick(' + den + ')" style="display:flex;align-items:center;cursor:pointer;padding:' + Math.max(6, px * 0.45).toFixed(1) + 'px 0;' + (sel ? 'background:#fde68a;' : '') + (den === 40 ? 'border-top:1px dashed #d4a017;border-bottom:1px dashed #d4a017;' : '') + '">' +
+        '<div style="width:64px;flex:none"></div>' +
+        '<div style="flex:1;text-align:center;font-family:Arial,Helvetica,sans-serif;font-weight:700;letter-spacing:0.25em;line-height:1.1;font-size:' + px.toFixed(2) + 'px">' + visionLineLetters(den * 7 + i) + '</div>' +
+        '<div style="width:64px;flex:none;text-align:right;padding-right:8px;white-space:nowrap;font-size:11px;color:' + (sel ? '#000' : '#6b7280') + ';font-weight:' + (sel ? '700' : '500') + '">' + (sel ? '✓ ' : '') + '20/' + den + std + '</div></div>';
     });
     chart += '</div>';
-    chart += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:10px">' + VISION_LINES.map(den => '<div class="env-btn" style="padding:8px 0;font-size:0.625rem" onclick="medVisionPick(' + den + ')">20/' + den + '</div>').join('') + '</div>';
-    chart += '<div class="fb" style="margin-top:10px;font-size:0.75rem"><span>Recording for:</span><span><button class="btn-ghost" style="padding:4px 8px;' + (ST.medEye !== 'left' ? 'color:var(--gold)' : '') + '" onclick="ST.medEye=\'right\';renderPage()">Right eye</button><button class="btn-ghost" style="padding:4px 8px;' + (ST.medEye === 'left' ? 'color:var(--gold)' : '') + '" onclick="ST.medEye=\'left\';renderPage()">Left eye</button></span></div>';
+    chart += '<div style="font-size:0.6875rem;color:var(--muted);margin-top:8px;line-height:1.5">If you can\'t read even the top line, tap it; that result means see an optometrist. ' + (eye === 'right' && v.right && !v.left ? 'Next: tap Left eye above.' : '') + '</div>';
     parts.push(medCard('STEP 2 · READ THE CHART', chart));
     if (v.right || v.left) {
       let res = '';
@@ -14125,8 +14133,12 @@ function medVisionSaveCal() {
 }
 function medVisionPick(den) {
   const rec = medicalRecord(); rec.vision = rec.vision || {};
-  rec.vision[ST.medEye === 'left' ? 'left' : 'right'] = { den, date: localDateStr(new Date()) };
-  saveMedicalRecord(); haptic('light'); renderPage();
+  const eye = ST.medEye === 'left' ? 'left' : 'right';
+  rec.vision[eye] = { den, date: localDateStr(new Date()) };
+  saveMedicalRecord(); haptic('light');
+  // Right eye first, then straight on to the left.
+  if (eye === 'right' && !rec.vision.left) { ST.medEye = 'left'; showToast('Right eye: 20/' + den + '. Now cover your right eye.'); }
+  renderPage();
 }
 function medVisionReset() { const rec = medicalRecord(); const cal = rec.vision?.pxPerMm; rec.vision = cal ? { pxPerMm: cal } : {}; saveMedicalRecord(); renderPage(); }
 

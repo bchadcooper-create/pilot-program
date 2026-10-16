@@ -93,8 +93,11 @@ let fail = 0; const check = (n, c, g) => { console.log((c ? 'PASS ' : 'FAIL ') +
   check('seven chart lines, shrinking', sizes.length === 7 && sizes.every((v, i) => i === 0 || v < sizes[i - 1]), sizes);
   const px20 = sizes[6], expect20 = (330 / 85.6) * 0.591 / 0.72;
   check('20/20 line sized from calibration', Math.abs(px20 - expect20) < 0.1, [px20, expect20]);
-  await p.evaluate(() => medVisionPick(30)); await p.waitForTimeout(300);
-  await p.evaluate(() => { ST.medEye = 'left'; medVisionPick(50); }); await p.waitForTimeout(400);
+  check('each line shows its score beside it', (await p.locator('.med-vline').count()) === 7 && /20\/40/.test(await p.locator('.med-vline').nth(3).textContent()));
+  await p.evaluate(() => { ST.medEye = 'right'; }); await p.locator('.med-vline').nth(4).click(); await p.waitForTimeout(400);
+  check('tapping a line records it and moves to the left eye', await p.evaluate(() => ST.medEye === 'left' && medicalRecord().vision.right.den === 30));
+  await p.locator('.med-vline').nth(2).click(); await p.waitForTimeout(400);
+  check('left eye line marked', /✓ 20\/50/.test(await p.locator('.med-vline').nth(2).textContent()));
   const vt = await p.textContent('#mainPage');
   check('right eye passes, left eye flagged', /Right eye: 20\/30/.test(vt) && /Reaches the 20\/40/.test(vt) && /Left eye: 20\/50/.test(vt) && /See an optometrist/.test(vt));
   await p.waitForTimeout(2600); await p.evaluate(() => document.querySelector('#mainPage div[style*="background:#fff"]').scrollIntoView({block:'center'})); await p.waitForTimeout(300); await p.screenshot({ path: S + '/07-vision.png' });

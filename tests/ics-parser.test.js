@@ -1619,6 +1619,10 @@ test('ECG: once at the first exam from 35, yearly from 40, first class only', ()
   assertEqual(r(1, '1980-01-01', true, '2027-01-15').due, false, '47, last one 5 months ago: not due');
   assertEqual(r(1, '1980-01-01', true, '').due, true, '47, no date recorded: assume due');
   assertEqual(r(2, '1980-01-01', true, ''), null, 'second class: no ECG rule');
+  // Wording: real dates, measured to the next exam, not 'months ago'.
+  const w = ctx.medicalEcgDue({ cls: 1, dob: '1977-01-01', hadEcg: true, lastEcg: '2026-06-05' }, '2026-12-31');
+  assertEqual(w.due, false, 'June ECG, exam due by Dec 31: not due');
+  assertEqual(/June 5, 2026/.test(w.why) && /December 31, 2026/.test(w.why) && /7 months old/.test(w.why) && /June 2027/.test(w.why) && !/ago/.test(w.why), true, 'why text: ' + w.why);
 });
 test('medication search finds brand and generic names and tags them', () => {
   const k = q => ctx.medSearch(q).map(m => m.g + ':' + m.k).join(' | ');

@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.45 / 20261016_2
+ * Version/build: fcf-v5.44.46 / 20261016_3
  */
 
-const FCF_VERSION = 'fcf-v5.44.45';
-const FCF_BUILD   = '20261016_2';
+const FCF_VERSION = 'fcf-v5.44.46';
+const FCF_BUILD   = '20261016_3';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -13660,8 +13660,19 @@ function medicalEcgDue(rec, nextExamDate) {
   if (age < 35) return { due: false, why: 'No ECG before 35.' };
   if (age < 40) return rec.hadEcg ? { due: false, why: 'One ECG between 35 and 40 is already on file.' } : { due: true, why: 'First ECG: required at the first exam at or after age 35.' };
   if (!rec.lastEcg) return { due: true, why: 'Annual from 40, and no ECG date is recorded here.' };
+  // Measured against the next exam (the date the privileges end), not today.
   const months = (new Date(nextExamDate) - new Date(rec.lastEcg)) / (30.44 * 86400000);
-  return months >= 11.5 ? { due: true, why: 'Annual from 40: the last one was ' + Math.round(months) + ' months before this exam.' } : { due: false, why: 'Last ECG was ' + Math.round(months) + ' months ago; the next one is a year after it.' };
+  const last = medFmtDate(rec.lastEcg), by = medFmtDate(nextExamDate);
+  const [ly, lm] = rec.lastEcg.split('-').map(Number);
+  const yearOn = new Date(ly + 1, lm - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  return months >= 11.5
+    ? { due: true, why: 'Annual from 40: your last ECG was ' + last + ', and it will be over a year old at your next exam (due by ' + by + ').' }
+    : { due: false, why: 'Your last ECG was ' + last + '. At your next exam (due by ' + by + ') it will be ' + Math.round(months) + ' months old. Expect the next one at your first exam from ' + yearOn + ' on.' };
+}
+function medFmtDate(s) {
+  if (!s) return '';
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
 // ── Medications (FAA DNI/DNF tables). Not all-inclusive; the footer says so.

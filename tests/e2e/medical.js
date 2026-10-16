@@ -55,6 +55,7 @@ let fail = 0; const check = (n, c, g) => { console.log((c ? 'PASS ' : 'FAIL ') +
   check('captain: home tile shows the first-class date', /First-class \(ATP\) privileges ended \d+ days ago|First-class \(ATP\) privileges end in \d+ days \(2026-12-31\)/.test(await p.textContent('#mainPage')));
   // Numbers
   await p.evaluate(() => medicalSetView('bio')); await p.waitForTimeout(1500);
+  check('numbers page loads (no error)', !/Could not load/.test(await p.textContent('#medBioBox')) && !/Loading/.test(await p.textContent('#medBioBox')), await p.textContent('#medBioBox'));
   await p.screenshot({ path: S + '/04-bio.png', fullPage: true });
   // Meds
   await p.evaluate(() => medicalSetView('meds')); await p.waitForTimeout(400);
@@ -66,6 +67,17 @@ let fail = 0; const check = (n, c, g) => { console.log((c ? 'PASS ' : 'FAIL ') +
   await p.screenshot({ path: S + '/06-medxpress.png', fullPage: true });
   // Vision
   await p.evaluate(() => medicalSetView('vision')); await p.waitForTimeout(400);
+  check('portrait: turn-sideways hint shows', await p.locator('.med-rotate-hint').isVisible());
+  check('slider reaches card length on an iPhone (517 px+)', +(await p.getAttribute('#medCalSlider', 'max')) >= 600);
+  // Sideways (iPhone 17 landscape, 874 x 402)
+  await p.setViewportSize({ width: 874, height: 402 }); await p.waitForTimeout(800);
+  check('landscape: bar scrolled into view', await p.$eval('#medCalBar', e => { const r = e.getBoundingClientRect(); return r.top > 60 && r.bottom < 402 - 60; }));
+  check('landscape: hint hidden', !(await p.locator('.med-rotate-hint').isVisible()));
+  await p.evaluate(() => { const s = document.getElementById('medCalSlider'); s.value = 517; medVisionCalDraw(); medVisionNudge(1); medVisionNudge(1); medVisionNudge(-1); });
+  const barW = await p.$eval('#medCalBar', e => e.getBoundingClientRect().width);
+  check('landscape: bar draws full card length, nudges by 1 px', Math.abs(barW - 518) < 0.5 && /518 px/.test(await p.textContent('#medCalPx')), barW);
+  await p.screenshot({ path: S + '/07a-cal-landscape.png' });
+  await p.setViewportSize({ width: 390, height: 664 }); await p.evaluate(() => renderPage()); await p.waitForTimeout(400);
   await p.evaluate(() => { document.getElementById('medCalSlider').value = 330; });
   await p.locator('button', { hasText: 'This matches my card' }).click(); await p.waitForTimeout(500);
   const sizes = await p.$$eval('#mainPage div[style*="font-family:Arial"]', els => els.map(e => parseFloat(e.style.fontSize)));

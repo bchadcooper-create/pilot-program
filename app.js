@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.46 / 20261016_3
+ * Version/build: fcf-v5.44.47 / 20261016_4
  */
 
-const FCF_VERSION = 'fcf-v5.44.46';
-const FCF_BUILD   = '20261016_3';
+const FCF_VERSION = 'fcf-v5.44.47';
+const FCF_BUILD   = '20261016_4';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -13592,7 +13592,7 @@ function medicalRecord() {
 }
 function saveMedicalRecord() { writeLocalJSON(MEDICAL_STORE_KEY, medicalRecord()); }
 function deleteMedicalRecord() {
-  try { localStorage.removeItem(MEDICAL_STORE_KEY); } catch (e) {}
+  try { localStorage.removeItem(MEDICAL_STORE_KEY); localStorage.removeItem(MED_BIO_CACHE); } catch (e) {}
   ST.medical = null; ST.medicalUnlocked = false; ST.medicalView = 'home';
 }
 
@@ -13969,16 +13969,40 @@ function medCertHtml(rec) {
 }
 
 let _medBioRow = null;
+const MED_BIO_CACHE = 'fcf_med_bio_cache';
+// Latest value of each measure, since not every entry has every field.
+function medBioLatest(data) {
+  const row = {}; (data || []).forEach(r => { ['weight_lb','systolic_bp','diastolic_bp','fasting_glucose'].forEach(k => { if (row[k] == null && r[k] != null) row[k] = r[k]; }); });
+  return row;
+}
+function medBioDraw(box, row, note) {
+  const flags = medicalBioFlags(row, ST.heightIn);
+  box.innerHTML = (flags.length ? flags.map(medFlagHtml).join('') : '<div style="font-size:0.8125rem;color:var(--muted)">No blood pressure, glucose or weight logged yet. Log them under Trends and they show here against the FAA lines.</div>') + (note || '');
+}
 async function medLoadLatestBio() {
   const box = document.getElementById('medBioBox'); if (!box || !ST.user) return;
-  try {
-    const { data } = await withTimeout(SB.from('weight_log').select('weight_lb,systolic_bp,diastolic_bp,fasting_glucose,logged_at').eq('user_id', ST.user.id).order('logged_at', { ascending: false }).limit(10));
-    // Latest value of each measure, since not every entry has every field.
-    const row = {}; (data || []).forEach(r => { ['weight_lb','systolic_bp','diastolic_bp','fasting_glucose'].forEach(k => { if (row[k] == null && r[k] != null) row[k] = r[k]; }); });
-    _medBioRow = row;
-    const flags = medicalBioFlags(row, ST.heightIn);
-    box.innerHTML = flags.length ? flags.map(medFlagHtml).join('') : '<div style="font-size:0.8125rem;color:var(--muted)">No blood pressure, glucose or weight logged yet. Log them under Trends and they show here against the FAA lines.</div>';
-  } catch (e) { box.innerHTML = '<div style="font-size:0.8125rem;color:var(--muted)">Could not load your latest numbers.</div>'; }
+  // Show the last good read at once, then refresh. A first query right after
+  // an app update can stall while the sign-in token refreshes, so try twice.
+  const cached = readLocalJSON(MED_BIO_CACHE, null);
+  const mine = cached && cached.user === ST.user.id ? cached : null;
+  if (mine) medBioDraw(box, mine.row);
+  let lastErr = null;
+  for (const ms of [8000, 15000]) {
+    try {
+      const { data, error } = await withTimeout(SB.from('weight_log').select('weight_lb,systolic_bp,diastolic_bp,fasting_glucose,logged_at').eq('user_id', ST.user.id).order('logged_at', { ascending: false }).limit(10), ms);
+      if (error) throw error;
+      const row = medBioLatest(data);
+      _medBioRow = row;
+      writeLocalJSON(MED_BIO_CACHE, { user: ST.user.id, row, at: localDateStr(new Date()) });
+      const live = document.getElementById('medBioBox'); if (live) medBioDraw(live, row);
+      return;
+    } catch (e) { lastErr = e; }
+  }
+  const live = document.getElementById('medBioBox'); if (!live) return;
+  const retry = ' <button class="btn-ghost" style="font-size:0.75rem;padding:4px 0;color:var(--gold)" onclick="medLoadLatestBio()">Try again</button>';
+  const why = lastErr && lastErr.message === 'timeout' ? 'the server did not answer in time' : 'a connection problem';
+  if (mine) medBioDraw(live, mine.row, '<div style="font-size:0.6875rem;color:var(--muted);margin-top:8px">Showing your numbers as of ' + mine.at + '; could not refresh (' + why + ').' + retry + '</div>');
+  else live.innerHTML = '<div style="font-size:0.8125rem;color:var(--muted)">Could not load your latest numbers (' + why + ').' + retry + '</div>';
 }
 function medBioHtml() {
   return '<div class="section-label">MY NUMBERS VS. FAA LINES</div>' +
@@ -14026,12 +14050,18 @@ function medVisionHtml(rec) {
   const v = rec.vision || {};
   const cal = v.pxPerMm || null;
   const parts = ['<div class="section-label">NEAR-VISION CHECK</div>'];
-  parts.push(medCard('WHAT THIS IS', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6">The first-class standard for near vision is 20/40 or better in each eye at 16 inches, with glasses if you wear them for reading. This check uses the same letter sizes. It cannot replace the AME\'s chart; it can tell you to see an optometrist before your exam instead of finding out in the chair.</div>'));
-  parts.push(medCard('STEP 1 · CALIBRATE THE SCREEN', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6;margin-bottom:10px">Set the phone to full brightness. Hold a credit card against the screen and move the slider until the bar is exactly as wide as the card.</div>' +
-    '<div id="medCalBar" style="height:40px;background:var(--gold);border-radius:4px;width:' + (cal ? Math.round(cal * CREDIT_CARD_MM) : 300) + 'px;max-width:100%;margin-bottom:10px"></div>' +
-    '<input id="medCalSlider" type="range" min="200" max="' + Math.max(400, Math.min(900, (window.innerWidth || 390) - 48)) + '" value="' + (cal ? Math.round(cal * CREDIT_CARD_MM) : 300) + '" style="width:100%" oninput="document.getElementById(\'medCalBar\').style.width=this.value+\'px\'">' +
+  parts.push('<div class="med-portrait-only">' + medCard('WHAT THIS IS', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6">The first-class standard for near vision is 20/40 or better in each eye at 16 inches, with glasses if you wear them for reading. This check uses the same letter sizes. It cannot replace the AME\'s chart; it can tell you to see an optometrist before your exam instead of finding out in the chair.</div>') + '</div>');
+  // A card is 85.6 mm. On a 460 ppi, 3x iPhone that is about 517 CSS px,
+  // wider than the phone held upright (402 px), so this step is done sideways.
+  const calStart = cal ? Math.round(cal * CREDIT_CARD_MM) : 520;
+  const calMax = Math.min(1200, Math.max(window.innerWidth || 390, window.innerHeight || 844) - 32);
+  parts.push(medCard('STEP 1 · CALIBRATE THE SCREEN', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6;margin-bottom:10px">Turn the phone sideways and set it to full brightness. Lay a credit card flat on the screen, long edge along the gold bar, left ends lined up. Drag the slider, then use − and + to make the bar exactly as long as the card.</div>' +
+    '<div class="med-rotate-hint" style="font-size:0.75rem;color:var(--amber);line-height:1.5;margin-bottom:10px">Turn your phone sideways: a card is longer than the screen is wide. If the screen does not turn, open Control Center and switch off Portrait Orientation Lock.</div>' +
+    '<div style="overflow:hidden"><div id="medCalBar" style="height:44px;background:var(--gold);border-radius:4px;width:' + calStart + 'px;margin-bottom:10px"></div></div>' +
+    '<input id="medCalSlider" type="range" min="250" max="' + calMax + '" value="' + Math.min(calStart, calMax) + '" style="width:100%" oninput="medVisionCalDraw()">' +
+    '<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="btn btn-outline" style="width:56px;flex:none" onclick="medVisionNudge(-1)">−</button><div id="medCalPx" style="flex:1;text-align:center;font-family:var(--mono);font-size:0.75rem;color:var(--muted)">' + calStart + ' px</div><button class="btn btn-outline" style="width:56px;flex:none" onclick="medVisionNudge(1)">+</button></div>' +
     '<button class="btn btn-outline mt8" onclick="medVisionSaveCal()">This matches my card</button>' +
-    (cal ? '<div style="font-size:0.6875rem;color:var(--green);margin-top:6px">Calibrated: ' + cal.toFixed(2) + ' px per mm</div>' : '')));
+    (cal ? '<div style="font-size:0.6875rem;color:var(--green);margin-top:6px">Calibrated: ' + cal.toFixed(2) + ' px per mm. You can turn the phone upright again for the chart.</div>' : '')));
   if (cal) {
     const dist = 406.4;
     let chart = '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6;margin-bottom:10px">Hold the phone 16 inches from your eyes (about the length of a sheet of letter paper plus a hand). Cover one eye. Read down. Tap the smallest line you read without guessing, then do the other eye.</div>';
@@ -14058,6 +14088,23 @@ function medVisionHtml(rec) {
   return parts.join('');
 }
 function medVisionAfterDraw() {}
+// Turning the phone sideways for calibration: bring the bar into view, since
+// a landscape screen shows only a few lines below the header.
+window.addEventListener('resize', () => {
+  if (typeof ST === 'undefined' || ST.tab !== 'medical' || ST.medicalView !== 'vision') return;
+  if (window.innerWidth <= window.innerHeight) return;
+  clearTimeout(window._medCalScroll);
+  window._medCalScroll = setTimeout(() => document.getElementById('medCalBar')?.scrollIntoView({ block: 'center' }), 250);
+});
+function medVisionCalDraw() {
+  const sl = document.getElementById('medCalSlider'); if (!sl) return;
+  const bar = document.getElementById('medCalBar'); if (bar) bar.style.width = sl.value + 'px';
+  const lab = document.getElementById('medCalPx'); if (lab) lab.textContent = sl.value + ' px';
+}
+function medVisionNudge(d) {
+  const sl = document.getElementById('medCalSlider'); if (!sl) return;
+  sl.value = Math.max(+sl.min, Math.min(+sl.max, +sl.value + d)); medVisionCalDraw();
+}
 function medVisionSaveCal() {
   const px = parseInt(document.getElementById('medCalSlider')?.value);
   if (!px) return;

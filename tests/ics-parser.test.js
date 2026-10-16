@@ -1610,6 +1610,11 @@ test('seat decides the class that matters, 14 CFR 61.23(a)', () => {
   const p2 = ctx.medicalPrivileges(2, '2026-06-10', rec.dob);
   assertEqual(ctx.medicalKeyPrivilege({ seat: 'capt', cls: 2 }, p2, T).cls, 2, 'short certificate: top line');
 });
+test('numbers page takes the latest value of each measure', () => {
+  const row = ctx.medBioLatest([{ weight_lb: '219', systolic_bp: null, diastolic_bp: null, fasting_glucose: null }, { weight_lb: '223', systolic_bp: 118, diastolic_bp: 81, fasting_glucose: null }, { weight_lb: '220', fasting_glucose: 117 }]);
+  assertEqual(JSON.stringify(row), JSON.stringify({ weight_lb: '219', systolic_bp: 118, diastolic_bp: 81, fasting_glucose: 117 }), 'latest per field');
+  assertEqual(ctx.medicalBioFlags(row, 72).map(f => f.tone).join(','), 'green,amber,green', 'BP fine, glucose prediabetes range, BMI under 30');
+});
 test('ECG: once at the first exam from 35, yearly from 40, first class only', () => {
   const r = (cls, dob, hadEcg, lastEcg) => ctx.medicalEcgDue({ cls, dob, hadEcg, lastEcg }, '2027-06-30');
   assertEqual(r(1, '1995-01-01', false, '').due, false, 'under 35: none');

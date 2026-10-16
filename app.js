@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.47 / 20261016_4
+ * Version/build: fcf-v5.44.48 / 20261016_5
  */
 
-const FCF_VERSION = 'fcf-v5.44.47';
-const FCF_BUILD   = '20261016_4';
+const FCF_VERSION = 'fcf-v5.44.48';
+const FCF_BUILD   = '20261016_5';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -14055,9 +14055,9 @@ function medVisionHtml(rec) {
   // wider than the phone held upright (402 px), so this step is done sideways.
   const calStart = cal ? Math.round(cal * CREDIT_CARD_MM) : 520;
   const calMax = Math.min(1200, Math.max(window.innerWidth || 390, window.innerHeight || 844) - 32);
-  parts.push(medCard('STEP 1 · CALIBRATE THE SCREEN', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6;margin-bottom:10px">Turn the phone sideways and set it to full brightness. Lay a credit card flat on the screen, long edge along the gold bar, left ends lined up. Drag the slider, then use − and + to make the bar exactly as long as the card.</div>' +
+  parts.push(medCard('STEP 1 · CALIBRATE THE SCREEN', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6;margin-bottom:10px">Turn the phone sideways and set it to full brightness. Lay a credit card flat on the screen along the gold bar, one end against the bar\'s fixed end at the edge of the screen. Drag the slider, then use − and + until the bar is exactly as long as the card.</div>' +
     '<div class="med-rotate-hint" style="font-size:0.75rem;color:var(--amber);line-height:1.5;margin-bottom:10px">Turn your phone sideways: a card is longer than the screen is wide. If the screen does not turn, open Control Center and switch off Portrait Orientation Lock.</div>' +
-    '<div style="overflow:hidden"><div id="medCalBar" style="height:44px;background:var(--gold);border-radius:4px;width:' + calStart + 'px;margin-bottom:10px"></div></div>' +
+    '<div id="medCalWrap" style="display:flex;overflow:hidden;justify-content:' + medCalSide() + '"><div id="medCalBar" style="height:44px;background:var(--gold);border-radius:4px;width:' + calStart + 'px;margin-bottom:10px"></div></div>' +
     '<input id="medCalSlider" type="range" min="250" max="' + calMax + '" value="' + Math.min(calStart, calMax) + '" style="width:100%" oninput="medVisionCalDraw()">' +
     '<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="btn btn-outline" style="width:56px;flex:none" onclick="medVisionNudge(-1)">−</button><div id="medCalPx" style="flex:1;text-align:center;font-family:var(--mono);font-size:0.75rem;color:var(--muted)">' + calStart + ' px</div><button class="btn btn-outline" style="width:56px;flex:none" onclick="medVisionNudge(1)">+</button></div>' +
     '<button class="btn btn-outline mt8" onclick="medVisionSaveCal()">This matches my card</button>' +
@@ -14090,8 +14090,20 @@ function medVisionHtml(rec) {
 function medVisionAfterDraw() {}
 // Turning the phone sideways for calibration: bring the bar into view, since
 // a landscape screen shows only a few lines below the header.
+// The camera cutout sits on the short edge that was the top of the phone.
+// Turned counterclockwise (orientation 90) it is on the left, so the bar is
+// anchored to the right edge and grows leftward; turned clockwise, the reverse.
+window.addEventListener('orientationchange', () => setTimeout(() => {
+  const wrap = document.getElementById('medCalWrap'); if (wrap) wrap.style.justifyContent = medCalSide();
+}, 300));
+function medCalSide() {
+  let a = typeof window.orientation === 'number' ? window.orientation : (screen.orientation ? screen.orientation.angle : 0);
+  a = ((a % 360) + 360) % 360;
+  return a === 90 ? 'flex-end' : 'flex-start';
+}
 window.addEventListener('resize', () => {
   if (typeof ST === 'undefined' || ST.tab !== 'medical' || ST.medicalView !== 'vision') return;
+  const wrap = document.getElementById('medCalWrap'); if (wrap) wrap.style.justifyContent = medCalSide();
   if (window.innerWidth <= window.innerHeight) return;
   clearTimeout(window._medCalScroll);
   window._medCalScroll = setTimeout(() => document.getElementById('medCalBar')?.scrollIntoView({ block: 'center' }), 250);

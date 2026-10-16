@@ -77,6 +77,15 @@ let fail = 0; const check = (n, c, g) => { console.log((c ? 'PASS ' : 'FAIL ') +
   const barW = await p.$eval('#medCalBar', e => e.getBoundingClientRect().width);
   check('landscape: bar draws full card length, nudges by 1 px', Math.abs(barW - 518) < 0.5 && /518 px/.test(await p.textContent('#medCalPx')), barW);
   await p.screenshot({ path: S + '/07a-cal-landscape.png' });
+  // Turned counterclockwise (90): camera on the left, bar anchored right.
+  await p.evaluate(() => { Object.defineProperty(window, 'orientation', { value: 90, configurable: true }); window.dispatchEvent(new Event('orientationchange')); }); await p.waitForTimeout(500);
+  let bb = await p.$eval('#medCalBar', e => { const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, w: window.innerWidth }; });
+  check('counterclockwise: bar anchored right, clear of the left edge', bb.r > bb.w - 60 && bb.l > 200, bb);
+  await p.screenshot({ path: S + '/07b-cal-ccw.png' });
+  await p.evaluate(() => { Object.defineProperty(window, 'orientation', { value: -90, configurable: true }); window.dispatchEvent(new Event('orientationchange')); }); await p.waitForTimeout(500);
+  bb = await p.$eval('#medCalBar', e => { const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, w: window.innerWidth }; });
+  check('clockwise: bar anchored left', bb.l < 60, bb);
+  await p.evaluate(() => { delete window.orientation; });
   await p.setViewportSize({ width: 390, height: 664 }); await p.evaluate(() => renderPage()); await p.waitForTimeout(400);
   await p.evaluate(() => { document.getElementById('medCalSlider').value = 330; });
   await p.locator('button', { hasText: 'This matches my card' }).click(); await p.waitForTimeout(500);

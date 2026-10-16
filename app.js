@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.44 / 20261016_1
+ * Version/build: fcf-v5.44.45 / 20261016_2
  */
 
-const FCF_VERSION = 'fcf-v5.44.44';
-const FCF_BUILD   = '20261016_1';
+const FCF_VERSION = 'fcf-v5.44.45';
+const FCF_BUILD   = '20261016_2';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -13573,6 +13573,8 @@ const MEDICAL_STORE_KEY = 'fcf_medical_v1';
 const MEDICAL_GUIDE_CHECKED = 'October 16, 2026';
 const FAA_STANDARDS_URL = 'https://www.faa.gov/ame_guide/standards';
 const FAA_DNI_DNF_URL = 'https://www.faa.gov/ame_guide/pharm/dni_dnf';
+const MED_CLASS_WORD = ['', 'first', 'second', 'third'];
+const MED_SEATS = [['', 'Choose your seat'], ['capt', 'Captain (Part 121, or any ATP pilot in command)'], ['fo', 'First officer (Part 121 airline)'], ['other', 'Other: charter, corporate, instructor, private']];
 
 function medicalEnabled() {
   return !!(ST.user && MEDICAL_OWNER_IDS.includes(ST.user.id));
@@ -13584,7 +13586,7 @@ function medicalRecord() {
     // Tied to the signed-in account: another account on the same phone
     // starts clean rather than seeing someone else's dates.
     const mine = saved && ST.user && saved.user === ST.user.id ? saved : null;
-    ST.medical = mine || { user: ST.user ? ST.user.id : null, cls: 1, examDate: '', dob: '', hadEcg: null, lastEcg: '', pinHash: '', accepted: false, vision: {} };
+    ST.medical = mine || { user: ST.user ? ST.user.id : null, cls: 1, seat: '', augmented: false, airlineFirst: false, examDate: '', dob: '', hadEcg: null, lastEcg: '', pinHash: '', accepted: false, vision: {} };
   }
   return ST.medical;
 }
@@ -13617,6 +13619,33 @@ function medicalPrivileges(cls, examDate, dob) {
   if (cls <= 2) out.push({ cls: 2, label: 'Second-class (commercial) privileges', ends: medicalEndOfMonthPlus(examDate, 12) });
   out.push({ cls: 3, label: 'Third-class (private) privileges', ends: medicalEndOfMonthPlus(examDate, under40 ? 60 : 24) });
   return out;
+}
+// Which class the pilot's seat calls for, 14 CFR 61.23(a).
+//   Captain: ATP pilot-in-command privileges, first class (a)(1)(i).
+//   Part 121 first officer: at least second class (a)(2)(i), except first
+//   class in a flag or supplemental operation needing three or more pilots
+//   (a)(1)(ii), or at 60 and over (a)(1)(iii). Some airlines also require
+//   first class by company policy; the pilot ticks that.
+//   Other (charter, corporate, instructor, private): the class they chose.
+function medicalNeededClass(rec, today) {
+  const seat = rec && rec.seat;
+  if (seat === 'capt') return { cls: 1, why: 'Captains use ATP pilot-in-command privileges, which need first class (14 CFR 61.23(a)(1)(i)).' };
+  if (seat === 'fo') {
+    const age = medicalAgeOn(rec.dob, today || localDateStr(new Date()));
+    if (age != null && age >= 60) return { cls: 1, why: 'At 60 and over, every required pilot in a Part 121 operation needs first class (14 CFR 61.23(a)(1)(iii)).' };
+    if (rec.augmented) return { cls: 1, why: 'First officers in a flag or supplemental operation that needs three or more pilots need first class (14 CFR 61.23(a)(1)(ii)).' };
+    if (rec.airlineFirst) return { cls: 1, why: 'The FAA asks a Part 121 first officer for second class, but your airline requires first class.' };
+    return { cls: 2, why: 'A Part 121 first officer needs at least second class (14 CFR 61.23(a)(2)(i)).' };
+  }
+  return { cls: (rec && rec.cls) || 1, why: '' };
+}
+// The privilege line that matters for the seat: the date the pilot is
+// actually grounded. A first officer holding a first-class certificate keeps
+// flying on its second-class privileges after the first-class ones lapse.
+function medicalKeyPrivilege(rec, privs, today) {
+  if (!privs.length) return null;
+  const need = medicalNeededClass(rec, today).cls;
+  return privs.find(p => p.cls === need) || privs[0];
 }
 function medicalDaysUntil(dateStr, today) {
   const t = today || localDateStr(new Date());
@@ -13797,11 +13826,18 @@ function medicalSaveCert() {
   const g = id => document.getElementById(id);
   const rec = medicalRecord();
   rec.cls = parseInt(g('medCls')?.value) || 1;
+  rec.seat = g('medSeat')?.value || '';
+  rec.augmented = !!(g('medAug') && g('medAug').checked);
+  rec.airlineFirst = !!(g('medAirFirst') && g('medAirFirst').checked);
   rec.examDate = g('medExam')?.value || '';
   rec.dob = g('medDob')?.value || '';
   rec.hadEcg = g('medHadEcg') ? g('medHadEcg').checked : rec.hadEcg;
   rec.lastEcg = g('medLastEcg')?.value || '';
   saveMedicalRecord(); showToast('Saved on this phone.'); renderPage();
+}
+function medicalSeatChange() {
+  const fo = document.getElementById('medSeat')?.value === 'fo';
+  const box = document.getElementById('medFoOpts'); if (box) box.style.display = fo ? '' : 'none';
 }
 function medicalAccept() { medicalRecord().accepted = true; saveMedicalRecord(); renderPage(); }
 
@@ -13848,10 +13884,12 @@ function medHomeHtml(rec) {
   const today = localDateStr(new Date());
   const privs = medicalPrivileges(rec.cls, rec.examDate, rec.dob);
   const item = (icon, title, sub, view) => '<div class="card mb12" style="cursor:pointer" onclick="medicalSetView(\'' + view + '\')"><div class="fb"><div style="display:flex;align-items:center;gap:12px"><div style="font-size:1.375rem">' + icon + '</div><div><div style="font-size:0.875rem;font-weight:600">' + title + '</div><div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">' + sub + '</div></div></div><div style="color:var(--muted)">→</div></div></div>';
-  let certSub = 'Set your class, exam date and birth date';
+  let certSub = 'Set your seat, class, exam date and birth date';
   if (privs.length) {
-    const top = privs[0]; const d = medicalDaysUntil(top.ends, today);
-    certSub = d < 0 ? top.label + ' ended ' + (-d) + ' days ago' : top.label + ' end in ' + d + ' days (' + top.ends + ')';
+    const top = medicalKeyPrivilege(rec, privs, today); const d = medicalDaysUntil(top.ends, today);
+    const need = medicalNeededClass(rec, today).cls;
+    if (rec.cls > need) certSub = 'Your seat needs ' + MED_CLASS_WORD[need] + ' class; this certificate is ' + MED_CLASS_WORD[rec.cls];
+    else certSub = d < 0 ? top.label + ' ended ' + (-d) + ' days ago' : top.label + ' end in ' + d + ' days (' + top.ends + ')';
   }
   parts.push(item('🪪', 'My certificate', certSub, 'cert'));
   parts.push(item('🩺', 'My numbers vs. FAA lines', 'Blood pressure, glucose, BMI', 'bio'));
@@ -13867,32 +13905,54 @@ function medHomeHtml(rec) {
 function medCertHtml(rec) {
   const parts = ['<div class="section-label">MY CERTIFICATE</div>'];
   parts.push('<div class="card mb12">');
-  parts.push('<div class="field"><label>Class I hold or need</label><select id="medCls">' + [1, 2, 3].map(c => '<option value="' + c + '"' + (rec.cls === c ? ' selected' : '') + '>' + ['', 'First class (ATP, Part 121 PIC)', 'Second class (commercial, most Part 135 and Part 91 commercial)', 'Third class (private, student)'][c] + '</option>').join('') + '</select></div>');
+  parts.push('<div class="field"><label>My seat</label><select id="medSeat" onchange="medicalSeatChange()">' + MED_SEATS.map(([v, l]) => '<option value="' + v + '"' + ((rec.seat || '') === v ? ' selected' : '') + '>' + l + '</option>').join('') + '</select></div>');
+  parts.push('<div id="medFoOpts" style="' + (rec.seat === 'fo' ? '' : 'display:none') + '">' +
+    '<div class="fb" style="padding:6px 0;gap:12px"><label for="medAug" style="font-size:0.8125rem;line-height:1.4">I fly long-haul with three or more pilots (flag or supplemental)</label><input id="medAug" type="checkbox" style="width:22px;height:22px;flex-shrink:0"' + (rec.augmented ? ' checked' : '') + '></div>' +
+    '<div class="fb" style="padding:6px 0;gap:12px"><label for="medAirFirst" style="font-size:0.8125rem;line-height:1.4">My airline requires first officers to hold first class</label><input id="medAirFirst" type="checkbox" style="width:22px;height:22px;flex-shrink:0"' + (rec.airlineFirst ? ' checked' : '') + '></div></div>');
+  parts.push('<div class="field"><label>Class on my certificate</label><select id="medCls">' + [1, 2, 3].map(c => '<option value="' + c + '"' + (rec.cls === c ? ' selected' : '') + '>' + ['', 'First class', 'Second class', 'Third class'][c] + '</option>').join('') + '</select></div>');
   parts.push('<div class="field"><label>Date of last exam</label><input id="medExam" type="date" value="' + (rec.examDate || '') + '"></div>');
   parts.push('<div class="field"><label>Date of birth</label><input id="medDob" type="date" value="' + (rec.dob || '') + '"><div style="font-size:0.625rem;color:var(--muted);margin-top:4px">Needed because the rules change at 35, 40 and 50. Stays on this phone.</div></div>');
-  if (rec.cls === 1) {
+  if (rec.cls === 1 || medicalNeededClass(rec).cls === 1) {
     parts.push('<div class="fb" style="padding:6px 0"><label style="font-size:0.875rem">I have had an FAA ECG before</label><input id="medHadEcg" type="checkbox" style="width:22px;height:22px"' + (rec.hadEcg ? ' checked' : '') + '></div>');
     parts.push('<div class="field"><label>Date of last FAA ECG (if known)</label><input id="medLastEcg" type="date" value="' + (rec.lastEcg || '') + '"></div>');
   }
   parts.push('<button class="btn btn-gold" onclick="medicalSaveCert()">Save on this phone</button>');
   parts.push('</div>');
   const privs = medicalPrivileges(rec.cls, rec.examDate, rec.dob);
+  const today = localDateStr(new Date());
+  const need = medicalNeededClass(rec, today);
+  if (rec.seat && rec.seat !== 'other') {
+    const short = rec.cls > need.cls;
+    parts.push(medCard('WHAT YOUR SEAT NEEDS', '<div style="font-size:0.875rem;font-weight:600;color:' + (short ? 'var(--amber)' : 'var(--text)') + '">' + MED_CLASS_WORD[need.cls].replace(/^./, c => c.toUpperCase()) + '-class privileges</div><div style="font-size:0.75rem;color:var(--muted);margin-top:4px;line-height:1.5">' + need.why +
+      (short ? ' Your certificate is ' + MED_CLASS_WORD[rec.cls] + ' class, so it does not cover this seat. Talk to your AME about the exam you need.' : '') +
+      (rec.seat === 'fo' && need.cls === 2 ? ' Many first officers hold a first-class certificate anyway, to be ready for upgrade. Check your contract or ops manual for a company rule.' : '') + '</div>'));
+  }
   if (privs.length) {
-    const today = localDateStr(new Date());
+    const key = medicalKeyPrivilege(rec, privs, today);
     let inner = '';
     privs.forEach(pv => {
       const d = medicalDaysUntil(pv.ends, today);
+      const isKey = pv === key && rec.seat && rec.seat !== 'other';
       const col = d < 0 ? 'var(--red)' : d <= 30 ? 'var(--amber)' : 'var(--text)';
-      inner += '<div class="fb" style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-size:0.8125rem">' + pv.label + '</div><div style="font-family:var(--mono);font-size:0.75rem;color:' + col + '">' + pv.ends + (d < 0 ? ' · ended' : ' · ' + d + ' d') + '</div></div>';
+      inner += '<div class="fb" style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-size:0.8125rem' + (isKey ? ';font-weight:600' : '') + '">' + pv.label + (isKey ? ' <span style="font-size:0.625rem;color:var(--gold);font-weight:600">YOUR SEAT</span>' : '') + '</div><div style="font-family:var(--mono);font-size:0.75rem;color:' + col + '">' + pv.ends + (d < 0 ? ' · ended' : ' · ' + d + ' d') + '</div></div>';
     });
     const age = medicalAgeOn(rec.dob, rec.examDate);
     inner += '<div style="font-size:0.6875rem;color:var(--muted);margin-top:8px;line-height:1.5">You were ' + age + ' at that exam. Privileges run to the end of the month (14 CFR 61.23). When a higher class ends, the same certificate keeps working at the next class down.</div>';
+    if (rec.seat === 'fo' && rec.cls === 1 && need.cls === 2 && key.cls === 2 && privs[0].ends !== key.ends) {
+      inner += '<div style="font-size:0.75rem;line-height:1.5;margin-top:8px">First-class privileges end ' + privs[0].ends + ', but as a first officer you keep flying on second-class privileges until <b>' + key.ends + '</b>. That later date is the one that grounds you.</div>';
+    }
     parts.push(medCard('WHAT THIS CERTIFICATE IS GOOD FOR', inner));
-    const next = privs[0].ends;
-    const ecg = medicalEcgDue(rec, next);
-    if (ecg) parts.push(medCard('ECG AT YOUR NEXT FIRST-CLASS EXAM', '<div style="font-size:0.875rem;font-weight:600;color:' + (ecg.due ? 'var(--amber)' : 'var(--green)') + '">' + (ecg.due ? 'Expect an ECG' : 'No ECG expected') + '</div><div style="font-size:0.75rem;color:var(--muted);margin-top:2px;line-height:1.5">' + ecg.why + ' The rule: one ECG at the first exam at or after 35, then every year from 40. Plan a few extra minutes; it is done in the office.</div>'));
+    const next = key.ends;
+    // ECG is a first-class exam requirement. Show it when the next exam
+    // would be first class: the seat needs it, or the pilot holds first class.
+    const wantsFirst = need.cls === 1 || rec.cls === 1;
+    const ecg = wantsFirst ? medicalEcgDue(Object.assign({}, rec, { cls: 1 }), next) : null;
+    if (ecg) {
+      const foNote = need.cls === 2 ? ' Your seat needs second class, and a second-class exam has no ECG. You only need it to keep first-class privileges, for upgrade or a company rule.' : '';
+      parts.push(medCard('ECG AT YOUR NEXT FIRST-CLASS EXAM', '<div style="font-size:0.875rem;font-weight:600;color:' + (ecg.due ? 'var(--amber)' : 'var(--green)') + '">' + (ecg.due ? 'Expect an ECG' : 'No ECG expected') + '</div><div style="font-size:0.75rem;color:var(--muted);margin-top:2px;line-height:1.5">' + ecg.why + ' The rule: one ECG at the first exam at or after 35, then every year from 40. Plan a few extra minutes; it is done in the office.' + foNote + '</div>'));
+    }
     const planAhead = medicalDaysUntil(next, today);
-    if (planAhead >= 0 && planAhead <= 60) parts.push(medCard('BOOK IT', '<div style="font-size:0.8125rem;line-height:1.55">Your top privileges end in ' + planAhead + ' days. Book the exam for the last month, so the new certificate starts from the end of that month and you lose nothing. Fill in MedXPress within 60 days before the appointment.</div>'));
+    if (planAhead >= 0 && planAhead <= 60) parts.push(medCard('BOOK IT', '<div style="font-size:0.8125rem;line-height:1.55">' + (rec.seat && rec.seat !== 'other' ? 'The privileges your seat needs' : 'Your top privileges') + ' end in ' + planAhead + ' days. Book the exam for the last month, so the new certificate starts from the end of that month and you lose nothing. Fill in MedXPress within 60 days before the appointment.</div>'));
   }
   return parts.join('');
 }
@@ -14021,7 +14081,7 @@ function medStandardsHtml() {
       row('Urine', 'glucose, protein', 'same', 'same') +
       row('Valid for (under 40 / 40+)', '12 / 6 months', '12 / 12', '60 / 24') + '</table>') +
     medCard('HISTORY THAT STOPS AN OFFICE ISSUE', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6">The AME must deny or defer to the FAA, unless the FAA has already ruled, for: diabetes needing medication to lower blood sugar, angina, treated or symptomatic coronary disease, heart attack, valve replacement, pacemaker, heart transplant, psychosis, bipolar disorder, severe personality disorder, substance dependence or abuse, epilepsy, unexplained loss of consciousness, transient loss of nervous system control. Many of these end in a special issuance rather than a denial, but the path starts before the exam, with your AME.</div>') +
-    medCard('WHICH CLASS YOU NEED', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6">First class to use ATP privileges (airline PIC, and Part 135 operations that require an ATP). Second class for commercial privileges, which covers most Part 135 and corporate Part 91 flying. Third class or BasicMed for private flying. A first-class certificate steps down to second-class privileges, then third, as it ages (see My certificate).</div>');
+    medCard('WHICH CLASS YOU NEED', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6"><b style="color:var(--text)">Captain:</b> first class, for ATP pilot-in-command privileges (airline captains, and Part 135 operations that require an ATP).<br><b style="color:var(--text)">Part 121 first officer:</b> second class is the FAA minimum. First class if you fly a flag or supplemental operation that needs three or more pilots, or once you turn 60. Some airlines require first class by company policy.<br><b style="color:var(--text)">Commercial flying</b> (most Part 135 and corporate Part 91): second class.<br><b style="color:var(--text)">Private flying:</b> third class or BasicMed.<br>A first-class certificate steps down to second-class privileges, then third, as it ages (see My certificate). Source: 14 CFR 61.23(a).</div>');
 }
 
 async function medicalDeleteConfirm() {

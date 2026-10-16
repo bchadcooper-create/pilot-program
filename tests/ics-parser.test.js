@@ -1589,6 +1589,27 @@ test('certificate privileges follow 14 CFR 61.23(d), to the end of the month', (
   assertEqual(p.map(x => x.cls + ':' + x.ends).join(' '), '3:2031-03-31', 'third class, under 40');
   assertEqual(ctx.medicalPrivileges(1, '', '1990-01-01').length, 0, 'nothing without an exam date');
 });
+test('seat decides the class that matters, 14 CFR 61.23(a)', () => {
+  const T = '2026-10-16';
+  const n = rec => ctx.medicalNeededClass(rec, T).cls;
+  assertEqual(n({ seat: 'capt', cls: 1, dob: '1980-01-01' }), 1, 'captain: first');
+  assertEqual(n({ seat: 'fo', cls: 1, dob: '1980-01-01' }), 2, 'Part 121 FO: second');
+  assertEqual(n({ seat: 'fo', cls: 1, dob: '1980-01-01', augmented: true }), 1, 'FO, 3+ pilot flag or supplemental: first');
+  assertEqual(n({ seat: 'fo', cls: 1, dob: '1980-01-01', airlineFirst: true }), 1, 'FO, airline rule: first');
+  assertEqual(n({ seat: 'fo', cls: 1, dob: '1966-10-16' }), 1, 'FO turning 60 today: first');
+  assertEqual(n({ seat: 'fo', cls: 1, dob: '1966-10-17' }), 2, 'FO one day short of 60: second');
+  assertEqual(n({ seat: 'other', cls: 2 }), 2, 'other: the class chosen');
+  assertEqual(n({ seat: '', cls: 3 }), 3, 'no seat yet: the class chosen');
+  // FO, 45, first-class exam June 10 2026: first-class lapses Dec 31, but the
+  // date that grounds a first officer is the second-class end, June 30 2027.
+  const rec = { seat: 'fo', cls: 1, dob: '1981-01-01' };
+  const privs = ctx.medicalPrivileges(1, '2026-06-10', rec.dob);
+  assertEqual(ctx.medicalKeyPrivilege(rec, privs, T).ends, '2027-06-30', 'FO keys on second-class end');
+  assertEqual(ctx.medicalKeyPrivilege(Object.assign({}, rec, { seat: 'capt' }), privs, T).ends, '2026-12-31', 'captain keys on first-class end');
+  // Holding second class in a captain seat: falls back to the top line (and the page warns).
+  const p2 = ctx.medicalPrivileges(2, '2026-06-10', rec.dob);
+  assertEqual(ctx.medicalKeyPrivilege({ seat: 'capt', cls: 2 }, p2, T).cls, 2, 'short certificate: top line');
+});
 test('ECG: once at the first exam from 35, yearly from 40, first class only', () => {
   const r = (cls, dob, hadEcg, lastEcg) => ctx.medicalEcgDue({ cls, dob, hadEcg, lastEcg }, '2027-06-30');
   assertEqual(r(1, '1995-01-01', false, '').due, false, 'under 35: none');

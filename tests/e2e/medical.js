@@ -36,6 +36,23 @@ let fail = 0; const check = (n, c, g) => { console.log((c ? 'PASS ' : 'FAIL ') +
   check('privileges shown to end of month', /2026-12-31/.test(certTxt) && /2027-06-30/.test(certTxt) && /2028-06-30/.test(certTxt), certTxt.slice(0, 200));
   check('ECG not expected (last one at the exam)', /No ECG expected/.test(certTxt));
   await p.screenshot({ path: S + '/03-cert.png', fullPage: true });
+  // Seat: first officer. FO options appear only for that seat.
+  check('FO options hidden before choosing', await p.locator('#medFoOpts').evaluate(e => e.style.display === 'none'));
+  await p.selectOption('#medSeat', 'fo'); await p.waitForTimeout(200);
+  check('FO options shown for first officer', await p.locator('#medFoOpts').evaluate(e => e.style.display !== 'none'));
+  await p.locator('button', { hasText: 'Save on this phone' }).click(); await p.waitForTimeout(600);
+  const foTxt = await p.textContent('#mainPage');
+  check('FO: seat needs second class', /Second-class privileges/.test(foTxt) && /61\.23\(a\)\(2\)\(i\)/.test(foTxt), foTxt.slice(0, 300));
+  check('FO: grounded date is the second-class end', /keep flying on second-class privileges until 2027-06-30/.test(foTxt));
+  check('FO: ECG only for first-class privileges', /a second-class exam has no ECG/.test(foTxt));
+  await p.screenshot({ path: S + '/03b-cert-fo.png', fullPage: true });
+  await p.evaluate(() => medicalSetView('home')); await p.waitForTimeout(300);
+  check('home tile shows the second-class date', /Second-class \(commercial\) privileges end in \d+ days \(2027-06-30\)/.test(await p.textContent('#mainPage')));
+  // Captain keys on the first-class date.
+  await p.evaluate(() => medicalSetView('cert')); await p.waitForTimeout(300);
+  await p.selectOption('#medSeat', 'capt'); await p.locator('button', { hasText: 'Save on this phone' }).click(); await p.waitForTimeout(600);
+  await p.evaluate(() => medicalSetView('home')); await p.waitForTimeout(300);
+  check('captain: home tile shows the first-class date', /First-class \(ATP\) privileges ended \d+ days ago|First-class \(ATP\) privileges end in \d+ days \(2026-12-31\)/.test(await p.textContent('#mainPage')));
   // Numbers
   await p.evaluate(() => medicalSetView('bio')); await p.waitForTimeout(1500);
   await p.screenshot({ path: S + '/04-bio.png', fullPage: true });

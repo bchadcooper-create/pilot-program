@@ -1656,6 +1656,22 @@ test('biometric flags use the FAA lines (155/95, 100/126, BMI 30/35/40)', () => 
   assertEqual(f({ weight_lb: 180 }, 70), 'green', 'BMI 25.8');
   assertEqual(ctx.medicalBioFlags(null).length, 0, 'no row, no flags');
 });
+test('mid range and distance checks: sizes and FAA lines by class and age', () => {
+  assertEqual(Math.abs(ctx.visionLetterMm(20, 6096) - 8.87) < 0.01, true, '20/20 at 20 ft is 8.87 mm');
+  assertEqual(Math.abs(ctx.visionLetterMm(20, 3048) - 4.43) < 0.01, true, '20/20 at 10 ft is 4.43 mm');
+  assertEqual(Math.abs(ctx.visionLetterMm(40, 812.8) - 2 * ctx.visionLetterMm(20, 812.8)) < 1e-9, true, '20/40 is twice 20/20');
+  const capt = { seat: 'capt', cls: 1, dob: '1975-01-01', vision: {} };
+  const far = ctx.medVisionTest(capt, 'far');
+  assertEqual(far.std + ':' + far.ft + ':' + Math.round(far.distMm), '20:10:3048', 'captain distance: 20/20, default 10 ft');
+  assertEqual(ctx.medVisionTest({ seat: 'other', cls: 3, dob: '1990-01-01', vision: { farFt: 20 } }, 'far').std + ':' + ctx.medVisionTest({ seat: 'other', cls: 3, dob: '1990-01-01', vision: { farFt: 20 } }, 'far').ft, '40:20', 'third class distance: 20/40, 20 ft chosen');
+  assertEqual(ctx.medVisionTest(capt, 'mid').required, true, 'mid range required at 51, first class');
+  assertEqual(ctx.medVisionTest({ seat: 'capt', cls: 1, dob: '1990-01-01' }, 'mid').required, false, 'not required at 36');
+  assertEqual(ctx.medVisionVerdict(far, 'right', { den: 25 }).tone, 'amber', '20/25 misses 20/20 distance');
+  assertEqual(ctx.medVisionVerdict(far, 'right', { den: 20 }).tone, 'green', '20/20 meets it');
+  assertEqual(/from age 50/.test(ctx.medVisionVerdict(ctx.medVisionTest({ seat: 'capt', cls: 1, dob: '1990-01-01' }, 'mid'), 'left', { den: 50 }).body), true, 'under 50 told it is not on the exam yet');
+  const v = { right: { den: 30 }, mid: { left: { den: 40 } }, far: {} };
+  assertEqual([ctx.medVisionResult(v, 'near', 'right').den, ctx.medVisionResult(v, 'mid', 'left').den, ctx.medVisionResult(v, 'far', 'left')].join(','), '30,40,', 'results read from the right place');
+});
 test('near-vision letters are sized by the 5 arc-minute rule at 16 inches', () => {
   const mm20 = ctx.visionLetterMm(20, 406.4), mm40 = ctx.visionLetterMm(40, 406.4);
   assertEqual(Math.abs(mm20 - 0.591) < 0.005, true, '20/20 letter is 0.59 mm, got ' + mm20.toFixed(3));

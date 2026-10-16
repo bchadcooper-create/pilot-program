@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.49 / 20261016_6
+ * Version/build: fcf-v5.44.50 / 20261016_7
  */
 
-const FCF_VERSION = 'fcf-v5.44.49';
-const FCF_BUILD   = '20261016_6';
+const FCF_VERSION = 'fcf-v5.44.50';
+const FCF_BUILD   = '20261016_7';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -13831,7 +13831,7 @@ async function medicalUnlock() {
   else { showToast('That PIN did not match.'); if (el) el.value = ''; }
 }
 
-function medicalSetView(v) { ST.medicalView = v; renderPage(); window.scrollTo(0, 0); }
+function medicalSetView(v) { ST.medicalView = v; ST.medFull = false; renderPage(); window.scrollTo(0, 0); }
 function medicalSave(field, value) { medicalRecord()[field] = value; saveMedicalRecord(); }
 function medicalSaveCert() {
   const g = id => document.getElementById(id);
@@ -13906,7 +13906,7 @@ function medHomeHtml(rec) {
   parts.push(item('🩺', 'My numbers vs. FAA lines', 'Blood pressure, glucose, BMI', 'bio'));
   parts.push(item('💊', 'Medication check', 'Is it accepted, a wait, or a call to your AME first', 'meds'));
   parts.push(item('📝', 'MedXPress prep', 'The questions that trip pilots up', 'medxpress'));
-  parts.push(item('👁️', 'Near-vision check', 'Phone-based, 16 inches, one eye at a time', 'vision'));
+  parts.push(item('👁️', 'Vision check', 'Near, mid range and distance, one eye at a time', 'vision'));
   parts.push(item('👂', 'Hearing and color vision', 'What the exam does, and the AirPods Pro test', 'hearing'));
   parts.push(item('📋', 'What the exam checks', 'First, second and third class standards', 'standards'));
   parts.push(item('🔒', 'Privacy and PIN', rec.pinHash ? 'PIN on · data stays on this phone' : 'No PIN · data stays on this phone', 'privacy'));
@@ -14049,8 +14049,8 @@ function medXpressHtml() {
 function medVisionHtml(rec) {
   const v = rec.vision || {};
   const cal = v.pxPerMm || null;
-  const parts = ['<div class="section-label">NEAR-VISION CHECK</div>'];
-  parts.push('<div class="med-portrait-only">' + medCard('WHAT THIS IS', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6">The first-class standard for near vision is 20/40 or better in each eye at 16 inches, with glasses if you wear them for reading. This check uses the same letter sizes. It cannot replace the AME\'s chart; it can tell you to see an optometrist before your exam instead of finding out in the chair.</div>') + '</div>');
+  const parts = ['<div class="section-label">VISION CHECK</div>'];
+  parts.push('<div class="med-portrait-only">' + medCard('WHAT THIS IS', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6">Three checks with the same letter sizes the AME uses: near (16 inches, 20/40), mid range (32 inches, 20/40, checked from age 50 for first and second class) and distance (20/20 for first and second class, 20/40 for third). Glasses or contacts are fine; wear the ones you fly with. It cannot replace the AME\'s chart; it can tell you to see an optometrist before your exam instead of finding out in the chair.</div>') + '</div>');
   // A card is 85.6 mm. On a 460 ppi, 3x iPhone that is about 517 CSS px,
   // wider than the phone held upright (402 px), so this step is done sideways.
   const calStart = cal ? Math.round(cal * CREDIT_CARD_MM) : 520;
@@ -14063,35 +14063,50 @@ function medVisionHtml(rec) {
     '<button class="btn btn-outline mt8" onclick="medVisionSaveCal()">This matches my card</button>' +
     (cal ? '<div style="font-size:0.6875rem;color:var(--green);margin-top:6px">Calibrated: ' + cal.toFixed(2) + ' px per mm. You can turn the phone upright again for the chart.</div>' : '')));
   if (cal) {
-    const dist = 406.4;
+    const test = MED_VTESTS[ST.medVTest] ? ST.medVTest : 'near';
+    const cfg = medVisionTest(rec, test);
     const eye = ST.medEye === 'left' ? 'left' : 'right';
-    const picked = v[eye] ? v[eye].den : null;
-    const eyeBtn = (e, label) => '<button class="env-btn" style="flex:1;padding:10px 0;font-size:0.8125rem' + (eye === e ? ';border-color:var(--gold);color:var(--gold);font-weight:600' : '') + '" onclick="ST.medEye=\'' + e + '\';renderPage()">' + label + (v[e] ? ' · 20/' + v[e].den : '') + '</button>';
-    let chart = '<div style="display:flex;gap:8px;margin-bottom:10px">' + eyeBtn('right', 'Right eye') + eyeBtn('left', 'Left eye') + '</div>';
-    chart += '<div style="font-size:0.8125rem;line-height:1.6;margin-bottom:10px"><b>Cover your ' + (eye === 'right' ? 'left' : 'right') + ' eye.</b> <span style="color:var(--muted)">Hold the phone 16 inches away (about a sheet of letter paper plus a hand), upright is fine. Read from the top down, then <b style="color:var(--text)">tap the smallest line you can read without guessing.</b> The score is beside each line.</span></div>';
-    chart += '<div style="background:#fff;color:#000;border-radius:8px;padding:8px 0">';
-    VISION_LINES.forEach((den, i) => {
-      const mm = visionLetterMm(den, dist);
-      const px = mm * cal / 0.72; // cap height is about 0.72 em in a bold sans
+    const got = e => medVisionResult(v, test, e);
+    const picked = got(eye) ? got(eye).den : null;
+    const tab = (t) => { const c = medVisionTest(rec, t); return '<button class="env-btn" style="flex:1;padding:8px 0;font-size:0.75rem;line-height:1.3' + (test === t ? ';border-color:var(--gold);color:var(--gold);font-weight:600' : ';color:var(--text)') + '" onclick="medVisionSetTest(\'' + t + '\')">' + c.label + '<br><span style="font-size:0.625rem;opacity:0.8">' + c.sub + '</span></button>'; };
+    const eyeBtn = (e, label) => '<button class="env-btn" style="flex:1;padding:10px 0;font-size:0.8125rem' + (eye === e ? ';border-color:var(--gold);color:var(--gold);font-weight:600' : ';color:var(--text)') + '" onclick="ST.medEye=\'' + e + '\';renderPage()">' + label + (got(e) ? ' · 20/' + got(e).den : '') + '</button>';
+    let chart = '<div style="display:flex;gap:6px;margin-bottom:10px">' + tab('near') + tab('mid') + tab('far') + '</div>';
+    if (test === 'far') chart += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;font-size:0.75rem;color:var(--muted)">Distance:' + [10, 20].map(ft => '<button class="btn-ghost" style="padding:4px 8px;' + (cfg.ft === ft ? 'color:var(--gold);font-weight:600' : '') + '" onclick="medVisionSetFarFt(' + ft + ')">' + ft + ' ft</button>').join('') + '</div>';
+    chart += '<div style="font-size:0.75rem;color:var(--muted);line-height:1.55;margin-bottom:10px">' + cfg.how + '</div>';
+    chart += '<div style="display:flex;gap:8px;margin-bottom:10px">' + eyeBtn('right', 'Right eye') + eyeBtn('left', 'Left eye') + '</div>';
+    chart += '<div style="font-size:0.8125rem;line-height:1.6;margin-bottom:10px"><b>Cover your ' + (eye === 'right' ? 'left' : 'right') + ' eye.</b> <span style="color:var(--muted)">Read from the top down. ' + (test === 'far' ? 'Remember the smallest line you read without guessing, then walk back and tap it.' : '<b style="color:var(--text)">Tap the smallest line you can read without guessing.</b>') + ' The score is beside each line.</span></div>';
+    // Room for letters: the page width less padding and the two 64 px label columns.
+    const avail = Math.max(120, (window.innerWidth || 390) - 64 - 128);
+    const lines = VISION_LINES.map((den, i) => ({ den, i, px: visionLetterMm(den, cfg.distMm) * cal / 0.72 })) // cap height is about 0.72 em in a bold sans
+      .filter(l => l.px <= avail);
+    let lineHtml = '';
+    lines.forEach(({ den, i, px }) => {
       const sel = picked === den;
-      const std = den === 40 ? '<div style="font-size:8px;color:#a16207;font-weight:600">FAA LINE</div>' : '';
-      chart += '<div role="button" class="med-vline" onclick="medVisionPick(' + den + ')" style="display:flex;align-items:center;cursor:pointer;padding:' + Math.max(6, px * 0.45).toFixed(1) + 'px 0;' + (sel ? 'background:#fde68a;' : '') + (den === 40 ? 'border-top:1px dashed #d4a017;border-bottom:1px dashed #d4a017;' : '') + '">' +
+      const n = Math.max(1, Math.min(5, Math.floor(avail / px)));
+      const std = den === cfg.std ? '<div style="font-size:8px;color:#a16207;font-weight:600">FAA LINE</div>' : '';
+      lineHtml += '<div role="button" class="med-vline" onclick="medVisionPick(' + den + ')" style="display:flex;align-items:center;cursor:pointer;padding:' + Math.max(5, px * 0.2).toFixed(1) + 'px 0;' + (sel ? 'background:#fde68a;' : '') + (den === cfg.std ? 'border-top:1px dashed #d4a017;border-bottom:1px dashed #d4a017;' : '') + '">' +
         '<div style="width:64px;flex:none"></div>' +
-        '<div style="flex:1;text-align:center;font-family:Arial,Helvetica,sans-serif;font-weight:700;letter-spacing:0.25em;line-height:1.1;font-size:' + px.toFixed(2) + 'px">' + visionLineLetters(den * 7 + i) + '</div>' +
+        '<div style="flex:1;text-align:center;font-family:Arial,Helvetica,sans-serif;font-weight:700;letter-spacing:0.25em;line-height:1.1;white-space:nowrap;font-size:' + px.toFixed(2) + 'px">' + visionLineLetters(den * 7 + i + (test === 'near' ? 0 : test === 'mid' ? 3 : 5)).split(' ').slice(0, n).join(' ') + '</div>' +
         '<div style="width:64px;flex:none;text-align:right;padding-right:8px;white-space:nowrap;font-size:11px;color:' + (sel ? '#000' : '#6b7280') + ';font-weight:' + (sel ? '700' : '500') + '">' + (sel ? '✓ ' : '') + '20/' + den + std + '</div></div>';
     });
-    chart += '</div>';
-    chart += '<div style="font-size:0.6875rem;color:var(--muted);margin-top:8px;line-height:1.5">If you can\'t read even the top line, tap it; that result means see an optometrist. ' + (eye === 'right' && v.right && !v.left ? 'Next: tap Left eye above.' : '') + '</div>';
+    if (test !== 'near') chart += '<button class="btn btn-gold" style="margin-bottom:10px" onclick="ST.medFull=true;renderPage()">Show the chart full screen</button>';
+    chart += '<div style="background:#fff;color:#000;border-radius:8px;padding:8px 0">' + lineHtml + '</div>';
+    // Full screen: nothing but the chart, for reading from across the room.
+    if (ST.medFull && test !== 'near') parts.push('<div id="medFullChart" style="position:fixed;inset:0;z-index:9000;background:#fff;color:#000;overflow-y:auto;padding:calc(env(safe-area-inset-top) + 8px) 0 calc(env(safe-area-inset-bottom) + 16px)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:0 16px 8px;font-size:12px;color:#6b7280"><span>' + cfg.label + ' · ' + cfg.sub + ' · ' + (eye === 'right' ? 'cover left eye' : 'cover right eye') + '</span><button onclick="ST.medFull=false;renderPage()" style="background:#111827;color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:14px;font-weight:600">Done</button></div>' +
+      lineHtml + '<div style="text-align:center;font-size:12px;color:#6b7280;margin-top:12px;padding:0 16px">Walk back and tap the smallest line you read without guessing.</div></div>');
+    const dropped = VISION_LINES.length - lines.length;
+    chart += '<div style="font-size:0.6875rem;color:var(--muted);margin-top:8px;line-height:1.5">' + (dropped ? 'The biggest ' + (dropped === 1 ? 'line does' : dropped + ' lines do') + ' not fit on this screen at this distance' + (test === 'far' ? '; try 10 ft or turn the phone sideways' : '') + '. ' : '') + 'If you can\'t read even the top line, tap it; that result means see an optometrist.</div>';
     parts.push(medCard('STEP 2 · READ THE CHART', chart));
-    if (v.right || v.left) {
-      let res = '';
-      ['right', 'left'].forEach(eye => {
-        if (!v[eye]) return;
-        const ok = v[eye].den <= 40;
-        res += medFlagHtml({ tone: ok ? 'green' : 'amber', title: (eye === 'right' ? 'Right' : 'Left') + ' eye: 20/' + v[eye].den + ' at 16 in' + (v[eye].date ? ' · ' + v[eye].date : ''), body: ok ? 'Reaches the 20/40 near standard on this screen check. If it felt like a strain, an optometrist can still make the exam easier.' : 'Does not reach the 20/40 near standard on this screen check. See an optometrist before your medical; reading glasses or an updated prescription usually settle it, and the AME notes a "must have glasses for near vision" limitation.' });
+    let res = '';
+    ['near', 'mid', 'far'].forEach(t => {
+      const c = medVisionTest(rec, t);
+      ['right', 'left'].forEach(e => {
+        const r = medVisionResult(v, t, e); if (!r) return;
+        res += medFlagHtml(medVisionVerdict(c, e, r));
       });
-      parts.push(medCard('RESULT', res + '<button class="btn-ghost" style="font-size:0.75rem" onclick="medVisionReset()">Clear results</button>'));
-    }
+    });
+    if (res) parts.push(medCard('RESULTS', res + '<button class="btn-ghost" style="font-size:0.75rem" onclick="medVisionReset()">Clear results</button>'));
   }
   return parts.join('');
 }
@@ -14131,16 +14146,53 @@ function medVisionSaveCal() {
   const rec = medicalRecord(); rec.vision = rec.vision || {}; rec.vision.pxPerMm = px / CREDIT_CARD_MM; saveMedicalRecord();
   showToast('Screen calibrated.'); renderPage();
 }
+// Near results live at vision.right / vision.left (the first version);
+// mid range and distance at vision.mid and vision.far.
+const MED_VTESTS = { near: 1, mid: 1, far: 1 };
+function medVisionTest(rec, test) {
+  const need = medicalNeededClass(rec).cls;
+  const age = medicalAgeOn(rec.dob, localDateStr(new Date()));
+  if (test === 'mid') return { test, label: 'Mid range', sub: '32 in', distMm: 812.8, std: 40, at: '32 in',
+    required: need <= 2 && age != null && age >= 50, age,
+    how: 'Prop the phone up at eye level and sit 32 inches away, about the distance to an instrument panel. A tape measure helps. Same glasses as you fly with.' };
+  if (test === 'far') { const ft = (rec.vision && rec.vision.farFt) === 20 ? 20 : 10;
+    return { test, label: 'Distance', sub: ft + ' ft', ft, distMm: ft * 304.8, std: need <= 2 ? 20 : 40, at: ft + ' ft', need,
+      how: 'Prop the phone upright at eye level, full brightness, in a lit room. Measure ' + ft + ' feet with a tape measure and stand there. The letters are sized for that distance, so it matches a 20-foot wall chart. Less exact than the near check: a miss means see an optometrist; a pass only means no obvious problem.' }; }
+  return { test: 'near', label: 'Near', sub: '16 in', distMm: 406.4, std: 40, at: '16 in',
+    how: 'Hold the phone 16 inches away (about a sheet of letter paper plus a hand), upright is fine. Reading glasses on if you wear them.' };
+}
+function medVisionResult(v, test, eye) {
+  if (!v) return null;
+  return test === 'near' ? v[eye] || null : (v[test] && v[test][eye]) || null;
+}
+function medVisionVerdict(c, eye, r) {
+  const ok = r.den <= c.std;
+  const title = (eye === 'right' ? 'Right' : 'Left') + ' eye: 20/' + r.den + ' at ' + c.at + (r.date ? ' · ' + r.date : '');
+  if (c.test === 'mid') {
+    if (!c.required) return { tone: ok ? 'green' : 'amber', title, body: (ok ? 'Reaches 20/40 at 32 inches.' : 'Short of 20/40 at 32 inches.') + ' Not part of your exam yet: the AME checks intermediate vision from age 50 for first and second class.' };
+    return { tone: ok ? 'green' : 'amber', title, body: ok ? 'Reaches the 20/40 intermediate standard on this screen check.' : 'Does not reach the 20/40 intermediate standard on this screen check. See an optometrist before your medical; progressive or computer-distance lenses usually settle it.' };
+  }
+  if (c.test === 'far') {
+    const cls = c.std === 20 ? 'first and second class' : 'third class';
+    return { tone: ok ? 'green' : 'amber', title, body: ok ? 'Reaches the 20/' + c.std + ' distance standard for ' + cls + ' on this screen check. A pass here means no obvious problem, not a pass at the exam.' : 'Does not reach the 20/' + c.std + ' distance standard for ' + cls + ' on this screen check. See an optometrist before your medical; an updated prescription usually settles it, and the AME notes a "must wear corrective lenses" limitation.' };
+  }
+  return { tone: ok ? 'green' : 'amber', title, body: ok ? 'Reaches the 20/40 near standard on this screen check. If it felt like a strain, an optometrist can still make the exam easier.' : 'Does not reach the 20/40 near standard on this screen check. See an optometrist before your medical; reading glasses or an updated prescription usually settle it, and the AME notes a "must have glasses for near vision" limitation.' };
+}
+function medVisionSetTest(t) { ST.medVTest = t; ST.medEye = 'right'; ST.medFull = false; renderPage(); }
+function medVisionSetFarFt(ft) { const rec = medicalRecord(); rec.vision = rec.vision || {}; rec.vision.farFt = ft; saveMedicalRecord(); renderPage(); }
 function medVisionPick(den) {
   const rec = medicalRecord(); rec.vision = rec.vision || {};
+  const v = rec.vision;
+  const test = MED_VTESTS[ST.medVTest] ? ST.medVTest : 'near';
   const eye = ST.medEye === 'left' ? 'left' : 'right';
-  rec.vision[eye] = { den, date: localDateStr(new Date()) };
-  saveMedicalRecord(); haptic('light');
+  const entry = { den, date: localDateStr(new Date()) };
+  if (test === 'near') v[eye] = entry; else { v[test] = v[test] || {}; v[test][eye] = entry; }
+  saveMedicalRecord(); haptic('light'); ST.medFull = false;
   // Right eye first, then straight on to the left.
-  if (eye === 'right' && !rec.vision.left) { ST.medEye = 'left'; showToast('Right eye: 20/' + den + '. Now cover your right eye.'); }
+  if (eye === 'right' && !medVisionResult(v, test, 'left')) { ST.medEye = 'left'; showToast('Right eye: 20/' + den + '. Now cover your right eye.'); }
   renderPage();
 }
-function medVisionReset() { const rec = medicalRecord(); const cal = rec.vision?.pxPerMm; rec.vision = cal ? { pxPerMm: cal } : {}; saveMedicalRecord(); renderPage(); }
+function medVisionReset() { const rec = medicalRecord(); const cal = rec.vision?.pxPerMm, ft = rec.vision?.farFt; rec.vision = {}; if (cal) rec.vision.pxPerMm = cal; if (ft) rec.vision.farFt = ft; saveMedicalRecord(); renderPage(); }
 
 function medHearingHtml() {
   return '<div class="section-label">HEARING AND COLOR VISION</div>' +

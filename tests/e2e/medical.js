@@ -100,6 +100,19 @@ let fail = 0; const check = (n, c, g) => { console.log((c ? 'PASS ' : 'FAIL ') +
   check('left eye line marked', /✓ 20\/50/.test(await p.locator('.med-vline').nth(2).textContent()));
   const vt = await p.textContent('#mainPage');
   check('right eye passes, left eye flagged', /Right eye: 20\/30/.test(vt) && /Reaches the 20\/40/.test(vt) && /Left eye: 20\/50/.test(vt) && /See an optometrist/.test(vt));
+  // Mid range and distance
+  await p.locator('button', { hasText: 'Mid range' }).click(); await p.waitForTimeout(400);
+  check('mid range: letters sized for 32 in', await p.$$eval('#mainPage div[style*="font-family:Arial"]', els => { const v = els.map(e => parseFloat(e.style.fontSize)); return Math.abs(v[v.length - 1] - (330 / 85.6) * 1.182 / 0.72) < 0.1; }));
+  await p.locator('.med-vline').last().click(); await p.waitForTimeout(400);
+  await p.locator('button', { hasText: 'Distance' }).click(); await p.waitForTimeout(400);
+  const farSizes = await p.$$eval('#mainPage div[style*="font-family:Arial"]', els => els.map(e => parseFloat(e.style.fontSize)));
+  check('distance 10 ft: 20/20 sized for 10 ft', Math.abs(farSizes[farSizes.length - 1] - (330 / 85.6) * 4.433 / 0.72) < 0.1, farSizes);
+  check('distance: 20/20 marked as the FAA line for first class', /20\/20FAALINE/.test((await p.locator('.med-vline').last().textContent()).replace(/\s/g, '')));
+  await p.locator('.med-vline').last().click(); await p.waitForTimeout(400);
+  const allRes = await p.textContent('#mainPage');
+  check('results list near, mid and distance', /at 16 in/.test(allRes) && /at 32 in/.test(allRes) && /at 10 ft/.test(allRes), allRes.slice(-600));
+  await p.screenshot({ path: S + '/07c-distance.png', fullPage: true });
+  await p.locator('button', { hasText: 'Near' }).first().click(); await p.waitForTimeout(300);
   await p.waitForTimeout(2600); await p.evaluate(() => document.querySelector('#mainPage div[style*="background:#fff"]').scrollIntoView({block:'center'})); await p.waitForTimeout(300); await p.screenshot({ path: S + '/07-vision.png' });
   const back = await p.$$eval('#mainPage .btn-ghost', els => els.filter(e => /←/.test(e.textContent)).map(e => e.textContent.trim()));
   check('one back link on a sub-page', back.length === 1 && back[0] === '← Medical', back);

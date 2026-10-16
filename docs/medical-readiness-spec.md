@@ -63,7 +63,9 @@ Walk-through of the questions pilots stumble on: item 17 medications (everything
 ## Self-checks (Tier 2)
 
 - **Near vision**: calibrate screen with a credit card (85.6 mm wide), hold at 16 in (a tape measure or a sheet of letter paper long side is 11 in; use arm's length guidance plus a ruler), read lines from 20/100 to 20/20 using Sloan letters (C D H K N O R S V Z). Letter height for 20/20 at 16 in is 0.59 mm (5 arcmin), 20/40 is 1.18 mm. One eye at a time. Result phrased as "comfortable line" and whether it reaches the 20/40 standard, with a nudge to an optometrist if not. Instruct: full brightness, lit room, glasses on if worn for reading.
-- **Distant vision**: 10 ft with a mirror or 20 ft; same calibration. Lower confidence, say so on screen; a miss means "see an optometrist", a pass means nothing more than "no obvious problem".
+- **Mid range (intermediate)**: 32 in, 20/40, on the exam from age 50 for first and second class; under 50 or third class the result says it is not on the exam yet. Phone propped, full-screen chart option. (v5.44.50)
+- **Distant vision**: 10 ft (default) or 20 ft, letters sized for the chosen distance by the same 5 arc-minute rule, so 10 ft is equivalent to a 20 ft wall chart. FAA line 20/20 for first and second class (class the seat needs), 20/40 for third. Lines too big for the screen are dropped; big lines show fewer letters. Full-screen chart; read from distance, walk back, tap. On screen: less exact than near; a miss means see an optometrist, a pass only means no obvious problem. (v5.44.50)
+- Chart UI (v5.44.49): each line of letters is the button, score beside it, FAA line marked; eye buttons at top; after the right eye it moves to the left. Calibration (v5.44.47/48): done sideways, bar anchored away from the camera cutout, -/+ 1 px.
 - **Hearing**: explain the 6 ft conversational voice test. Pull the Apple Health audiogram when the shell can read it (build 7) and compare to the FAA thresholds.
 - **Color vision**: explainer only.
 
@@ -74,7 +76,7 @@ From weight_log: latest BP vs 155/95; fasting glucose vs 100 (prediabetes) and 1
 ## Phases
 
 1. (now, owner only) Medical menu item, disclaimer, PIN, certificate tracker with expiry and ECG due, biometrics vs FAA lines, medication lookup, MedXPress prep, near-vision check, hearing and color explainers.
-2. Distant vision check, Today reminders at 60 and 30 days before expiry, push notifications.
+2. Today reminders at 60 and 30 days before expiry, push notifications.
 3. Build 7: read the Apple Health audiogram (HKAudiogramSample) for the hearing comparison.
 4. Pro gate for all members after Chad's testing and the AME's feedback.
 

@@ -53,7 +53,7 @@ const CORS = {
 // OLD prompt (e.g. one that doesn't know about incidentalWalk or recency)
 // for up to a full day after the fix ships. Included in the cache check so
 // a prompt change auto-invalidates any stale cached response.
-const WEEKLY_SUMMARY_PROMPT_VERSION = 5; // v5: sees exercises/sets/daysAgo, never judges by minutes, equipment-aware, today's work is credited, ring-detected sessions explained; // v4: goal-aware weight framing, house style; // v3: model upgrade to Sonnet 5 // v2: incidentalWalk awareness + recency check + sandwich structure
+const WEEKLY_SUMMARY_PROMPT_VERSION = 6; // v6: when/trained/recentWeek, label is not the work; // v5: sees exercises/sets/daysAgo, never judges by minutes, equipment-aware, today's work is credited, ring-detected sessions explained; // v4: goal-aware weight framing, house style; // v3: model upgrade to Sonnet 5 // v2: incidentalWalk awareness + recency check + sandwich structure
 // v2: added minutesActuallyFreeBeforeNeedingToLeave awareness, so the cache
 // (added the same day this constant was) doesn't keep serving a
 // pre-fix response — that field didn't exist in the context sent to
@@ -124,6 +124,15 @@ their actual flight schedule, not anything they typed in. You'll also get body w
 
 Each session also carries exercises (the main lifts or drills done), setsLogged, and daysAgo (0 means today,
 1 yesterday). Use these to see WHAT was done and how recently.
+
+WHEN AND WHAT, READ THEM, NEVER WORK THEM OUT. Sessions come newest first. Each has when ("today (Sunday)",
+"yesterday (Saturday)", "3 days ago (Thursday)"), and recentWeek lists the last seven days in plain words. Only
+call a session "today" or "yesterday" if its when says so, word for word; anything older is "Thursday" or "earlier
+this week". Each session also has trained: the body areas its exercises actually worked (lower body, upper push,
+upper pull, jump/plyo, core, cardio). muscleGroup is only the label the member picked: a Full Body session with
+squats or jumps IS leg work, and counts in lowerBodySessionsLast14Days. Never say legs, pushing or pulling are
+thin, missing or neglected if trained shows that area in the last 7 days. durationIsReal: true means the member
+set the time themselves; you still never judge a session by minutes.
 
 For a workout logged in the app, durationMinutes is only the clock time between opening the workout and saving
 it. People often log a session afterwards from memory, so it can be a fraction of the real workout. NEVER call

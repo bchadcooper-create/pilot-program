@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.51 / 20261018_1
+ * Version/build: fcf-v5.44.52 / 20261018_2
  */
 
-const FCF_VERSION = 'fcf-v5.44.51';
-const FCF_BUILD   = '20261018_1';
+const FCF_VERSION = 'fcf-v5.44.52';
+const FCF_BUILD   = '20261018_2';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -6115,8 +6115,57 @@ function weeklyCoachSessions(sessionCache, now) {
         setsLogged: autoDetected ? 0 : setsLogged,
         incidentalWalk,
         autoDetected,
+        // Said for the model in words, so it never has to do date maths
+        // (reported: a walk the day before was called "yesterday's heavy
+        // pull day", which was three days earlier).
+        when: coachWhenLabel(Math.round((today0.getTime() - day0.getTime()) / 86400000), day0),
+        // What the session actually worked, from its exercises, not its
+        // label (reported: a Full Body day with squats and box jumps was
+        // followed by "your leg days have been thinning out").
+        trained: autoDetected || incidentalWalk ? [] : sessionTrainedAreas(main, s.muscle_group),
+        durationIsReal: !!s.durationEdited || autoDetected,
       };
-    });
+    })
+    .sort((a, b) => a.daysAgo - b.daysAgo); // newest first
+}
+function coachWhenLabel(daysAgo, day0) {
+  const wd = day0.toLocaleDateString('en-US', { weekday: 'long' });
+  if (daysAgo <= 0) return 'today (' + wd + ')';
+  if (daysAgo === 1) return 'yesterday (' + wd + ')';
+  return daysAgo + ' days ago (' + wd + ')';
+}
+// Exercise name -> body area, from the catalog's own groups first, then by
+// name for anything added by hand.
+let _exAreaMap = null;
+function exerciseArea(name) {
+  if (!_exAreaMap) {
+    _exAreaMap = {};
+    const groups = { 'Lower Body': 'lower body', 'Upper Push': 'upper push', 'Upper Pull': 'upper pull', 'Power / Plyo': 'jump/plyo' };
+    Object.values(WORKOUTS).forEach(byGroup => Object.entries(groups).forEach(([g, area]) => {
+      const w = byGroup && byGroup[g]; if (!w) return;
+      [...(w.takeoff || []), ...(w.enroute || [])].forEach(e => { if (e && e.name && !_exAreaMap[e.name]) _exAreaMap[e.name] = area; });
+    }));
+  }
+  if (_exAreaMap[name]) return _exAreaMap[name];
+  const n = String(name || '').toLowerCase();
+  if (/jump|hop|bound|plyo/.test(n)) return 'jump/plyo';
+  if (/squat|lunge|deadlift|rdl|step-?up|leg |leg$|calf|glute|hip thrust|hamstring|quad|split/.test(n)) return 'lower body';
+  if (/row|pull|chin|lat |curl|face pull|rear delt/.test(n)) return 'upper pull';
+  if (/press|push|bench|dip|fly|tricep|raise/.test(n)) return 'upper push';
+  if (/plank|core|ab |crunch|carry|pallof|dead bug/.test(n)) return 'core';
+  if (/run|walk|bike|row erg|elliptical|stair/.test(n)) return 'cardio';
+  return null;
+}
+function sessionTrainedAreas(main, group) {
+  const out = [];
+  (main || []).forEach(e => { const a = e && exerciseArea(e.name); if (a && !out.includes(a)) out.push(a); });
+  if (!out.length && group) {
+    const g = { 'Lower Body': 'lower body', 'Upper Push': 'upper push', 'Upper Pull': 'upper pull', 'Power / Plyo': 'jump/plyo', 'Run': 'cardio', 'Walk': 'cardio', 'Cardio': 'cardio' }[group];
+    if (g) out.push(g);
+  }
+  // Jump work loads the legs too.
+  if (out.includes('jump/plyo') && !out.includes('lower body')) out.push('lower body');
+  return out;
 }
 // Changes whenever a workout logged in the app is added, edited or removed,
 // so the cached weekly note is rewritten after a workout instead of standing
@@ -6220,6 +6269,11 @@ async function loadProgressionAnalytics() {
       dailyStepGoal: activeStepGoal(),
       sessionKey: weeklyCoachSessionKey(sessions),
       sessionsByEnvironment: weeklyCoachEnvironments(sessions),
+      // The last seven days in plain words, newest first. The note's
+      // "yesterday" and "today" must come from here.
+      recentWeek: sessions.filter(x => x.daysAgo <= 6 && !x.incidentalWalk && !x.autoDetected)
+        .map(x => x.when + ': ' + (x.muscleGroup || 'workout') + (x.trained.length ? ' (worked: ' + x.trained.join(', ') + ')' : '')),
+      lowerBodySessionsLast14Days: sessions.filter(x => x.daysAgo <= 13 && x.trained.includes('lower body')).length,
       sessions: sessionsWithTripContext,
       weightTrend,
       biometrics,
@@ -7710,6 +7764,9 @@ function renderSessionEditor() {
   parts.push('<div class="field"><label>Muscle Group</label><select onchange="ST.editSession.session.muscle_group=this.value">');
   MUSCLE_GROUPS.forEach(mg => parts.push('<option value="'+mg+'"'+(s.muscle_group===mg?' selected':'')+'>'+mg+'</option>'));
   parts.push('</select></div>');
+  // Logged afterwards, the clock only saw the typing. Let the member set the
+  // real length of the workout.
+  parts.push('<div class="field"><label>Total time (minutes)</label><input type="text" inputmode="numeric" placeholder="e.g. 60" value="'+(s.durationMinutes||'')+'" oninput="edSetDuration(this.value)"><div style="font-size:0.625rem;color:var(--muted);margin-top:4px">How long the whole workout took.</div></div>');
 
   ed.exList.forEach(exDef => {
     const sets = s.sets[exDef.id] || [];
@@ -7861,6 +7918,38 @@ function edPushExercise(exDef) {
   renderSessionEditor();
 }
 
+function debriefEditMinutes() {
+  const d = ST.lastDebrief; if (!d) return;
+  document.getElementById('modalRoot').innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet"><div class="modal-handle"></div>' +
+    '<div class="modal-title">How long did it take?</div>' +
+    '<div class="modal-body" style="margin-bottom:10px">The whole workout, start to finish. Logging it afterwards only timed the typing.</div>' +
+    '<div class="field"><label>Minutes</label><input id="debriefMins" type="text" inputmode="numeric" value="' + (d.session.durationMinutes || '') + '" onkeydown="if(event.key===\'Enter\')debriefSaveMinutes()"></div>' +
+    '<button class="btn btn-gold" onclick="debriefSaveMinutes()">Save</button><button class="btn btn-outline mt8" onclick="closeModal()">Cancel</button></div></div>';
+  setTimeout(() => { const i = document.getElementById('debriefMins'); if (i) { i.focus(); i.select(); } }, 50);
+}
+async function debriefSaveMinutes() {
+  const d = ST.lastDebrief; if (!d) return;
+  const n = parseInt(document.getElementById('debriefMins')?.value, 10);
+  if (!(n > 0 && n <= 600)) { showToast('Enter the minutes, 1 to 600.'); return; }
+  d.session.durationMinutes = n; d.session.durationEdited = true;
+  d.summary.durationMinutes = n;
+  closeModal(); renderPage();
+  if (!ST.user || !d.key) return;
+  try {
+    const { error } = await SB.from('workout_sessions').update({ session_data: d.session }).eq('session_key', d.key).eq('user_id', ST.user.id);
+    if (error) throw error;
+    ST.calendarSessions = {};
+    loadSessionCache();
+    showToast('Time saved: ' + n + ' min.');
+  } catch (e) { showToast('Could not save the time. Edit it from the Trends calendar later.'); }
+}
+function edSetDuration(v) {
+  const n = parseInt(v, 10);
+  const sess = ST.editSession && ST.editSession.session; if (!sess) return;
+  if (n > 0 && n <= 600) { sess.durationMinutes = n; sess.durationEdited = true; }
+  else if (!String(v).trim()) { sess.durationMinutes = null; delete sess.durationEdited; }
+}
 async function saveEditedSession() {
   const ed = ST.editSession;
   const s = ed.session;
@@ -11568,10 +11657,11 @@ async function setTheChocks() {
     durationMinutes: durationMinutes,
     workoutSnapshot: wk,
   };
+  const savedKey = String(Date.now());
   try {
     const { error } = await SB.from('workout_sessions').insert([{
       user_id: ST.user?.id || null,
-      session_key: String(Date.now()),
+      session_key: savedKey,
       session_data: session,
       workout_key: ST.muscleGroup,
       started_at: session.date,
@@ -11591,7 +11681,7 @@ async function setTheChocks() {
   const debriefMsgs = buildDebriefMessages(summary);
 
   ST.lastSession = session;
-  ST.lastDebrief = { summary, messages: debriefMsgs, session };
+  ST.lastDebrief = { summary, messages: debriefMsgs, session, key: savedKey };
   ST.workout = null;
   ST.sets = {};
   ST.workoutStartedAt = null;
@@ -12245,6 +12335,7 @@ function renderDebrief(p) {
   parts.push(glowTile('SETS', s.totalSets, 'blue'));
   parts.push(glowTile('CALORIES', s.estCalories, 'teal'));
   parts.push('</div>');
+  parts.push('<div style="text-align:center;margin:-4px 0 10px"><button class="btn-ghost" style="font-size:0.75rem;color:var(--gold)" onclick="debriefEditMinutes()">Wrong time? Set how long it took</button></div>');
   parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">');
   parts.push(glowTile('REPS', s.totalReps, 'amber'));
   parts.push(glowTile('VOLUME LB', s.totalVolume.toLocaleString(), 'blue'));

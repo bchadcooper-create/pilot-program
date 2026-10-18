@@ -867,6 +867,23 @@ test('each session tells the coach what was actually done, not only how long the
   const l = out.find(x => x.muscleGroup === 'Lower Body');
   assertEqual(l.daysAgo, 4, 'Sep 30 is 4 days before Oct 4');
 });
+test('coach sees when in words and what each session worked (reported: walk called heavy pull day; Full Body squats ignored)', () => {
+  const now = new Date(2026, 9, 18, 10, 30);
+  const pull = { date: new Date(2026, 9, 15, 11, 36).toISOString(), muscle_group: 'Upper Pull', env: 'hotel', sets: { a: [{ reps: '10', weight: '100' }] },
+    workoutSnapshot: { taxi: [], takeoff: [{ id: 'a', name: 'Lat Pulldown' }, { id: 'b', name: 'DB Row' }], enroute: [{ id: 'c', name: 'DB Curl' }], landing: [] } };
+  const walk = { date: new Date(2026, 9, 17, 10, 56).toISOString(), muscle_group: 'Walk', env: 'comm', sets: { w: [{ seconds: '1800' }] },
+    workoutSnapshot: { taxi: [], takeoff: [], enroute: [{ id: 'w', name: 'Walking' }], landing: [] } };
+  const full = { date: new Date(2026, 9, 18, 10, 35).toISOString(), muscle_group: 'Full Body', env: 'comm', durationMinutes: 60, durationEdited: true, sets: { s: [{ reps: '5', weight: '225' }] },
+    workoutSnapshot: { taxi: [], takeoff: [{ id: 's', name: 'Back Squat' }, { id: 'j', name: 'Box Jump' }], enroute: [{ id: 'p', name: 'DB Bench Press' }, { id: 'f', name: 'Face Pull' }], landing: [] } };
+  const out = ctx.weeklyCoachSessions([pull, walk, full], now);
+  assertEqual(out.map(x => x.muscleGroup).join(','), 'Full Body,Walk,Upper Pull', 'newest first');
+  assertEqual(out[1].when, 'yesterday (Saturday)', 'yesterday was the walk');
+  assertEqual(out[2].when, '3 days ago (Thursday)', 'pull day was Thursday');
+  assertEqual(['lower body', 'jump/plyo', 'upper push', 'upper pull'].every(a => out[0].trained.includes(a)), true, 'Full Body worked legs, jumps, push and pull: ' + out[0].trained.join(','));
+  assertEqual(out[0].durationIsReal, true, 'time set by the member');
+  assertEqual(out[2].trained.join(','), 'upper pull', 'pull day is pull');
+  assertEqual(out[1].trained.join(','), 'cardio', 'walk is cardio');
+});
 test('an airport walk is still flagged and carries no exercise list', () => {
   const w = ctx.weeklyCoachSessions([airportWalk], coachNow)[0];
   assertEqual(w.incidentalWalk, true, 'incidental walk');

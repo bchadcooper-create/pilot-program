@@ -350,6 +350,33 @@ test('medReminderPlan stops at the iOS budget and reports the overflow', () => {
   assertEqual(plan.scheduled.has('w6|08:00'), false, 'sixth dose not scheduled');
   ctx.ST.medications = [];
 });
+test('a dose checked off today does not ring today (reported: reminder fired after check-off)', () => {
+  const today = ctx.localDateStr(new Date()); const wd = new Date().getDay() + 1;
+  const allDays = [0,1,2,3,4,5,6];
+  ctx.ST.medications = [
+    ctx.normalizeMedication({ id: 'a', name: 'Daily', times: ['07:00', '19:00'], remind: true }),
+    ctx.normalizeMedication({ id: 'b', name: 'Some days', times: ['08:00'], days: allDays.filter(d => d !== (wd % 7)), remind: true }),
+    ctx.normalizeMedication({ id: 'c', name: 'Only today', times: ['09:00'], days: [wd - 1], remind: true }),
+  ];
+  ctx.ST.medsTakenDate = today; ctx.ST.medsTakenToday = {};
+  let plan = ctx.medReminderPlan();
+  assertEqual(plan.prefs.find(p => p.time === '07:00').weekdays, null, 'unchecked: plain daily trigger');
+  ctx.ST.medsTakenToday = { 'a|07:00': true, 'b|08:00': true, 'c|09:00': true };
+  plan = ctx.medReminderPlan();
+  const am = plan.prefs.find(p => p.id === 'a' && p.time === '07:00');
+  assertEqual(am.weekdays.length === 6 && !am.weekdays.includes(wd), true, 'checked daily dose: every weekday but today');
+  assertEqual(plan.prefs.find(p => p.id === 'a' && p.time === '19:00').weekdays, null, 'evening dose not checked: still daily');
+  assertEqual(plan.prefs.find(p => p.id === 'b').weekdays.includes(wd), false, 'weekday dose that skips today anyway: unchanged');
+  assertEqual(plan.prefs.some(p => p.id === 'c'), false, 'today-only dose, taken: nothing sent today');
+  // No room left: keeps its daily reminder rather than pushing another dose out.
+  // 4 doses on 6 days = 24 requests, plus 2 daily = 26; expanding one daily to 6 would be 31.
+  ctx.ST.medications = [1,2,3,4].map(i => ctx.normalizeMedication({ id: 'w'+i, name: 'W'+i, times: ['08:00'], days: [1,2,3,4,5,6], remind: true }))
+    .concat([ctx.normalizeMedication({ id: 'd', name: 'Daily', times: ['06:00'], remind: true }), ctx.normalizeMedication({ id: 'e', name: 'Daily2', times: ['06:30'], remind: true })]);
+  ctx.ST.medsTakenToday = { 'd|06:00': true };
+  plan = ctx.medReminderPlan();
+  assertEqual(plan.prefs.find(p => p.id === 'd').weekdays, null, 'over budget: daily trigger kept');
+  ctx.ST.medications = []; ctx.ST.medsTakenToday = {};
+});
 test('Preflight Checklist meds item completes with a med added or with "None"', () => {
   const item = () => ctx.getSetupChecklist().find(i => i.icon === '💊');
   ctx.ST.medications = []; ctx.ST.medsSkipped = false;

@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.50 / 20261016_7
+ * Version/build: fcf-v5.44.51 / 20261018_1
  */
 
-const FCF_VERSION = 'fcf-v5.44.50';
-const FCF_BUILD   = '20261016_7';
+const FCF_VERSION = 'fcf-v5.44.51';
+const FCF_BUILD   = '20261018_1';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -4873,6 +4873,7 @@ async function loadMedsTakenToday() {
   // Only a server answer replaces the device copy, so a failed read can't
   // wipe it.
   if (fromServer) cacheMedsTaken();
+  rescheduleMedRemindersSoon();
 }
 
 // Doses with a save still in flight. A second tap on the same dose is
@@ -4892,6 +4893,7 @@ async function toggleMedTaken(medId, time) {
   refreshMedsSection();
   if (!ST.user) return;
   cacheMedsTaken();
+  rescheduleMedRemindersSoon();
   // This tap supersedes any older offline tap on the same dose.
   dropPendingMedOp(medId, today, time);
   if (navigator.onLine === false) { queueOfflineMedTap(medId, today, time, nowTaken); return; }
@@ -4907,6 +4909,7 @@ async function toggleMedTaken(medId, time) {
       if (nowTaken) delete ST.medsTakenToday[key]; else ST.medsTakenToday[key] = true;
       cacheMedsTaken();
       refreshMedsSection();
+      rescheduleMedRemindersSoon();
       showBigToast('Could not save that check-off. Try again in a moment.', 'warn');
     }
   } finally {
@@ -4988,15 +4991,54 @@ function medReminderPlan() {
       used += cost;
       scheduled.add(m.id + '|' + t);
       prefs.push({
-        id: m.id, name: m.name, dose: medDoseLabel(m), hour: h, minute: mm,
+        id: m.id, name: m.name, dose: medDoseLabel(m), hour: h, minute: mm, time: t,
         // iOS weekday numbering: 1 = Sunday … 7 = Saturday.
         weekdays: m.days ? m.days.map(d => d + 1) : null,
       });
     });
   });
-  return { prefs, scheduled, overflow };
+  // A dose checked off today should not ring today. The shell only knows
+  // repeating triggers (daily, or per weekday), so a checked daily dose is
+  // sent as the six other weekdays; a weekday-restricted one just drops
+  // today. Spent from what is left of the budget, so it can never push
+  // another dose out; when there is no room the dose keeps its daily
+  // reminder (a reminder you no longer need beats one that never comes).
+  // The next app open on a later day puts the daily trigger back.
+  const today = localDateStr(new Date());
+  const taken = ST.medsTakenDate === today ? (ST.medsTakenToday || {}) : (cachedMedsTaken(today) || {});
+  const todayWd = new Date().getDay() + 1; // iOS: 1 = Sunday
+  const skippedToday = new Set();
+  prefs.forEach(p => {
+    const key = p.id + '|' + p.time;
+    if (!taken[key]) return;
+    if (p.weekdays) {
+      if (!p.weekdays.includes(todayWd)) return;
+      if (p.weekdays.length === 1) { p.skip = true; } else { p.weekdays = p.weekdays.filter(w => w !== todayWd); }
+      used -= 1; skippedToday.add(key);
+    } else if (used + 5 <= MED_REMINDER_BUDGET) {
+      p.weekdays = [1, 2, 3, 4, 5, 6, 7].filter(w => w !== todayWd);
+      used += 5; skippedToday.add(key);
+    }
+  });
+  // A dose that only rings on today's weekday, taken already: nothing to
+  // send until the next app open puts it back.
+  const sent = prefs.filter(p => !p.skip);
+  return { prefs: sent, scheduled, overflow, skippedToday, day: today };
 }
-function medicationNotificationPrefs() { return medReminderPlan().prefs; }
+function medicationNotificationPrefs() { const plan = medReminderPlan(); _medPlanDay = plan.day; return plan.prefs; }
+let _medPlanDay = null;
+// Re-send the reminder plan after check-offs settle, so a burst of taps is
+// one reschedule.
+let _medReschedTimer = null;
+function rescheduleMedRemindersSoon() {
+  if (typeof FCFBridge === 'undefined' || !FCFBridge.isNative) return;
+  clearTimeout(_medReschedTimer);
+  _medReschedTimer = setTimeout(() => scheduleNotifications(), 1500);
+}
+document.addEventListener('visibilitychange', () => {
+  // New day since the last plan: put back the triggers skipped yesterday.
+  if (document.visibilityState === 'visible' && ST.user && _medPlanDay && _medPlanDay !== localDateStr(new Date())) rescheduleMedRemindersSoon();
+});
 
 function showInfoModal(title, text) {
   const root = document.getElementById('modalRoot');

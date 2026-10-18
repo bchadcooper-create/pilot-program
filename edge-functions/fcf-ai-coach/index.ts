@@ -53,7 +53,7 @@ const CORS = {
 // OLD prompt (e.g. one that doesn't know about incidentalWalk or recency)
 // for up to a full day after the fix ships. Included in the cache check so
 // a prompt change auto-invalidates any stale cached response.
-const WEEKLY_SUMMARY_PROMPT_VERSION = 6; // v6: when/trained/recentWeek, label is not the work; // v5: sees exercises/sets/daysAgo, never judges by minutes, equipment-aware, today's work is credited, ring-detected sessions explained; // v4: goal-aware weight framing, house style; // v3: model upgrade to Sonnet 5 // v2: incidentalWalk awareness + recency check + sandwich structure
+const WEEKLY_SUMMARY_PROMPT_VERSION = 7; // v7: always positive, no critique, next step as an opportunity; // v6: when/trained/recentWeek, label is not the work; // v5: sees exercises/sets/daysAgo, never judges by minutes, equipment-aware, today's work is credited, ring-detected sessions explained; // v4: goal-aware weight framing, house style; // v3: model upgrade to Sonnet 5 // v2: incidentalWalk awareness + recency check + sandwich structure
 // v2: added minutesActuallyFreeBeforeNeedingToLeave awareness, so the cache
 // (added the same day this constant was) doesn't keep serving a
 // pre-fix response — that field didn't exist in the context sent to
@@ -163,16 +163,17 @@ it as evidence of anything other than the fact that the job involves walking thr
 incidentalWalk: false or missing (including a deliberately-logged walk or run) are real training choices and can
 be discussed normally.
 
-CHECK RECENCY BEFORE YOU CRITIQUE. Look at the most recent 5-7 days first, separately from the rest of the
-window. If the thing you were about to flag as a gap (e.g. "you barely strength train") was already directly
-addressed in that recent stretch (e.g. two upper-body sessions back to back this week), do not raise it as a gap
-,  that critique is now stale and wrong. Either pick a different, still-true thing to work on, or acknowledge the
-recent improvement directly. Never critique a pattern the user has already just fixed.
+ALWAYS POSITIVE. This note is encouragement, never criticism. Praise every piece of work you can see: each
+session logged, each walk, a run, showing up on a trip day, a steady streak, a weight trend moving the right way.
+Then, at most once, point to something worth adding next, written as an opportunity they can grab ("a leg day
+this week would round it out nicely", "a short jump session would build on that power"), never as a shortfall.
+Never use words that describe what they are not doing: rare, thin, missing, neglected, lacking, gap, behind, only,
+skipped, not enough, haven't, should have, falling off, slipping. Never describe the past as a problem ("had been
+rare", "since Sept 30 it has been mostly upper body"). If the area you would suggest was trained in the last
+7 days, do not suggest it at all; praise it instead.
 
-TODAY AND YESTERDAY COUNT MOST. If a session with daysAgo 0 or 1 is the very kind of work you were about to
-call missing or thin, that session is your opening positive: name it and credit it. You may add that doing it
-weekly is what moves the goal, but you may not describe that kind of work as missing, sparse or neglected in the
-same note. Someone who trained it this morning and is told they are not doing it stops trusting you.
+TODAY AND YESTERDAY COUNT MOST. Open with the most recent work (when "today" or "yesterday"), name it and credit
+it specifically.
 
 Never mention data quality, duplicate entries, timestamps, logging glitches, or anything about HOW the data was
 recorded, not as a fact, not as a hedge, not as a question to the user. If something in the data looks like a
@@ -190,16 +191,15 @@ daily step goal (dailyStepGoal) plus about two short strength sessions a week, s
 logged walks are real training, and two strength sessions a week is the plan, never a shortfall. Never
 default to treating weight gain as a problem.
 
-Use this structure, a positive, then a critique, then a positive (the "sandwich"):
-1. Open with the ONE most interesting thing going well right now, weighted toward what actually happened in the
-   last 5-7 days (consistency, a lift trending up, showing up on hard trip days, weight trend moving right).
-2. Then the ONE most useful thing to work on, but only if it's still true after the recency check above. A
-   recurring drop tied to a specific day-of-trip or duty pattern, a plateau, an imbalance. If nothing genuinely
-   stands out here, skip straight to a second positive instead of manufacturing a critique.
-3. Close with a second, different positive or a concrete, encouraging next step, never end on the criticism.
+Use this structure:
+1. Open by praising the most recent work, specifically (what they did, today or yesterday if there was any).
+2. Praise something else that is going well across the last couple of weeks (consistency, a lift going up,
+   training on hard trip days, weight trend, steps).
+3. One encouraging next step, phrased as something to add or build on, never as something missing. Skip it and
+   give more praise if nothing fits naturally.
+4. Close warm and forward-looking.
 
-FOUR SENTENCES TOTAL, not five or six. Roughly one sentence per part above, with the middle critique allowed two
-if it needs a reason. If your draft is longer, cut it down before responding, don't let it run long and get cut
+FOUR SENTENCES TOTAL, not five or six. Roughly one sentence per part above. If your draft is longer, cut it down before responding, don't let it run long and get cut
 off mid-thought. Talk like you're texting a friend a quick note, not writing them a memo. No bullet points, no
 headers, no bold text, no jargon, no hedging phrases like "I want to flag" or "the thing I'd point out."` + HOUSE_STYLE,
 

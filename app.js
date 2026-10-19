@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.46.1 / 20261018_6
+ * Version/build: fcf-v5.46.2 / 20261018_7
  */
 
-const FCF_VERSION = 'fcf-v5.46.1';
-const FCF_BUILD   = '20261018_6';
+const FCF_VERSION = 'fcf-v5.46.2';
+const FCF_BUILD   = '20261018_7';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -2650,7 +2650,7 @@ async function crewPostSession(session, sessionKey, opts) {
   if (!(opts && opts.force) && ST.crew.profile.auto_post === false) return null;
   const row = Object.assign(crewActivityFromSession(session, sessionKey, Object.assign({ visibility: ST.crew.profile.visibility === 'followers' ? 'followers' : 'everyone' }, opts || {})), { user_id: ST.user.id });
   try {
-    const { error } = await withTimeout(SB.from('crew_activities').upsert(row, { onConflict: 'user_id,session_key' }));
+    const { error } = await withTimeout(SB.from('crew_activities').upsert(row, { onConflict: 'user_id,session_key' }), 15000);
     if (error) throw error;
     return row;
   } catch (e) { console.warn('crew post failed', e); return null; }
@@ -2681,13 +2681,23 @@ async function crewJoin() {
   if (!g('crewRules')?.checked) { showToast('Please agree to the crew rules.'); return; }
   const row = { user_id: ST.user.id, callsign, base: base || null, visibility, auto_post: true, rules_accepted_at: new Date().toISOString() };
   try {
-    const { error } = await withDialogSpinner('Joining…', () => withTimeout(SB.from('crew_profiles').insert(row)));
+    // 20 s: the first write after an app update can wait on a token refresh
+    // (reported: "Could not join: timeout" while the row had been created).
+    const { error } = await withDialogSpinner('Joining…', () => withTimeout(SB.from('crew_profiles').insert(row), 20000));
     if (error) throw error;
   } catch (e) {
-    showBigToast(/duplicate|unique/i.test(e.message || '') ? 'That call sign is taken on the crew feed. Try another.' : 'Could not join: ' + (e.message || 'connection'), 'warn');
-    return;
+    // A slow answer or a retry: if the profile is there, carry on.
+    let existing = null;
+    try { existing = (await withTimeout(SB.from('crew_profiles').select('*').eq('user_id', ST.user.id).maybeSingle(), 10000)).data; } catch (e2) {}
+    if (existing) {
+      if (base && existing.base !== base) { existing.base = base; SB.from('crew_profiles').update({ base }).eq('user_id', ST.user.id).then(() => {}, () => {}); }
+      ST.crew.profile = existing;
+    } else {
+      showBigToast(/duplicate|unique/i.test(e.message || '') ? 'That call sign is taken on the crew feed. Try another.' : 'Could not join: ' + (e.message === 'timeout' ? 'the server did not answer in time. Try again.' : (e.message || 'connection')), 'warn');
+      return;
+    }
   }
-  ST.crew.profile = row;
+  if (!ST.crew.profile) ST.crew.profile = row;
   if (!ST.username) ST.username = callsign;
   if (base && ST.homeBase !== base) { ST.homeBase = base; try { const pr = (await dbGetProfile()) || {}; pr.homeBase = base; pr.username = ST.username; await dbSetProfile(pr); } catch (e) {} }
   const n = await withDialogSpinner('Sharing your last 14 days…', () => crewShareRecent(14));
@@ -2706,7 +2716,7 @@ async function crewSaveSettings() {
     updated_at: new Date().toISOString(),
   };
   try {
-    const { error } = await withTimeout(SB.from('crew_profiles').update(upd).eq('user_id', ST.user.id));
+    const { error } = await withTimeout(SB.from('crew_profiles').update(upd).eq('user_id', ST.user.id), 15000);
     if (error) throw error;
     Object.assign(p, upd); if (upd.base !== ST.homeBase) { ST.homeBase = upd.base; dbGetProfile().then(pr => { pr = pr || {}; pr.homeBase = upd.base; return dbSetProfile(pr); }).catch(() => {}); }
     showToast('Crew settings saved.'); ST.crew.view = 'feed'; renderPage();
@@ -2715,7 +2725,7 @@ async function crewSaveSettings() {
 async function crewLeave() {
   if (!(await appConfirm('Leave the crew feed? Your posts, kudos and comments are deleted and people you follow are forgotten. Your workouts in the app are not affected.', 'Leave'))) return;
   try {
-    const { error } = await withTimeout(SB.from('crew_profiles').delete().eq('user_id', ST.user.id));
+    const { error } = await withTimeout(SB.from('crew_profiles').delete().eq('user_id', ST.user.id), 15000);
     if (error) throw error;
     ST.crew.profile = null; ST.crew.feed = []; ST.crew.view = 'feed'; ST.ranksSeg = 'boards'; showToast('You have left the crew feed.'); renderPage();
   } catch (e) { showBigToast('Could not leave: ' + (e.message || 'connection'), 'warn'); }

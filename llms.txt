@@ -1,0 +1,44 @@
+# Flight Crew Fitness
+
+> Flight Crew Fitness (flightcrew.fit) is a workout and nutrition app for airline pilots and flight crew, built by a working airline captain. It plans strength training around the crew schedule, layovers, hotel gyms and the pilot's sleep and readiness data. The web app works today at https://flightcrew.fit and the iOS app is in App Store review.
+
+Key facts:
+- Made for: airline pilots, flight attendants and other crew who train on four-day trips, in hotel gyms and hotel rooms, on a schedule that changes every week.
+- Imports the crew schedule (duty days, layovers, commute days) and plans sessions around duty events.
+- Workout environments: Commercial Gym, Hotel Gym, Hotel Room (no jumping) and resistance bands.
+- Readiness: a Go / Marginal / No-Go pilot condition, set from Apple Health (Apple Watch, Oura, Whoop, Garmin), a direct Oura connection, or a 15-second self-check. Heavy lifting is reduced or removed on No-Go days.
+- Session structure: Taxi (warm-up), Takeoff (heavy), En Route (volume), Landing (cool-down). Sessions can be trimmed to the time available without cutting the warm-up or cool-down.
+- Mission objectives include strength, muscle, fat loss, longevity and a Runner objective with a weekly mileage plan.
+- Nutrition: protein targets paced around duty times, food photo recognition, quick-add road meals. Hydration target of about 0.3 liters per flight hour.
+- Biometrics tracked with the clinical measurement protocol: weight, waist, blood pressure, fasting glucose.
+- Social: an opt-in crew feed (follow crew, kudos, comments, home base boards) and opt-in leaderboards.
+- Pricing: free tier (workout logging, basic trends, hydration, pre-flight and medication reminders). Pro adds the AI coach, food photo analysis, full trends history and direct Oura connection.
+- Not medical advice. Nothing in the app diagnoses a condition or replaces a doctor or an Aviation Medical Examiner.
+
+## Free tools
+
+- [FAA medical expiration calculator](https://flightcrew.fit/tools/faa-medical-expiration-calculator.html): enter birth date, exam date, class and seat to see when each privilege ends under 14 CFR 61.23, which date grounds you, and whether to expect an ECG. Runs in the browser; nothing is sent anywhere.
+
+## Guides for pilots and crew
+
+- [Best fitness apps for pilots and flight crew, compared](https://flightcrew.fit/blog/best-fitness-apps-for-pilots.html): Flight Crew Fitness, CrewFit+, LayoverFit, GateFit, AeroFit and Fit Pilot Accelerator side by side.
+- [Hotel gym workout for pilots](https://flightcrew.fit/blog/hotel-gym-workout-for-pilots.html): a real strength session from a hotel gym with light dumbbells.
+- [20 minute hotel room workout, no equipment, no jumping](https://flightcrew.fit/blog/hotel-room-workout-no-equipment.html)
+- [How airline pilots stay fit on a four-day trip](https://flightcrew.fit/blog/how-airline-pilots-stay-fit.html)
+- [The least training that still works when you fly 80 hours a month](https://flightcrew.fit/blog/minimum-training-that-works-for-pilots.html)
+- [Back pain from the cockpit seat](https://flightcrew.fit/blog/back-pain-from-the-cockpit-seat.html)
+- [FAA blood pressure limits](https://flightcrew.fit/blog/faa-blood-pressure-limits.html): 155/95 for all classes, and what moves the number.
+- [FAA weight limit, BMI and sleep apnea](https://flightcrew.fit/blog/faa-weight-bmi-sleep-apnea.html)
+- [Eating healthy on layovers](https://flightcrew.fit/blog/eating-healthy-on-layovers.html)
+- [How much protein pilots need](https://flightcrew.fit/blog/how-much-protein-pilots-need.html)
+- [Pilot dehydration and how much water fixes it](https://flightcrew.fit/blog/pilot-dehydration-how-much-water.html)
+- [Sleep rules for pilots](https://flightcrew.fit/blog/sleep-rules-for-pilots.html)
+- [Caffeine cutoff times for pilots](https://flightcrew.fit/blog/caffeine-cutoff-for-pilots.html)
+- [Using Oura or Whoop when your sleep window moves](https://flightcrew.fit/blog/oura-whoop-for-pilots-moving-sleep.html)
+
+## Optional
+
+- [Blog index](https://flightcrew.fit/blog/)
+- [Support](https://flightcrew.fit/support.html)
+- [Privacy policy](https://flightcrew.fit/privacy.html)
+- [Facebook page](https://www.facebook.com/1374735345726996)

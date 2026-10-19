@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FAA Medical Expiration Calculator for Pilots | Flight Crew Fitness</title>
+<meta name="description" content="Free FAA medical expiration calculator. Enter your birth date, exam date and seat to see the exact day each privilege ends, plus whether to expect an ECG.">
+<link rel="canonical" href="https://flightcrew.fit/tools/faa-medical-expiration-calculator.html">
+<meta property="og:type" content="website">
+<meta property="og:title" content="When does my FAA medical expire? Free calculator">
+<meta property="og:description" content="Birth date, exam date and seat in. The exact day each privilege ends, the date that grounds you, and whether to expect an ECG out.">
+<meta property="og:url" content="https://flightcrew.fit/tools/faa-medical-expiration-calculator.html">
+<meta property="og:image" content="https://flightcrew.fit/og-image.png">
+<meta property="og:site_name" content="Flight Crew Fitness">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#0a0f1a">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/blog/blog.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[
+{"@type":"WebApplication","@id":"https://flightcrew.fit/tools/faa-medical-expiration-calculator.html#app","name":"FAA Medical Expiration Calculator","url":"https://flightcrew.fit/tools/faa-medical-expiration-calculator.html","applicationCategory":"UtilitiesApplication","operatingSystem":"Any (runs in the browser)","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"description":"Works out when each privilege on an FAA first, second or third class medical certificate ends, which date grounds the pilot for their seat, and whether to expect an ECG at the next first-class exam. Based on 14 CFR 61.23.","author":{"@type":"Person","name":"Chad Cooper","jobTitle":"Airline captain"},"publisher":{"@type":"Organization","name":"Flight Crew Fitness","url":"https://flightcrew.fit/"},"dateModified":"2026-10-19"},
+{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://flightcrew.fit/"},{"@type":"ListItem","position":2,"name":"Tools","item":"https://flightcrew.fit/tools/faa-medical-expiration-calculator.html"},{"@type":"ListItem","position":3,"name":"FAA medical expiration calculator"}]},
+{"@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"How long is a first class medical good for?","acceptedAnswer":{"@type":"Answer","text":"For airline transport pilot privileges, a first class medical lasts until the end of the 12th month after the exam if you were under 40 on the exam date, and the end of the 6th month if you were 40 or older. After that it keeps working at second class level until the end of the 12th month, and at third class level until the end of the 60th month (under 40) or 24th month (40 and over)."}},
+{"@type":"Question","name":"Does a first officer need a first class medical?","acceptedAnswer":{"@type":"Answer","text":"Under 14 CFR 61.23 a Part 121 first officer needs at least a second class medical. First class is required at 60 and over, or in a flag or supplemental operation that needs three or more pilots. Many airlines require first class by company policy anyway, so check your own carrier's rule. A first officer holding a first class certificate keeps flying on its second class privileges after the first class ones lapse."}},
+{"@type":"Question","name":"When do pilots need an ECG for a first class medical?","acceptedAnswer":{"@type":"Answer","text":"The FAA requires an ECG at the first application for a first class medical after your 35th birthday, then on an annual basis after your 40th birthday. Second and third class applicants do not need a routine ECG. Your AME does it in the office, so plan a few extra minutes at the appointment."}},
+{"@type":"Question","name":"Is the medical expiration the exact date of my exam?","acceptedAnswer":{"@type":"Answer","text":"No. Medical certificate durations are counted in calendar months, so privileges run to the last day of the month, not the anniversary of the exam date. An exam on March 3 and an exam on March 28 expire on the same day. Your age is taken on the date of the exam, so turning 40 after the exam does not shorten that certificate."}}
+]}]}</script>
+<style>
+.tool{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:20px;margin:0 0 26px}
+.tool .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.tool label{display:block;font-size:.8125rem;color:var(--text);font-weight:600;margin:0 0 6px}
+.tool .hint{display:block;font-size:.75rem;color:var(--muted);font-weight:400;margin-top:2px}
+.tool input,.tool select{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:12px;font-size:1rem;font-family:var(--sans);min-height:46px;-webkit-appearance:none;appearance:none}
+.tool select{background-image:linear-gradient(45deg,transparent 50%,var(--gold) 50%),linear-gradient(135deg,var(--gold) 50%,transparent 50%);background-position:calc(100% - 18px) 20px,calc(100% - 13px) 20px;background-size:5px 5px;background-repeat:no-repeat;padding-right:34px}
+.tool input:focus,.tool select:focus{outline:2px solid var(--gold);outline-offset:1px}
+.tool .f{margin-bottom:14px}
+.tool .optional{display:none}
+.tool .optional.on{display:block}
+.result{margin-top:6px}
+.result .big{border-radius:14px;padding:18px;margin:6px 0 14px;border:1px solid var(--border);background:var(--bg2)}
+.result .big .k{font-family:var(--mono);font-size:.6875rem;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)}
+.result .big .d{font-size:1.75rem;font-weight:800;color:#fff;line-height:1.2;margin:6px 0 4px}
+.result .big .s{font-size:.9rem;color:var(--muted)}
+.result .big.ok{border-color:rgba(74,222,128,.45)}
+.result .big.soon{border-color:rgba(251,191,36,.6)}
+.result .big.bad{border-color:rgba(248,113,113,.7)}
+.pill{display:inline-block;font-family:var(--mono);font-size:.75rem;padding:3px 8px;border-radius:999px;margin-left:6px;vertical-align:middle}
+.pill.ok{background:rgba(74,222,128,.14);color:#4ade80}.pill.soon{background:rgba(251,191,36,.14);color:#fbbf24}.pill.bad{background:rgba(248,113,113,.14);color:#f87171}
+.privs{width:100%;border-collapse:collapse;font-size:.9rem;margin:0 0 14px}
+.privs td{border-top:1px solid var(--border);padding:9px 4px;vertical-align:top}
+.privs td:last-child{text-align:right;white-space:nowrap;font-family:var(--mono);color:var(--text)}
+.privs tr.key td{color:#fff;font-weight:700}
+.msg{font-size:.875rem;line-height:1.55;border-radius:10px;padding:12px 14px;margin:0 0 12px;background:var(--bg2);border:1px solid var(--border)}
+.msg.warn{border-color:rgba(251,191,36,.55)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+.btn2{display:inline-block;background:transparent;border:1px solid var(--gold);color:var(--gold2);font-weight:700;font-size:.8125rem;letter-spacing:.04em;text-transform:uppercase;padding:12px 16px;border-radius:10px;cursor:pointer;font-family:var(--sans)}
+.btn2:hover{background:rgba(201,168,76,.1)}
+.private{font-size:.75rem;color:var(--muted);margin-top:12px}
+@media (max-width:600px){.tool .row{grid-template-columns:1fr;gap:0}.result .big .d{font-size:1.5rem}}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap wide">
+  <a class="logo" href="/">✈ FLIGHT CREW FITNESS</a>
+  <nav class="topnav"><a href="/blog/">Blog</a><a href="/tools/faa-medical-expiration-calculator.html">Medical calculator</a><a href="/#faq">FAQ</a><a class="cta" href="/?utm_source=tool&amp;utm_medium=nav&amp;utm_campaign=medical-calculator">Start free</a></nav>
+</div></header>
+<main class="wrap"><article>
+<div class="crumbs"><a href="/">Home</a> / Free tools / FAA medical</div>
+<span class="cat">Free tool</span>
+<h1>FAA Medical Expiration Calculator</h1>
+<p class="intro">Put in your birth date, the date of your last exam and the seat you fly. You get the exact day each privilege on your certificate ends, the one date that actually grounds you, and whether to expect an ECG at the next first-class exam.</p>
+
+<div class="tool" id="tool">
+  <div class="row">
+    <div class="f"><label for="dob">Date of birth</label><input type="date" id="dob" autocomplete="bday"></div>
+    <div class="f"><label for="exam">Date of your last medical exam</label><input type="date" id="exam"></div>
+  </div>
+  <div class="row">
+    <div class="f"><label for="cls">Class issued</label>
+      <select id="cls"><option value="1">First class</option><option value="2">Second class</option><option value="3">Third class</option></select></div>
+    <div class="f"><label for="seat">What you fly</label>
+      <select id="seat">
+        <option value="capt">Airline captain (ATP pilot in command)</option>
+        <option value="fo">Airline first officer (Part 121)</option>
+        <option value="fo3">First officer, flag or supplemental op with 3+ pilots</option>
+        <option value="com">Commercial: charter, corporate, paid flying</option>
+        <option value="priv">Private, student, recreational or instructing</option>
+      </select></div>
+  </div>
+  <div class="f optional" id="airlineBox"><label><input type="checkbox" id="airlineFirst" style="width:auto;min-height:0;margin-right:8px;vertical-align:middle;-webkit-appearance:checkbox;appearance:auto">My airline requires first class for first officers</label></div>
+  <div class="f optional" id="ecgBox"><label for="ecg">Date of your last ECG <span class="hint">Optional. Only matters for first class at 35 and over.</span></label><input type="date" id="ecg"></div>
+  <div class="result" id="result" aria-live="polite"></div>
+  <p class="private">Nothing you type leaves this page. It is worked out in your browser and is not sent anywhere.</p>
+</div>
+
+<div class="ctabox"><div class="txt"><b>The date is the easy part.</b><span>What decides the exam is blood pressure, weight and sleep. Flight Crew Fitness tracks those with the proper protocol and builds the training that moves them, around your trips.</span></div><a class="btn" href="/?utm_source=tool&amp;utm_medium=cta&amp;utm_campaign=medical-calculator">Start free</a></div>
+
+<h2 id="how-long">How long an FAA medical lasts</h2>
+<p>Durations come from 14 CFR 61.23(d). They are counted in calendar months from the month of the exam, so every privilege ends on the last day of a month. Your age is the age you were on the exam date.</p>
+<table>
+<thead><tr><th>Privileges you are using</th><th>Under 40 at the exam</th><th>40 and over at the exam</th></tr></thead>
+<tbody>
+<tr><td>ATP pilot in command (first class)</td><td>12 calendar months</td><td>6 calendar months</td></tr>
+<tr><td>Part 121 second in command, commercial (second class)</td><td>12 calendar months</td><td>12 calendar months</td></tr>
+<tr><td>Private, student, recreational, instructing (third class)</td><td>60 calendar months</td><td>24 calendar months</td></tr>
+</tbody></table>
+<p>A certificate steps down rather than dying. A first class certificate is used at first class level until that period ends, then at second class level, then at third class level. A first officer holding first class keeps flying on its second class privileges after the first class ones lapse, unless the airline requires first class.</p>
+
+<h2 id="which-class">Which class your seat needs</h2>
+<ul>
+<li><strong>Airline captain:</strong> first class, because you are using ATP pilot in command privileges.</li>
+<li><strong>Part 121 first officer:</strong> at least second class. First class at 60 and over, or in a flag or supplemental operation that needs three or more pilots. Many airlines ask for first class by policy.</li>
+<li><strong>Commercial flying for hire:</strong> at least second class.</li>
+<li><strong>Private, student, recreational, or instructing as pilot in command:</strong> third class. BasicMed is a separate route with its own rules and is not covered here.</li>
+</ul>
+
+<h2 id="ecg">When the ECG comes due</h2>
+<p>First class only. The FAA's examiner guide calls for an ECG at the first application after your 35th birthday, then on an annual basis after your 40th. If you are a 40-plus captain renewing every six months, that works out to an ECG at every other exam.</p>
+<div class="note"><b class="lbl">Captain's note</b><p>Book the exam early in the month it is due, not the last week. A blood pressure reading taken after a red-eye, or a form question that needs paperwork, is far easier to sort out with three weeks left on the certificate than with three days.</p></div>
+
+<section class="faq">
+<h2>FAQ</h2>
+<details><summary>How long is a first class medical good for?</summary><p>For airline transport pilot privileges, a first class medical lasts until the end of the 12th month after the exam if you were under 40 on the exam date, and the end of the 6th month if you were 40 or older. After that it keeps working at second class level until the end of the 12th month, and at third class level until the end of the 60th month (under 40) or 24th month (40 and over).</p></details>
+<details><summary>Does a first officer need a first class medical?</summary><p>Under 14 CFR 61.23 a Part 121 first officer needs at least a second class medical. First class is required at 60 and over, or in a flag or supplemental operation that needs three or more pilots. Many airlines require first class by company policy anyway, so check your own carrier's rule. A first officer holding a first class certificate keeps flying on its second class privileges after the first class ones lapse.</p></details>
+<details><summary>When do pilots need an ECG for a first class medical?</summary><p>The FAA requires an ECG at the first application for a first class medical after your 35th birthday, then on an annual basis after your 40th birthday. Second and third class applicants do not need a routine ECG. Your AME does it in the office, so plan a few extra minutes at the appointment.</p></details>
+<details><summary>Is the medical expiration the exact date of my exam?</summary><p>No. Medical certificate durations are counted in calendar months, so privileges run to the last day of the month, not the anniversary of the exam date. An exam on March 3 and an exam on March 28 expire on the same day. Your age is taken on the date of the exam, so turning 40 after the exam does not shorten that certificate.</p></details>
+</section>
+
+<section class="refs"><h2>Sources</h2><ol>
+<li><a href="https://www.ecfr.gov/current/title-14/chapter-I/subchapter-D/part-61/subpart-A/section-61.23">14 CFR 61.23, Medical certificates: Requirement and duration (eCFR)</a>. Who needs which class, and the duration table in paragraph (d).</li>
+<li><a href="https://www.faa.gov/ame_guide/app_process/exam_tech/item58">FAA Guide for Aviation Medical Examiners, Item 58, ECG</a>. First application after the 35th birthday, annually after the 40th.</li>
+<li><a href="https://www.faa.gov/ame_guide/standards/duration">FAA Guide for Aviation Medical Examiners, Duration of medical certificates</a>.</li>
+</ol><p>Checked October 19, 2026. This calculator is a planning aid, not legal advice. Your certificate, your AME and the current regulation are the authority for your own case.</p></section>
+
+<div class="author"><div class="av">CC</div><div><b>Chad Cooper</b><p>Airline captain and founder of Flight Crew Fitness. More on the medical: <a href="/blog/faa-blood-pressure-limits.html">FAA blood pressure limits</a>, <a href="/blog/faa-weight-bmi-sleep-apnea.html">weight, BMI and sleep apnea</a>.</p></div></div>
+</article></main>
+<footer class="bottom"><div class="wrap wide">
+  <a href="/">Flight Crew Fitness</a><a href="/blog/">Blog</a><a href="/tools/faa-medical-expiration-calculator.html">FAA medical calculator</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="https://www.facebook.com/1374735345726996">Facebook</a>
+  <p class="disc">Flight Crew Fitness is a training tool, not medical advice. Nothing on this site diagnoses a condition or replaces your doctor or your AME. Consult a physician before beginning any new exercise program.</p>
+</div></footer>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var KEY = 'fcf_medcalc_v1';
+  var MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  function parse(s) { if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null; var p = s.split('-').map(Number); return { y: p[0], m: p[1], d: p[2] }; }
+  function lastDayPlus(e, months) { return new Date(e.y, e.m - 1 + months + 1, 0); }
+  function ageOn(dob, on) { var a = on.y - dob.y; if (on.m < dob.m || (on.m === dob.m && on.d < dob.d)) a--; return a; }
+  function fmt(dt) { return MONTHS[dt.getMonth()] + ' ' + dt.getDate() + ', ' + dt.getFullYear(); }
+  function fmtMonth(dt) { return MONTHS[dt.getMonth()] + ' ' + dt.getFullYear(); }
+  function todayParts() { var t = new Date(); return { y: t.getFullYear(), m: t.getMonth() + 1, d: t.getDate() }; }
+  function daysUntil(dt) { var t = new Date(); t.setHours(12, 0, 0, 0); var x = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 12); return Math.round((x - t) / 86400000); }
+  function ymd(dt) { return dt.getFullYear() + String(dt.getMonth() + 1).padStart(2, '0') + String(dt.getDate()).padStart(2, '0'); }
+
+  function needed(seat, age, airlineFirst) {
+    if (seat === 'capt') return { cls: 1, why: 'Captains use ATP pilot in command privileges, which need first class.' };
+    if (seat === 'fo3') return { cls: 1, why: 'A first officer in a flag or supplemental operation that needs three or more pilots needs first class.' };
+    if (seat === 'fo') {
+      if (age >= 60) return { cls: 1, why: 'At 60 and over, every required pilot in a Part 121 operation needs first class.' };
+      if (airlineFirst) return { cls: 1, why: 'The FAA asks a Part 121 first officer for second class, but your airline requires first class.' };
+      return { cls: 2, why: 'A Part 121 first officer needs at least second class.' };
+    }
+    if (seat === 'com') return { cls: 2, why: 'Commercial flying for hire needs at least second class.' };
+    return { cls: 3, why: 'Private, student, recreational and instructing as pilot in command need third class.' };
+  }
+  function privileges(cls, exam, ageAtExam) {
+    var u40 = ageAtExam < 40, out = [];
+    if (cls === 1) out.push({ cls: 1, label: 'First class (ATP pilot in command)', ends: lastDayPlus(exam, u40 ? 12 : 6) });
+    if (cls <= 2) out.push({ cls: 2, label: 'Second class (Part 121 SIC, commercial)', ends: lastDayPlus(exam, 12) });
+    out.push({ cls: 3, label: 'Third class (private, student, instructing)', ends: lastDayPlus(exam, u40 ? 60 : 24) });
+    return out;
+  }
+  function state(days) { return days < 0 ? 'bad' : days <= 60 ? 'soon' : 'ok'; }
+
+  var lastIcs = null;
+  function run() {
+    var dob = parse($('dob').value), exam = parse($('exam').value);
+    var cls = Number($('cls').value), seat = $('seat').value, af = $('airlineFirst').checked;
+    $('airlineBox').classList.toggle('on', seat === 'fo');
+    save();
+    var res = $('result');
+    if (!dob || !exam) { res.innerHTML = ''; $('ecgBox').classList.remove('on'); lastIcs = null; return; }
+    var ageExam = ageOn(dob, exam), ageNow = ageOn(dob, todayParts());
+    if (ageExam < 14 || ageExam > 100 || exam.y > todayParts().y + 1) { res.innerHTML = '<div class="msg warn">Check the dates. The exam date or birth date looks off.</div>'; return; }
+    var need = needed(seat, ageNow, af);
+    var privs = privileges(cls, exam, ageExam);
+    var key = privs.filter(function (p) { return p.cls === need.cls; })[0];
+    var html = '';
+    if (!key) {
+      html += '<div class="big bad"><div class="k">Not valid for this seat</div><div class="d">A ' + ['', 'first', 'second', 'third'][cls] + ' class certificate does not cover it</div><div class="s">' + need.why + '</div></div>';
+      lastIcs = null;
+    } else {
+      var days = daysUntil(key.ends), st = state(days);
+      var line = days < 0 ? 'Ended ' + (-days) + ' day' + (days === -1 ? '' : 's') + ' ago.' : days === 0 ? 'Ends today, at the end of the day.' : days + ' day' + (days === 1 ? '' : 's') + ' left. Valid through the end of that day.';
+      html += '<div class="big ' + st + '"><div class="k">' + (days < 0 ? 'Expired for your seat on' : 'Legal for your seat through') + '</div><div class="d">' + fmt(key.ends) + '</div><div class="s">' + line + ' ' + need.why + '</div></div>';
+      lastIcs = days >= 0 ? { ends: key.ends } : null;
+      if (days < 0) html += '<div class="msg warn">This certificate no longer covers your seat. If you have had a newer exam, enter that date instead.</div>';
+    }
+    html += '<table class="privs">' + privs.map(function (p) {
+      var d = daysUntil(p.ends), st = state(d);
+      return '<tr' + (key && p === key ? ' class="key"' : '') + '><td>' + p.label + (key && p === key ? ' <span class="pill ' + st + '">your seat</span>' : '') + '</td><td>' + fmt(p.ends) + '</td></tr>';
+    }).join('') + '</table>';
+    if (ageExam >= 40 && cls === 1 && need.cls === 1) html += '<div class="msg">You were 40 or over at this exam, so first class privileges last 6 calendar months. That is two exams a year for an airline captain.</div>';
+
+    // ECG: only for first class, at the next exam (the date the privileges end).
+    var wantsFirst = need.cls === 1 || cls === 1;
+    var showEcg = false;
+    if (wantsFirst && key) {
+      var next = key.ends, nextP = { y: next.getFullYear(), m: next.getMonth() + 1, d: next.getDate() };
+      var ageNext = ageOn(dob, nextP);
+      var ecg = parse($('ecg').value);
+      var txt = '';
+      if (ageNext < 35) txt = 'No ECG at your next first class exam. The first one comes at the first exam after your 35th birthday.';
+      else if (ageNext < 40) { showEcg = true; txt = ecg && ageOn(dob, ecg) >= 35 ? 'You already have an ECG since turning 35. The next one is due at your first exam after your 40th birthday.' : 'Expect an ECG at your next exam if you have not had one since turning 35. Enter your last ECG above to check.'; }
+      else {
+        showEcg = true;
+        if (!ecg) txt = 'From 40 the ECG is annual. Enter the date of your last ECG above to see whether your next exam needs one.';
+        else {
+          var months = (next - new Date(ecg.y, ecg.m - 1, ecg.d)) / (30.44 * 86400000);
+          txt = months >= 11.5 ? 'Expect an ECG at your next exam. Your last one will be over a year old by ' + fmt(next) + '.' : 'Probably no ECG at your next exam. Your last one will be about ' + Math.round(months) + ' months old. Expect the next one at your first exam from ' + fmtMonth(new Date(ecg.y + 1, ecg.m - 1, 1)) + ' on.';
+        }
+      }
+      html += '<div class="msg"><b style="color:#fff">ECG:</b> ' + txt + '</div>';
+    }
+    $('ecgBox').classList.toggle('on', showEcg);
+    if (lastIcs) html += '<div class="actions"><button class="btn2" type="button" id="icsBtn">Add reminders to my calendar</button></div>';
+    res.innerHTML = html;
+    var b = $('icsBtn'); if (b) b.onclick = downloadIcs;
+  }
+
+  function downloadIcs() {
+    if (!lastIcs) return;
+    var end = lastIcs.ends, book = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 45);
+    var dayAfter = function (d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1); };
+    var stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+    function ev(uid, d, title, desc) {
+      return ['BEGIN:VEVENT', 'UID:' + uid + '-' + ymd(d) + '@flightcrew.fit', 'DTSTAMP:' + stamp, 'DTSTART;VALUE=DATE:' + ymd(d), 'DTEND;VALUE=DATE:' + ymd(dayAfter(d)), 'SUMMARY:' + title, 'DESCRIPTION:' + desc, 'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + title, 'TRIGGER:PT9H', 'END:VALARM', 'END:VEVENT'].join('\r\n');
+    }
+    var ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Flight Crew Fitness//Medical Calculator//EN', 'CALSCALE:GREGORIAN',
+      ev('fcf-med-book', book, 'Book your FAA medical', 'Your medical privileges for your seat end ' + fmt(end) + '. Book the AME now. flightcrew.fit'),
+      ev('fcf-med-end', end, 'FAA medical privileges end today', 'Last day your current medical covers your seat. flightcrew.fit'),
+      'END:VCALENDAR'].join('\r\n');
+    var blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'faa-medical-reminders.ics';
+    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+
+  // Remember the inputs on this device only, as a convenience.
+  function save() { try { localStorage.setItem(KEY, JSON.stringify({ dob: $('dob').value, exam: $('exam').value, cls: $('cls').value, seat: $('seat').value, af: $('airlineFirst').checked, ecg: $('ecg').value })); } catch (e) {} }
+  function load() { try { var s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (!s) return; $('dob').value = s.dob || ''; $('exam').value = s.exam || ''; if (s.cls) $('cls').value = s.cls; if (s.seat) $('seat').value = s.seat; $('airlineFirst').checked = !!s.af; $('ecg').value = s.ecg || ''; } catch (e) {} }
+
+  ['dob', 'exam', 'cls', 'seat', 'airlineFirst', 'ecg'].forEach(function (id) { $(id).addEventListener('input', run); $(id).addEventListener('change', run); });
+  load(); run();
+  window.__fcfMedCalc = { privileges: privileges, needed: needed, lastDayPlus: lastDayPlus, ageOn: ageOn };
+})();
+</script>
+</body>
+</html>

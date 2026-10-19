@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.46.6 / 20261019_1
+ * Version/build: fcf-v5.46.7 / 20261019_2
  */
 
-const FCF_VERSION = 'fcf-v5.46.6';
-const FCF_BUILD   = '20261019_1';
+const FCF_VERSION = 'fcf-v5.46.7';
+const FCF_BUILD   = '20261019_2';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -15352,12 +15352,12 @@ function superUserStatsHtml(d) {
     label('SIGNUPS') +
     grid([stat(d.users_total || 0, 'Accounts'), stat((d.users_new_7 || 0) + ' / ' + (d.users_new_30 || 0), 'New 7 / 30 days')]) +
     label('ACTIVITY') +
-    grid([stat((d.active_7 || 0) + ' / ' + (d.active_30 || 0), 'Active 7 / 30 days'), stat((d.sessions_7 || 0) + ' / ' + (d.sessions_30 || 0), 'Workouts 7 / 30 days')]) +
+    grid([stat((d.active_7_not_owner || 0) + ' / ' + (d.active_30_not_owner || 0), 'Active 7 / 30 days, not you'), stat((d.sessions_7 || 0) + ' / ' + (d.sessions_30 || 0), 'Workouts 7 / 30 days')]) +
     grid([stat(d.oura_connected || 0, 'Oura connected'), stat((d.crew_members || 0) + ' / ' + (d.crew_posts_7 || 0), 'Crew members / posts 7d')]) +
     (d.crew_reports_open ? '<div style="font-size:0.75rem;color:var(--amber);margin-bottom:8px">⚠️ ' + d.crew_reports_open + ' crew report' + (d.crew_reports_open === 1 ? '' : 's') + ' on file. Ask Claude to pull them.</div>' : '') +
     label('MISSION OBJECTIVES') +
     '<div class="card" style="padding:8px 12px">' + objs.map(([k, n]) => '<div class="fb" style="padding:5px 0;font-size:0.8125rem;border-bottom:1px solid var(--border)"><span>' + (objNames[k] || k) + '</span><span style="font-family:var(--mono)">' + n + '</span></div>').join('') + '</div>' +
-    '<div style="font-size:0.625rem;color:var(--muted);margin-top:8px">"Active" means at least one workout logged in the app (ring-detected activity not counted).</div>';
+    '<div style="font-size:0.625rem;color:var(--muted);margin-top:8px;line-height:1.5">"Active" means at least one workout logged in the app (ring-detected activity not counted). All numbers leave out ' + (d.test_accounts_hidden || 0) + ' test accounts (every @flightcrew.fit address, including Apple\'s reviewer). Accounts and workouts include you.</div>';
 }
 
 function renderSuperUser(p) {

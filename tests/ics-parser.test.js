@@ -1480,6 +1480,32 @@ test('Walking First: two short strength days a week, two days apart, walks other
   assertEqual(ctx.getRecommendedNext(), 'Walk', 'the recommended profile follows the same rule');
   ctx.ST.goal = 'longevity'; ctx.ST.sessionCache = saved;
 });
+test('Runner: easy runs, one long run and one strength day a week', () => {
+  const saved = ctx.ST.sessionCache, sg = ctx.ST.goal, sp = ctx.ST.runPlan;
+  assertEqual(!!vm.runInContext('GOALS', ctx).runner, true, 'Runner is a Mission Objective');
+  const run = (n, miles) => ({ date: isoDaysAgo(n), muscle_group: 'Run', sets: { c_ca_er5: [{ miles: String(miles), seconds: String(miles * 600) }] } });
+  const lift = n => ({ date: isoDaysAgo(n), muscle_group: 'Lower Body' });
+  ctx.ST.goal = 'runner'; ctx.ST.runPlan = { daysPerWeek: 3, race: '10k', weeklyMiles: 18 };
+  ctx.ST.sessionCache = [];
+  assertEqual(ctx.runnerNext().kind, 'easy', 'nothing logged: easy run');
+  ctx.ST.sessionCache = [run(2, 3)];
+  assertEqual(ctx.runnerNext().kind, 'strength', 'one run in, no strength this week: strength day');
+  ctx.ST.sessionCache = [run(2, 3), lift(1)];
+  assertEqual(ctx.runnerNext().kind + ':' + ctx.runnerNext().miles, 'long:6', 'strength done, long run owed: long run of about 6');
+  ctx.ST.sessionCache = [run(3, 3), lift(2), run(1, 6)];
+  assertEqual(ctx.runnerNext().kind, 'easy', 'long run done: back to easy');
+  ctx.ST.sessionCache = [run(5, 3), run(3, 6), run(1, 3)];
+  assertEqual(ctx.runnerNext().kind, 'strength', 'three runs, long done, no strength: strength day even with run days used');
+  ctx.ST.sessionCache = [run(6, 3), lift(4), run(3, 6), run(1, 3)];
+  assertEqual(/done/.test(ctx.runnerNext().note), true, 'plan complete: shakeout note');
+  assertEqual(ctx.getRecommendedNext(), 'Run', 'recommended profile follows runnerNext');
+  // Week summary (Monday start): runs since this week's Monday
+  const w = ctx.runWeekSummary();
+  assertEqual(w.plan.weeklyMiles, 18, 'plan carried');
+  assertEqual(ctx.cleanRunPlan({ daysPerWeek: 9, race: 'ultra', weeklyMiles: 0 }).daysPerWeek + ctx.cleanRunPlan({}).race + ctx.cleanRunPlan({ race: 'half' }).weeklyMiles, '3consistency25', 'bad input falls back');
+  assertEqual(ctx.isRunSession({ date: isoDaysAgo(1), muscle_group: 'Cardio', importedFromOura: true, ouraActivity: 'running' }), true, 'ring-detected run counts');
+  ctx.ST.goal = sg; ctx.ST.runPlan = sp; ctx.ST.sessionCache = saved;
+});
 test('a NO-GO day never removes the walk from a walk session', () => {
   const sv = { mg: ctx.ST.muscleGroup, f: ctx.ST.fatigue };
   ctx.ST.muscleGroup = 'Walk'; ctx.ST.fatigue = 'nogo';

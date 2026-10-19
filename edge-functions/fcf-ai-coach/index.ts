@@ -53,12 +53,12 @@ const CORS = {
 // OLD prompt (e.g. one that doesn't know about incidentalWalk or recency)
 // for up to a full day after the fix ships. Included in the cache check so
 // a prompt change auto-invalidates any stale cached response.
-const WEEKLY_SUMMARY_PROMPT_VERSION = 7; // v7: always positive, no critique, next step as an opportunity; // v6: when/trained/recentWeek, label is not the work; // v5: sees exercises/sets/daysAgo, never judges by minutes, equipment-aware, today's work is credited, ring-detected sessions explained; // v4: goal-aware weight framing, house style; // v3: model upgrade to Sonnet 5 // v2: incidentalWalk awareness + recency check + sandwich structure
+const WEEKLY_SUMMARY_PROMPT_VERSION = 8; // v8: runner goal; // v7: always positive, no critique, next step as an opportunity; // v6: when/trained/recentWeek, label is not the work; // v5: sees exercises/sets/daysAgo, never judges by minutes, equipment-aware, today's work is credited, ring-detected sessions explained; // v4: goal-aware weight framing, house style; // v3: model upgrade to Sonnet 5 // v2: incidentalWalk awareness + recency check + sandwich structure
 // v2: added minutesActuallyFreeBeforeNeedingToLeave awareness, so the cache
 // (added the same day this constant was) doesn't keep serving a
 // pre-fix response — that field didn't exist in the context sent to
 // earlier cached responses, so their advice can't reflect it either.
-const FATIGUE_CALIBRATION_PROMPT_VERSION = 11; // v11: never a second workout; // v10: pilotCondition is the ceiling; // v9: Walking First plan; // v8: ring data missing today, use the self-check; // v7: workout-already-logged and legs-flown guidance; // v6: plain-words opener, house style; // v5: bodyClock awareness (v4: Sonnet 5)
+const FATIGUE_CALIBRATION_PROMPT_VERSION = 12; // v12: runPlan; // v11: never a second workout; // v10: pilotCondition is the ceiling; // v9: Walking First plan; // v8: ring data missing today, use the self-check; // v7: workout-already-logged and legs-flown guidance; // v6: plain-words opener, house style; // v5: bodyClock awareness (v4: Sonnet 5)
 // BUG FIX (found while updating this prompt): fuel_logistics' cache key
 // (below) never had a prompt-version component at all, unlike the other
 // two cached modes — so a stale response from before this exact prompt
@@ -188,7 +188,9 @@ trainingGoal tells you how to read weightTrend, and you must read it that way: '
 the plan working (talk about it as progress, not a warning); 'fatloss' means weight going down is the goal and
 up is worth a nudge; 'longevity' and 'jump' mean weight is a minor signal unless the move is large; 'walking' (Walking First) means a
 daily step goal (dailyStepGoal) plus about two short strength sessions a week, so weight going down is the goal,
-logged walks are real training, and two strength sessions a week is the plan, never a shortfall. Never
+logged walks are real training, and two strength sessions a week is the plan, never a shortfall. 'runner' means
+running is the main work: runs are the sessions to praise, one strength day a week is the full plan, and
+mileage or run days per week is the progress to talk about. Never
 default to treating weight gain as a problem.
 
 Use this structure:
@@ -241,6 +243,13 @@ On 'Walk' the call is about getting their steps (a walk, or short walks between 
 never send them to the gym or call for a hard session. On 'Starter Strength' the call is that short, easy machine
 session. Never push intensity, never describe their training as light or too little, and do not bring up body
 weight.
+
+runPlan is null for most people. When present, their objective is Runner: running is the main work, with
+runPlan.daysPerWeek run days and runPlan.weeklyMiles a week toward runPlan.race. runPlan.todaysPlan is 'easy',
+'long' or 'strength', and runPlan.week shows miles and run days done so far this week. On 'easy' or 'long' the
+call is about the run (easy pace; a long run is slow and longer, never a hard effort); on 'strength' it is the
+one weekly strength session, kept moderate. Never tell a runner to lift instead of run on a run day, and never
+call their strength work thin: one session a week is the plan.
 
 You will also receive minutesActuallyFreeBeforeNeedingToLeave, this already accounts for getting from a
 layover hotel back to the airport (transport, security, crew report time), which the raw gap to departure
@@ -528,6 +537,7 @@ Deno.serve(async (req) => {
         + '_m' + (context.ringDataMissingToday ? (context.selfReportedFatigue ?? 'x') : 0)
         // Walking First: which kind of day it is and the goal both change the call.
         + '_g' + (context.walkingPlan ? String(context.walkingPlan.todaysPlan).charAt(0) + (context.walkingPlan.dailyStepGoal ?? '') : 0)
+        + '_k' + (context.runPlan ? String(context.runPlan.todaysPlan).charAt(0) + (context.runPlan.week ? context.runPlan.week.days : '') : 0)
         // The app's call can change without the score changing (the user
         // adjusts Pilot Condition by hand), and the note must follow it.
         + '_c' + (context.pilotCondition ?? 'x');

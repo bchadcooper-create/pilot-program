@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.44.52 / 20261018_2
+ * Version/build: fcf-v5.45.0 / 20261018_3
  */
 
-const FCF_VERSION = 'fcf-v5.44.52';
-const FCF_BUILD   = '20261018_2';
+const FCF_VERSION = 'fcf-v5.45.0';
+const FCF_BUILD   = '20261018_3';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -267,6 +267,10 @@ const GOALS = {
   // picks, plus two short, seated or supported strength sessions a week.
   // The order is not a rotation; walkingFirstNext() picks the day.
   walking:  { label: 'Walking First',   icon: '🚶', desc: 'Daily step goal, plus two short, low-impact gym sessions a week', order: ['Starter Strength'] },
+  // Run-first plan (owner, Oct 18: "a lot of pilots who just run"). The
+  // order is not a rotation; runnerNext() picks the day: easy runs, one
+  // long run a week, one strength day a week for durability.
+  runner:   { label: 'Runner',          icon: '🏃', desc: 'Run-first plan: easy runs, one long run and one strength day a week', order: ['Run'] },
   chest:    { label: 'Chest & Shoulders', icon: '🏋️', desc: 'Pressing emphasis: Upper Push comes around twice per rotation', suggestFor: 'male', order: ['Upper Push','Lower Body','Upper Push','Upper Pull','Full Body'] },
   glute:    { label: 'Glute Emphasis',   icon: '🍑', desc: 'Glute-focused programming: Lower Body comes around twice per rotation', suggestFor: 'female', order: ['Lower Body','Upper Push','Lower Body','Upper Pull','Full Body'] },
   strength: { label: 'Overall Strength', icon: '⚡', desc: 'Heavy low-rep compounds plus explosive power work', order: ['Lower Body','Upper Push','Upper Pull','Power / Plyo','Full Body'] },
@@ -1282,6 +1286,7 @@ function lastMajorSessions(limit) {
 // rotation never repeats a group anyway.
 function getRecommendedNext() {
   if (ST.goal === 'walking') return walkingFirstNext();
+  if (ST.goal === 'runner') return runnerNext().group;
   const order = (GOALS[ST.goal] || GOALS.longevity).order;
   const majors = order.filter(g => !NON_ROTATING_GROUPS.has(g));
   if (!majors.length) return order[0];
@@ -3063,6 +3068,86 @@ function walkingFirstNext(now) {
   return 'Starter Strength';
 }
 
+// ─── RUNNER ──────────────────────────────────────────────────────────────────
+// Plan: { daysPerWeek: 3|4|5, race: 'consistency'|'5k'|'10k'|'half', weeklyMiles }
+// Weekly mileage starting points by race goal; the member can change them.
+const RUN_RACE = {
+  consistency: { label: 'Just run',       miles: 10, long: 4 },
+  '5k':        { label: '5K',             miles: 12, long: 4 },
+  '10k':       { label: '10K',            miles: 18, long: 6 },
+  half:        { label: 'Half marathon',  miles: 25, long: 10 },
+};
+const RUN_DAYS_CHOICES = [3, 4, 5];
+const RUN_MILES_CHOICES = [10, 15, 20, 25, 30, 40];
+function cleanRunPlan(p) {
+  p = p || {};
+  const race = RUN_RACE[p.race] ? p.race : 'consistency';
+  const days = RUN_DAYS_CHOICES.includes(Number(p.daysPerWeek)) ? Number(p.daysPerWeek) : 3;
+  let miles = Math.round(Number(p.weeklyMiles));
+  if (!isFinite(miles) || miles < 3 || miles > 120) miles = RUN_RACE[race].miles;
+  return { daysPerWeek: days, race, weeklyMiles: miles };
+}
+function isRunner() { return ST.goal === 'runner'; }
+function activeRunPlan() { return isRunner() ? cleanRunPlan(ST.runPlan) : null; }
+// A run is a session whose running exercises carry distance or time, or
+// one filed under Run (a run logged without distance still counts as a
+// run day).
+function isRunSession(s) {
+  if (!s || !s.date) return false;
+  if (s.muscle_group === 'Run') return true;
+  if (s.importedFromOura && /^(running|jogging)$/i.test(s.ouraActivity || '')) return true;
+  return !!sessionRunningDistance(s);
+}
+function runMiles(s) { const r = sessionRunningDistance(s); return r ? r.miles : 0; }
+// Monday-start week, local time.
+function weekStartStr(d) {
+  d = d || new Date();
+  const day = (d.getDay() + 6) % 7; // Monday 0
+  const m = new Date(d.getFullYear(), d.getMonth(), d.getDate() - day);
+  return localDateStr(m);
+}
+function runsThisWeek(now) {
+  const start = weekStartStr(now || new Date());
+  return (ST.sessionCache || []).filter(s => isRunSession(s) && localDateStr(new Date(s.date)) >= start);
+}
+// What today should be for a runner. Strength once a week (Lower Body,
+// durability work), never on the day after a long run; otherwise a run,
+// marked long when the week's long run is still owed and the last run was
+// an easy one.
+function runnerNext(now) {
+  now = now || new Date();
+  const plan = activeRunPlan() || cleanRunPlan(null);
+  const dayNum = d => Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / 864e5);
+  const today = dayNum(now);
+  const sessions = (ST.sessionCache || []).filter(s => s && s.date && !isNaN(new Date(s.date).getTime()));
+  const strengthDays = sessions.filter(s => isRotationStep(s) && s.muscle_group !== 'Cardio' && s.muscle_group !== 'Stretch').map(s => dayNum(new Date(s.date)));
+  const runs = sessions.filter(isRunSession).map(s => ({ day: dayNum(new Date(s.date)), miles: runMiles(s) }));
+  const runsLast7 = runs.filter(r => today - r.day < 7);
+  const strengthLast7 = strengthDays.filter(d => today - d < 7).length;
+  const longTarget = RUN_RACE[plan.race].long;
+  const longDone = runsLast7.some(r => r.miles >= longTarget * 0.85);
+  const lastRun = runs.length ? Math.max(...runs.map(r => r.day)) : null;
+  const lastRunWasLong = lastRun !== null && runs.some(r => r.day === lastRun && r.miles >= longTarget * 0.85);
+  const runDaysDone = new Set(runsLast7.map(r => r.day)).size;
+  // Strength day: one a week, after at least one run this week, not right after the long run.
+  if (!strengthLast7 && runDaysDone >= 1 && !(lastRunWasLong && today - lastRun < 2)) {
+    return { group: 'Lower Body', kind: 'strength', note: 'Strength day. One a week keeps runners durable: legs, hips and core.' };
+  }
+  if (!longDone && runDaysDone >= 1 && lastRun !== null && today - lastRun >= 1 && runDaysDone < plan.daysPerWeek) {
+    return { group: 'Run', kind: 'long', miles: longTarget, note: 'Long run day. Easy pace, about ' + longTarget + ' miles. Slow enough to talk the whole way.' };
+  }
+  const left = Math.max(0, plan.daysPerWeek - runDaysDone);
+  return { group: 'Run', kind: 'easy', note: left ? 'Easy run. Conversational pace, 20 to 40 minutes.' : 'Run days for the week are done. An easy shakeout is fine if you feel good.' };
+}
+function runWeekSummary(now) {
+  const plan = activeRunPlan(); if (!plan) return null;
+  const runs = runsThisWeek(now);
+  const miles = Math.round(runs.reduce((n, s) => n + runMiles(s), 0) * 10) / 10;
+  const days = new Set(runs.map(s => localDateStr(new Date(s.date)))).size;
+  return { miles, days, plan };
+}
+
+
 function renderPage() {
   const p = document.getElementById('mainPage');
   if (!p) return;
@@ -3184,6 +3269,7 @@ function applyProfileToState(profile) {
   if (profile.level) ST.level = profile.level;
   if (profile.goal)  ST.goal  = profile.goal;
   ST.stepGoal = cleanStepGoal(profile.stepGoal);
+  ST.runPlan = profile.runPlan ? cleanRunPlan(profile.runPlan) : null;
   ST.customExercises = (profile.customExercises || []).map(ce => {
     if (ce?.exercise) {
       ce.exercise.name = sanitizeUserText(ce.exercise.name);
@@ -6480,6 +6566,7 @@ async function loadFatigueCalibration(ctx) {
       // Walking First only: the step goal and whether today is a walk day
       // or one of the two short strength days.
       walkingPlan: isWalkingFirst() ? { dailyStepGoal: activeStepGoal(), todaysPlan: walkingFirstNext() } : null,
+      runPlan: isRunner() ? Object.assign({}, activeRunPlan(), { todaysPlan: runnerNext().kind, week: runWeekSummary() }) : null,
     };
     const ctxKey = JSON.stringify(context);
     const card0 = document.getElementById('aiFatigueCard');
@@ -8338,6 +8425,11 @@ async function renderPreflight(p) {
   // explicit way to open them. Auto-expanded for new users and for anyone
   // who hasn't picked anything yet (nothing to summarize otherwise).
   const showPlan = ST.showChangePlan || isNewUser || !wk;
+  // Runner: say what kind of day this is, so a long run is not run like an easy one.
+  if (isRunner() && !ST.activeCustomProfileId && ST.muscleGroup === 'Run') {
+    const rn = runnerNext();
+    parts.push('<div class="alert alert-info mb12"><div class="alert-icon">🏃</div><div><b>' + (rn.kind === 'long' ? 'Long run day' : 'Easy run') + '.</b> ' + rn.note + '</div></div>');
+  }
   parts.push('<div class="edit-row-fb" style="display:flex;justify-content:space-between;align-items:center;padding:8px 2px;font-size:0.75rem;color:var(--muted)" onclick="ST.showChangePlan=!ST.showChangePlan;renderPage()">');
   parts.push('<span>'+(ST.scheduleEnvNote || (ST.activeCustomProfileId ? 'Custom routine, used as saved.' : 'Same as your usual plan.'))+'</span>');
   parts.push('<span style="font-family:var(--mono);font-size:0.75rem;font-weight:700;color:var(--gold);cursor:pointer;padding:8px 14px;border:1.5px solid var(--gold);border-radius:8px;background:rgba(201,168,76,0.1);white-space:nowrap">'+(showPlan?'HIDE ▴':'CHANGE PLAN ▾')+'</span>');
@@ -8625,6 +8717,7 @@ async function saveGoalLevel() {
     profile.goal = ST.goal;
     profile.level = ST.level;
     profile.stepGoal = ST.stepGoal;
+    profile.runPlan = ST.runPlan || null;
     profile.customExercises = ST.customExercises;
     await dbSetProfile(profile);
   } catch (e) { showBigToast('Saved on this device, but could not sync.', 'warn'); }
@@ -8654,6 +8747,7 @@ function selectGoal(gid) {
   syncBodyMetricsFieldsToState();
   ST.goal = gid;
   if (gid === 'walking' && !ST.stepGoal) ST.stepGoal = STEP_GOAL_DEFAULT;
+  if (gid === 'runner' && !ST.runPlan) ST.runPlan = cleanRunPlan(null);
   ST.muscleGroup = getRecommendedNext();
   saveGoalLevel();
   renderPage();
@@ -8679,6 +8773,43 @@ function setStepGoal(n) {
   showToast('Daily step goal set to ' + clean.toLocaleString() + '.');
 }
 
+function setRunPlan(field, value) {
+  syncBodyMetricsFieldsToState();
+  const p = cleanRunPlan(ST.runPlan);
+  if (field === 'race') { p.race = value; p.weeklyMiles = RUN_RACE[value].miles; }
+  if (field === 'daysPerWeek') p.daysPerWeek = Number(value);
+  if (field === 'weeklyMiles') { const n = Math.round(Number(value)); if (!(n >= 3 && n <= 120)) { showToast('Pick 3 to 120 miles a week.'); return; } p.weeklyMiles = n; }
+  ST.runPlan = cleanRunPlan(p);
+  saveGoalLevel(); renderPage();
+}
+function renderRunPlanPicker() {
+  const p = activeRunPlan();
+  const chip = (sel, label, onclick) => '<div class="env-btn ' + (sel ? 'sel' : '') + '" style="padding:10px 2px" onclick="haptic(\'selection\');' + onclick + '"><div class="el">' + label + '</div></div>';
+  const parts = ['<div class="divider"></div>'];
+  parts.push('<div class="section-label" style="margin-top:0">RUN PLAN</div>');
+  parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;line-height:1.5">Runs are the main work. The app picks each day: easy runs, one long run a week, and one strength day for durability.</div>');
+  parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-bottom:6px">GOAL</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px">' + Object.keys(RUN_RACE).map(k => chip(p.race === k, RUN_RACE[k].label, "setRunPlan('race','" + k + "')")).join('') + '</div>');
+  parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-bottom:6px">RUN DAYS A WEEK</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px">' + RUN_DAYS_CHOICES.map(n => chip(p.daysPerWeek === n, n + ' days', "setRunPlan('daysPerWeek'," + n + ")")).join('') + '</div>');
+  parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-bottom:6px">MILES A WEEK</div><div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px">' + RUN_MILES_CHOICES.map(n => chip(p.weeklyMiles === n, n, "setRunPlan('weeklyMiles'," + n + ")")).join('') + '</div>');
+  const custom = RUN_MILES_CHOICES.includes(p.weeklyMiles) ? '' : String(p.weeklyMiles);
+  parts.push('<div class="field" style="margin-top:8px"><label>Or type a weekly target</label><input type="text" inputmode="numeric" placeholder="miles" value="' + custom + '" onchange="setRunPlan(\'weeklyMiles\',this.value)"></div>');
+  return parts.join('');
+}
+// Today: this week's running against the plan, under the date line.
+function runWeekProgressHtml() {
+  const w = runWeekSummary(); if (!w) return '';
+  const pct = Math.min(100, Math.round(w.miles / w.plan.weeklyMiles * 100));
+  const done = w.miles >= w.plan.weeklyMiles;
+  const next = runnerNext();
+  return '<div style="margin:-6px 0 16px">' +
+    '<div class="fb" style="align-items:baseline;margin-bottom:6px">' +
+      '<span style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.14em;color:var(--muted)">🏃 THIS WEEK</span>' +
+      '<span style="font-family:var(--mono);font-size:0.75rem;color:' + (done ? 'var(--green)' : 'var(--text)') + '">' + (done ? '✓ ' : '') + w.miles + ' / ' + w.plan.weeklyMiles + ' mi · ' + w.days + ' of ' + w.plan.daysPerWeek + ' runs</span>' +
+    '</div>' +
+    '<div style="height:6px;border-radius:3px;background:rgba(255,255,255,0.08);overflow:hidden"><div style="height:100%;width:' + pct + '%;background:' + (done ? 'var(--green)' : 'var(--gold)') + ';border-radius:3px"></div></div>' +
+    '<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px;line-height:1.5">Today: ' + next.note + '</div>' +
+  '</div>';
+}
 function renderStepGoalPicker() {
   const goal = activeStepGoal();
   const parts = [];
@@ -13629,6 +13760,7 @@ function renderProfile(p) {
     parts.push('</div>');
   });
   parts.push('</div>');
+  if (isRunner()) parts.push(renderRunPlanPicker());
   parts.push(renderStepGoalPicker());
   parts.push('</div>');
 
@@ -15553,6 +15685,17 @@ function buildTodayBriefing(ctx) {
       action:{ label:'Start a session', fn:"switchTab('preflight')" } };
   }
 
+  // 3a. Runner: today's run or strength day is the mission.
+  if (isRunner() && !training.workoutToday) {
+    const rn = runnerNext(ctx.now); const w = runWeekSummary(ctx.now);
+    if (rn.group === 'Run') {
+      return { tone:'go', headline: rn.kind === 'long' ? 'Long run day' : 'Run day',
+        body: rn.note + ' This week: ' + w.miles + ' of ' + w.plan.weeklyMiles + ' miles, ' + w.days + ' of ' + w.plan.daysPerWeek + ' run days.',
+        action:{ label:'Start a run', fn:"selectMissionProfile('Run');switchTab('preflight')" } };
+    }
+    return { tone:'go', headline:'Strength day', body: rn.note + ' Keep it moderate so tomorrow\'s run is fresh.',
+      action:{ label:'Start the session', fn:"selectMissionProfile('Lower Body');switchTab('preflight')" } };
+  }
   // 3b. Walking First on a walk day: the step goal is the mission.
   const stepGoal = activeStepGoal();
   if (isWalkingFirst() && !training.workoutToday && walkingFirstNext(ctx.now) === 'Walk') {
@@ -15880,6 +16023,7 @@ function buildOuraTopSectionHTML(ctx) {
   if (ctx.oura.steps !== null && !activeStepGoal()) parts.push('<span style="font-family:var(--mono);font-size:0.75rem;color:var(--text)">'+ctx.oura.steps.toLocaleString()+' <span style="font-size:0.5625rem;color:var(--muted);letter-spacing:.1em">STEPS</span></span>');
   parts.push('</div>');
   noteStepsToday(ctx.oura.steps);
+  parts.push(runWeekProgressHtml());
   parts.push(stepGoalProgressHtml(ctx.oura.steps));
 
   if (ctx.oura.missingToday) {

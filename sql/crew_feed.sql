@@ -209,3 +209,7 @@ alter table crew_blocks add constraint crew_blocks_blocked_fk foreign key (block
 -- Oct 18 2026: owner dashboard (Super User page). Aggregates only; raises
 -- for anyone but the owner's account.
 -- (see migration admin_stats_for_owner; body kept in Supabase)
+
+-- Oct 19 2026: crew_reports.dismissed_at. Owner dismisses a report instead
+-- of deleting it; admin_stats counts only open (not dismissed) reports.
+alter table crew_reports add column if not exists dismissed_at timestamptz;

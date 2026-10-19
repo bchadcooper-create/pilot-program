@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.46.5 / 20261018_10
+ * Version/build: fcf-v5.46.6 / 20261019_1
  */
 
-const FCF_VERSION = 'fcf-v5.46.5';
-const FCF_BUILD   = '20261018_10';
+const FCF_VERSION = 'fcf-v5.46.6';
+const FCF_BUILD   = '20261019_1';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -7576,7 +7576,7 @@ async function showCalendarDay(isoDate) {
 // page can share a file from inside the app, and saving a picture to
 // Photos works. A phone that cannot share files from the page still gets
 // the full-screen card to screenshot.
-const SHARE_TAGLINE = 'Engineered for the flight deck. Built for the layover.';
+const SHARE_TAGLINE = 'Fit for flight.'; // owner's pick, Oct 19 2026
 // Every exercise is shown (reported: the card cut off after the first
 // few). drawShareCard shrinks rows, then grows the picture up to Story
 // height (1080 x 1920) when a long workout needs it.

@@ -1506,6 +1506,26 @@ test('Runner: easy runs, one long run and one strength day a week', () => {
   assertEqual(ctx.isRunSession({ date: isoDaysAgo(1), muscle_group: 'Cardio', importedFromOura: true, ouraActivity: 'running' }), true, 'ring-detected run counts');
   ctx.ST.goal = sg; ctx.ST.runPlan = sp; ctx.ST.sessionCache = saved;
 });
+test('running stats: weekly and monthly miles, best efforts, monthly challenge', () => {
+  const now = new Date(2026, 9, 18, 12, 0); // Sunday Oct 18; week starts Mon Oct 12
+  const run = (y, m, d, miles, secPerMi) => ({ date: new Date(y, m, d, 9, 0).toISOString(), muscle_group: 'Run', sets: { c_ca_er5: [{ miles: String(miles), seconds: String(Math.round(miles * secPerMi)) }] } });
+  const S = [run(2026, 9, 13, 3.2, 560), run(2026, 9, 15, 6.5, 600), run(2026, 9, 3, 13.2, 650), run(2026, 8, 28, 4, 540), { date: new Date(2026, 9, 16).toISOString(), muscle_group: 'Upper Pull' }];
+  const sg = ctx.ST.goal, sp = ctx.ST.runPlan; ctx.ST.goal = 'longevity'; ctx.ST.runPlan = null;
+  const st = ctx.runStats(S, now);
+  assertEqual(st.weekMiles, 9.7, 'this week: Oct 13 and 15');
+  assertEqual(st.monthMiles, 22.9, 'October: three runs');
+  assertEqual(st.monthGoal, 25, 'default challenge 25 mi');
+  assertEqual(st.monthChallengeMet, false, 'not yet');
+  assertEqual(st.longestMi, 13.2, 'longest run');
+  const e = Object.fromEntries(st.efforts.map(x => [x.key, x.best && Math.round(x.best.pace)]));
+  assertEqual(e.mile + ',' + e['5k'] + ',' + e['10k'] + ',' + e.half, '540,540,600,650', 'best pace per distance comes from runs at least that long');
+  assertEqual(ctx.fmtPace(560) + ' ' + ctx.fmtDuration(st.efforts[1].best.estSeconds), '9:20 27:58', 'pace and est. 5K time formatted');
+  assertEqual(st.weeks.length === 8 && st.weeks[7].miles === 9.7 && st.weeks[5].miles === 17.2, true, '8-week series (Sep 28 and Oct 3 share a week), newest last: ' + st.weeks.map(w => w.miles).join(','));
+  ctx.ST.goal = 'runner'; ctx.ST.runPlan = { daysPerWeek: 3, race: '5k', weeklyMiles: 5 };
+  assertEqual(ctx.runStats(S, now).monthGoal + ':' + ctx.runStats(S, now).monthChallengeMet, '22:true', 'runner goal from weekly target (5 x 4.3 = 22), met');
+  assertEqual(ctx.runStats([], now).totalRuns, 0, 'no runs: nothing');
+  ctx.ST.goal = sg; ctx.ST.runPlan = sp;
+});
 test('a NO-GO day never removes the walk from a walk session', () => {
   const sv = { mg: ctx.ST.muscleGroup, f: ctx.ST.fatigue };
   ctx.ST.muscleGroup = 'Walk'; ctx.ST.fatigue = 'nogo';

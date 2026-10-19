@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.45.0 / 20261018_3
+ * Version/build: fcf-v5.45.1 / 20261018_4
  */
 
-const FCF_VERSION = 'fcf-v5.45.0';
-const FCF_BUILD   = '20261018_3';
+const FCF_VERSION = 'fcf-v5.45.1';
+const FCF_BUILD   = '20261018_4';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -2234,6 +2234,8 @@ const BADGES = [
   { id:'all_weather',  icon:'🌍', title:'All-Weather',      desc:'Trained in 3 different environments (room, gym, or bands)', check:s => s.envsTrained >= 3 },
   { id:'early_bird',   icon:'🌅', title:'Early Bird',       desc:'Logged a workout before 6 AM, 5 times',  check:s => s.earlyBirdCount >= 5 },
   { id:'step_streak_5',icon:'👟', title:'Five-Day Stride',  desc:'Hit your daily step goal 5 days in a row (set one in Pilot Profile)', check:s => s.bestStepStreak >= 5 },
+  { id:'month_miles',  icon:'🏃', title:'Monthly Miles',    desc:'Hit your monthly running distance challenge', check:s => s.monthChallengeMet },
+  { id:'half_run',     icon:'🏅', title:'Thirteen Point One', desc:'Logged a single run of 13.1 miles or more', check:s => s.longestRunMi >= 13.1 },
   { id:'top_gun',      icon:'🎖️', title:'Top Gun',          desc:'Hold the #1 spot on any leaderboard',    check:null, live:true },
   { id:'debrief',      icon:'💬', title:'Debrief',          desc:'Sent feedback to help improve the app',  check:null, live:true },
   { id:'recruiter',    icon:'📡', title:'Recruiter',        desc:'Shared Flight Crew Fitness with someone (self-reported)', check:null, live:true },
@@ -2244,6 +2246,7 @@ function computeBadgeStats(sessions, bioRows, stepHistory, stepGoal) {
   const stats = { totalSessions: 0, best7Day: 0, best28Day: 0, prCount: 0, weightLost: 0, bioStreak: 0,
     totalSets: 0, maxSetsInSession: 0, envsTrained: 0, earlyBirdCount: 0,
     bestStepStreak: bestStepStreak(stepHistory || {}, stepGoal || null) };
+  const rs = runStats(sessions); stats.monthChallengeMet = rs.monthChallengeMet; stats.longestRunMi = rs.longestMi;
   const sorted = (sessions||[]).filter(s => s?.date).slice().sort((a,b) => new Date(a.date) - new Date(b.date));
   stats.totalSessions = sorted.length;
 
@@ -11988,6 +11991,81 @@ function getFuelTrends(mealLogs, goals) {
   return { daysLogged: days.length, trend, avgProteinPct, avgCalories };
 }
 
+// ─── RUNNING STATS ───────────────────────────────────────────────────────────
+// Everything a runner wants to see from logged runs: miles by week and
+// month, pace, best efforts and a monthly distance challenge. No GPS or
+// splits exist here, so a best effort is the best average pace held over a
+// run at least that long, and the time shown is that pace over the
+// distance (marked est.).
+const RUN_EFFORTS = [{ key: 'mile', label: '1 mile', mi: 1 }, { key: '5k', label: '5K', mi: 3.107 }, { key: '10k', label: '10K', mi: 6.214 }, { key: 'half', label: 'Half', mi: 13.109 }];
+function runMonthGoal() {
+  const plan = activeRunPlan();
+  return plan ? Math.round(plan.weeklyMiles * 4.3) : 25;
+}
+function fmtPace(secPerMi) {
+  if (!isFinite(secPerMi) || secPerMi <= 0) return '';
+  const m = Math.floor(secPerMi / 60), sec = Math.round(secPerMi % 60);
+  return m + ':' + String(sec).padStart(2, '0');
+}
+function fmtDuration(sec) {
+  sec = Math.round(sec); const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s2 = sec % 60;
+  return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s2).padStart(2, '0');
+}
+function runStats(sessions, now) {
+  now = now || new Date();
+  const today = localDateStr(now);
+  const monthStart = today.slice(0, 8) + '01';
+  const weekStart = weekStartStr(now);
+  const runs = (sessions || []).filter(isRunSession).map(s => {
+    const r = sessionRunningDistance(s) || { miles: 0, seconds: 0 };
+    return { date: localDateStr(new Date(s.date)), when: s.date, miles: r.miles, seconds: r.seconds || 0, pace: r.miles > 0 && r.seconds > 0 ? r.seconds / r.miles : null, group: s.muscle_group };
+  }).filter(r => r.date && r.date !== 'Invalid Date').sort((a, b) => a.when < b.when ? 1 : -1);
+  const sum = list => Math.round(list.reduce((n, r) => n + r.miles, 0) * 10) / 10;
+  const weekRuns = runs.filter(r => r.date >= weekStart), monthRuns = runs.filter(r => r.date >= monthStart);
+  // Last 8 weeks, oldest first
+  const weeks = [];
+  for (let i = 7; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7 * i);
+    const ws = weekStartStr(d); const we = shiftDateStr(ws, 6);
+    weeks.push({ start: ws, miles: sum(runs.filter(r => r.date >= ws && r.date <= we)), runs: runs.filter(r => r.date >= ws && r.date <= we).length });
+  }
+  const efforts = RUN_EFFORTS.map(e => {
+    const cands = runs.filter(r => r.miles >= e.mi * 0.98 && r.pace);
+    if (!cands.length) return { ...e, best: null };
+    const best = cands.reduce((a, b) => a.pace < b.pace ? a : b);
+    return { ...e, best: { pace: best.pace, estSeconds: best.pace * e.mi, from: best } };
+  });
+  const monthGoal = runMonthGoal(); const monthMiles = sum(monthRuns);
+  const longest = runs.reduce((a, r) => r.miles > a ? r.miles : a, 0);
+  const year = runs.filter(r => r.date >= today.slice(0, 4) + '-01-01');
+  return { runs, weekMiles: sum(weekRuns), weekRuns: weekRuns.length, monthMiles, monthRuns: monthRuns.length, monthGoal,
+    monthChallengeMet: monthMiles >= monthGoal && monthRuns.length > 0, weeks, efforts, longestMi: longest, yearMiles: sum(year), totalRuns: runs.length };
+}
+function runningCardHtml(stats) {
+  if (!stats.totalRuns) return '';
+  const pct = Math.min(100, Math.round(stats.monthMiles / stats.monthGoal * 100));
+  const maxW = Math.max(1, ...stats.weeks.map(w => w.miles));
+  const monthName = new Date().toLocaleDateString('en-US', { month: 'long' });
+  const parts = ['<div class="card mb12"><div class="section-label" style="margin-top:0">🏃 RUNNING</div>'];
+  parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">' +
+    glowTile('WEEK MI', stats.weekMiles, 'gold') + glowTile(monthName.slice(0, 3).toUpperCase() + ' MI', stats.monthMiles, 'blue') + glowTile('YEAR MI', stats.yearMiles, 'teal') + '</div>');
+  parts.push('<div class="fb" style="align-items:baseline;margin-bottom:6px"><span style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.14em;color:var(--muted)">' + monthName.toUpperCase() + ' CHALLENGE</span><span style="font-family:var(--mono);font-size:0.75rem;color:' + (stats.monthChallengeMet ? 'var(--green)' : 'var(--text)') + '">' + (stats.monthChallengeMet ? '✓ ' : '') + stats.monthMiles + ' / ' + stats.monthGoal + ' mi</span></div>');
+  parts.push('<div style="height:6px;border-radius:3px;background:rgba(255,255,255,0.08);overflow:hidden;margin-bottom:4px"><div style="height:100%;width:' + pct + '%;background:' + (stats.monthChallengeMet ? 'var(--green)' : 'var(--gold)') + ';border-radius:3px"></div></div>');
+  parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-bottom:14px">' + (stats.monthChallengeMet ? 'Challenge done: the Monthly Miles badge is yours.' : (Math.round((stats.monthGoal - stats.monthMiles) * 10) / 10) + ' miles to go this month. ' + (isRunner() ? 'Set from your weekly target.' : 'Pick Runner as your objective to set your own target.')) + '</div>');
+  parts.push('<div style="font-size:0.625rem;color:var(--muted);letter-spacing:.14em;font-family:var(--mono);margin-bottom:6px">LAST 8 WEEKS</div>');
+  parts.push('<div style="display:flex;align-items:flex-end;gap:4px;height:56px;margin-bottom:4px">' + stats.weeks.map((w, i) => '<div title="' + w.start + ': ' + w.miles + ' mi" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%"><div style="height:' + Math.max(w.miles ? 4 : 1, Math.round(w.miles / maxW * 52)) + 'px;background:' + (i === 7 ? 'var(--gold)' : 'rgba(201,168,76,0.45)') + ';border-radius:3px 3px 0 0"></div></div>').join('') + '</div>');
+  parts.push('<div style="display:flex;gap:4px;margin-bottom:14px">' + stats.weeks.map(w => '<div style="flex:1;text-align:center;font-family:var(--mono);font-size:0.5625rem;color:var(--muted)">' + (w.miles || '') + '</div>').join('') + '</div>');
+  parts.push('<div style="font-size:0.625rem;color:var(--muted);letter-spacing:.14em;font-family:var(--mono);margin-bottom:6px">BEST EFFORTS</div>');
+  parts.push('<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:6px">' + stats.efforts.map(e => '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 4px;text-align:center"><div style="font-size:0.625rem;color:var(--muted)">' + e.label + '</div><div style="font-family:var(--mono);font-size:0.875rem;font-weight:600;color:' + (e.best ? 'var(--text)' : 'var(--muted)') + '">' + (e.best ? fmtDuration(e.best.estSeconds) : '–') + '</div><div style="font-size:0.5625rem;color:var(--muted)">' + (e.best ? fmtPace(e.best.pace) + '/mi' : 'no run yet') + '</div></div>').join('') + '</div>');
+  parts.push('<div style="font-size:0.5625rem;color:var(--muted);margin-bottom:14px;line-height:1.5">Est. from your best average pace on a run at least that long. Longest run: ' + stats.longestMi + ' mi.</div>');
+  parts.push('<div style="font-size:0.625rem;color:var(--muted);letter-spacing:.14em;font-family:var(--mono);margin-bottom:6px">RECENT RUNS</div>');
+  stats.runs.slice(0, 5).forEach(r => {
+    parts.push('<div class="fb" style="padding:7px 0;border-bottom:1px solid var(--border);font-size:0.75rem"><span style="color:var(--muted)">' + new Date(r.when).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) + '</span><span style="font-family:var(--mono)">' + (r.miles ? r.miles + ' mi' : 'no distance') + (r.seconds ? ' · ' + fmtDuration(r.seconds) : '') + (r.pace ? ' · ' + fmtPace(r.pace) + '/mi' : '') + '</span></div>');
+  });
+  parts.push('</div>');
+  return parts.join('');
+}
+
 async function renderTrends(p) {
   const parts = [];
 
@@ -12017,6 +12095,7 @@ async function renderTrends(p) {
   const rangeData = await loadCalendarRange();
   parts.push('<div class="section-label" style="margin-top:0">📅 TRAINING CALENDAR</div>');
   parts.push(buildCalendarHTML(rangeData));
+  parts.push(runningCardHtml(runStats(ST.sessionCache || [])));
 
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">LOG TODAY\'S DATA</div>');

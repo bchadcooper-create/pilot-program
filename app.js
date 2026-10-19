@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.46.0 / 20261018_5
+ * Version/build: fcf-v5.46.1 / 20261018_6
  */
 
-const FCF_VERSION = 'fcf-v5.46.0';
-const FCF_BUILD   = '20261018_5';
+const FCF_VERSION = 'fcf-v5.46.1';
+const FCF_BUILD   = '20261018_6';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -451,6 +451,8 @@ function updateHydrationUI() {
   persistDailyInputs();
 }
 
+// Common US airline crew bases, for the Home Base picker. Any code can be typed.
+const HOME_BASES = ['ATL','AUS','BNA','BOS','BWI','CLT','DAL','DCA','DEN','DFW','DTW','EWR','FLL','HNL','HOU','IAD','IAH','JFK','LAS','LAX','LGA','MCO','MDW','MEM','MIA','MSP','MSY','OAK','ORD','PDX','PHL','PHX','PIT','RDU','SAN','SEA','SFO','SJC','SLC','SMF','STL','TPA','ANC','CVG','IND','MKE','OMA','RSW','SAT','SJU'];
 const MUSCLE_GROUPS = ['Lower Body','Upper Push','Upper Pull','Power / Plyo','Full Body','Longevity','Stretch','Cardio','Run','Walk','Starter Strength'];
 
 // ─── EXERCISE BUILDER ─────────────────────────────────────────────────────────
@@ -2686,7 +2688,8 @@ async function crewJoin() {
     return;
   }
   ST.crew.profile = row;
-  if (!ST.username) { ST.username = callsign; saveGoalLevel(); }
+  if (!ST.username) ST.username = callsign;
+  if (base && ST.homeBase !== base) { ST.homeBase = base; try { const pr = (await dbGetProfile()) || {}; pr.homeBase = base; pr.username = ST.username; await dbSetProfile(pr); } catch (e) {} }
   const n = await withDialogSpinner('Sharing your last 14 days…', () => crewShareRecent(14));
   showToast('Welcome to the crew.' + (n ? ' ' + n + ' workout' + (n === 1 ? '' : 's') + ' shared.' : ''));
   ST.crew.scope = 'all'; ST.ranksSeg = 'crew'; renderPage();
@@ -2705,7 +2708,8 @@ async function crewSaveSettings() {
   try {
     const { error } = await withTimeout(SB.from('crew_profiles').update(upd).eq('user_id', ST.user.id));
     if (error) throw error;
-    Object.assign(p, upd); showToast('Crew settings saved.'); ST.crew.view = 'feed'; renderPage();
+    Object.assign(p, upd); if (upd.base !== ST.homeBase) { ST.homeBase = upd.base; dbGetProfile().then(pr => { pr = pr || {}; pr.homeBase = upd.base; return dbSetProfile(pr); }).catch(() => {}); }
+    showToast('Crew settings saved.'); ST.crew.view = 'feed'; renderPage();
   } catch (e) { showBigToast('Could not save: ' + (e.message || 'connection'), 'warn'); }
 }
 async function crewLeave() {
@@ -2758,21 +2762,48 @@ async function crewDeleteComment(actId, cmtId) {
     crewRedrawCard(actId);
   } catch (e) { showToast('Could not delete.'); }
 }
+// Following someone whose posts are followers-only is a request they
+// approve; everyone else is followed at once.
 async function crewFollow(userId, follow) {
   try {
-    const q = follow ? SB.from('crew_follows').insert({ follower_id: ST.user.id, followee_id: userId })
+    let status = 'active';
+    if (follow) {
+      const { data: tp } = await withTimeout(SB.from('crew_profiles').select('visibility').eq('user_id', userId).maybeSingle());
+      if (tp && tp.visibility === 'followers') status = 'pending';
+    }
+    const q = follow ? SB.from('crew_follows').insert({ follower_id: ST.user.id, followee_id: userId, status })
                      : SB.from('crew_follows').delete().eq('follower_id', ST.user.id).eq('followee_id', userId);
     const { error } = await withTimeout(q); if (error) throw error;
-    ST.crew.followingSet = ST.crew.followingSet || new Set();
-    if (follow) ST.crew.followingSet.add(userId); else ST.crew.followingSet.delete(userId);
-    haptic('light'); showToast(follow ? 'Following.' : 'Unfollowed.'); renderPage();
+    ST.crew.followingSet = ST.crew.followingSet || new Set(); ST.crew.pendingSet = ST.crew.pendingSet || new Set();
+    if (follow && status === 'active') ST.crew.followingSet.add(userId);
+    else if (follow) ST.crew.pendingSet.add(userId);
+    else { ST.crew.followingSet.delete(userId); ST.crew.pendingSet.delete(userId); }
+    haptic('light'); showToast(follow ? (status === 'pending' ? 'Request sent. They approve followers.' : 'Following.') : 'Unfollowed.'); renderPage();
   } catch (e) { showToast('Could not update follow.'); }
 }
 async function crewLoadFollowing() {
   try {
-    const { data } = await withTimeout(SB.from('crew_follows').select('followee_id').eq('follower_id', ST.user.id).eq('status', 'active'));
-    ST.crew.followingSet = new Set((data || []).map(r => r.followee_id));
-  } catch (e) { ST.crew.followingSet = ST.crew.followingSet || new Set(); }
+    const [{ data: out }, { data: reqs }] = await Promise.all([
+      withTimeout(SB.from('crew_follows').select('followee_id,status').eq('follower_id', ST.user.id)),
+      withTimeout(SB.from('crew_follows').select('follower_id,created_at').eq('followee_id', ST.user.id).eq('status', 'pending')) ]);
+    ST.crew.followingSet = new Set((out || []).filter(r => r.status === 'active').map(r => r.followee_id));
+    ST.crew.pendingSet = new Set((out || []).filter(r => r.status === 'pending').map(r => r.followee_id));
+    ST.crew.requests = await crewAttachCallsigns((reqs || []).map(r => ({ user_id: r.follower_id, created_at: r.created_at })));
+  } catch (e) { ST.crew.followingSet = ST.crew.followingSet || new Set(); ST.crew.pendingSet = ST.crew.pendingSet || new Set(); ST.crew.requests = ST.crew.requests || []; }
+}
+async function crewAnswerRequest(userId, approve) {
+  try {
+    const q = approve ? SB.from('crew_follows').update({ status: 'active' }).eq('follower_id', userId).eq('followee_id', ST.user.id)
+                      : SB.from('crew_follows').delete().eq('follower_id', userId).eq('followee_id', ST.user.id);
+    const { error } = await withTimeout(q); if (error) throw error;
+    ST.crew.requests = (ST.crew.requests || []).filter(r => r.user_id !== userId);
+    haptic('light'); showToast(approve ? 'Approved.' : 'Declined.'); renderPage();
+  } catch (e) { showToast('Could not update the request.'); }
+}
+function crewRequestsHtml() {
+  const reqs = ST.crew.requests || []; if (!reqs.length) return '';
+  return '<div class="card mb12" style="border-color:var(--gold)"><div class="section-label" style="margin-top:0">FOLLOW REQUESTS</div>' + reqs.map(r =>
+    '<div class="fb" style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-size:0.875rem;font-weight:600;cursor:pointer" onclick="crewGo(\'profile\',\'' + r.user_id + '\')">' + crewEsc(r.crew_profiles?.callsign || 'crew') + '</div><div style="display:flex;gap:6px"><button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid var(--gold);border-radius:8px;color:var(--gold)" onclick="crewAnswerRequest(\'' + r.user_id + '\',true)">Approve</button><button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid var(--border);border-radius:8px;color:var(--muted)" onclick="crewAnswerRequest(\'' + r.user_id + '\',false)">Decline</button></div></div>').join('') + '</div>';
 }
 async function crewBlock(userId, callsign) {
   if (!(await appConfirm('Block ' + callsign + '? You will not see each other on the feed. You can unblock from Crew settings.', 'Block'))) return;
@@ -2836,7 +2867,7 @@ function crewJoinCardHtml() {
     '<div style="font-size:1rem;font-weight:600;margin-bottom:6px">Join the crew feed</div>' +
     '<div style="font-size:0.75rem;color:var(--muted);line-height:1.6;margin-bottom:12px">See what other pilots and crew are running and lifting, give kudos, follow people, and find crew at your base. Your workouts post under your call sign: what you did, distance, time and where (gym, hotel) but never an address or a route. You can hide any post, turn posting off, or leave at any time. Your last 14 days of workouts are shared when you join so your feed is not empty.</div>' +
     '<div class="field"><label>Call sign</label><input id="crewCallsign" type="text" maxlength="20" value="' + crewEsc(ST.username || '') + '" placeholder="e.g. Maverick"></div>' +
-    '<div class="field-row"><div class="field"><label>Home base</label><input id="crewBase" type="text" maxlength="4" placeholder="PHX" style="text-transform:uppercase"></div>' +
+    '<div class="field-row"><div class="field"><label>Home base</label><input id="crewBase" type="text" maxlength="4" list="bmBaseList" placeholder="PHX" autocapitalize="characters" style="text-transform:uppercase" value="' + crewEsc(ST.homeBase || '') + '"><datalist id="bmBaseList">' + HOME_BASES.map(b => '<option value="' + b + '">').join('') + '</datalist></div>' +
     '<div class="field"><label>Who sees my posts</label><select id="crewVis"><option value="everyone">Everyone on the feed</option><option value="followers">Only people I approve</option></select></div></div>' +
     '<div class="fb" style="padding:6px 0 10px;gap:12px"><label for="crewRules" style="font-size:0.75rem;line-height:1.5;color:var(--muted)">I agree to the crew rules: ' + CREW_RULES + '</label><input id="crewRules" type="checkbox" style="width:22px;height:22px;flex-shrink:0"></div>' +
     '<button class="btn btn-gold" onclick="crewJoin()">Join the crew</button></div>';
@@ -2873,9 +2904,9 @@ function crewSettingsHtml() {
   const p = ST.crew.profile;
   return '<div class="card mb12"><div class="section-label" style="margin-top:0">CREW SETTINGS</div>' +
     '<div class="field"><label>Call sign</label><input type="text" value="' + crewEsc(p.callsign) + '" disabled></div>' +
-    '<div class="field-row"><div class="field"><label>Home base</label><input id="crewBase" type="text" maxlength="4" value="' + crewEsc(p.base || '') + '" style="text-transform:uppercase"></div><div class="field"><label>Airline (optional)</label><input id="crewAirline" type="text" maxlength="40" value="' + crewEsc(p.airline || '') + '"></div></div>' +
+    '<div class="field-row"><div class="field"><label>Home base</label><input id="crewBase" type="text" maxlength="4" list="bmBaseList" autocapitalize="characters" value="' + crewEsc(p.base || '') + '" style="text-transform:uppercase"><datalist id="bmBaseList">' + HOME_BASES.map(b => '<option value="' + b + '">').join('') + '</datalist></div><div class="field"><label>Airline (optional)</label><input id="crewAirline" type="text" maxlength="40" value="' + crewEsc(p.airline || '') + '"></div></div>' +
     '<div class="field"><label>About me (140 characters)</label><input id="crewBio" type="text" maxlength="140" value="' + crewEsc(p.bio || '') + '"></div>' +
-    '<div class="field"><label>Who sees my posts</label><select id="crewVis"><option value="everyone"' + (p.visibility === 'everyone' ? ' selected' : '') + '>Everyone on the feed</option><option value="followers"' + (p.visibility === 'followers' ? ' selected' : '') + '>Only my followers</option></select></div>' +
+    '<div class="field"><label>Who sees my posts</label><select id="crewVis"><option value="everyone"' + (p.visibility === 'everyone' ? ' selected' : '') + '>Everyone on the feed</option><option value="followers"' + (p.visibility === 'followers' ? ' selected' : '') + '>Only followers I approve</option></select><div style="font-size:0.625rem;color:var(--muted);margin-top:4px;line-height:1.5">With "followers I approve", new followers send a request you accept or decline. Your call sign and base still show in Find crew.</div></div>' +
     '<div class="fb" style="padding:6px 0 12px"><label for="crewAuto" style="font-size:0.875rem">Post my workouts automatically</label><input id="crewAuto" type="checkbox" style="width:22px;height:22px"' + (p.auto_post !== false ? ' checked' : '') + '></div>' +
     '<button class="btn btn-gold" onclick="crewSaveSettings()">Save</button>' +
     '<button class="btn btn-outline mt8" onclick="crewShareRecent(14).then(n=>{showToast(n+\' workouts shared.\');crewGo(\'feed\')})">Share my last 14 days</button>' +
@@ -2921,9 +2952,10 @@ async function crewFindRun() {
 }
 function crewPersonRow(r) {
   const f = ST.crew.followingSet && ST.crew.followingSet.has(r.user_id);
+  const pend = ST.crew.pendingSet && ST.crew.pendingSet.has(r.user_id);
   const me = r.user_id === ST.user.id;
   return '<div class="fb" style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="cursor:pointer" onclick="crewGo(\'profile\',\'' + r.user_id + '\')"><div style="font-size:0.875rem;font-weight:600">' + crewEsc(r.callsign) + (me ? ' (you)' : '') + '</div><div style="font-size:0.6875rem;color:var(--muted)">' + [r.base, r.month_miles != null ? Number(r.month_miles) + ' mi' : null, r.month_sessions != null ? r.month_sessions + ' sessions' : null].filter(Boolean).join(' · ') + '</div></div>' +
-    (me ? '' : '<button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid ' + (f ? 'var(--border)' : 'var(--gold)') + ';border-radius:8px;color:' + (f ? 'var(--muted)' : 'var(--gold)') + '" onclick="crewFollow(\'' + r.user_id + '\',' + (f ? 'false' : 'true') + ')">' + (f ? 'Following' : 'Follow') + '</button>') + '</div>';
+    (me ? '' : '<button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid ' + (f ? 'var(--border)' : 'var(--gold)') + ';border-radius:8px;color:' + (f ? 'var(--muted)' : 'var(--gold)') + '" onclick="crewFollow(\'' + r.user_id + '\',' + (f || pend ? 'false' : 'true') + ')">' + (f ? 'Following' : pend ? 'Requested' : 'Follow') + '</button>') + '</div>';
 }
 async function crewLoadBaseBoard() {
   const box = document.getElementById('crewBaseBoard'); if (!box || !ST.crew.profile.base) return;
@@ -2939,9 +2971,9 @@ async function crewLoadProfileHeader(userId) {
       withTimeout(SB.from('crew_profiles').select('user_id,callsign,base,airline,bio,visibility').eq('user_id', userId).maybeSingle()),
       withTimeout(SB.rpc('crew_profile_counts', { p_user: userId })) ]);
     if (!p) { box.innerHTML = '<div style="font-size:0.75rem;color:var(--muted)">This member has left the crew feed.</div>'; return; }
-    const k = (c && c[0]) || {}; const me = userId === ST.user.id; const f = ST.crew.followingSet && ST.crew.followingSet.has(userId);
+    const k = (c && c[0]) || {}; const me = userId === ST.user.id; const f = ST.crew.followingSet && ST.crew.followingSet.has(userId); const pend = ST.crew.pendingSet && ST.crew.pendingSet.has(userId);
     box.innerHTML = '<div class="fb" style="align-items:flex-start"><div><div style="font-size:1.125rem;font-weight:600">' + crewEsc(p.callsign) + '</div><div style="font-size:0.75rem;color:var(--muted)">' + [p.base, p.airline].filter(Boolean).map(crewEsc).join(' · ') + '</div>' + (p.bio ? '<div style="font-size:0.8125rem;margin-top:6px;line-height:1.5">' + crewEsc(p.bio) + '</div>' : '') + '</div>' +
-      (me ? '<button class="btn-ghost" style="font-size:0.75rem;color:var(--gold)" onclick="crewGo(\'settings\')">Settings</button>' : '<div style="display:flex;flex-direction:column;gap:6px"><button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid ' + (f ? 'var(--border)' : 'var(--gold)') + ';border-radius:8px;color:' + (f ? 'var(--muted)' : 'var(--gold)') + '" onclick="crewFollow(\'' + userId + '\',' + (f ? 'false' : 'true') + ')">' + (f ? 'Following' : 'Follow') + '</button><button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewReport(\'profile\',\'' + userId + '\')">Report</button><button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewBlock(\'' + userId + '\',\'' + crewEsc(p.callsign).replace(/'/g, '') + '\')">Block</button></div>') + '</div>' +
+      (me ? '<button class="btn-ghost" style="font-size:0.75rem;color:var(--gold)" onclick="crewGo(\'settings\')">Settings</button>' : '<div style="display:flex;flex-direction:column;gap:6px"><button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid ' + (f ? 'var(--border)' : 'var(--gold)') + ';border-radius:8px;color:' + (f ? 'var(--muted)' : 'var(--gold)') + '" onclick="crewFollow(\'' + userId + '\',' + (f || pend ? 'false' : 'true') + ')">' + (f ? 'Following' : pend ? 'Requested' : (p.visibility === 'followers' ? 'Request to follow' : 'Follow')) + '</button><button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewReport(\'profile\',\'' + userId + '\')">Report</button><button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewBlock(\'' + userId + '\',\'' + crewEsc(p.callsign).replace(/'/g, '') + '\')">Block</button></div>') + '</div>' +
       '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:12px">' + [['FOLLOWERS', k.followers], ['FOLLOWING', k.following], ['POSTS', k.activities], ['MI THIS MO', Number(k.month_miles || 0)]].map(([l, v]) => '<div style="text-align:center"><div style="font-family:var(--mono);font-size:1rem;font-weight:600">' + (v ?? 0) + '</div><div style="font-size:0.5625rem;color:var(--muted);letter-spacing:.1em">' + l + '</div></div>').join('') + '</div>';
   } catch (e) { box.innerHTML = '<div style="font-size:0.75rem;color:var(--muted)">Could not load this profile.</div>'; }
 }
@@ -2961,6 +2993,7 @@ function renderCrew(parts) {
   } else {
     const seg = (s, label) => '<div class="env-btn" style="padding:8px 4px' + (c.scope === s ? ';border-color:var(--gold);background:rgba(212,175,55,0.08)' : '') + '" onclick="crewSetScope(\'' + s + '\')"><div style="font-size:0.6875rem;font-weight:700">' + label + '</div></div>';
     parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:12px">' + seg('following', 'FOLLOWING') + seg('base', 'MY BASE') + seg('all', 'EVERYONE') + '</div>');
+    parts.push(crewRequestsHtml());
   }
   const key = c.view + ':' + c.scope + ':' + (c.viewUser || '');
   if (c.loadedKey !== key) {
@@ -3711,6 +3744,7 @@ function applyProfileToState(profile) {
   // their defaults regardless of what was in the database.
   if (profile.age)                          ST.age = profile.age;
   if (profile.username)                     ST.username = profile.username;
+  if (profile.homeBase)                     ST.homeBase = cleanBase(profile.homeBase);
   // BUG FIX (reported: fuel plan / tracking toggles reset after a
   // refresh, the same way badges used to before that fix was added).
   // Same root cause, same fix — these were never hydrated here either.
@@ -9046,7 +9080,10 @@ function syncBodyMetricsFieldsToState() {
     const raw = unameEl.value.trim().replace(/[^A-Za-z0-9_\- ]/g, '').slice(0, 20);
     if (raw) ST.username = raw;
   }
+  const baseEl = document.getElementById('bmBase');
+  if (baseEl) ST.homeBase = cleanBase(baseEl.value);
 }
+function cleanBase(v) { const b = String(v || '').trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4); return b.length >= 3 ? b : null; }
 
 async function saveBodyMetrics() {
   const sexEl = document.getElementById('bmSex');
@@ -9062,9 +9099,13 @@ async function saveBodyMetrics() {
   const rawUname = (unameEl?.value || '').trim().replace(/[^A-Za-z0-9_\- ]/g, '').slice(0, 20);
   const hadUsername = !!ST.username;
   ST.username = rawUname || null;
+  ST.homeBase = cleanBase(document.getElementById('bmBase')?.value);
   const profile = (await dbGetProfile()) || {};
   const hadSex = !!profile.sex;
   profile.username = ST.username;
+  profile.homeBase = ST.homeBase;
+  // Keep the crew feed's base in step with the profile.
+  if (crewIsMember() && ST.crew.profile.base !== ST.homeBase) { ST.crew.profile.base = ST.homeBase; SB.from('crew_profiles').update({ base: ST.homeBase }).eq('user_id', ST.user.id).then(() => {}, () => {}); }
   profile.sex = ST.sex;
   profile.heightIn = ST.heightIn;
   profile.age = ST.age;
@@ -14234,9 +14275,13 @@ function renderProfile(p) {
   parts.push('</div>');
   parts.push('<div class="field"><label>Age <span class="info-i" onclick="showBioInfo(\'age\')">i</span></label>');
   parts.push('<input id="bmAge" type="text" inputmode="numeric" placeholder="e.g. 42" value="'+(ST.age||'')+'"></div>');
-  parts.push('<div class="field"><label>Call Sign (Leaderboard Name)</label>');
+  parts.push('<div class="field"><label>Call Sign (Leaderboard and Crew Feed Name)</label>');
   parts.push('<input id="bmUsername" type="text" maxlength="20" placeholder="e.g. MaverickPHX" value="'+(ST.username||'')+'">');
   parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-top:4px;line-height:1.5">Shown publicly on the leaderboards. Leave blank to stay off the boards. Your lifts stay private either way until you set one.</div></div>');
+  parts.push('<div class="field"><label>Home Base</label>');
+  parts.push('<input id="bmBase" type="text" maxlength="4" list="bmBaseList" placeholder="e.g. PHX" autocapitalize="characters" style="text-transform:uppercase" value="'+(ST.homeBase||'')+'">');
+  parts.push('<datalist id="bmBaseList">' + HOME_BASES.map(b => '<option value="' + b + '">').join('') + '</datalist>');
+  parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-top:4px;line-height:1.5">Airport code. Groups you with crew at your base on the crew feed. Pick from the list or type any code.</div></div>');
   parts.push('<button class="btn btn-outline" onclick="saveBodyMetrics()">💾 Save Body Metrics</button>');
   parts.push('</div>');
 

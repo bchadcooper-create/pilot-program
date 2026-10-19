@@ -1526,6 +1526,21 @@ test('running stats: weekly and monthly miles, best efforts, monthly challenge',
   assertEqual(ctx.runStats([], now).totalRuns, 0, 'no runs: nothing');
   ctx.ST.goal = sg; ctx.ST.runPlan = sp;
 });
+test('crew feed: a saved session becomes a post, stats line, time ago, escaping', () => {
+  const run = { date: '2026-10-18T17:35:00.000Z', muscle_group: 'Run', env: 'hotel', sets: { c_ca_er5: [{ miles: '5.2', seconds: '2880' }] }, workoutSnapshot: { taxi: [], takeoff: [], enroute: [{ id: 'c_ca_er5', name: 'Outdoor Run' }], landing: [] } };
+  const a = ctx.crewActivityFromSession(run, '123', { airport: 'DFW' });
+  assertEqual(a.kind + '|' + a.title + '|' + a.miles + '|' + a.seconds + '|' + a.env + '|' + a.visibility, 'run|Outdoor Run|5.2|2880|hotel|everyone', 'run post');
+  assertEqual(ctx.crewStatLine(a), '5.2 mi · 48:00 · 9:14/mi · hotel gym · DFW', 'stat line');
+  const lift = { date: '2026-10-18T17:35:00.000Z', muscle_group: 'Full Body', env: 'comm', durationMinutes: 60, sets: { s: [{ reps: '5', weight: '225' }, { reps: '5', weight: '225' }], p: [{ reps: '8', weight: '60' }] }, workoutSnapshot: { taxi: [], takeoff: [{ id: 's', name: 'Back Squat' }], enroute: [{ id: 'p', name: 'DB Bench Press' }], landing: [] } };
+  const b = ctx.crewActivityFromSession(lift, '124', { visibility: 'followers' });
+  assertEqual(b.kind + '|' + b.title + '|' + b.sets_logged + '|' + b.seconds + '|' + b.visibility, 'workout|Full Body|3|3600|followers', 'workout post');
+  assertEqual(ctx.crewStatLine(b), '1:00:00 · 3 sets · gym', 'workout stat line');
+  const walk = { date: '2026-10-17T17:00:00.000Z', muscle_group: 'Cardio', importedFromOura: true, ouraActivity: 'walking', sets: { c_ca_er3: [{ miles: '1.5', seconds: '1800' }] } };
+  assertEqual(ctx.crewActivityFromSession(walk, 'o1').kind + ':' + ctx.crewActivityFromSession(walk, 'o1').env, 'walk:null', 'ring walk: walk, no location');
+  const now = new Date('2026-10-18T20:00:00Z');
+  assertEqual([ctx.crewAgo('2026-10-18T19:50:00Z', now), ctx.crewAgo('2026-10-18T15:00:00Z', now), ctx.crewAgo('2026-10-15T15:00:00Z', now)].join(','), '10m,5h,3d', 'time ago');
+  assertEqual(ctx.crewEsc('<b>"x"</b>'), '&lt;b&gt;&quot;x&quot;&lt;/b&gt;', 'html escaped');
+});
 test('a NO-GO day never removes the walk from a walk session', () => {
   const sv = { mg: ctx.ST.muscleGroup, f: ctx.ST.fatigue };
   ctx.ST.muscleGroup = 'Walk'; ctx.ST.fatigue = 'nogo';

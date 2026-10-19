@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.45.1 / 20261018_4
+ * Version/build: fcf-v5.46.0 / 20261018_5
  */
 
-const FCF_VERSION = 'fcf-v5.45.1';
-const FCF_BUILD   = '20261018_4';
+const FCF_VERSION = 'fcf-v5.46.0';
+const FCF_BUILD   = '20261018_5';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -2570,8 +2570,423 @@ async function loadLeaderboardGlance() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// CREW FEED: the social layer (owner, Oct 18 2026: "copy what Strava is
+// doing"). Opt in. A member joins with a call sign and a base; from then on
+// their saved workouts post to the feed (auto_post), and they can follow
+// other crew, give kudos, comment, see their base's board, block and report.
+// Everything is enforced by row-level security in sql/crew_feed.sql; this
+// file only asks.
+// ═══════════════════════════════════════════════════════════════════════════
+const CREW_RULES = 'Be the crew member you would want on the jumpseat. Encourage, do not mock. No harassment, no slurs, no sexual content, no selling. Nothing that identifies a passenger, a flight number or a company incident. Report what breaks this and block who you need to; reports go to the owner and repeat offenders are removed.';
+const CREW_ENV_WORD = { comm: 'gym', hotel: 'hotel gym', room: 'hotel room', band: 'bands' };
+if (!ST.crew) ST.crew = { profile: null, loaded: false, scope: 'following', feed: [], view: 'feed', viewUser: null, comments: {}, open: {}, find: '' };
+
+function crewEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function crewAgo(iso, now) {
+  const t = new Date(iso).getTime(); const n = (now || new Date()).getTime();
+  const m = Math.max(0, Math.round((n - t) / 60000));
+  if (m < 60) return m + 'm';
+  const h = Math.round(m / 60); if (h < 24) return h + 'h';
+  const d = Math.round(h / 24); if (d < 7) return d + 'd';
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+// Distance and time from any set that carries miles (runs, walks, bikes).
+function sessionDistance(session) {
+  let miles = 0, seconds = 0;
+  Object.values(session?.sets || {}).forEach(list => (list || []).forEach(s => {
+    const m = parseFloat(s.miles), sec = parseFloat(s.seconds);
+    if (!isNaN(m) && m > 0) { miles += m; if (!isNaN(sec) && sec > 0) seconds += sec; }
+  }));
+  return miles > 0 ? { miles: Math.round(miles * 100) / 100, seconds } : null;
+}
+// What a saved session becomes on the feed. Pure.
+function crewActivityFromSession(session, sessionKey, opts) {
+  opts = opts || {};
+  const run = sessionRunningDistance(session);
+  const dist = run || sessionDistance(session);
+  const isWalk = session.muscle_group === 'Walk' || (session.importedFromOura && /walk/i.test(session.ouraActivity || ''));
+  const kind = run || session.muscle_group === 'Run' ? 'run' : isWalk ? 'walk' : 'workout';
+  const snap = session.workoutSnapshot || {};
+  const main = [...(snap.takeoff || []), ...(snap.enroute || [])].map(e => e && e.name).filter(Boolean);
+  const title = kind === 'run' ? (main.find(n => /run/i.test(n)) || 'Run') : kind === 'walk' ? 'Walk' : (session.muscle_group || main[0] || 'Workout');
+  const setsLogged = Object.values(session.sets || {}).reduce((n, list) => n + (Array.isArray(list) ? list.filter(x => x && Object.values(x).some(v => v)).length : 0), 0);
+  return {
+    session_key: String(sessionKey), kind, title,
+    muscle_group: session.muscle_group || null, env: session.importedFromOura ? null : (session.env || null),
+    airport: opts.airport || null,
+    miles: dist ? dist.miles : null, seconds: dist && dist.seconds ? Math.round(dist.seconds) : (session.durationMinutes ? session.durationMinutes * 60 : null),
+    sets_logged: kind === 'workout' ? setsLogged : null,
+    note: opts.note || null,
+    performed_at: session.date,
+    visibility: opts.visibility || 'everyone',
+  };
+}
+function crewStatLine(a) {
+  const bits = [];
+  if (a.miles) bits.push(Number(a.miles) + ' mi');
+  if (a.seconds) bits.push(fmtDuration(a.seconds));
+  if (a.miles && a.seconds && a.kind !== 'workout') bits.push(fmtPace(a.seconds / Number(a.miles)) + '/mi');
+  if (a.kind === 'workout' && a.sets_logged) bits.push(a.sets_logged + ' sets');
+  if (a.env && CREW_ENV_WORD[a.env]) bits.push(CREW_ENV_WORD[a.env]);
+  if (a.airport) bits.push(a.airport);
+  return bits.join(' · ');
+}
+
+// ── Data ──────────────────────────────────────────────────────────────────
+async function loadCrewProfile() {
+  if (!ST.user) { ST.crew.profile = null; ST.crew.loaded = true; return; }
+  try {
+    const { data } = await withTimeout(SB.from('crew_profiles').select('*').eq('user_id', ST.user.id).maybeSingle());
+    ST.crew.profile = data || null;
+  } catch (e) { /* offline: keep what we had */ }
+  ST.crew.loaded = true;
+}
+function crewIsMember() { return !!(ST.crew && ST.crew.profile); }
+async function crewPostSession(session, sessionKey, opts) {
+  if (!ST.user || !crewIsMember()) return null;
+  if (!(opts && opts.force) && ST.crew.profile.auto_post === false) return null;
+  const row = Object.assign(crewActivityFromSession(session, sessionKey, Object.assign({ visibility: ST.crew.profile.visibility === 'followers' ? 'followers' : 'everyone' }, opts || {})), { user_id: ST.user.id });
+  try {
+    const { error } = await withTimeout(SB.from('crew_activities').upsert(row, { onConflict: 'user_id,session_key' }));
+    if (error) throw error;
+    return row;
+  } catch (e) { console.warn('crew post failed', e); return null; }
+}
+async function crewShareRecent(days) {
+  const cutoff = Date.now() - days * 864e5;
+  const list = (ST.sessionCache || []).filter(s => s && s.date && s._key && new Date(s.date).getTime() >= cutoff && !/yardwork|housework|other/i.test(s.ouraActivity || ''));
+  for (const s of list) await crewPostSession(s, s._key, { force: true });
+  return list.length;
+}
+async function crewLoadFeed(more) {
+  const c = ST.crew;
+  const before = more && c.feed.length ? c.feed[c.feed.length - 1].performed_at : null;
+  const args = { p_scope: c.view === 'profile' ? 'user' : c.scope, p_user: c.view === 'profile' ? c.viewUser : null, p_before: before, p_limit: 30 };
+  const { data, error } = await withTimeout(SB.rpc('crew_feed', args), 10000);
+  if (error) throw error;
+  c.feed = more ? c.feed.concat(data || []) : (data || []);
+  c.feedEnd = (data || []).length < 30;
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────
+async function crewJoin() {
+  const g = id => document.getElementById(id);
+  const callsign = (g('crewCallsign')?.value || '').trim().replace(/[^A-Za-z0-9_\- ]/g, '').slice(0, 20);
+  const base = (g('crewBase')?.value || '').trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
+  const visibility = g('crewVis')?.value || 'everyone';
+  if (!callsign) { showToast('Pick a call sign.'); return; }
+  if (!g('crewRules')?.checked) { showToast('Please agree to the crew rules.'); return; }
+  const row = { user_id: ST.user.id, callsign, base: base || null, visibility, auto_post: true, rules_accepted_at: new Date().toISOString() };
+  try {
+    const { error } = await withDialogSpinner('Joining…', () => withTimeout(SB.from('crew_profiles').insert(row)));
+    if (error) throw error;
+  } catch (e) {
+    showBigToast(/duplicate|unique/i.test(e.message || '') ? 'That call sign is taken on the crew feed. Try another.' : 'Could not join: ' + (e.message || 'connection'), 'warn');
+    return;
+  }
+  ST.crew.profile = row;
+  if (!ST.username) { ST.username = callsign; saveGoalLevel(); }
+  const n = await withDialogSpinner('Sharing your last 14 days…', () => crewShareRecent(14));
+  showToast('Welcome to the crew.' + (n ? ' ' + n + ' workout' + (n === 1 ? '' : 's') + ' shared.' : ''));
+  ST.crew.scope = 'all'; ST.ranksSeg = 'crew'; renderPage();
+}
+async function crewSaveSettings() {
+  const g = id => document.getElementById(id);
+  const p = ST.crew.profile; if (!p) return;
+  const upd = {
+    base: ((g('crewBase')?.value || '').trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4)) || null,
+    airline: (g('crewAirline')?.value || '').trim().slice(0, 40) || null,
+    bio: (g('crewBio')?.value || '').trim().slice(0, 140) || null,
+    visibility: g('crewVis')?.value || p.visibility,
+    auto_post: !!g('crewAuto')?.checked,
+    updated_at: new Date().toISOString(),
+  };
+  try {
+    const { error } = await withTimeout(SB.from('crew_profiles').update(upd).eq('user_id', ST.user.id));
+    if (error) throw error;
+    Object.assign(p, upd); showToast('Crew settings saved.'); ST.crew.view = 'feed'; renderPage();
+  } catch (e) { showBigToast('Could not save: ' + (e.message || 'connection'), 'warn'); }
+}
+async function crewLeave() {
+  if (!(await appConfirm('Leave the crew feed? Your posts, kudos and comments are deleted and people you follow are forgotten. Your workouts in the app are not affected.', 'Leave'))) return;
+  try {
+    const { error } = await withTimeout(SB.from('crew_profiles').delete().eq('user_id', ST.user.id));
+    if (error) throw error;
+    ST.crew.profile = null; ST.crew.feed = []; ST.crew.view = 'feed'; ST.ranksSeg = 'boards'; showToast('You have left the crew feed.'); renderPage();
+  } catch (e) { showBigToast('Could not leave: ' + (e.message || 'connection'), 'warn'); }
+}
+async function crewKudos(id) {
+  const a = ST.crew.feed.find(x => x.id === id); if (!a) return;
+  const was = a.my_kudos;
+  a.my_kudos = !was; a.kudos_count = Number(a.kudos_count || 0) + (was ? -1 : 1);
+  haptic('light'); crewRedrawCard(id);
+  try {
+    const q = was ? SB.from('crew_kudos').delete().eq('activity_id', id).eq('user_id', ST.user.id)
+                  : SB.from('crew_kudos').insert({ activity_id: id, user_id: ST.user.id });
+    const { error } = await withTimeout(q); if (error) throw error;
+  } catch (e) { a.my_kudos = was; a.kudos_count = Number(a.kudos_count) + (was ? 1 : -1); crewRedrawCard(id); }
+}
+async function crewToggleComments(id) {
+  const c = ST.crew; c.open[id] = !c.open[id];
+  crewRedrawCard(id);
+  if (c.open[id] && !c.comments[id]) {
+    try {
+      const { data } = await withTimeout(SB.from('crew_comments').select('id,user_id,body,created_at').eq('activity_id', id).order('created_at'));
+      c.comments[id] = await crewAttachCallsigns(data || []);
+    } catch (e) { c.comments[id] = []; }
+    crewRedrawCard(id);
+  }
+}
+async function crewComment(id) {
+  const inp = document.getElementById('crewCmt_' + id); const body = (inp?.value || '').trim().slice(0, 500);
+  if (!body) return;
+  try {
+    const { data, error } = await withTimeout(SB.from('crew_comments').insert({ activity_id: id, user_id: ST.user.id, body }).select('id,user_id,body,created_at').single());
+    if (error) throw error;
+    data.crew_profiles = { callsign: ST.crew.profile.callsign };
+    (ST.crew.comments[id] = ST.crew.comments[id] || []).push(data);
+    const a = ST.crew.feed.find(x => x.id === id); if (a) a.comment_count = Number(a.comment_count || 0) + 1;
+    haptic('light'); crewRedrawCard(id);
+  } catch (e) { showToast('Could not post the comment.'); }
+}
+async function crewDeleteComment(actId, cmtId) {
+  try {
+    const { error } = await withTimeout(SB.from('crew_comments').delete().eq('id', cmtId)); if (error) throw error;
+    ST.crew.comments[actId] = (ST.crew.comments[actId] || []).filter(x => x.id !== cmtId);
+    const a = ST.crew.feed.find(x => x.id === actId); if (a) a.comment_count = Math.max(0, Number(a.comment_count || 1) - 1);
+    crewRedrawCard(actId);
+  } catch (e) { showToast('Could not delete.'); }
+}
+async function crewFollow(userId, follow) {
+  try {
+    const q = follow ? SB.from('crew_follows').insert({ follower_id: ST.user.id, followee_id: userId })
+                     : SB.from('crew_follows').delete().eq('follower_id', ST.user.id).eq('followee_id', userId);
+    const { error } = await withTimeout(q); if (error) throw error;
+    ST.crew.followingSet = ST.crew.followingSet || new Set();
+    if (follow) ST.crew.followingSet.add(userId); else ST.crew.followingSet.delete(userId);
+    haptic('light'); showToast(follow ? 'Following.' : 'Unfollowed.'); renderPage();
+  } catch (e) { showToast('Could not update follow.'); }
+}
+async function crewLoadFollowing() {
+  try {
+    const { data } = await withTimeout(SB.from('crew_follows').select('followee_id').eq('follower_id', ST.user.id).eq('status', 'active'));
+    ST.crew.followingSet = new Set((data || []).map(r => r.followee_id));
+  } catch (e) { ST.crew.followingSet = ST.crew.followingSet || new Set(); }
+}
+async function crewBlock(userId, callsign) {
+  if (!(await appConfirm('Block ' + callsign + '? You will not see each other on the feed. You can unblock from Crew settings.', 'Block'))) return;
+  try {
+    const { error } = await withTimeout(SB.from('crew_blocks').insert({ blocker_id: ST.user.id, blocked_id: userId })); if (error) throw error;
+    await withTimeout(SB.from('crew_follows').delete().or('and(follower_id.eq.' + ST.user.id + ',followee_id.eq.' + userId + '),and(follower_id.eq.' + userId + ',followee_id.eq.' + ST.user.id + ')'));
+    ST.crew.feed = ST.crew.feed.filter(a => a.user_id !== userId); showToast('Blocked.'); ST.crew.view = 'feed'; renderPage();
+  } catch (e) { showToast('Could not block.'); }
+}
+async function crewUnblock(userId) {
+  try { await withTimeout(SB.from('crew_blocks').delete().eq('blocker_id', ST.user.id).eq('blocked_id', userId)); showToast('Unblocked.'); renderPage(); } catch (e) { showToast('Could not unblock.'); }
+}
+function crewReport(type, id) {
+  document.getElementById('modalRoot').innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet"><div class="modal-handle"></div>' +
+    '<div class="modal-title">Report</div><div class="modal-body" style="margin-bottom:10px">Tell us what is wrong. The owner reads every report.</div>' +
+    '<textarea id="crewReportText" rows="4" placeholder="What happened?" style="width:100%;background:var(--bg3);border:1.5px solid var(--border);border-radius:8px;padding:12px;font-size:1rem;color:var(--text);margin-bottom:10px"></textarea>' +
+    '<button class="btn btn-gold" onclick="crewSendReport(\'' + type + '\',\'' + id + '\')">Send report</button><button class="btn btn-outline mt8" onclick="closeModal()">Cancel</button></div></div>';
+}
+async function crewSendReport(type, id) {
+  const reason = (document.getElementById('crewReportText')?.value || '').trim().slice(0, 500);
+  if (!reason) { showToast('Say what is wrong, in a few words.'); return; }
+  try {
+    const { error } = await withTimeout(SB.from('crew_reports').insert({ reporter_id: ST.user.id, target_type: type, target_id: id, reason })); if (error) throw error;
+    closeModal(); showToast('Report sent. Thank you.');
+  } catch (e) { showToast('Could not send the report.'); }
+}
+async function crewSetVisibility(id, visibility) {
+  try {
+    const { error } = await withTimeout(SB.from('crew_activities').update({ visibility }).eq('id', id)); if (error) throw error;
+    const a = ST.crew.feed.find(x => x.id === id); if (a) a.visibility = visibility; crewRedrawCard(id); showToast(visibility === 'private' ? 'Hidden from the feed.' : 'Shared.');
+  } catch (e) { showToast('Could not change that.'); }
+}
+async function crewDeleteActivity(id) {
+  if (!(await appConfirm('Remove this post from the feed? The workout stays in your log.', 'Remove'))) return;
+  try {
+    const { error } = await withTimeout(SB.from('crew_activities').delete().eq('id', id)); if (error) throw error;
+    ST.crew.feed = ST.crew.feed.filter(a => a.id !== id); renderPage();
+  } catch (e) { showToast('Could not remove.'); }
+}
+function crewMenu(id) {
+  const a = ST.crew.feed.find(x => x.id === id); if (!a) return;
+  const mine = a.user_id === ST.user.id;
+  const btn = (label, fn, red) => '<button class="btn ' + (red ? 'btn-red-outline' : 'btn-outline') + ' mt8" onclick="closeModal();' + fn + '">' + label + '</button>';
+  document.getElementById('modalRoot').innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet"><div class="modal-handle"></div>' +
+    '<div class="modal-title">' + crewEsc(a.title) + '</div>' +
+    (mine
+      ? (a.visibility === 'private' ? btn('Share to the feed', "crewSetVisibility('" + id + "','everyone')") : btn('Hide from the feed', "crewSetVisibility('" + id + "','private')")) + btn('Remove this post', "crewDeleteActivity('" + id + "')", true)
+      : btn('Report this post', "crewReport('activity','" + id + "')") + btn('Block ' + crewEsc(a.callsign), "crewBlock('" + a.user_id + "','" + crewEsc(a.callsign).replace(/'/g, '') + "')", true)) +
+    '<button class="btn btn-outline mt8" onclick="closeModal()">Cancel</button></div></div>';
+}
+function crewGo(view, userId) {
+  ST.crew.view = view; ST.crew.viewUser = userId || null; ST.crew.feed = []; ST.crew.loadedKey = null; renderPage(); window.scrollTo(0, 0);
+}
+function crewSetScope(s) { ST.crew.scope = s; ST.crew.feed = []; ST.crew.loadedKey = null; renderPage(); }
+
+// ── Render ────────────────────────────────────────────────────────────────
+function crewJoinCardHtml() {
+  return '<div class="card mb12" style="border-color:var(--gold)">' +
+    '<div style="font-size:1rem;font-weight:600;margin-bottom:6px">Join the crew feed</div>' +
+    '<div style="font-size:0.75rem;color:var(--muted);line-height:1.6;margin-bottom:12px">See what other pilots and crew are running and lifting, give kudos, follow people, and find crew at your base. Your workouts post under your call sign: what you did, distance, time and where (gym, hotel) but never an address or a route. You can hide any post, turn posting off, or leave at any time. Your last 14 days of workouts are shared when you join so your feed is not empty.</div>' +
+    '<div class="field"><label>Call sign</label><input id="crewCallsign" type="text" maxlength="20" value="' + crewEsc(ST.username || '') + '" placeholder="e.g. Maverick"></div>' +
+    '<div class="field-row"><div class="field"><label>Home base</label><input id="crewBase" type="text" maxlength="4" placeholder="PHX" style="text-transform:uppercase"></div>' +
+    '<div class="field"><label>Who sees my posts</label><select id="crewVis"><option value="everyone">Everyone on the feed</option><option value="followers">Only people I approve</option></select></div></div>' +
+    '<div class="fb" style="padding:6px 0 10px;gap:12px"><label for="crewRules" style="font-size:0.75rem;line-height:1.5;color:var(--muted)">I agree to the crew rules: ' + CREW_RULES + '</label><input id="crewRules" type="checkbox" style="width:22px;height:22px;flex-shrink:0"></div>' +
+    '<button class="btn btn-gold" onclick="crewJoin()">Join the crew</button></div>';
+}
+function crewCardHtml(a) {
+  const mine = a.user_id === ST.user.id;
+  const icon = a.kind === 'run' ? '🏃' : a.kind === 'walk' ? '🚶' : '🏋️';
+  const open = ST.crew.open[a.id]; const cmts = ST.crew.comments[a.id];
+  let h = '<div class="card mb12" id="crewCard_' + a.id + '">';
+  h += '<div class="fb" style="align-items:flex-start;margin-bottom:8px"><div style="cursor:pointer" onclick="crewGo(\'profile\',\'' + a.user_id + '\')"><div style="font-size:0.875rem;font-weight:600">' + crewEsc(a.callsign) + (a.base ? ' <span style="font-weight:400;color:var(--muted);font-size:0.75rem">· ' + crewEsc(a.base) + '</span>' : '') + '</div><div style="font-size:0.625rem;color:var(--muted)">' + crewAgo(a.performed_at) + (a.visibility === 'private' ? ' · hidden' : a.visibility === 'followers' ? ' · followers' : '') + '</div></div>' +
+    '<button class="btn-ghost" style="padding:4px 8px;font-size:1rem;line-height:1" onclick="crewMenu(\'' + a.id + '\')">···</button></div>';
+  h += '<div style="font-size:1rem;font-weight:600;margin-bottom:2px">' + icon + ' ' + crewEsc(a.title) + '</div>';
+  const stat = crewStatLine(a); if (stat) h += '<div style="font-family:var(--mono);font-size:0.75rem;color:var(--gold);margin-bottom:6px">' + crewEsc(stat) + '</div>';
+  if (a.note) h += '<div style="font-size:0.8125rem;line-height:1.5;margin-bottom:6px">' + crewEsc(a.note) + '</div>';
+  h += '<div style="display:flex;gap:8px;margin-top:8px">' +
+    '<button class="btn-ghost" style="padding:6px 10px;font-size:0.8125rem;border:1px solid ' + (a.my_kudos ? 'var(--gold)' : 'var(--border)') + ';border-radius:8px;color:' + (a.my_kudos ? 'var(--gold)' : 'var(--text)') + '" onclick="crewKudos(\'' + a.id + '\')">👏 ' + (a.kudos_count || 0) + '</button>' +
+    '<button class="btn-ghost" style="padding:6px 10px;font-size:0.8125rem;border:1px solid var(--border);border-radius:8px" onclick="crewToggleComments(\'' + a.id + '\')">💬 ' + (a.comment_count || 0) + '</button></div>';
+  if (open) {
+    h += '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">';
+    if (!cmts) h += '<div style="font-size:0.75rem;color:var(--muted)">Loading…</div>';
+    else {
+      cmts.forEach(c => { h += '<div class="fb" style="align-items:flex-start;padding:4px 0;font-size:0.8125rem"><div><b style="cursor:pointer" onclick="crewGo(\'profile\',\'' + c.user_id + '\')">' + crewEsc(c.crew_profiles?.callsign || 'crew') + '</b> <span style="color:var(--muted);font-size:0.625rem">' + crewAgo(c.created_at) + '</span><div style="line-height:1.5">' + crewEsc(c.body) + '</div></div>' + (c.user_id === ST.user.id || mine ? '<button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewDeleteComment(\'' + a.id + '\',\'' + c.id + '\')">delete</button>' : '<button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewReport(\'comment\',\'' + c.id + '\')">report</button>') + '</div>'; });
+      if (!cmts.length) h += '<div style="font-size:0.75rem;color:var(--muted)">No comments yet.</div>';
+    }
+    h += '<div style="display:flex;gap:6px;margin-top:8px"><input id="crewCmt_' + a.id + '" type="text" maxlength="500" placeholder="Say something" style="flex:1" onkeydown="if(event.key===\'Enter\')crewComment(\'' + a.id + '\')"><button class="btn btn-outline" style="width:auto;padding:0 14px" onclick="crewComment(\'' + a.id + '\')">Post</button></div></div>';
+  }
+  return h + '</div>';
+}
+function crewRedrawCard(id) {
+  const el = document.getElementById('crewCard_' + id); const a = ST.crew.feed.find(x => x.id === id);
+  if (el && a) { const t = document.createElement('div'); t.innerHTML = crewCardHtml(a); el.replaceWith(t.firstChild); }
+}
+function crewSettingsHtml() {
+  const p = ST.crew.profile;
+  return '<div class="card mb12"><div class="section-label" style="margin-top:0">CREW SETTINGS</div>' +
+    '<div class="field"><label>Call sign</label><input type="text" value="' + crewEsc(p.callsign) + '" disabled></div>' +
+    '<div class="field-row"><div class="field"><label>Home base</label><input id="crewBase" type="text" maxlength="4" value="' + crewEsc(p.base || '') + '" style="text-transform:uppercase"></div><div class="field"><label>Airline (optional)</label><input id="crewAirline" type="text" maxlength="40" value="' + crewEsc(p.airline || '') + '"></div></div>' +
+    '<div class="field"><label>About me (140 characters)</label><input id="crewBio" type="text" maxlength="140" value="' + crewEsc(p.bio || '') + '"></div>' +
+    '<div class="field"><label>Who sees my posts</label><select id="crewVis"><option value="everyone"' + (p.visibility === 'everyone' ? ' selected' : '') + '>Everyone on the feed</option><option value="followers"' + (p.visibility === 'followers' ? ' selected' : '') + '>Only my followers</option></select></div>' +
+    '<div class="fb" style="padding:6px 0 12px"><label for="crewAuto" style="font-size:0.875rem">Post my workouts automatically</label><input id="crewAuto" type="checkbox" style="width:22px;height:22px"' + (p.auto_post !== false ? ' checked' : '') + '></div>' +
+    '<button class="btn btn-gold" onclick="crewSaveSettings()">Save</button>' +
+    '<button class="btn btn-outline mt8" onclick="crewShareRecent(14).then(n=>{showToast(n+\' workouts shared.\');crewGo(\'feed\')})">Share my last 14 days</button>' +
+    '<div id="crewBlocks" style="margin-top:14px"></div>' +
+    '<button class="btn btn-red-outline mt12" onclick="crewLeave()">Leave the crew feed</button>' +
+    '<div style="font-size:0.625rem;color:var(--muted);margin-top:10px;line-height:1.5">Crew rules: ' + CREW_RULES + '</div></div>';
+}
+// comments and blocks point at auth.users, so the call sign comes in a second read.
+async function crewAttachCallsigns(rows) {
+  const ids = [...new Set(rows.map(r => r.user_id).filter(Boolean))];
+  if (!ids.length) return rows;
+  try {
+    const { data } = await withTimeout(SB.from('crew_profiles').select('user_id,callsign').in('user_id', ids));
+    const by = {}; (data || []).forEach(p => { by[p.user_id] = p.callsign; });
+    rows.forEach(r => { r.crew_profiles = { callsign: by[r.user_id] || 'crew' }; });
+  } catch (e) { rows.forEach(r => { r.crew_profiles = r.crew_profiles || { callsign: 'crew' }; }); }
+  return rows;
+}
+async function crewLoadBlocks() {
+  const box = document.getElementById('crewBlocks'); if (!box) return;
+  try {
+    const { data: raw } = await withTimeout(SB.from('crew_blocks').select('blocked_id').eq('blocker_id', ST.user.id));
+    const data = await crewAttachCallsigns((raw || []).map(r => ({ user_id: r.blocked_id, blocked_id: r.blocked_id })));
+    if (!data || !data.length) { box.innerHTML = ''; return; }
+    box.innerHTML = '<div class="section-label">BLOCKED</div>' + data.map(b => '<div class="fb" style="padding:6px 0;font-size:0.8125rem"><span>' + crewEsc(b.crew_profiles?.callsign || b.blocked_id.slice(0, 8)) + '</span><button class="btn-ghost" style="font-size:0.75rem;color:var(--gold)" onclick="crewUnblock(\'' + b.blocked_id + '\')">Unblock</button></div>').join('');
+  } catch (e) { box.innerHTML = ''; }
+}
+function crewFindHtml() {
+  return '<div class="card mb12"><div class="section-label" style="margin-top:0">FIND CREW</div>' +
+    '<div class="field"><input id="crewFindInput" type="text" placeholder="Search by call sign" value="' + crewEsc(ST.crew.find || '') + '" oninput="crewFindTyped(this.value)"></div>' +
+    '<div id="crewFindResults"></div></div>' +
+    (ST.crew.profile.base ? '<div class="card mb12"><div class="section-label" style="margin-top:0">CREW AT ' + crewEsc(ST.crew.profile.base) + ' · THIS MONTH</div><div id="crewBaseBoard"><div style="font-size:0.75rem;color:var(--muted)">Loading…</div></div></div>' : '<div class="card mb12" style="font-size:0.75rem;color:var(--muted)">Set your home base in Crew settings to see the crew at your base.</div>');
+}
+let _crewFindTimer = null;
+function crewFindTyped(v) { ST.crew.find = v; clearTimeout(_crewFindTimer); _crewFindTimer = setTimeout(crewFindRun, 300); }
+async function crewFindRun() {
+  const box = document.getElementById('crewFindResults'); if (!box) return;
+  const q = (ST.crew.find || '').trim(); if (q.length < 2) { box.innerHTML = ''; return; }
+  try {
+    const { data } = await withTimeout(SB.from('crew_profiles').select('user_id,callsign,base').ilike('callsign', '%' + q.replace(/[%_]/g, '') + '%').neq('user_id', ST.user.id).limit(20));
+    box.innerHTML = (data || []).map(crewPersonRow).join('') || '<div style="font-size:0.75rem;color:var(--muted)">No one by that call sign.</div>';
+  } catch (e) { box.innerHTML = '<div style="font-size:0.75rem;color:var(--muted)">Search failed.</div>'; }
+}
+function crewPersonRow(r) {
+  const f = ST.crew.followingSet && ST.crew.followingSet.has(r.user_id);
+  const me = r.user_id === ST.user.id;
+  return '<div class="fb" style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="cursor:pointer" onclick="crewGo(\'profile\',\'' + r.user_id + '\')"><div style="font-size:0.875rem;font-weight:600">' + crewEsc(r.callsign) + (me ? ' (you)' : '') + '</div><div style="font-size:0.6875rem;color:var(--muted)">' + [r.base, r.month_miles != null ? Number(r.month_miles) + ' mi' : null, r.month_sessions != null ? r.month_sessions + ' sessions' : null].filter(Boolean).join(' · ') + '</div></div>' +
+    (me ? '' : '<button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid ' + (f ? 'var(--border)' : 'var(--gold)') + ';border-radius:8px;color:' + (f ? 'var(--muted)' : 'var(--gold)') + '" onclick="crewFollow(\'' + r.user_id + '\',' + (f ? 'false' : 'true') + ')">' + (f ? 'Following' : 'Follow') + '</button>') + '</div>';
+}
+async function crewLoadBaseBoard() {
+  const box = document.getElementById('crewBaseBoard'); if (!box || !ST.crew.profile.base) return;
+  try {
+    const { data, error } = await withTimeout(SB.rpc('crew_base_board', { p_base: ST.crew.profile.base })); if (error) throw error;
+    box.innerHTML = (data || []).map(crewPersonRow).join('') || '<div style="font-size:0.75rem;color:var(--muted)">You are the first at ' + crewEsc(ST.crew.profile.base) + '. Tell your crew.</div>';
+  } catch (e) { box.innerHTML = '<div style="font-size:0.75rem;color:var(--muted)">Could not load.</div>'; }
+}
+async function crewLoadProfileHeader(userId) {
+  const box = document.getElementById('crewProfileHead'); if (!box) return;
+  try {
+    const [{ data: p }, { data: c }] = await Promise.all([
+      withTimeout(SB.from('crew_profiles').select('user_id,callsign,base,airline,bio,visibility').eq('user_id', userId).maybeSingle()),
+      withTimeout(SB.rpc('crew_profile_counts', { p_user: userId })) ]);
+    if (!p) { box.innerHTML = '<div style="font-size:0.75rem;color:var(--muted)">This member has left the crew feed.</div>'; return; }
+    const k = (c && c[0]) || {}; const me = userId === ST.user.id; const f = ST.crew.followingSet && ST.crew.followingSet.has(userId);
+    box.innerHTML = '<div class="fb" style="align-items:flex-start"><div><div style="font-size:1.125rem;font-weight:600">' + crewEsc(p.callsign) + '</div><div style="font-size:0.75rem;color:var(--muted)">' + [p.base, p.airline].filter(Boolean).map(crewEsc).join(' · ') + '</div>' + (p.bio ? '<div style="font-size:0.8125rem;margin-top:6px;line-height:1.5">' + crewEsc(p.bio) + '</div>' : '') + '</div>' +
+      (me ? '<button class="btn-ghost" style="font-size:0.75rem;color:var(--gold)" onclick="crewGo(\'settings\')">Settings</button>' : '<div style="display:flex;flex-direction:column;gap:6px"><button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid ' + (f ? 'var(--border)' : 'var(--gold)') + ';border-radius:8px;color:' + (f ? 'var(--muted)' : 'var(--gold)') + '" onclick="crewFollow(\'' + userId + '\',' + (f ? 'false' : 'true') + ')">' + (f ? 'Following' : 'Follow') + '</button><button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewReport(\'profile\',\'' + userId + '\')">Report</button><button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewBlock(\'' + userId + '\',\'' + crewEsc(p.callsign).replace(/'/g, '') + '\')">Block</button></div>') + '</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:12px">' + [['FOLLOWERS', k.followers], ['FOLLOWING', k.following], ['POSTS', k.activities], ['MI THIS MO', Number(k.month_miles || 0)]].map(([l, v]) => '<div style="text-align:center"><div style="font-family:var(--mono);font-size:1rem;font-weight:600">' + (v ?? 0) + '</div><div style="font-size:0.5625rem;color:var(--muted);letter-spacing:.1em">' + l + '</div></div>').join('') + '</div>';
+  } catch (e) { box.innerHTML = '<div style="font-size:0.75rem;color:var(--muted)">Could not load this profile.</div>'; }
+}
+function renderCrew(parts) {
+  const c = ST.crew;
+  if (!c.loaded) { parts.push('<div class="card mb12" style="text-align:center;color:var(--muted);font-size:0.75rem">Loading…</div>'); loadCrewProfile().then(renderPage); return; }
+  if (!c.profile) { parts.push(crewJoinCardHtml()); return; }
+  if (!c.followingSet) crewLoadFollowing().then(renderPage);
+  const nav = (v, label) => '<button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;' + (c.view === v ? 'color:var(--gold);font-weight:600' : '') + '" onclick="crewGo(\'' + v + '\')">' + label + '</button>';
+  parts.push('<div class="fb" style="margin-bottom:6px"><div>' + nav('feed', 'Feed') + nav('find', 'Find crew') + '</div><div>' + nav('settings', '⚙︎') + '</div></div>');
+  if (c.view === 'settings') { parts.push(crewSettingsHtml()); setTimeout(crewLoadBlocks, 0); return; }
+  if (c.view === 'find') { parts.push(crewFindHtml()); setTimeout(() => { crewLoadBaseBoard(); crewFindRun(); }, 0); return; }
+  if (c.view === 'profile') {
+    parts.push('<button class="btn-ghost" style="font-size:0.75rem;padding:6px 0;margin-bottom:8px" onclick="crewGo(\'feed\')">← Feed</button>');
+    parts.push('<div class="card mb12" id="crewProfileHead"><div style="font-size:0.75rem;color:var(--muted)">Loading…</div></div>');
+    setTimeout(() => crewLoadProfileHeader(c.viewUser), 0);
+  } else {
+    const seg = (s, label) => '<div class="env-btn" style="padding:8px 4px' + (c.scope === s ? ';border-color:var(--gold);background:rgba(212,175,55,0.08)' : '') + '" onclick="crewSetScope(\'' + s + '\')"><div style="font-size:0.6875rem;font-weight:700">' + label + '</div></div>';
+    parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:12px">' + seg('following', 'FOLLOWING') + seg('base', 'MY BASE') + seg('all', 'EVERYONE') + '</div>');
+  }
+  const key = c.view + ':' + c.scope + ':' + (c.viewUser || '');
+  if (c.loadedKey !== key) {
+    c.loadedKey = key;
+    parts.push('<div id="crewFeedBox"><div class="card mb12" style="text-align:center;color:var(--muted);font-size:0.75rem">Loading…</div></div>');
+    crewLoadFeed(false).then(() => { const box = document.getElementById('crewFeedBox'); if (box) box.innerHTML = crewFeedListHtml(); }).catch(() => { const box = document.getElementById('crewFeedBox'); if (box) box.innerHTML = '<div class="card mb12" style="font-size:0.75rem;color:var(--muted)">Could not load the feed. <button class="btn-ghost" style="color:var(--gold)" onclick="ST.crew.loadedKey=null;renderPage()">Try again</button></div>'; });
+    return;
+  }
+  parts.push('<div id="crewFeedBox">' + crewFeedListHtml() + '</div>');
+}
+function crewFeedListHtml() {
+  const c = ST.crew;
+  if (!c.feed.length) {
+    const msg = c.view === 'profile' ? 'No posts yet.' : c.scope === 'following' ? 'Nobody followed yet. Tap Find crew, or switch to Everyone.' : c.scope === 'base' ? 'No posts from your base yet.' : 'Nothing on the feed yet. Log a workout and it shows up here.';
+    return '<div class="card mb12" style="font-size:0.8125rem;color:var(--muted);line-height:1.6">' + msg + '</div>';
+  }
+  return c.feed.map(crewCardHtml).join('') + (c.feedEnd ? '' : '<button class="btn btn-outline mb12" onclick="crewLoadFeed(true).then(()=>{document.getElementById(\'crewFeedBox\').innerHTML=crewFeedListHtml()})">Load more</button>');
+}
+
 function renderLeaderboard(p) {
   const parts = [];
+  // Crew feed or the boards. Default to the feed once a member has joined.
+  if (!ST.ranksSeg) ST.ranksSeg = crewIsMember() ? 'crew' : 'boards';
+  const segTop = (v, label) => '<div class="env-btn" style="padding:10px 4px' + (ST.ranksSeg === v ? ';border-color:var(--gold);background:rgba(212,175,55,0.08)' : '') + '" onclick="ST.ranksSeg=\'' + v + '\';renderPage()"><div style="font-size:0.75rem;font-weight:700">' + label + '</div></div>';
+  parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:4px 0 12px">' + segTop('crew', '👥 CREW') + segTop('boards', '🏆 BOARDS') + '</div>');
+  if (ST.ranksSeg === 'crew') { renderCrew(parts); p.innerHTML = parts.join(''); return; }
   parts.push('<div class="section-label">RANKS</div>');
   if (!ST.username) {
     parts.push('<div class="card mb12" style="border-color:var(--gold)">');
@@ -3644,6 +4059,7 @@ async function bootAppInner() {
   ST.muscleGroup = getRecommendedNext();
   renderRoot();
   _bootRenderDone = true;
+  loadCrewProfile().catch(() => {});
 
   // Apply a notification-tap tab request that arrived before boot/auth was
   // ready (see the fcf:pushTap listener's comment for why this can happen
@@ -8070,6 +8486,7 @@ async function saveEditedSession() {
       if (ST.user) q = q.eq('user_id', ST.user.id);
       const { error } = await q;
       if (error) throw error;
+      if (crewIsMember()) crewPostSession(s, ed.key).catch(() => {});
     }
     ST.calendarSessions = {};
     await withDialogSpinner('Saving workout…', () => loadSessionCache());
@@ -11802,6 +12219,7 @@ async function setTheChocks() {
     }]);
     if (error) throw error;
     showToast('✅ Chocks set. Data synced.');
+    crewPostSession(session, savedKey).catch(() => {});
     cancelWorkoutReminderNative(); // suppress 3-day reminder — user just trained
   } catch(e) {
     showToast('⚠️ Saved locally. Will sync when online.');

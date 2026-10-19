@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.46.4 / 20261018_9
+ * Version/build: fcf-v5.46.5 / 20261018_10
  */
 
-const FCF_VERSION = 'fcf-v5.46.4';
-const FCF_BUILD   = '20261018_9';
+const FCF_VERSION = 'fcf-v5.46.5';
+const FCF_BUILD   = '20261018_10';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -2142,7 +2142,7 @@ function renderRoot() {
   page.style.padding = '16px 16px calc(60px + var(--safe-bot))';
   
   const subEl = document.getElementById('topbarSub');
-  if (subEl) subEl.textContent = FCF_VERSION + ' · MISSION CONTROL';
+  if (subEl) subEl.textContent = FCF_VERSION + ' · FLIGHT RELEASE';
   
   renderPage();
 }
@@ -7577,7 +7577,10 @@ async function showCalendarDay(isoDate) {
 // Photos works. A phone that cannot share files from the page still gets
 // the full-screen card to screenshot.
 const SHARE_TAGLINE = 'Engineered for the flight deck. Built for the layover.';
-const SHARE_MAX_ROWS = 6;
+// Every exercise is shown (reported: the card cut off after the first
+// few). drawShareCard shrinks rows, then grows the picture up to Story
+// height (1080 x 1920) when a long workout needs it.
+const SHARE_MAX_ROWS = 40;
 function shareCardData(session, summary, rows) {
   const all = rows || [];
   const fits = all.length <= SHARE_MAX_ROWS;
@@ -7627,8 +7630,21 @@ function shareButtonHtml(key, cls) {
   return '<button class="btn btn-outline ' + (cls || 'mt8') + '" onclick="haptic(\'light\');openShareCard(\'' + key + '\')">📤 SHARE THIS WORKOUT</button>';
 }
 
+// Row height for the exercise list: 66 px when it fits in the standard
+// 4:5 card, down to 44 px, then the card grows (up to 1920 tall), then
+// rows shrink again (to 30 px) so even a very long workout fits.
+function shareCardLayout(n) {
+  const BASE_H = 1350, MAX_H = 1920, AVAIL = 1150 - 784;
+  let rowH = 66, H = BASE_H;
+  if (n * rowH > AVAIL) rowH = Math.max(44, AVAIL / n);
+  if (n * rowH > AVAIL) H = Math.min(MAX_H, BASE_H + Math.ceil(n * rowH - AVAIL));
+  const avail = AVAIL + (H - BASE_H);
+  if (n * rowH > avail) rowH = Math.max(30, avail / n);
+  return { H, rowH, extra: H - BASE_H };
+}
 function drawShareCard(canvas, d) {
-  const W = 1080, H = 1350, P = 72;
+  const L = shareCardLayout(d.rows.length + (d.more > 0 ? 1 : 0));
+  const W = 1080, H = L.H, P = 72, EX = L.extra;
   canvas.width = W; canvas.height = H;
   const c = canvas.getContext('2d');
   const MONO = '"Share Tech Mono", ui-monospace, Menlo, monospace', SANS = 'Inter, -apple-system, "Helvetica Neue", Arial, sans-serif';
@@ -7683,24 +7699,25 @@ function drawShareCard(canvas, d) {
   if (d.rows.length) {
     c.fillStyle = MUTED; c.font = '24px ' + MONO; spaced('EXERCISES', P, y, 7);
     y += 24;
+    const k = L.rowH / 66;
     d.rows.forEach(r => {
-      const mid = y + 42;
-      c.font = (r.pr ? '700 ' : '') + '31px ' + MONO; const perfW = c.measureText(r.perf).width;
+      const mid = y + Math.round(42 * k);
+      c.font = (r.pr ? '700 ' : '') + Math.round(31 * Math.max(k, 0.7)) + 'px ' + MONO; const perfW = c.measureText(r.perf).width;
       c.fillStyle = r.pr ? GOLD2 : TEXT; c.textAlign = 'right'; c.fillText(r.perf, W - P, mid);
       let nx = P;
-      if (r.pr) { c.fillStyle = GOLD2; star(P + 17, mid - 12, 18); nx = P + 46; }
-      c.fillStyle = TEXT; c.font = '500 35px ' + SANS; c.textAlign = 'left';
+      if (r.pr) { c.fillStyle = GOLD2; star(P + 17 * k, mid - 12 * k, 18 * k); nx = P + Math.round(46 * k); }
+      c.fillStyle = TEXT; c.font = '500 ' + Math.round(35 * Math.max(k, 0.7)) + 'px ' + SANS; c.textAlign = 'left';
       c.fillText(fit(r.name, W - P - perfW - 36 - nx), nx, mid);
-      c.fillStyle = 'rgba(136,153,180,0.22)'; c.fillRect(P, y + 64, W - 2 * P, 2);
-      y += 66;
+      c.fillStyle = 'rgba(136,153,180,0.22)'; c.fillRect(P, y + L.rowH - 2, W - 2 * P, 2);
+      y += L.rowH;
     });
     if (d.more > 0) { c.fillStyle = MUTED; c.font = '26px ' + MONO; c.textAlign = 'left'; c.fillText('+ ' + d.more + ' more', P, y + 40); }
   }
 
   // Where to get it
-  c.fillStyle = rule; c.fillRect(P, 1178, W - 2 * P, 3);
-  c.fillStyle = MUTED; c.font = '500 30px ' + SANS; c.textAlign = 'left'; c.fillText(d.tagline, P, 1234);
-  c.fillStyle = GOLD2; c.font = '60px ' + MONO; spaced(d.url, P, 1304, 4);
+  c.fillStyle = rule; c.fillRect(P, 1178 + EX, W - 2 * P, 3);
+  c.fillStyle = MUTED; c.font = '500 30px ' + SANS; c.textAlign = 'left'; c.fillText(d.tagline, P, 1234 + EX);
+  c.fillStyle = GOLD2; c.font = '60px ' + MONO; spaced(d.url, P, 1304 + EX, 4);
   return canvas;
 }
 
@@ -15086,29 +15103,19 @@ function renderMore(p) {
     '<div><div style="font-size:0.875rem;font-weight:600">'+title+'</div>' +
     '<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">'+sub+'</div></div></div>' +
     '<div style="color:var(--muted)">→</div></div></div>';
-  const earnedCount = BADGES.filter(b => ST.badges[b.id]).length;
+  // Menu order (owner, Oct 18: clean up the menu): your stuff, then app
+  // settings, subscription, share and feedback, legal, sign out, delete.
+  // Badges moved off the menu; they live on Ranks.
+  if (isSuperUser()) parts.push(item('🛡️','Super User','Sales, signups and activity',"switchTab('superuser')"));
   parts.push(item('👤','Pilot Profile','Identity, metrics &amp; mission objectives',"switchTab('profile')"));
-  parts.push(item('🏅','Badges',earnedCount+' of '+BADGES.length+' earned',"switchTab('badges')"));
   parts.push(item('⌚','Connected Devices','Apple Health, Apple Watch, Oura Ring',"switchTab('devices')"));
-  parts.push(item('📖','Flight Deck Wisdom','Daily training wisdom cards',"switchTab('wisdom')"));
-  parts.push(item('📊','Data & Import/Export','Flight schedule import, CSV export, AI prompt',"switchTab('data')"));
   if (ST.trackNutrition) parts.push(item('🍽️','Nutrition Log','Log meals, search foods, track macros',"switchTab('nutrition')"));
   if (medicalEnabled()) parts.push(item('🩺','FAA Medical','Certificate dates, medication check, exam prep (preview)',"switchTab('medical')"));
-  if (isSuperUser()) {
-    parts.push(item('🛡️','Super User','Pilot activity insights',"switchTab('superuser')"));
-  }
+  parts.push(item('📊','Data & Import/Export','Flight schedule import, CSV export, AI prompt',"switchTab('data')"));
+  parts.push(item('📖','Flight Deck Wisdom','Daily training wisdom cards',"switchTab('wisdom')"));
 
-  parts.push('<div class="card mb12">');
-  parts.push('<button class="btn btn-outline" onclick="shareApp()">📡 Share with Crew</button>');
-  parts.push('<button class="btn btn-outline mt8" onclick="showFeedbackModal()">💬 Send Feedback</button>');
-  parts.push('</div>');
-
-  parts.push('<div class="card mb12"><div class="disclaimer-banner">Flight Crew Fitness is a training tool, not medical advice. Consult a physician before beginning any new exercise program. Exercise at your own risk and within your own physical limits.</div></div>');
-  parts.push('<button class="btn btn-red-outline" onclick="doSignOut()">Sign Out</button>');
-
+  parts.push('<div class="section-label" style="margin-top:20px">APP SETTINGS</div>');
   parts.push(renderTextSizeControl());
-  // Subscription status, and the legal links Apple requires to be reachable
-  // from inside the app rather than only on the store listing.
   parts.push(renderTrackingToggles());
 
   parts.push('<div class="section-label" style="margin-top:20px">SUBSCRIPTION</div>');
@@ -15182,10 +15189,19 @@ function renderMore(p) {
   // promoCodeCardHTML for why).
   parts.push(promoCodeCardHTML());
 
+  parts.push('<div class="card mb12">');
+  parts.push('<button class="btn btn-outline" onclick="shareApp()">📡 Share with Crew</button>');
+  parts.push('<button class="btn btn-outline mt8" onclick="showFeedbackModal()">💬 Send Feedback</button>');
+  parts.push('</div>');
+
+  parts.push('<div class="card mb12"><div class="disclaimer-banner">Flight Crew Fitness is a training tool, not medical advice. Consult a physician before beginning any new exercise program. Exercise at your own risk and within your own physical limits.</div></div>');
+  // Legal links Apple requires to be reachable inside the app.
   parts.push('<div class="card mb12" style="padding:0">');
   parts.push('<a class="modal-link" style="display:block;padding:14px 16px;border-bottom:1px solid var(--border)" href="'+PRIVACY_POLICY_URL+'" '+externalLinkAttrs()+'>Privacy Policy</a>');
   parts.push('<a class="modal-link" style="display:block;padding:14px 16px" href="'+TERMS_URL+'" '+externalLinkAttrs()+'>Terms of Use</a>');
   parts.push('</div>');
+
+  parts.push('<button class="btn btn-red-outline mb12" onclick="doSignOut()">Sign Out</button>');
 
   // Apple has required in-app account deletion since 2022 for any app that
   // supports account creation — its absence is an automatic rejection.
@@ -15301,67 +15317,56 @@ async function loadSuperUserStats() {
   const el = document.getElementById('suStats');
   if (!el) return;
   try {
-    const { data, error } = await withTimeout(SB.from('workout_sessions').select('user_id,started_at').limit(20000));
+    const { data: d, error } = await withTimeout(SB.rpc('admin_stats'), 20000);
     if (error) throw error;
-    const now = Date.now();
-    const DAY = 86400000;
-    const seenAll = new Set(), seen7 = new Set(), seen30 = new Set();
-    let sessions7 = 0, sessions30 = 0;
-    (data || []).forEach(r => {
-      if (!r.user_id) return;
-      seenAll.add(r.user_id);
-      const t = new Date(r.started_at).getTime();
-      if (isNaN(t)) return;
-      const ageDays = (now - t) / DAY;
-      if (ageDays <= 7)  { seen7.add(r.user_id); sessions7++; }
-      if (ageDays <= 30) { seen30.add(r.user_id); sessions30++; }
-    });
-    const stat = (n, lbl) => '<div class="stat-box"><div class="stat-val">'+n+'</div><div class="stat-lbl">'+lbl+'</div></div>';
-    el.innerHTML =
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">' +
-      stat(seen7.size, 'Active (7 Days)') + stat(seen30.size, 'Active (30 Days)') +
-      '</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
-      stat(sessions7, 'Sessions (7 Days)') + stat(seenAll.size, 'All-Time Active Users') +
-      '</div>';
-  } catch(e) {
+    el.innerHTML = superUserStatsHtml(d);
+  } catch (e) {
     const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
-    el.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:0.75rem">'+(offline
-      ? '📡 Needs a connection to load.'
-      : 'Couldn\'t load. The admin read policy on workout_sessions may not be set up yet.')+'</div>';
+    el.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:0.75rem">' + (offline ? '📡 Needs a connection to load.' : 'Could not load the numbers. <button class="btn-ghost" style="color:var(--gold)" onclick="loadSuperUserStats()">Try again</button>') + '</div>';
   }
+}
+// Owner numbers. Revenue is an estimate: active paid subscriptions at list
+// price (Apple's and Stripe's own reports are the real figures).
+function superUserStatsHtml(d) {
+  const priceNum = s => parseFloat(String(s).replace(/[^0-9.]/g, '')) || 0;
+  const monthly = priceNum(PRO_MONTHLY_PRICE), annual = priceNum(PRO_ANNUAL_PRICE);
+  const subs = d.subs || [];
+  const count = f => subs.filter(f).reduce((n, r) => n + Number(r.n || 0), 0);
+  const paid = r => r.platform === 'ios' || r.platform === 'web';
+  const isAnnual = r => /annual|year/i.test(r.product || '');
+  const iosM = count(r => r.platform === 'ios' && !isAnnual(r)), iosA = count(r => r.platform === 'ios' && isAnnual(r));
+  const webM = count(r => r.platform === 'web' && !isAnnual(r)), webA = count(r => r.platform === 'web' && isAnnual(r));
+  const promo = count(r => !paid(r));
+  const paidTotal = iosM + iosA + webM + webA;
+  const mrr = Math.round((iosM + webM) * monthly + (iosA + webA) * annual / 12);
+  const stat = (n, lbl) => '<div class="stat-box"><div class="stat-val">' + n + '</div><div class="stat-lbl">' + lbl + '</div></div>';
+  const grid = items => '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">' + items.join('') + '</div>';
+  const label = t => '<div class="section-label" style="margin-top:6px">' + t + '</div>';
+  const objNames = Object.assign({ unset: 'Not set' }, Object.fromEntries(Object.entries(GOALS).map(([k, g]) => [k, g.label])));
+  const objs = Object.entries(d.objectives || {}).sort((x, y) => y[1] - x[1]);
+  return label('SALES') +
+    grid([stat('$' + mrr.toLocaleString(), 'Est. monthly revenue'), stat(paidTotal, 'Paying subscribers')]) +
+    grid([stat(iosM + ' / ' + iosA, 'iOS monthly / annual'), stat(webM + ' / ' + webA, 'Web monthly / annual')]) +
+    grid([stat(promo, 'Comp / promo Pro'), stat(d.subs_lapsed || 0, 'Lapsed or cancelled')]) +
+    '<div style="font-size:0.625rem;color:var(--muted);margin:-2px 0 10px;line-height:1.5">Estimate at list price (' + PRO_MONTHLY_PRICE + '/mo, ' + PRO_ANNUAL_PRICE + '/yr) before Apple\'s cut. App Store Connect and Stripe have the real figures.</div>' +
+    label('SIGNUPS') +
+    grid([stat(d.users_total || 0, 'Accounts'), stat((d.users_new_7 || 0) + ' / ' + (d.users_new_30 || 0), 'New 7 / 30 days')]) +
+    label('ACTIVITY') +
+    grid([stat((d.active_7 || 0) + ' / ' + (d.active_30 || 0), 'Active 7 / 30 days'), stat((d.sessions_7 || 0) + ' / ' + (d.sessions_30 || 0), 'Workouts 7 / 30 days')]) +
+    grid([stat(d.oura_connected || 0, 'Oura connected'), stat((d.crew_members || 0) + ' / ' + (d.crew_posts_7 || 0), 'Crew members / posts 7d')]) +
+    (d.crew_reports_open ? '<div style="font-size:0.75rem;color:var(--amber);margin-bottom:8px">⚠️ ' + d.crew_reports_open + ' crew report' + (d.crew_reports_open === 1 ? '' : 's') + ' on file. Ask Claude to pull them.</div>' : '') +
+    label('MISSION OBJECTIVES') +
+    '<div class="card" style="padding:8px 12px">' + objs.map(([k, n]) => '<div class="fb" style="padding:5px 0;font-size:0.8125rem;border-bottom:1px solid var(--border)"><span>' + (objNames[k] || k) + '</span><span style="font-family:var(--mono)">' + n + '</span></div>').join('') + '</div>' +
+    '<div style="font-size:0.625rem;color:var(--muted);margin-top:8px">"Active" means at least one workout logged in the app (ring-detected activity not counted).</div>';
 }
 
 function renderSuperUser(p) {
   if (!isSuperUser()) { p.innerHTML = '<div class="section-label">NOT AUTHORIZED</div>'; return; }
   const parts = [moreBackLink()];
-  parts.push('<div class="section-label" style="margin-top:0">SUPER USER · ACTIVITY REPORT</div>');
-  parts.push('<div class="card mb12">');
-  parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:10px;line-height:1.5">"Active" means a real logged workout, not just an account existing (a truer signal than raw signups, which aren\'t readable from the app at all).</div>');
-  parts.push('<div id="suStats" style="text-align:center;color:var(--muted);font-size:0.75rem">Loading…</div>');
-  parts.push('</div>');
-  parts.push('<div class="card mb12">');
-  parts.push('<div class="section-label" style="margin-top:0">TEMP: RAW OURA WORKOUT DUMP</div>');
-  parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:10px;line-height:1.5">One-time diagnostic: an auto-detected treadmill run imported with no duration. Dumps the raw Oura workout data for the last 3 days to see exactly what fields an auto-detected session actually has, compared to a manually-confirmed one.</div>');
-  parts.push('<button class="btn btn-outline" onclick="dumpRawOuraWorkouts()">🔬 Dump Raw Workout Data</button>');
-  parts.push('<div id="ouraDumpResults" style="margin-top:10px;font-family:var(--mono);font-size:0.5625rem;color:var(--muted);word-break:break-all;white-space:pre-wrap"></div>');
-  parts.push('</div>');
+  parts.push('<div class="section-label" style="margin-top:0">SUPER USER</div>');
+  parts.push('<div class="card mb12"><div id="suStats" style="text-align:center;color:var(--muted);font-size:0.75rem">Loading…</div></div>');
   p.innerHTML = parts.join('');
   loadSuperUserStats();
-}
-
-async function dumpRawOuraWorkouts() {
-  const box = document.getElementById('ouraDumpResults');
-  if (!box) return;
-  if (!ST.ouraAccessToken) { box.innerHTML = 'Connect Oura Ring first.'; return; }
-  box.innerHTML = 'Loading…';
-  const today = new Date().toISOString().slice(0,10);
-  const threeDaysAgo = new Date(Date.now()-3*86400000).toISOString().slice(0,10);
-  try {
-    const res = await ouraFetch('workout?start_date='+threeDaysAgo+'&end_date='+today);
-    box.innerHTML = JSON.stringify(res?.data || [], null, 2);
-  } catch(e) {
-    box.innerHTML = 'Error: ' + (e.message || 'failed');
-  }
 }
 
 // ─── NUTRITION LOGGING (foundation — manual entry + USDA lookup) ──────────

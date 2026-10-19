@@ -1214,12 +1214,15 @@ test('the share card carries the workout and the brand, and nothing private', ()
   assertEqual(d.tagline.length > 10, true, 'tagline');
   assertEqual(/hotel|Condition|go\b/.test(JSON.stringify(d)), false, 'no location or condition');
 });
-test('a long workout is trimmed to fit the card and says how much was left off', () => {
+test('every exercise is on the card (reported: cut off after the first few)', () => {
   const d = ctx.shareCardData(shSession, shSummary, shRows);
-  assertEqual(d.rows.length, 5, 'five rows shown'); assertEqual(d.more, 3, 'three more noted');
+  assertEqual(d.rows.length + ':' + d.more, '8:0', 'all eight shown, nothing left off');
   assertEqual(d.rows.find(r => r.name === 'Step-Up').pr, true, 'a personal record is marked');
-  const short = ctx.shareCardData(shSession, shSummary, shRows.slice(0, 6));
-  assertEqual(short.rows.length, 6, 'six fit without a "more" line'); assertEqual(short.more, 0, 'nothing left off');
+  const L5 = ctx.shareCardLayout(5), L8 = ctx.shareCardLayout(8), L12 = ctx.shareCardLayout(12), L30 = ctx.shareCardLayout(30);
+  assertEqual(L5.H + ':' + L5.rowH, '1350:66', 'short workout: standard card, full-size rows');
+  assertEqual(L8.H + ':' + Math.round(L8.rowH), '1350:46', 'eight: rows shrink, card stays 4:5');
+  assertEqual(L12.H > 1350 && L12.rowH === 44, true, 'twelve: card grows taller: ' + L12.H);
+  assertEqual(L30.H + ':' + (L30.rowH >= 30), '1920:true', 'thirty: Story height, rows no smaller than 30 px');
 });
 test('the caption names the app and links to it', () => {
   const c = ctx.shareCaption(ctx.shareCardData(shSession, shSummary, shRows));

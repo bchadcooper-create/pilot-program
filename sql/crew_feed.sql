@@ -205,3 +205,7 @@ alter table crew_follows add constraint crew_follows_follower_fk foreign key (fo
 alter table crew_follows add constraint crew_follows_followee_fk foreign key (followee_id) references crew_profiles(user_id) on delete cascade;
 alter table crew_blocks add constraint crew_blocks_blocker_fk foreign key (blocker_id) references crew_profiles(user_id) on delete cascade;
 alter table crew_blocks add constraint crew_blocks_blocked_fk foreign key (blocked_id) references crew_profiles(user_id) on delete cascade;
+
+-- Oct 18 2026: owner dashboard (Super User page). Aggregates only; raises
+-- for anyone but the owner's account.
+-- (see migration admin_stats_for_owner; body kept in Supabase)

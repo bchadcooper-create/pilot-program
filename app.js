@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.46.2 / 20261018_7
+ * Version/build: fcf-v5.46.3 / 20261018_8
  */
 
-const FCF_VERSION = 'fcf-v5.46.2';
-const FCF_BUILD   = '20261018_7';
+const FCF_VERSION = 'fcf-v5.46.3';
+const FCF_BUILD   = '20261018_8';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -1832,9 +1832,9 @@ async function dbGetRecentSessions(days) {
   const since = new Date(Date.now() - days*24*60*60*1000).toISOString();
   try {
     const filter = ST.user ? SB.from('workout_sessions').select('*').eq('user_id', ST.user.id) : SB.from('workout_sessions').select('*');
-    const { data, error } = await withTimeout(filter.gte('started_at', since).order('started_at', { ascending: true }));
+    const { data, error } = await withTimeout(filter.gte('started_at', since).order('started_at', { ascending: true }), 15000);
     if (error) throw error;
-    return (data||[]).map(r => r.session_data).filter(Boolean);
+    return sessionsFromRows(data);
   } catch(e) {
     const keys = Object.keys(localStorage).filter(k => k.startsWith('fcf_session_'));
     const sessions = keys.map(k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } }).filter(Boolean);
@@ -9781,30 +9781,54 @@ function nextWeightFrom(last, exName, phaseKey) {
   const increment = (phaseKey==='takeoff' && isLower) ? 5 : 2.5;
   return last + increment;
 }
-async function loadSessionCache() {
-  try {
-    // Recent-90-days fetch and the full-history fetch (for older entries
-    // saved before started_at existed) are independent — run them in
-    // parallel so offline they share one timeout window instead of stacking.
-    const fullFetch = ST.user
-      ? withTimeout(SB.from('workout_sessions')
-          .select('*').eq('user_id', ST.user.id)
-          .order('started_at', { ascending: true })).catch(() => ({ data: null }))
-      : Promise.resolve({ data: null });
-    let [sessions, { data }] = await Promise.all([dbGetRecentSessions(90), fullFetch]);
-    if (data && data.length > sessions.length) {
-      sessions = data.map(r => r.session_data).filter(Boolean);
-    }
-    // Also include lastSession which is always loaded
-    if (ST.lastSession && !sessions.find(s => s.date === ST.lastSession.date)) {
-      sessions.push(ST.lastSession);
-    }
-    ST.sessionCache = sessions;
-  } catch(e) {
-    // Fall back to localStorage sessions
-    const keys = Object.keys(localStorage).filter(k => k.startsWith('fcf_session_'));
-    ST.sessionCache = keys.map(k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } }).filter(Boolean);
-    if (ST.lastSession) ST.sessionCache.push(ST.lastSession);
+// Workout history for everything that looks back (trends, coach, badges,
+// rotation, crew sharing). BUG FIX (reported: Strength & Performance
+// trends vanished on a slow connection). Both fetches had a 6 s limit, and
+// when they ran out the cache silently became the handful of sessions
+// saved on the phone, too few for any trend. Now: 20 s for the full
+// history, a device copy of the last good download as the fallback, never
+// replace a bigger list with a smaller one on failure, and retry in the
+// background and redraw when the real list arrives.
+const SESSION_CACHE_KEY = 'fcf_session_cache_v1';
+function sessionsFromRows(rows) {
+  // _key (the row's session_key) lets crew sharing and editing find the row.
+  return (rows || []).map(r => r.session_data ? Object.assign({}, r.session_data, { _key: r.session_key }) : null).filter(Boolean);
+}
+let _sessionRetryTimer = null;
+async function loadSessionCache(isRetry) {
+  let fresh = null;
+  if (ST.user) {
+    try {
+      const { data, error } = await withTimeout(SB.from('workout_sessions')
+        .select('session_key,session_data,started_at').eq('user_id', ST.user.id)
+        .order('started_at', { ascending: true }), 20000);
+      if (error) throw error;
+      fresh = sessionsFromRows(data);
+    } catch (e) { console.warn('session history fetch failed:', e && e.message); }
+  }
+  if (fresh) {
+    if (ST.lastSession && !fresh.find(s => s.date === ST.lastSession.date)) fresh.push(ST.lastSession);
+    ST.sessionCache = fresh;
+    try { localStorage.setItem(SESSION_CACHE_KEY, JSON.stringify({ user: ST.user.id, sessions: fresh })); } catch (e) {}
+    return;
+  }
+  // Failed: use the best list we have, never shrink.
+  let device = [];
+  try { const c = JSON.parse(localStorage.getItem(SESSION_CACHE_KEY) || 'null'); if (c && ST.user && c.user === ST.user.id) device = c.sessions || []; } catch (e) {}
+  const local = Object.keys(localStorage).filter(k => k.startsWith('fcf_session_') && k !== SESSION_CACHE_KEY)
+    .map(k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }).filter(Boolean);
+  const merged = device.slice();
+  local.forEach(s => { if (!merged.find(m => m.date === s.date)) merged.push(s); });
+  if (ST.lastSession && !merged.find(s => s.date === ST.lastSession.date)) merged.push(ST.lastSession);
+  merged.sort((x, y) => new Date(x.date) - new Date(y.date));
+  if (!ST.sessionCache || merged.length >= ST.sessionCache.length) ST.sessionCache = merged;
+  if (ST.user && !isRetry) {
+    clearTimeout(_sessionRetryTimer);
+    _sessionRetryTimer = setTimeout(async () => {
+      const before = (ST.sessionCache || []).length;
+      await loadSessionCache(true);
+      if ((ST.sessionCache || []).length !== before && ['trends', 'today', 'leaderboard'].includes(ST.tab)) renderPage();
+    }, 8000);
   }
 }
 

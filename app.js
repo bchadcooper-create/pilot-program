@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.46.3 / 20261018_8
+ * Version/build: fcf-v5.46.4 / 20261018_9
  */
 
-const FCF_VERSION = 'fcf-v5.46.3';
-const FCF_BUILD   = '20261018_8';
+const FCF_VERSION = 'fcf-v5.46.4';
+const FCF_BUILD   = '20261018_9';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -2992,8 +2992,9 @@ function renderCrew(parts) {
   if (!c.loaded) { parts.push('<div class="card mb12" style="text-align:center;color:var(--muted);font-size:0.75rem">Loading…</div>'); loadCrewProfile().then(renderPage); return; }
   if (!c.profile) { parts.push(crewJoinCardHtml()); return; }
   if (!c.followingSet) crewLoadFollowing().then(renderPage);
-  const nav = (v, label) => '<button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;' + (c.view === v ? 'color:var(--gold);font-weight:600' : '') + '" onclick="crewGo(\'' + v + '\')">' + label + '</button>';
-  parts.push('<div class="fb" style="margin-bottom:6px"><div>' + nav('feed', 'Feed') + nav('find', 'Find crew') + '</div><div>' + nav('settings', '⚙︎') + '</div></div>');
+  // Full-size buttons (reported: the gear for settings was too small to tap).
+  const nav = (v, label) => '<div class="env-btn" style="padding:10px 4px' + (c.view === v || (v === 'feed' && c.view === 'profile') ? ';border-color:var(--gold);background:rgba(212,175,55,0.08)' : '') + '" onclick="crewGo(\'' + v + '\')"><div style="font-size:0.75rem;font-weight:700;color:var(--text)">' + label + '</div></div>';
+  parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:12px">' + nav('feed', '📰 Feed') + nav('find', '🔎 Find') + nav('settings', '⚙️ Settings') + '</div>');
   if (c.view === 'settings') { parts.push(crewSettingsHtml()); setTimeout(crewLoadBlocks, 0); return; }
   if (c.view === 'find') { parts.push(crewFindHtml()); setTimeout(() => { crewLoadBaseBoard(); crewFindRun(); }, 0); return; }
   if (c.view === 'profile') {

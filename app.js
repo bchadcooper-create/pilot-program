@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.46.9 / 20261019_4
+ * Version/build: fcf-v5.46.10 / 20261019_5
  */
 
-const FCF_VERSION = 'fcf-v5.46.9';
-const FCF_BUILD   = '20261019_4';
+const FCF_VERSION = 'fcf-v5.46.10';
+const FCF_BUILD   = '20261019_5';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -8437,19 +8437,25 @@ function exerciseSearchRank(name, query) {
 // Single shared implementation of filter -> rank -> limit, used by every
 // search UI's display function AND its paired "add by index" handler, so
 // the two can never disagree about what result index N actually refers to.
-function rankedExerciseMatches(pool, q, excludeIds, limit) {
+// Every exercise search in the app goes through this. "walking outdoors"
+// matched nothing because no name has both words; when the whole phrase
+// finds nothing, the single words are tried in the order typed, so
+// "Walking" still shows. Used by the session editor, the swap sheet, Add
+// Your Own Exercise and the blueprint builder.
+function matchExercisesWithFallback(pool, q, excludeIds) {
+  const skip = excludeIds || new Set();
   const run = query => pool
-    .filter(e => exerciseMatchesQuery(e.name, query) && !excludeIds.has(e.id))
+    .filter(e => exerciseMatchesQuery(e.name, query) && !skip.has(e.id))
     .sort((a, b) => exerciseSearchRank(a.name, query) - exerciseSearchRank(b.name, query));
-  let out = run(q);
-  // "walking outdoors" matched nothing because no name has both words.
-  // Fall back to the single words, in the order typed, so "Walking" leads.
-  if (!out.length) {
-    const words = String(q || '').toLowerCase().split(/\s+/).filter(w => w.length >= 3);
-    const seen = new Set();
-    words.forEach(w => run(w).forEach(e => { if (!seen.has(e.id)) { seen.add(e.id); out.push(e); } }));
-  }
-  return out.slice(0, limit);
+  const out = run(q);
+  if (out.length) return out;
+  const words = String(q || '').toLowerCase().split(/\s+/).filter(w => w.length >= 3);
+  const seen = new Set();
+  words.forEach(w => run(w).forEach(e => { if (!seen.has(e.id)) { seen.add(e.id); out.push(e); } }));
+  return out;
+}
+function rankedExerciseMatches(pool, q, excludeIds, limit) {
+  return matchExercisesWithFallback(pool, q, excludeIds).slice(0, limit);
 }
 
 function edFilterExercises(q) {
@@ -10581,13 +10587,11 @@ function isStretchLikeExercise(exItem) {
 function rankedSwapMatches(exId, q, limit) {
   const allEx = ST.workout ? [...ST.workout.taxi,...ST.workout.takeoff,...ST.workout.enroute,...ST.workout.landing] : [];
   const swappingOutStretch = isStretchLikeExercise(allEx.find(e => e.id === exId));
-  const allMatches = buildExerciseCatalog().filter(e => exerciseMatchesQuery(e.name, q));
-  const byRelevance = (a, b) => exerciseSearchRank(a.name, q) - exerciseSearchRank(b.name, q);
+  const allMatches = matchExercisesWithFallback(buildExerciseCatalog(), q); // already in relevance order
   if (swappingOutStretch) {
-    return [...allMatches.filter(isStretchLikeExercise).sort(byRelevance),
-            ...allMatches.filter(e => !isStretchLikeExercise(e)).sort(byRelevance)].slice(0, limit);
+    return [...allMatches.filter(isStretchLikeExercise), ...allMatches.filter(e => !isStretchLikeExercise(e))].slice(0, limit);
   }
-  return allMatches.sort(byRelevance).slice(0, limit);
+  return allMatches.slice(0, limit);
 }
 
 function swapFilterExercises(exId, q) {
@@ -10601,6 +10605,7 @@ function swapFilterExercises(exId, q) {
     parts.push('<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:0.8125rem" onclick="swapAddCatalogExercise(\''+exId+'\','+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:0.625rem;color:var(--muted)">'+(e.target||'')+'</span></div>');
   });
   if (matches.length) parts.push('<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);letter-spacing:0.08em;margin:8px 0 2px">TAP TO SWAP IN, OR USE "CREATE YOUR OWN" BELOW</div>');
+  else parts.push('<div style="font-size:0.6875rem;color:var(--muted);padding:6px 2px">No catalog match. Use "Create your own" below.</div>');
   box.innerHTML = parts.join('');
 }
 function swapAddCatalogExercise(exId, matchIdx, q) {
@@ -11797,10 +11802,7 @@ function filterAddExerciseCatalog(q) {
   if (!box) return;
   q = (q||'').trim().toLowerCase();
   if (!q) { box.innerHTML = ''; return; }
-  const matches = buildExerciseCatalog()
-    .filter(e => exerciseMatchesQuery(e.name, q))
-    .sort((a, b) => exerciseSearchRank(a.name, q) - exerciseSearchRank(b.name, q))
-    .slice(0, 6);
+  const matches = rankedExerciseMatches(buildExerciseCatalog(), q, new Set(), 6);
   const parts = [];
   matches.forEach((e, i) => {
     parts.push('<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:0.8125rem" onclick="addExistingCatalogExercise('+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:0.625rem;color:var(--muted)">'+(e.target||'')+'</span></div>');
@@ -11812,10 +11814,7 @@ function filterAddExerciseCatalog(q) {
 }
 
 function addExistingCatalogExercise(matchIdx, q) {
-  const matches = buildExerciseCatalog()
-    .filter(e => exerciseMatchesQuery(e.name, q))
-    .sort((a, b) => exerciseSearchRank(a.name, q) - exerciseSearchRank(b.name, q))
-    .slice(0, 6);
+  const matches = rankedExerciseMatches(buildExerciseCatalog(), q, new Set(), 6);
   const exDef = matches[matchIdx];
   if (!exDef || !ST.workout) return;
   const id = exDef.id || ('custom_' + Date.now());

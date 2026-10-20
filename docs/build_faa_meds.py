@@ -1,5 +1,7 @@
 import re, json
-P = '/home/claude/pilot-program/app.js'
+import os
+# Run from anywhere: app.js sits one folder above this script (repo root).
+P = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'app.js')
 s = open(P).read()
 
 # Each entry: generic, brands, bucket, note, optional wait/flag/aliases.

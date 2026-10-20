@@ -14563,7 +14563,7 @@ function medFmtDate(s) {
 // Anticoagulants, Controlled Substances and CBD, OTC medications. Where the
 // FAA names only a class, leftseat.com's accepted list supplied the drug
 // names. Still not all-inclusive; the footer says so. Rebuild from
-// scratchpad meds.py when the FAA tables change.
+// docs/build_faa_meds.py when the FAA tables change (edit it, run it).
 // bucket: 'dni' AME cannot issue without FAA clearance; 'dnf' do not fly for
 // the wait time; 'ok' generally accepted, still reported on MedXPress;
 // 'si' special issuance path (allowed only through the FAA process).

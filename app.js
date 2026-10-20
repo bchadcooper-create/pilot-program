@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.46.8 / 20261019_3
+ * Version/build: fcf-v5.46.9 / 20261019_4
  */
 
-const FCF_VERSION = 'fcf-v5.46.8';
-const FCF_BUILD   = '20261019_3';
+const FCF_VERSION = 'fcf-v5.46.9';
+const FCF_BUILD   = '20261019_4';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -6650,7 +6650,7 @@ function weeklyCoachSessions(sessionCache, now) {
       // Anything the ring picked up (yard work, house work, a lift it
       // noticed) is saved with the default location "comm" and no exercise
       // detail. Mark it so the coach does not read it as a gym visit.
-      const autoDetected = !!s.importedFromOura;
+      const autoDetected = !!s.importedFromOura && !s.userEdited;
       const snap = s.workoutSnapshot || {};
       const main = incidentalWalk ? [] : [...(snap.takeoff || []), ...(snap.enroute || [])];
       const setsLogged = incidentalWalk ? 0 : Object.values(s.sets || {}).reduce((n, list) =>
@@ -6725,7 +6725,10 @@ function weeklyCoachSessionKey(sessions) {
   const real = (sessions || []).filter(s => !s.incidentalWalk && !s.autoDetected);
   const latest = real.map(s => String(s.date)).sort().pop() || 'none';
   const sets = real.reduce((n, s) => n + (s.setsLogged || 0), 0);
-  return real.length + '_' + sets + '_' + latest;
+  // The local date is part of the key (reported: a note written the
+  // evening of a Full Body day still said "today" the next evening). The
+  // server caches for 24 hours; a new day needs new words for "today".
+  return real.length + '_' + sets + '_' + latest + '_' + localDateStr(new Date());
 }
 // How many chosen sessions happened in each kind of place. Advice has to
 // fit the equipment the member actually has in front of them.
@@ -8435,10 +8438,18 @@ function exerciseSearchRank(name, query) {
 // search UI's display function AND its paired "add by index" handler, so
 // the two can never disagree about what result index N actually refers to.
 function rankedExerciseMatches(pool, q, excludeIds, limit) {
-  return pool
-    .filter(e => exerciseMatchesQuery(e.name, q) && !excludeIds.has(e.id))
-    .sort((a, b) => exerciseSearchRank(a.name, q) - exerciseSearchRank(b.name, q))
-    .slice(0, limit);
+  const run = query => pool
+    .filter(e => exerciseMatchesQuery(e.name, query) && !excludeIds.has(e.id))
+    .sort((a, b) => exerciseSearchRank(a.name, query) - exerciseSearchRank(b.name, query));
+  let out = run(q);
+  // "walking outdoors" matched nothing because no name has both words.
+  // Fall back to the single words, in the order typed, so "Walking" leads.
+  if (!out.length) {
+    const words = String(q || '').toLowerCase().split(/\s+/).filter(w => w.length >= 3);
+    const seen = new Set();
+    words.forEach(w => run(w).forEach(e => { if (!seen.has(e.id)) { seen.add(e.id); out.push(e); } }));
+  }
+  return out.slice(0, limit);
 }
 
 function edFilterExercises(q) {
@@ -8531,7 +8542,18 @@ async function saveEditedSession() {
       });
     }
   });
-  if (!Object.keys(s.sets).length) { showToast('Log at least one set before saving.'); return; }
+  // A walk or a ring-detected session may have no sets at all. Total time
+  // is enough to save it (reported: editing an Oura "house work" entry
+  // into a 20 minute walk was refused with "Log at least one set").
+  if (!Object.keys(s.sets).length && !(s.durationMinutes > 0)) { showToast('Log at least one set, or set the total time, before saving.'); return; }
+  if (s.importedFromOura) {
+    // The member corrected what the ring guessed. Keep the Oura id for
+    // dedup, but let the activity follow the exercises they chose.
+    const names = ['taxi','takeoff','enroute','landing'].flatMap(ph => (s.workoutSnapshot[ph] || []).map(e => e && e.name || ''));
+    if (names.some(n => /walk/i.test(n)) || s.muscle_group === 'Walk') s.ouraActivity = 'walking';
+    else if (names.some(n => /\brun|jog/i.test(n)) || s.muscle_group === 'Run') s.ouraActivity = 'running';
+    s.userEdited = true;
+  }
 
   try {
     if (ed.isNew) {

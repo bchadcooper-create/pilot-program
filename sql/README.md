@@ -39,3 +39,40 @@ Views (for example `cp_bed_status`) need the same grants.
 
 If a schema is ever rebuilt from these files (new project, branch, or
 `supabase db reset`), run the grants for each table after creating it.
+
+## Database review, Oct 21 2026 (FCF project)
+
+Found and fixed, all verified by running the app's own queries as a signed-in
+member and as a signed-out visitor, plus the medical and crew browser tests:
+
+- `workout_sessions` had a policy "allow anonymous inserts" with no condition:
+  anyone holding the public key could insert rows under any user's id. Made
+  inert (`with check (false)`). One junk row with no user remains.
+- Every policy now applies to `authenticated` only (the app requires sign-in)
+  and uses `(select auth.uid())` so Postgres evaluates it once per query.
+  Done with ALTER POLICY, which the MCP tool allows; DROP is blocked.
+- Boards (leaderboard_entries, running_log, running_pr_entries) are no longer
+  readable by signed-out visitors.
+- `admin_stats`, the crew helpers, `dots_score`, `safe_int`, `safe_numeric`:
+  execute revoked from `anon`.
+- Indexes added: crew_blocks(blocked_id), crew_follows(followee_id, status),
+  crew_comments(user_id), crew_kudos(user_id), crew_reports(reporter_id),
+  workout_sessions(user_id, started_at desc), weight_log(user_id, logged_at desc).
+- `citext` moved from `public` to `extensions`. Lesson: PostgREST kept its old
+  schema cache for several minutes and crew joins failed until
+  `notify pgrst, 'reload schema'` ran. Always send that after moving an
+  extension or changing a type.
+
+Still open, needs a DROP the tool will not run (Chad, in the dashboard SQL
+editor, or approve the confirmation when Claude tries):
+
+```sql
+drop policy "allow anonymous inserts" on public.workout_sessions;
+drop policy "admin can read all sessions" on public.workout_sessions;
+drop index public.idx_workout_sessions_user_id;
+drop index public.idx_weight_log_user_id;
+delete from public.workout_sessions where user_id is null;
+```
+
+Also needs Chad: Supabase dashboard, Authentication, Settings, turn on
+"Leaked password protection" (checks new passwords against HaveIBeenPwned).

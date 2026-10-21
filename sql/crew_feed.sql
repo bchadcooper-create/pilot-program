@@ -213,3 +213,10 @@ alter table crew_blocks add constraint crew_blocks_blocked_fk foreign key (block
 -- Oct 19 2026: crew_reports.dismissed_at. Owner dismisses a report instead
 -- of deleting it; admin_stats counts only open (not dismissed) reports.
 alter table crew_reports add column if not exists dismissed_at timestamptz;
+
+-- Oct 21 2026: explicit Data API grants. Supabase stops auto-granting new
+-- public tables on Oct 30 2026 (see sql/README.md). The live tables already
+-- have these; they are here so a rebuild from this file works.
+grant select on crew_profiles, crew_follows, crew_activities, crew_kudos, crew_comments, crew_blocks, crew_reports to anon;
+grant select, insert, update, delete on crew_profiles, crew_follows, crew_activities, crew_kudos, crew_comments, crew_blocks, crew_reports to authenticated;
+grant select, insert, update, delete on crew_profiles, crew_follows, crew_activities, crew_kudos, crew_comments, crew_blocks, crew_reports to service_role;

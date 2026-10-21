@@ -4,3 +4,6 @@ ios/
 .DS_Store
 tests/e2e/.env
 tests/e2e/report/
+
+# Screenshots written by the browser tests on every run
+tests/e2e/*.png

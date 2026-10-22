@@ -1673,11 +1673,11 @@ test('after a workout is logged today, the Today card no longer offers another o
   ctx.isPro = realPro; ctx.ST.workout = sv;
 });
 
-console.log('\nFAA Medical (owner preview):');
-test('the section is only offered to the owner account', () => {
+console.log('\nFAA Medical (open to every member since Oct 22 2026):');
+test('the section is offered to every signed-in member, never when signed out', () => {
   const sv = ctx.ST.user;
   ctx.ST.user = { id: '7e41ca46-6e00-4c54-bc3f-2e45d923fe0b' }; assertEqual(ctx.medicalEnabled(), true, 'owner');
-  ctx.ST.user = { id: 'u-someone-else' }; assertEqual(ctx.medicalEnabled(), false, 'anyone else');
+  ctx.ST.user = { id: 'u-someone-else' }; assertEqual(ctx.medicalEnabled(), true, 'any member');
   ctx.ST.user = null; assertEqual(ctx.medicalEnabled(), false, 'signed out');
   ctx.ST.user = sv;
 });

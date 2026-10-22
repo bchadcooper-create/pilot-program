@@ -11,6 +11,7 @@ Key facts:
 - Mission objectives include strength, muscle, fat loss, longevity and a Runner objective with a weekly mileage plan.
 - Nutrition: protein targets paced around duty times, food photo recognition, quick-add road meals. Hydration target of about 0.3 liters per flight hour.
 - Biometrics tracked with the clinical measurement protocol: weight, waist, blood pressure, fasting glucose.
+- FAA Medical page (free, on-device only): certificate privilege end dates by class and seat under 14 CFR 61.23, ECG expectation, blood pressure, glucose and BMI against the FAA lines, a medication check of nearly 300 drugs against the FAA do-not-issue and do-not-fly lists, and near, mid and distance vision tests. Nothing on it leaves the phone.
 - Social: an opt-in crew feed (follow crew, kudos, comments, home base boards) and opt-in leaderboards.
 - Pricing: free tier (workout logging, basic trends, hydration, pre-flight and medication reminders). Pro adds the AI coach, food photo analysis, full trends history and direct Oura connection.
 - Not medical advice. Nothing in the app diagnoses a condition or replaces a doctor or an Aviation Medical Examiner.

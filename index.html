@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Flight Crew Fitness">
 <meta name="theme-color" content="#0a0f1a">
-<meta name="description" content="Flight Crew Fitness is the workout and nutrition app for airline pilots and flight crew. Training that adapts to your layover, hotel gym, fatigue and crew schedule. Built by an airline captain. Free to start.">
+<meta name="description" content="Flight Crew Fitness is the workout, nutrition and FAA medical app for airline pilots and flight crew. Training that adapts to your crew schedule, hotel gym and sleep, a crew feed, and medical readiness. Built by an airline captain. Free to start.">
 <link rel="canonical" href="https://flightcrew.fit/">
 <meta property="og:title" content="Flight Crew Fitness: Workout App for Pilots and Flight Crew">
 <meta property="og:description" content="Workouts and nutrition that fit the layover you actually have. Built by an airline captain. Free to start.">
@@ -19,7 +19,7 @@
 <meta property="og:image" content="https://flightcrew.fit/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Flight Crew Fitness: Train hard between duty days, not despite them.">
+<meta property="og:image:alt" content="Flight Crew Fitness: Fit for flight. Built around the trips you actually fly.">
 <meta property="og:site_name" content="Flight Crew Fitness">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Flight Crew Fitness: Workout App for Pilots and Flight Crew">
@@ -37,7 +37,7 @@
       "url": "https://flightcrew.fit/",
       "applicationCategory": "HealthApplication",
       "operatingSystem": "Web, iOS",
-      "description": "Workout and nutrition app for airline pilots and flight crew. Training that adapts to your layover, hotel gym, fatigue and crew schedule.",
+      "description": "Workout, nutrition and FAA medical readiness app for airline pilots and flight crew. Training that adapts to your crew schedule, hotel gym and sleep, with a crew feed and a medication check against the FAA lists.",
       "image": "https://flightcrew.fit/og-image.png",
       "offers": {
         "@type": "Offer",
@@ -61,7 +61,7 @@
         {
           "@type": "Question",
           "name": "Is Flight Crew Fitness free?",
-          "acceptedAnswer": { "@type": "Answer", "text": "Yes. Workout logging, basic trends, hydration and pre-flight reminders, and medication and supplement reminders are free with no credit card. Pro adds the AI coach, unlimited food photo analysis, full trends history, Oura direct connect and more." }
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. Workout logging, basic trends, hydration and pre-flight reminders, medication and supplement reminders, the crew feed and the FAA Medical page are free with no credit card. Pro adds the AI coach, unlimited food photo analysis, full trends history, Oura direct connect and more." }
         },
         {
           "@type": "Question",
@@ -72,6 +72,11 @@
           "@type": "Question",
           "name": "Does it use my crew schedule?",
           "acceptedAnswer": { "@type": "Answer", "text": "Yes. Import your duty days and the app plans training and nutrition around duty events, layovers and commuter days instead of a nine to five you do not have." }
+        },
+        {
+          "@type": "Question",
+          "name": "Does the app send my medical information anywhere?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. Everything on the FAA Medical page, including certificate dates, medications, vision results and the PIN, stays on the phone. It is not synced, not sent to the AI coach, and not included in the data export." }
         },
         {
           "@type": "Question",
@@ -420,9 +425,9 @@ a{color:inherit}
   <header class="landing-hero">
     <div class="fb" style="align-items:flex-start"><div class="landing-logo">✈ FLIGHT CREW FITNESS</div>
     <div id="zuluClock" style="font-family:var(--mono);font-size:0.6875rem;color:var(--muted);letter-spacing:0.05em;white-space:nowrap"></div></div>
-    <div class="landing-tag">THE WORKOUT AND NUTRITION APP FOR PILOTS AND FLIGHT CREW</div>
-    <h1 class="landing-h1">Train hard between <span class="accent">duty days</span>, not despite them.</h1>
-    <p class="landing-sub">A workout system that adapts to your gym access, your fatigue level, and your crew schedule, whether you're home, on layover, or stuck with nothing but a hotel room.</p>
+    <div class="landing-tag">WORKOUTS, NUTRITION AND THE FAA MEDICAL, FOR PILOTS AND FLIGHT CREW</div>
+    <h1 class="landing-h1">Fit for <span class="accent">flight</span>. Built around the trips you actually fly.</h1>
+    <p class="landing-sub">Training that reads your crew schedule, your sleep and the room you are in. Nutrition that survives a four-day. A crew feed to keep you honest. And the FAA medical, tracked the way an AME reads it.</p>
     <div class="landing-cta">
       <button class="btn btn-gold" onclick="ST.showLanding=false;ST.authMode='signup';renderRoot()">Get Started Free</button>
       <button class="btn btn-outline mt8" onclick="ST.showLanding=false;ST.authMode='signin';renderRoot()">I have an account</button>
@@ -432,6 +437,10 @@ a{color:inherit}
 
   <section class="landing-section">
     <h2 class="landing-section-title">Why pilots need a different program</h2>
+    <div class="feature-row"><div class="feature-icon">🩺</div><div class="feature-text"><h4>FAA medical, tracked the way your AME reads it</h4><p>Enter your class, seat and exam date and see the exact day each privilege ends, whether an ECG is due, and how your blood pressure, glucose and weight sit against the FAA lines. Check any medication or supplement against the FAA do-not-issue and do-not-fly lists, nearly 300 drugs with plain-language notes. Test your near, mid and distance vision on the phone. Everything stays on your device.</p></div></div>
+    <div class="feature-row"><div class="feature-icon">📅</div><div class="feature-text"><h4>Reads your crew schedule</h4><p>Import your trips and the app knows a 10-hour layover from a 26-hour one, a commute day from a reserve day, and plans training and meals around what you are actually doing.</p></div></div>
+    <div class="feature-row"><div class="feature-icon">👥</div><div class="feature-text"><h4>Crew feed</h4><p>Opt in under a call sign and every workout posts to a feed of other pilots and crew: kudos, comments, follow people, and a board of who is training at your base this month. Share your workout as a picture to Instagram or Messages. No location beyond the airport code you choose to show.</p></div></div>
+    <div class="feature-row"><div class="feature-icon">🏃</div><div class="feature-text"><h4>Runner mode</h4><p>Pick the Runner objective and get a weekly mileage plan that fits around your trips: easy days, one long run, one strength day placed away from it, plus best efforts at the mile, 5K, 10K and half, and a monthly miles challenge.</p></div></div>
     <div class="feature-row"><div class="feature-icon">🌍</div><div class="feature-text"><h4>Environment-aware workouts</h4><p>Every session adapts automatically to Commercial Gym, Hotel Gym, Hotel Room, or just resistance bands. No equipment excuses.</p></div></div>
     <div class="feature-row"><div class="feature-icon">🚦</div><div class="feature-text"><h4>Fatigue-gated intensity</h4><p>A pilot condition toggle (Go / Marginal / No-Go) reduces or removes heavy lifting when you're running on insufficient rest, auto-set from Apple Health if you sync a wearable, or a 15-second self-check if you don't.</p></div></div>
     <div class="feature-row"><div class="feature-icon">⌚</div><div class="feature-text"><h4>Wearable auto-sync</h4><p>Connect once via Apple Health and your daily readiness, sleep, HRV, resting heart rate, steps, and workouts drive your training automatically. It works with Apple Watch, Oura, Whoop, Garmin, or anything else that writes to Health. Connect Oura directly for its own full readiness score.</p></div></div>
@@ -440,10 +449,10 @@ a{color:inherit}
     <div class="feature-row"><div class="feature-icon">🎖️</div><div class="feature-text"><h4>Badges for reaching goals</h4><p>Hit a personal record, a training streak, or a milestone and it gets recognized automatically, pulled from your real logged history, not just a login count.</p></div></div>
     <div class="feature-row"><div class="feature-icon">🩹</div><div class="feature-text"><h4>Injury-aware programming</h4><p>Flag a sore shoulder or knee and the app automatically swaps in a safer alternative where one exists, or flags the exercise so you can decide, instead of just handing you the same plan regardless.</p></div></div>
     <div class="feature-row"><div class="feature-icon">⏱️</div><div class="feature-text"><h4>Fits the time you actually have</h4><p>Tell it how much time you've got and it trims the session to fit, protecting your warmup and cooldown, never your actual lift.</p></div></div>
-    <div class="feature-row"><div class="feature-icon">🎯</div><div class="feature-text"><h4>Goal-driven programming</h4><p>Nine mission objectives (from Walking First and Runner to Glute Emphasis and Overall Strength), each with real, distinct exercise programming behind it, not just a label.</p></div></div>
+    <div class="feature-row"><div class="feature-icon">🎯</div><div class="feature-text"><h4>Goal-driven programming</h4><p>Nine mission objectives, from Walking First and Runner to Glute Emphasis and Overall Strength, each with real, distinct programming behind it, not just a label.</p></div></div>
     <div class="feature-row"><div class="feature-icon">💧</div><div class="feature-text"><h4>Hydration math built in</h4><p>0.3L per flight hour, with a sensible floor on no-fly days. The app tells you exactly how much to drink and when.</p></div></div>
     <div class="feature-row"><div class="feature-icon">🛫</div><div class="feature-text"><h4>Aviation-phased structure</h4><p>Every workout follows Taxi (warmup), Takeoff (heavy), En Route (volume), Landing (decompression): a logical, recoverable structure, not just a random exercise list.</p></div></div>
-    <div class="feature-row"><div class="feature-icon">📊</div><div class="feature-text"><h4>Real biometric tracking</h4><p>Weight, waist, blood pressure, and fasting glucose, with the actual clinical protocol for measuring each one correctly. Watch the numbers your AME reads move before your next medical.</p></div></div>
+    <div class="feature-row"><div class="feature-icon">📊</div><div class="feature-text"><h4>Real biometric tracking</h4><p>Weight, waist, blood pressure, and fasting glucose, with the clinical protocol for measuring each one correctly. The FAA Medical page shows the same numbers against the lines your AME uses.</p></div></div>
     <div class="feature-row"><div class="feature-icon">💊</div><div class="feature-text"><h4>Meds and supplements on schedule</h4><p>Log anything you take, from creatine to prescriptions, with the dose and times. Check doses off on your Today screen, get a phone reminder when one is due, and include the history in your data export for AI analysis. Private to your account.</p></div></div>
     <div class="feature-row"><div class="feature-icon">📶</div><div class="feature-text"><h4>Works with no signal</h4><p>Keeps working with zero connectivity: at altitude, in a dead-zone layover hotel, wherever.</p></div></div>
   </section>
@@ -466,9 +475,10 @@ a{color:inherit}
 
   <section class="landing-section" style="background:var(--bg2)" id="faq">
     <h2 class="landing-section-title">Questions pilots ask</h2>
-    <div class="feature-text" style="margin-bottom:18px"><h4>Is it free?</h4><p>Yes. Workout logging, basic trends, hydration and pre-flight reminders, and medication and supplement reminders are free, with no credit card. Pro adds the AI coach, unlimited food photo analysis, full trends history, Oura direct connect and more.</p></div>
+    <div class="feature-text" style="margin-bottom:18px"><h4>Is it free?</h4><p>Yes. Workout logging, basic trends, hydration and pre-flight reminders, medication and supplement reminders, the crew feed and the FAA Medical page are free, with no credit card. Pro adds the AI coach, unlimited food photo analysis, full trends history, Oura direct connect and more.</p></div>
     <div class="feature-text" style="margin-bottom:18px"><h4>Does it work in a hotel room with no equipment?</h4><p>Yes. Hotel room sessions use no jumping, so thin floors and downstairs neighbours are not a problem.</p></div>
     <div class="feature-text" style="margin-bottom:18px"><h4>Does it use my crew schedule?</h4><p>Yes. Import your duty days and the app plans training and nutrition around duty events, layovers and commuter days.</p></div>
+    <div class="feature-text" style="margin-bottom:18px"><h4>Does the app send my medical information anywhere?</h4><p>No. Everything on the FAA Medical page, your certificate dates, medications, vision results and PIN, stays on your phone. It is not synced, not sent to the coach, and not in your data export.</p></div>
     <div class="feature-text" style="margin-bottom:18px"><h4>Which wearables does it support?</h4><p>Apple Watch, Oura, Whoop, Garmin and anything else that writes to Apple Health. Oura can also be connected directly.</p></div>
     <div class="feature-text"><h4>Is there an iPhone app?</h4><p>The iOS app is in App Store review. The web app works today in Safari and can be added to your Home Screen. Your account carries over the day the App Store version lands.</p></div>
   </section>

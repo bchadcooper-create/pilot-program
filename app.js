@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.46.11 / 20261019_6
+ * Version/build: fcf-v5.47.0 / 20261022_1
  */
 
-const FCF_VERSION = 'fcf-v5.46.11';
-const FCF_BUILD   = '20261019_6';
+const FCF_VERSION = 'fcf-v5.47.0';
+const FCF_BUILD   = '20261022_1';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -14456,8 +14456,10 @@ const FAA_DNI_DNF_URL = 'https://www.faa.gov/ame_guide/pharm/dni_dnf';
 const MED_CLASS_WORD = ['', 'first', 'second', 'third'];
 const MED_SEATS = [['', 'Choose your seat'], ['capt', 'Captain (Part 121, or any ATP pilot in command)'], ['fo', 'First officer (Part 121 airline)'], ['other', 'Other: charter, corporate, instructor, private']];
 
+// Oct 22 2026: open to every signed-in member (owner's call). Everything on
+// the Medical page stays on the device; the server never sees it.
 function medicalEnabled() {
-  return !!(ST.user && MEDICAL_OWNER_IDS.includes(ST.user.id));
+  return !!ST.user;
 }
 
 function medicalRecord() {
@@ -15377,7 +15379,7 @@ function renderMore(p) {
   parts.push(item('👤','Pilot Profile','Identity, metrics &amp; mission objectives',"switchTab('profile')"));
   parts.push(item('⌚','Connected Devices','Apple Health, Apple Watch, Oura Ring',"switchTab('devices')"));
   if (ST.trackNutrition) parts.push(item('🍽️','Nutrition Log','Log meals, search foods, track macros',"switchTab('nutrition')"));
-  if (medicalEnabled()) parts.push(item('🩺','FAA Medical','Certificate dates, medication check, exam prep (preview)',"switchTab('medical')"));
+  if (medicalEnabled()) parts.push(item('🩺','FAA Medical','Certificate dates, medication check, vision, your numbers vs the FAA lines',"switchTab('medical')"));
   parts.push(item('📊','Data & Import/Export','Flight schedule import, CSV export, AI prompt',"switchTab('data')"));
   parts.push(item('📖','Flight Deck Wisdom','Daily training wisdom cards',"switchTab('wisdom')"));
 

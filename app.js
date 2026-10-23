@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.47.1 / 20261022_2
+ * Version/build: fcf-v5.47.2 / 20261022_3
  */
 
-const FCF_VERSION = 'fcf-v5.47.1';
-const FCF_BUILD   = '20261022_2';
+const FCF_VERSION = 'fcf-v5.47.2';
+const FCF_BUILD   = '20261022_3';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -10016,34 +10016,41 @@ const ALTERNATES = {
 
   // HOTEL GYM
   'Kettlebell Goblet Squat (Heavy)': [
+    {name:'Cable Deadlift',target:'4×10',note:'Dumbbells too light? The hotel cable stack goes heavier. Low pulley, hinge and stand.'},
     {name:'Goblet Squat',target:'4×12',note:'Lighter load, same pattern. Use if the heavy KB isn\'t available.'},
     {name:'DB Romanian Deadlift',target:'4×10',note:'Shifts emphasis to posterior chain instead of quads.'},
     {name:'Step-Up (Weighted)',target:'3×12/leg',note:'Unilateral quad/glute work using a bench.'},
   ],
   'DB Romanian Deadlift': [
+    {name:'Cable Good Morning',target:'3×10',note:'Hinge against the cable when the dumbbells stop at 50. Constant tension on the hamstrings.'},
     {name:'Good Morning',target:'3×10',note:'Bar on back, same hip hinge, no dumbbells needed.'},
     {name:'Single Leg Split Squat',target:'3×8/leg',note:'Different pattern, same posterior chain and glute demand.'},
     {name:'Kettlebell Goblet Squat (Heavy)',target:'4×10',note:'Quad-dominant substitute if hinging bothers your back.'},
   ],
   'Step-Up (Weighted)': [
+    {name:'Cable Glute Kickback',target:'3×12/leg',note:'Ankle cuff on the low pulley. The card on the machine calls it a donkey kick.'},
     {name:'Reverse Lunge',target:'3×12/leg',note:'No bench needed. Same unilateral quad/glute demand.'},
     {name:'Single Leg Split Squat',target:'3×8/leg',note:'Rear foot elevated variant: more quad stretch.'},
     {name:'Step-Up',target:'3×12/leg',note:'Unweighted version if the loaded step feels too aggressive.'},
   ],
   'Single-Leg Calf Raise': [
+    {name:'Toe Raise (Cable)',target:'3×15',note:'Low pulley handle at the hips. Loadable calf raise when there is no step.'},
     {name:'Standing Calf Raise',target:'4×15',note:'Bilateral: easier balance, still loads the calf hard.'},
     {name:'Calf Raise (step)',target:'3×15/leg',note:'Same unilateral pattern using a step for extra range.'},
   ],
   'Dumbbell Lateral Lunge': [
+    {name:'Cable Hip Abduction',target:'3×12/leg',note:'Ankle cuff, lift the leg out to the side. Outer thigh and glute med on the cable.'},
     {name:'Reverse Lunge',target:'3×12/leg',note:'Sagittal-plane substitute, easier on the groin/adductors.'},
     {name:'Step-Up (Weighted)',target:'3×12/leg',note:'Different plane, same single-leg strength demand.'},
   ],
   'DB Bench Press': [
+    {name:'Cable Chest Press',target:'3×12',note:'Face away from the stack, split stance, press forward. Works when the bench is taken or the dumbbells are light.'},
     {name:'Chest Press (Machine)',target:'4×12',note:'Fixed path, easier on the shoulders for higher reps.'},
     {name:'Pushup Variations',target:'4×max',note:'Bodyweight substitute if dumbbells aren\'t heavy enough or available.',inputType:'reps_only'},
     {name:'DB Incline Press',target:'4×10',note:'Shifts emphasis to upper chest.'},
   ],
   'DB Overhead Press': [
+    {name:'Standing Cable Shoulder Press',target:'3×10',note:'Low pulley, press from the shoulder straight up. Brace against the forward pull.'},
     {name:'Standing Overhead Press',target:'4×8',note:'Barbell version: heavier bilateral loading.'},
     {name:'Pike Pushup',target:'4×12',note:'Bodyweight overhead pressing, no equipment needed.',inputType:'reps_only'},
     {name:'DB Incline Press',target:'4×10',note:'Still hits the front delts, less overhead shoulder strain.'},
@@ -10054,27 +10061,33 @@ const ALTERNATES = {
     {name:'Pushup Variations',target:'4×max',note:'Bodyweight substitute. Elevate feet for upper-chest emphasis.',inputType:'reps_only'},
   ],
   'DB Lateral Raise': [
+    {name:'Cable Lateral Raise',target:'3×15',note:'Low pulley across the body. Constant tension through the whole range.'},
     {name:'Cable Lateral Raise',target:'3×15',note:'Constant tension through the full range. Harder than DBs.'},
     {name:'Upright Row',target:'3×12',note:'Hits lateral delt and upper trap together.'},
   ],
   'DB Front Raise': [
+    {name:'Cable Front Raise',target:'3×15',note:'Back to the low pulley. Constant tension on the front delts.'},
     {name:'Cable Front Raise',target:'3×15',note:'Constant tension version if a cable stack is available.'},
     {name:'DB Lateral Raise',target:'3×15',note:'Different plane, same front-delt-adjacent shoulder work.'},
   ],
   'Pullups': [
+    {name:'Lat Pulldown',target:'4×10',note:'The hotel cable column has a high pulley: sit or kneel and pull to the collarbone.'},
     {name:'Lat Pulldown',target:'4×10',note:'Adjustable load. Good if bodyweight pullups are too hard yet.'},
     {name:'DB Row',target:'4×10/side',note:'Horizontal pulling substitute, no bar needed.'},
     {name:'Chinups',target:'4×max',note:'Supinated grip: more bicep involvement.',inputType:'reps_only'},
   ],
   'DB Row': [
+    {name:'Cable Bent-Over Row',target:'3×12',note:'Low pulley handle, hinge and row to the hip. Heavier than the dumbbell rack allows.'},
     {name:'Seated Cable Row',target:'4×12',note:'Bilateral, constant tension version.'},
     {name:'Barbell Row (Pendlay)',target:'4×6',note:'Heavier bilateral pulling if a barbell is available.'},
   ],
   'Chinups': [
+    {name:'Cable Biceps Curl',target:'3×12',note:'Low pulley bar, elbows pinned. Constant tension beats a light dumbbell.'},
     {name:'Pullups',target:'4×max',note:'Pronated grip: more lat, less bicep.',inputType:'reps_only'},
     {name:'Lat Pulldown',target:'4×10',note:'Adjustable load, supinated grip on most machines.'},
   ],
   'Bent-Over DB Face Pull': [
+    {name:'Cable Rear Delt Fly',target:'3×15',note:'Handle at chest height, pull out and back. Light; the rear delt is small.'},
     {name:'Band Pull-Apart',target:'3×20',note:'No dumbbells needed. Great shoulder health work.',inputType:'reps_only'},
     {name:'DB Lateral Raise',target:'3×15',note:'Different but complementary rear/side delt work.'},
   ],
@@ -10261,6 +10274,7 @@ const ALTERNATES = {
     {name:'Biceps Curl (Machine)',target:'3×12',note:'Arms braced on the pad. No swinging possible.'},
   ],
   'DB Curl': [
+    {name:'Cable Biceps Curl',target:'3×12',note:'Low pulley bar or handle, elbows pinned at the sides.'},
     {name:'Preacher Curl',target:'3×12',note:'Removes shoulder swing entirely for the strictest possible bicep isolation.'},
     {name:'EZ Bar Curl',target:'3×12',note:'Barbell variation. Slightly easier on the wrists.'},
     {name:'Cable Curl',target:'3×15',note:'Constant tension. Good isolation.'},
@@ -10274,6 +10288,7 @@ const ALTERNATES = {
     {name:'Triceps Extension (Machine)',target:'3×12',note:'Machine isolation. Easy on the shoulders.'},
   ],
   'DB Tricep Overhead': [
+    {name:'Cable Triceps Pushdown',target:'3×12',note:'High pulley bar or rope. The usual hotel option when the dumbbells are light.'},
     {name:'Close Grip Bench',target:'3×8',note:'Barbell tricep pressing.'},
     {name:'Cable Tricep Pushdown',target:'3×15',note:'Cable isolation.'},
     {name:'Seated Tricep Press (Machine)',target:'3×12',note:'Machine. Heavier loading than overhead DB work.'},
@@ -10410,6 +10425,7 @@ const ALTERNATES = {
     {name:'Plank',target:'3×60s',note:'Holds the trunk still instead of crunching.',inputType:'timed'},
   ],
   'Sit-Up': [
+    {name:'Cable Crunch',target:'3×15',note:'High pulley rope, kneel facing the stack, crunch the ribs to the hips. Loadable abs.'},
     {name:'Ab Crunch (Machine)',target:'3×15',note:'Loaded crunch. Easy to progress.'},
     {name:'Bicycle Crunch',target:'3×20/side',note:'Adds rotation.',inputType:'reps_only'},
     {name:'Dead Bug',target:'3×8/side',note:'Gentler on the lower back.',inputType:'reps_only'},

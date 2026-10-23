@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.47.2 / 20261022_3
+ * Version/build: fcf-v5.47.3 / 20261022_4
  */
 
-const FCF_VERSION = 'fcf-v5.47.2';
-const FCF_BUILD   = '20261022_3';
+const FCF_VERSION = 'fcf-v5.47.3';
+const FCF_BUILD   = '20261022_4';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -11558,11 +11558,22 @@ function queueSetFeedback(exId, i, leftField) {
     // Only a set with reps can be "not ready yet". A set whose reps were
     // just deleted must still refresh, or its old message is left behind.
     if (hasReps) {
+      const tile = document.getElementById('st_' + exId + '_' + i);
+      const stillInTile = tile && tile.contains && tile.contains(document.activeElement);
       if (leftField) {
         // Reps typed, then straight into the empty weight box: still mid-set.
-        const tile = document.getElementById('st_' + exId + '_' + i);
-        const stillInTile = tile && tile.contains && tile.contains(document.activeElement);
         if (stillInTile && !setFeedbackReady(set, false, repsOnly)) return;
+      } else {
+        // BUG FIX (reported: "I'm attempting to enter 12 but it jumps to
+        // failed as soon as I enter 1"). The weight box carries over from
+        // the last set, so the set looked complete after the first digit
+        // of the reps. While the cursor is still in this set's box, a
+        // typing pause never produces a miss: that waits for the field to
+        // be left. A hit at or above target may still show, since no later
+        // digit can turn it into a miss.
+        const target = found ? parseTargetReps(found.exItem.target) : null;
+        const reps = parseInt(set.reps, 10);
+        if (stillInTile && !(target && reps >= target)) return;
       }
       if (!setFeedbackReady(set, leftField, repsOnly)) return;
     }

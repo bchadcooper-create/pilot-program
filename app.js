@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.47.0 / 20261022_1
+ * Version/build: fcf-v5.47.1 / 20261022_2
  */
 
-const FCF_VERSION = 'fcf-v5.47.0';
-const FCF_BUILD   = '20261022_1';
+const FCF_VERSION = 'fcf-v5.47.1';
+const FCF_BUILD   = '20261022_2';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -8023,6 +8023,28 @@ const EXERCISE_SYNONYMS = {
   'hack squat': 'Hack Squat (Machine)',
   'lat pull': 'Lat Pulldown',
   'lat pulldown machine': 'Lat Pulldown',
+  // HD1900 cable column card names (Oct 22 2026)
+  'donkey kick': 'Cable Glute Kickback',
+  'cable donkey kick': 'Cable Glute Kickback',
+  'glute kick': 'Cable Glute Kickback',
+  'cable kickback': 'Cable Glute Kickback',
+  'toe raise': 'Toe Raise (Cable)',
+  'outer thigh': 'Cable Hip Abduction',
+  'inner thigh': 'Cable Hip Adduction',
+  'frontal deltoid': 'Cable Front Raise',
+  'lateral deltoid': 'Cable Lateral Raise',
+  'rear deltoid': 'Cable Rear Delt Fly',
+  'pectoral fly': 'Cable Fly',
+  'pec fly': 'Cable Fly',
+  'dead lift': 'Deadlift',
+  'side bend': 'Cable Side Bend',
+  'torso rotation': 'Cable Torso Rotation',
+  'tricep pushdown': 'Cable Triceps Pushdown',
+  'pushdown': 'Cable Triceps Pushdown',
+  'rope crunch': 'Cable Crunch',
+  'kneeling crunch': 'Cable Crunch',
+  'pull through': 'Cable Deadlift',
+  'pull-through': 'Cable Deadlift',
   'cable row': 'Seated Cable Row',
   'seated row': 'Seated Cable Row',
 
@@ -8186,6 +8208,26 @@ const CATALOG_EXTRAS = [
   ex('x_lm_twist',  'Landmine Twist',           '3×10/side', 3, 'Hold the bar end with straight arms, rotate it from one hip to the other, pivoting your feet as you turn. Core and obliques. Start light.'),
   ex('x_burpee',    'Burpee',                   '3×10', 3, 'Squat, hands to the floor, jump the feet back to a plank, chest to the floor, jump the feet in, then jump up with hands overhead. Step back and forward instead of jumping to make it easier.', false, 'reps_only'),
   ex('x_mb_burpee', 'Medicine Ball Burpee',     '3×10', 3, 'Set the ball on the floor, hands on the ball, jump the feet back to a plank, jump them in, then stand and lift the ball overhead. Log the weight of the ball.'),
+  // Hotel cable column (Oct 22 2026, from an HD1900 exercise card). Names
+  // match the card so a search for what the sticker says finds the move.
+  ex('x_cab_legcurl',  'Standing Leg Curl (Cable)',   '3×12/leg', 3, 'Ankle cuff on the low pulley, face the stack, curl the heel to the glute without moving the thigh. Slow on the way down.'),
+  ex('x_cab_toe',      'Toe Raise (Cable)',           '3×15', 3, 'Low pulley handle at the hips, stand tall, rise onto the toes and pause at the top. A standing calf raise with the stack as the load.'),
+  ex('x_cab_abd',      'Cable Hip Abduction',         '3×12/leg', 3, 'Ankle cuff, stand side-on with the working leg away from the stack, lift the leg straight out to the side. Outer thigh and glute med.'),
+  ex('x_cab_add',      'Cable Hip Adduction',         '3×12/leg', 3, 'Ankle cuff, working leg nearest the stack, sweep it across the body. Inner thigh. Hold the frame for balance.'),
+  ex('x_cab_sidebend', 'Cable Side Bend',             '3×12/side', 3, 'Low pulley handle in one hand, stand side-on, bend away from the stack and come back up with the obliques. No twisting.'),
+  ex('x_cab_rot',      'Cable Torso Rotation',        '3×10/side', 3, 'Handle at chest height, arms long, rotate the torso away from the stack. Hips stay square; the trunk does the work.'),
+  ex('x_cab_gm',       'Cable Good Morning',          '3×10', 3, 'Rope behind the neck or a handle at the hips, soft knees, hinge forward with a flat back and drive the hips through to stand. Light load.'),
+  ex('x_cab_dl',       'Cable Deadlift',              '3×10', 3, 'Low pulley handle, hinge down with a flat back and stand up against the cable. A pull-through with a bar handle works the same.'),
+  ex('x_cab_lunge',    'Cable Lunge',                 '3×10/leg', 3, 'Low pulley handle at the hips, step back into a lunge and drive up through the front heel. The cable pulls you forward, so brace.'),
+  ex('x_cab_reardelt', 'Cable Rear Delt Fly',         '3×15', 3, 'Handle at chest height, pull the arm out and back with a slight bend, squeeze the rear shoulder. Light.'),
+  ex('x_cab_upright',  'Cable Upright Row',           '3×12', 3, 'Low pulley bar, pull to the chest with elbows leading and no higher than the shoulders.'),
+  ex('x_cab_curl',     'Cable Biceps Curl',           '3×12', 3, 'Low pulley bar or handle, elbows pinned at the sides, curl and lower slowly. Constant tension beats a dumbbell here.'),
+  ex('x_cab_triext',   'Cable Triceps Extension',     '3×12', 3, 'High pulley rope, face away from the stack or kneel, extend the arms overhead from behind the head. Elbows point forward.'),
+  ex('x_cab_pushdown', 'Cable Triceps Pushdown',      '3×12', 3, 'High pulley bar or rope, elbows pinned, push down to lockout and control the return.'),
+  ex('x_cab_bentrow',  'Cable Bent-Over Row',         '3×12', 3, 'Low pulley handle, hinge to about 45 degrees, row to the hip. Shoulder blade back, no shrug.'),
+  ex('x_cab_chest',    'Cable Chest Press',           '3×12', 3, 'Handle at chest height, face away from the stack, split stance, press forward to lockout. One arm at a time on a single column.'),
+  ex('x_cab_shpress',  'Standing Cable Shoulder Press','3×10', 3, 'Low pulley handle, start at the shoulder and press straight up. Brace the trunk; the cable pulls forward.'),
+  ex('x_cab_crunch',   'Cable Crunch',                '3×15', 3, 'High pulley rope, kneel facing the stack, crunch the ribs toward the hips. Hips stay still; the abs move the weight.'),
   ex('x_hipthrust', 'Barbell Hip Thrust',       '3×10', 3, 'Shoulders on a bench, drive the hips up, squeeze the glutes at the top.'),
   ex('x_cablefly',  'Cable Fly',                '3×12', 3, 'Slight bend in the elbows, bring the handles together in front of the chest.'),
   ex('x_dbfly',     'Dumbbell Fly',             '3×12', 3, 'Flat or incline bench, wide arc, stretch at the bottom.'),

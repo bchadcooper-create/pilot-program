@@ -9,7 +9,7 @@ const W = eval(s.slice(start + 'const WISDOM = '.length, end + 3));
 const BOT_BLOCKED = /cdc\.gov|mayoclinic\.org|heart\.org|acefitness\.org/;
 const head = url => new Promise(res => {
   const mod = url.startsWith('https') ? https : http;
-  const req = mod.get(url, { headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1' }, timeout: 25000 }, r => { res({ code: r.statusCode, loc: r.headers.location }); r.resume(); });
+  const req = mod.get(url, { headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1', 'Accept': 'text/html,*/*;q=0.8', 'Accept-Language': 'en-US,en;q=0.9' }, timeout: 25000 }, r => { res({ code: r.statusCode, loc: r.headers.location }); r.resume(); });
   req.on('error', e => res({ code: 'ERR ' + e.code })); req.on('timeout', () => { req.destroy(); res({ code: 'TIMEOUT' }); });
 });
 (async () => {

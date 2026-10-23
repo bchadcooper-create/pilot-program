@@ -58,7 +58,7 @@ const WEEKLY_SUMMARY_PROMPT_VERSION = 8; // v8: runner goal; // v7: always posit
 // (added the same day this constant was) doesn't keep serving a
 // pre-fix response — that field didn't exist in the context sent to
 // earlier cached responses, so their advice can't reflect it either.
-const FATIGUE_CALIBRATION_PROMPT_VERSION = 12; // v12: runPlan; // v11: never a second workout; // v10: pilotCondition is the ceiling; // v9: Walking First plan; // v8: ring data missing today, use the self-check; // v7: workout-already-logged and legs-flown guidance; // v6: plain-words opener, house style; // v5: bodyClock awareness (v4: Sonnet 5)
+const FATIGUE_CALIBRATION_PROMPT_VERSION = 13; // v13: never train between legs, sleep under 70 caps the call; // v12: runPlan; // v11: never a second workout; // v10: pilotCondition is the ceiling; // v9: Walking First plan; // v8: ring data missing today, use the self-check; // v7: workout-already-logged and legs-flown guidance; // v6: plain-words opener, house style; // v5: bodyClock awareness (v4: Sonnet 5)
 // BUG FIX (found while updating this prompt): fuel_logistics' cache key
 // (below) never had a prompt-version component at all, unlike the other
 // two cached modes — so a stale response from before this exact prompt
@@ -216,6 +216,16 @@ marginal, the most you may say is "Dial it back": a moderate session, lighter lo
 efforts. On nogo, say "Take the day", or offer only an easy walk or mobility. A readiness in the 60s is below
 par: never call it fine, solid or good. Time available never upgrades the call; plenty of time on a marginal
 day is still a dial-it-back day.
+
+Sleep counts on its own too. If sleepScore is under 70, never say "Full send", even when pilotCondition is go:
+the most you may say is "Dial it back" (a normal session at moderate effort, no max lifts), and give the short
+sleep as the reason. Under 60, treat it like marginal or worse.
+
+betweenLegsOnDuty: true means they are mid duty day, sitting in a terminal between two legs. Nobody trains
+there, however long the sit. Never suggest a workout, a session or "getting work in" between legs. Give one
+useful line for the sit instead (eat real food if there is time, water, walk the terminal or stand rather than
+sit), and if it helps, point to after the last leg or the layover as when training fits. Open with "Between
+legs" or similar, not with a training call.
 
 You will receive today's readiness/recovery signal, their current trip day (which day of a multi-day pairing
 today is, day 2 of a 4-day trip, for example), today's flights with LOCAL departure/arrival times already
@@ -540,7 +550,8 @@ Deno.serve(async (req) => {
         + '_k' + (context.runPlan ? String(context.runPlan.todaysPlan).charAt(0) + (context.runPlan.week ? context.runPlan.week.days : '') : 0)
         // The app's call can change without the score changing (the user
         // adjusts Pilot Condition by hand), and the note must follow it.
-        + '_c' + (context.pilotCondition ?? 'x');
+        + '_c' + (context.pilotCondition ?? 'x')
+        + '_d' + (context.betweenLegsOnDuty ? 1 : 0);
       const { data: cached } = await supabase
         .from('user_profiles').select('profile_data').eq('user_id', user.id).maybeSingle();
       const cachedKey = cached?.profile_data?.fatigueCalibrationCacheKey;

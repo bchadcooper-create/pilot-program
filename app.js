@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.47.5 / 20261022_6
+ * Version/build: fcf-v5.47.6 / 20261023_1
  */
 
-const FCF_VERSION = 'fcf-v5.47.5';
-const FCF_BUILD   = '20261022_6';
+const FCF_VERSION = 'fcf-v5.47.6';
+const FCF_BUILD   = '20261023_1';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -6985,6 +6985,10 @@ async function loadFatigueCalibration(ctx) {
       tripTotalDays: sched.tripTotalDays ?? null,
       legsCompletedToday: sched.legsTodayCompleted ?? 0,
       legsRemainingToday: sched.legsTodayRemaining ?? 0,
+      // BUG FIX (reported Oct 23: between legs, 1.5 h sit, sleep 67, and the
+      // coach said "Full send... get your work in now"). The model saw free
+      // minutes and no flag saying the pilot was mid-duty in a terminal.
+      betweenLegsOnDuty: betweenLegsOnDuty(sched),
       todaysFlights,
       dutyEndsLocal: fmtLocalForAI(sched.dutyEndsToday),
       currentlyAtLayoverAirport: sched.layoverAirport || null,
@@ -16561,6 +16565,14 @@ const PRE_DEPARTURE_TRAVEL_BUFFER_MIN = 90;
 // it goes to getting from wherever you are back to the airport.
 // See PRE_DEPARTURE_TRAVEL_BUFFER_MIN above for why the layover figure is
 // conservative rather than precise.
+// On duty, between two legs today, and not at a layover hotel: a sit in the
+// terminal. Nobody trains here (owner, Oct 23 2026: "I'm not doing a
+// workout between flights"). The coach and the cards treat it that way.
+function betweenLegsOnDuty(sched) {
+  if (!sched) return false;
+  const atLayover = !!(sched.current && sched.current.type === 'layover');
+  return !atLayover && (sched.legsTodayCompleted || 0) > 0 && (sched.legsTodayRemaining || 0) > 0;
+}
 function usableMinutesBeforeDeparture(sched) {
   const gapMin = sched.freeMinutesUntilDuty;
   if (gapMin === null || gapMin === undefined) return null;
@@ -16981,7 +16993,7 @@ function buildOuraTopSectionHTML(ctx) {
     // could contradict what the coach just said.
     const startBtn = ST.workout
       ? '<button class="btn btn-gold" style="margin-top:14px" onclick="engageWorkout()">↩ Return to workout</button>'
-      : doneToday ? ''
+      : (doneToday || betweenLegsOnDuty(ctx.sched)) ? ''
       : '<button class="btn btn-gold" style="margin-top:14px" onclick="switchTab(\'preflight\')">Start a workout</button>';
     let coach = aiCoachCard('aiFatigueCard', 'aiFatigueText', 'AI COACH', 'amber',
       fatMemo && fatMemo.result && !fatMemo.result.error ? fatMemo.result.text : null, startBtn);

@@ -1673,6 +1673,15 @@ test('after a workout is logged today, the Today card no longer offers another o
   ctx.isPro = realPro; ctx.ST.workout = sv;
 });
 
+console.log('\nBetween legs (reported Oct 23: "I am not doing a workout between flights"):');
+test('a sit between two legs today is flagged; a layover, the first leg and the last leg are not', () => {
+  assertEqual(ctx.betweenLegsOnDuty({ legsTodayCompleted: 1, legsTodayRemaining: 2, current: null }), true, 'in the terminal between legs');
+  assertEqual(ctx.betweenLegsOnDuty({ legsTodayCompleted: 1, legsTodayRemaining: 1, current: { type: 'layover' } }), false, 'at a layover hotel');
+  assertEqual(ctx.betweenLegsOnDuty({ legsTodayCompleted: 0, legsTodayRemaining: 3, current: null }), false, 'before the first leg');
+  assertEqual(ctx.betweenLegsOnDuty({ legsTodayCompleted: 3, legsTodayRemaining: 0, current: null }), false, 'after the last leg');
+  assertEqual(ctx.betweenLegsOnDuty(null), false, 'no schedule');
+});
+
 console.log('\nFAA Medical (open to every member since Oct 22 2026):');
 test('the section is offered to every signed-in member, never when signed out', () => {
   const sv = ctx.ST.user;

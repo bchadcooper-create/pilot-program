@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.48.0 / 20261023_2
+ * Version/build: fcf-v5.48.1 / 20261023_3
  */
 
-const FCF_VERSION = 'fcf-v5.48.0';
-const FCF_BUILD   = '20261023_2';
+const FCF_VERSION = 'fcf-v5.48.1';
+const FCF_BUILD   = '20261023_3';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -11255,11 +11255,11 @@ function buildExCard(exItem, phaseKey) {
 
     if (!exItem.custom) {
       parts.push('<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">');
-      parts.push('<button class="btn-info" style="border-color:rgba(167,139,250,0.4);color:#a78bfa" onclick="showAlternates(\''+exItem.id+'\',\''+jsArg(exItem.name)+'\',\''+phaseKey+'\')">⇄ Alternate</button>');
-      parts.push('<button class="btn-info" style="color:#fca5a5;border-color:rgba(239,68,68,0.3)" onclick="confirmRemoveExercise(\''+exItem.id+'\',\''+jsArg(exItem.name)+'\',false)">✕ Remove</button>');
+      parts.push('<button class="btn-info" style="border-color:rgba(167,139,250,0.4);color:var(--violet)" onclick="showAlternates(\''+exItem.id+'\',\''+jsArg(exItem.name)+'\',\''+phaseKey+'\')">⇄ Alternate</button>');
+      parts.push('<button class="btn-info" style="color:var(--red-soft);border-color:rgba(239,68,68,0.3)" onclick="confirmRemoveExercise(\''+exItem.id+'\',\''+jsArg(exItem.name)+'\',false)">✕ Remove</button>');
       parts.push('</div>');
     } else {
-      parts.push('<div style="margin-top:10px"><button class="btn-info" style="color:#fca5a5;border-color:rgba(239,68,68,0.3)" onclick="confirmRemoveExercise(\''+exItem.id+'\',\''+jsArg(exItem.name)+'\',true)">✕ Remove</button></div>');
+      parts.push('<div style="margin-top:10px"><button class="btn-info" style="color:var(--red-soft);border-color:rgba(239,68,68,0.3)" onclick="confirmRemoveExercise(\''+exItem.id+'\',\''+jsArg(exItem.name)+'\',true)">✕ Remove</button></div>');
     }
     parts.push('</div>');
   }

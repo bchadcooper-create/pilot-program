@@ -9,7 +9,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Flight Crew Fitness">
-<meta name="theme-color" content="#0a0f1a">
+<meta name="theme-color" content="#0a0f1a" id="metaThemeColor">
+<script>
+// Theme before first paint (Appearance in the menu): dark, light, or auto.
+(function(){try{var t=localStorage.getItem('fcf_theme')||'dark';if(t==='auto')t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';if(t==='light'){document.documentElement.setAttribute('data-theme','light');document.getElementById('metaThemeColor').setAttribute('content','#ffffff');}}catch(e){}})();
+</script>
 <meta name="description" content="Flight Crew Fitness is the workout, nutrition and FAA medical app for airline pilots and flight crew. Training that adapts to your crew schedule, hotel gym and sleep, a crew feed, and medical readiness. Built by an airline captain. Free to start.">
 <link rel="canonical" href="https://flightcrew.fit/">
 <meta property="og:title" content="Flight Crew Fitness: Workout App for Pilots and Flight Crew">
@@ -144,7 +148,30 @@
   --text: #e8eef6; --muted: #8899b4; --mono: 'Share Tech Mono', monospace;
   --safe-top: env(safe-area-inset-top); --safe-bot: env(safe-area-inset-bottom);
   --radius-card: 16px; --radius-btn: 10px; --radius-modal: 20px;
+  /* Colors that used to be typed in by hand. Dark values here, light below. */
+  --on-gold: #080d17;          /* text on a gold button or medal */
+  --tile: #0f1623;             /* readiness tiles and the coach card */
+  --tile-border: rgba(255,255,255,0.07);
+  --glow-alpha: 1;             /* the colored glow in those tiles */
+  --overlay: rgba(0,0,0,0.55); /* modal backdrop */
+  --raise: rgba(255,255,255,0.08); /* a slightly lifted surface */
+  --gold-tint: rgba(212,175,55,0.12);
+  --scheme: dark;
 }
+/* Light theme (Appearance in the menu, owner's pick A "Daylight", Oct 23 2026).
+   Only colors change; every size, radius and font is shared. */
+:root[data-theme="light"] {
+  --bg: #f4f6fa; --bg2: #ffffff; --bg3: #eef1f6; --panel: #ffffff; --border: #d6dce6;
+  --gold: #a27f1f; --gold2: #8a6a12; --gold-grad: linear-gradient(135deg, #b8922e 0%, #e2bd57 50%, #c9a84c 100%);
+  --blue: #2563eb; --blue2: #1d4ed8; --teal: #0d9488;
+  --green: #15803d; --red: #dc2626; --amber: #b45309;
+  --text: #0f172a; --muted: #5b6b85;
+  --on-gold: #1a1407; --tile: #ffffff; --tile-border: #d6dce6; --glow-alpha: 0.55;
+  --overlay: rgba(15,23,42,0.45); --raise: rgba(15,23,42,0.05); --gold-tint: rgba(162,127,31,0.12);
+  --scheme: light;
+}
+:root { color-scheme: var(--scheme); }
+:root[data-theme="light"] .card { box-shadow: 0 1px 3px rgba(15,23,42,0.06); }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 html,body{height:100%;overflow:hidden;background:var(--bg)}
 /* Text size setting. Every font-size in the app is in rem, so this one
@@ -180,7 +207,7 @@ a{color:inherit}
 .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-card);padding:18px;margin-bottom:16px;box-shadow:0 2px 12px rgba(0,0,0,0.25)}
 @keyframes fcf-spin{to{transform:rotate(360deg)}}
 .fcf-spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:fcf-spin 0.8s linear infinite;vertical-align:middle;margin-right:8px}
-.loading-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:9999;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
+.loading-overlay{position:fixed;inset:0;background:var(--overlay);display:flex;align-items:center;justify-content:center;z-index:9999;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
 .loading-overlay-card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:18px 22px;display:flex;align-items:center;box-shadow:0 8px 32px rgba(0,0,0,0.6)}
 .loading-overlay-card .fcf-spinner{width:20px;height:20px;border-width:2.5px;margin-right:12px}
 .loading-overlay-label{font-size:0.875rem;font-weight:600;color:var(--text)}
@@ -221,8 +248,8 @@ a{color:inherit}
 .btn{display:block;width:100%;padding:15px;border:none;border-radius:var(--radius-btn);font-size:0.875rem;font-weight:700;cursor:pointer;text-align:center;letter-spacing:0.05em;transition:all 0.15s;-webkit-user-select:none;text-transform:uppercase}
 .btn:disabled{opacity:0.35;cursor:not-allowed}
 .btn:active{transform:scale(0.97)}
-.btn-gold{background:var(--gold-grad);color:#080d17;box-shadow:0 2px 16px rgba(201,168,76,0.3)}.btn-gold:active{filter:brightness(0.88)}
-.medal-badge{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-size:0.8125rem;font-weight:900;color:#080d17;flex-shrink:0;text-shadow:0 0 1px rgba(8,13,23,0.5)}
+.btn-gold{background:var(--gold-grad);color:var(--on-gold);box-shadow:0 2px 16px rgba(201,168,76,0.3)}.btn-gold:active{filter:brightness(0.88)}
+.medal-badge{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-size:0.8125rem;font-weight:900;color:var(--on-gold);flex-shrink:0;text-shadow:0 0 1px rgba(8,13,23,0.5)}
 .medal-badge.gold{background:var(--gold-grad);box-shadow:0 1px 6px rgba(201,168,76,0.55)}
 .medal-badge.silver{background:var(--silver-grad);box-shadow:0 1px 6px rgba(145,153,166,0.45)}
 .medal-badge.bronze{background:var(--bronze-grad);box-shadow:0 1px 6px rgba(138,90,46,0.45)}
@@ -282,7 +309,7 @@ a{color:inherit}
 @keyframes fcf-slide-in-left{from{transform:translateX(-100%)}to{transform:translateX(0)}}
 @keyframes fcf-content-enter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes fcf-pr-pop{0%{opacity:0;transform:scale(0.85)}60%{opacity:1;transform:scale(1.06)}100%{transform:scale(1)}}
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;display:flex;align-items:flex-end}
+.modal-bg{position:fixed;inset:0;background:var(--overlay);z-index:200;display:flex;align-items:flex-end}
 .modal-sheet{background:var(--panel);border-radius:var(--radius-modal) var(--radius-modal) 0 0;padding:20px 20px calc(20px + var(--safe-bot));width:100%;max-height:85vh;overflow-y:auto;border-top:1px solid var(--border);box-shadow:0 -4px 32px rgba(0,0,0,0.5)}
 /* Opt-in only. Deliberately NOT on the shared .modal-sheet class — the
    slide-up belongs to the "+" quick actions menu alone; every other sheet

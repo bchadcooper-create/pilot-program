@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.47.6 / 20261023_1
+ * Version/build: fcf-v5.48.0 / 20261023_2
  */
 
-const FCF_VERSION = 'fcf-v5.47.6';
-const FCF_BUILD   = '20261023_1';
+const FCF_VERSION = 'fcf-v5.48.0';
+const FCF_BUILD   = '20261023_2';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -2085,7 +2085,7 @@ function renderDisclaimerGate(root) {
   parts.push('<div style="text-align:center;margin-bottom:20px"><div class="landing-logo">✈ FLIGHT CREW FITNESS</div></div>');
   parts.push('<div class="card">');
   parts.push('<div class="section-label" style="margin-top:0">SAFETY DISCLAIMER</div>');
-  parts.push('<div style="font-size:0.8125rem;line-height:1.7;color:#cbd5e1">');
+  parts.push('<div style="font-size:0.8125rem;line-height:1.7;color:var(--text)">');
   parts.push('Flight Crew Fitness is a training and tracking tool. It is not medical advice and does not replace consultation with a qualified physician.<br><br>');
   parts.push('Consult your doctor before beginning any new exercise program, especially if you have an existing medical condition, are taking medication, or have concerns about your fitness for activity.<br><br>');
   parts.push('Exercise carries inherent risk of injury. You are responsible for exercising within your own physical limits, using proper form, and stopping immediately if you experience pain, dizziness, chest discomfort, or shortness of breath beyond normal exertion.<br><br>');
@@ -2993,7 +2993,7 @@ function renderCrew(parts) {
   if (!c.profile) { parts.push(crewJoinCardHtml()); return; }
   if (!c.followingSet) crewLoadFollowing().then(renderPage);
   // Full-size buttons (reported: the gear for settings was too small to tap).
-  const nav = (v, label) => '<div class="env-btn" style="padding:10px 4px' + (c.view === v || (v === 'feed' && c.view === 'profile') ? ';border-color:var(--gold);background:rgba(212,175,55,0.08)' : '') + '" onclick="crewGo(\'' + v + '\')"><div style="font-size:0.75rem;font-weight:700;color:var(--text)">' + label + '</div></div>';
+  const nav = (v, label) => '<div class="env-btn" style="padding:10px 4px' + (c.view === v || (v === 'feed' && c.view === 'profile') ? ';border-color:var(--gold);background:var(--gold-tint)' : '') + '" onclick="crewGo(\'' + v + '\')"><div style="font-size:0.75rem;font-weight:700;color:var(--text)">' + label + '</div></div>';
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:12px">' + nav('feed', '📰 Feed') + nav('find', '🔎 Find') + nav('settings', '⚙️ Settings') + '</div>');
   if (c.view === 'settings') { parts.push(crewSettingsHtml()); setTimeout(crewLoadBlocks, 0); return; }
   if (c.view === 'find') { parts.push(crewFindHtml()); setTimeout(() => { crewLoadBaseBoard(); crewFindRun(); }, 0); return; }
@@ -3002,7 +3002,7 @@ function renderCrew(parts) {
     parts.push('<div class="card mb12" id="crewProfileHead"><div style="font-size:0.75rem;color:var(--muted)">Loading…</div></div>');
     setTimeout(() => crewLoadProfileHeader(c.viewUser), 0);
   } else {
-    const seg = (s, label) => '<div class="env-btn" style="padding:8px 4px' + (c.scope === s ? ';border-color:var(--gold);background:rgba(212,175,55,0.08)' : '') + '" onclick="crewSetScope(\'' + s + '\')"><div style="font-size:0.6875rem;font-weight:700">' + label + '</div></div>';
+    const seg = (s, label) => '<div class="env-btn" style="padding:8px 4px' + (c.scope === s ? ';border-color:var(--gold);background:var(--gold-tint)' : '') + '" onclick="crewSetScope(\'' + s + '\')"><div style="font-size:0.6875rem;font-weight:700">' + label + '</div></div>';
     parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:12px">' + seg('following', 'FOLLOWING') + seg('base', 'MY BASE') + seg('all', 'EVERYONE') + '</div>');
     parts.push(crewRequestsHtml());
   }
@@ -3028,7 +3028,7 @@ function renderLeaderboard(p) {
   const parts = [];
   // Crew feed or the boards. Default to the feed once a member has joined.
   if (!ST.ranksSeg) ST.ranksSeg = crewIsMember() ? 'crew' : 'boards';
-  const segTop = (v, label) => '<div class="env-btn" style="padding:10px 4px' + (ST.ranksSeg === v ? ';border-color:var(--gold);background:rgba(212,175,55,0.08)' : '') + '" onclick="ST.ranksSeg=\'' + v + '\';renderPage()"><div style="font-size:0.75rem;font-weight:700">' + label + '</div></div>';
+  const segTop = (v, label) => '<div class="env-btn" style="padding:10px 4px' + (ST.ranksSeg === v ? ';border-color:var(--gold);background:var(--gold-tint)' : '') + '" onclick="ST.ranksSeg=\'' + v + '\';renderPage()"><div style="font-size:0.75rem;font-weight:700">' + label + '</div></div>';
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:4px 0 12px">' + segTop('crew', '👥 CREW') + segTop('boards', '🏆 BOARDS') + '</div>');
   if (ST.ranksSeg === 'crew') { renderCrew(parts); p.innerHTML = parts.join(''); return; }
   parts.push('<div class="section-label">RANKS</div>');
@@ -3052,12 +3052,12 @@ function renderLeaderboard(p) {
   parts.push('<div class="section-label">FULL BOARD</div>');
 
   const segBtn = (key, val, label) =>
-    '<div class="env-btn" style="padding:8px 4px'+(ST[key]===val?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="ST.'+key+'=\''+val+'\';renderPage()"><div style="font-size:0.6875rem;font-weight:700">'+label+'</div></div>';
+    '<div class="env-btn" style="padding:8px 4px'+(ST[key]===val?';border-color:var(--gold);background:var(--gold-tint)':'')+'" onclick="ST.'+key+'=\''+val+'\';renderPage()"><div style="font-size:0.6875rem;font-weight:700">'+label+'</div></div>';
 
   const category = ST.lbCategory || 'strength';
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:12px">' +
-    '<div class="env-btn" style="padding:10px 4px'+(category==='strength'?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="ST.lbCategory=\'strength\';renderPage()"><div style="font-size:0.75rem;font-weight:700">🏋️ STRENGTH</div></div>' +
-    '<div class="env-btn" style="padding:10px 4px'+(category==='running'?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="ST.lbCategory=\'running\';renderPage()"><div style="font-size:0.75rem;font-weight:700">🏃 RUNNING</div></div>' +
+    '<div class="env-btn" style="padding:10px 4px'+(category==='strength'?';border-color:var(--gold);background:var(--gold-tint)':'')+'" onclick="ST.lbCategory=\'strength\';renderPage()"><div style="font-size:0.75rem;font-weight:700">🏋️ STRENGTH</div></div>' +
+    '<div class="env-btn" style="padding:10px 4px'+(category==='running'?';border-color:var(--gold);background:var(--gold-tint)':'')+'" onclick="ST.lbCategory=\'running\';renderPage()"><div style="font-size:0.75rem;font-weight:700">🏃 RUNNING</div></div>' +
     '</div>');
 
   if (category === 'running') {
@@ -3770,6 +3770,10 @@ function applyProfileToState(profile) {
     applyTextSize(profile.textSize);
     try { localStorage.setItem(TEXT_SIZE_LS_KEY, profile.textSize); } catch (e) { /* fine */ }
   }
+  if (typeof profile.theme === 'string' && THEMES.some(t => t.key === profile.theme) && profile.theme !== currentTheme()) {
+    applyTheme(profile.theme);
+    try { localStorage.setItem(THEME_LS_KEY, profile.theme); } catch (e) { /* fine */ }
+  }
   // Re-engagement / disengagement nudges for nutrition + hydration
   // tracking — see computeTrackingNudges().
   if (profile.nutritionTrackingDisabledAt)   ST.nutritionTrackingDisabledAt = profile.nutritionTrackingDisabledAt;
@@ -4189,19 +4193,21 @@ function haptic(style) {
 
 // Oura-style glowing metric tile — large number bottom-left, label top-left,
 // radial glow arc top-right. Colors: gold, blue, teal, green, amber, red.
+// [glow start, glow fade, accent]. The accent is the theme's own color so a
+// label stays readable on the light theme; the glow dims there (--glow-alpha).
 const GLOW_COLORS = {
-  gold:  ['rgba(201,168,76,0.2)',  'rgba(201,168,76,0.06)',  '#c9a84c'],
-  blue:  ['rgba(96,165,250,0.2)',  'rgba(96,165,250,0.06)',  '#60a5fa'],
-  teal:  ['rgba(45,212,191,0.2)',  'rgba(45,212,191,0.06)',  '#2dd4bf'],
-  green: ['rgba(34,197,94,0.2)',   'rgba(34,197,94,0.06)',   '#22c55e'],
-  amber: ['rgba(245,158,11,0.2)',  'rgba(245,158,11,0.06)',  '#f59e0b'],
-  red:   ['rgba(239,68,68,0.2)',   'rgba(239,68,68,0.06)',   '#ef4444'],
+  gold:  ['rgba(201,168,76,calc(0.2 * var(--glow-alpha)))',  'rgba(201,168,76,calc(0.06 * var(--glow-alpha)))',  'var(--gold)'],
+  blue:  ['rgba(96,165,250,calc(0.2 * var(--glow-alpha)))',  'rgba(96,165,250,calc(0.06 * var(--glow-alpha)))',  'var(--blue2)'],
+  teal:  ['rgba(45,212,191,calc(0.2 * var(--glow-alpha)))',  'rgba(45,212,191,calc(0.06 * var(--glow-alpha)))',  'var(--teal)'],
+  green: ['rgba(34,197,94,calc(0.2 * var(--glow-alpha)))',   'rgba(34,197,94,calc(0.06 * var(--glow-alpha)))',   'var(--green)'],
+  amber: ['rgba(245,158,11,calc(0.2 * var(--glow-alpha)))',  'rgba(245,158,11,calc(0.06 * var(--glow-alpha)))',  'var(--amber)'],
+  red:   ['rgba(239,68,68,calc(0.2 * var(--glow-alpha)))',   'rgba(239,68,68,calc(0.06 * var(--glow-alpha)))',   'var(--red)'],
 };
 function glowTile(label, value, colorKey, valueColor) {
   const [gs, gf, accent] = GLOW_COLORS[colorKey] || GLOW_COLORS.blue;
   const vc = valueColor || 'var(--text)';
   return (
-    '<div style="position:relative;border-radius:16px;border:1px solid rgba(255,255,255,0.07);overflow:hidden;padding:12px 10px 10px;min-height:90px;background:#0f1623">' +
+    '<div style="position:relative;border-radius:16px;border:1px solid var(--tile-border);overflow:hidden;padding:12px 10px 10px;min-height:90px;background:var(--tile)">' +
     '<div style="position:absolute;top:-28px;right:-28px;width:110px;height:110px;border-radius:50%;background:radial-gradient(circle,' + gs + ' 0%,' + gf + ' 50%,transparent 75%);pointer-events:none"></div>' +
     '<div style="font-family:var(--mono);font-size:0.5rem;letter-spacing:.12em;color:' + accent + ';opacity:0.9;position:relative;z-index:1">' + label + '</div>' +
     '<div style="position:absolute;bottom:10px;left:10px;font-family:var(--mono);font-size:1.875rem;font-weight:700;color:' + vc + ';line-height:1;z-index:1">' + (value ?? '–') + '</div>' +
@@ -4232,8 +4238,8 @@ function aiCoachCard(id, textId, title, colorKey, initialText, footerHtml) {
   // textId content in when the real response arrives (see those functions —
   // they already just do textEl.textContent = result.text, unchanged).
   return (
-    '<div id="' + id + '" style="position:relative;border-radius:16px;border:1px solid rgba(255,255,255,0.08);' +
-      'overflow:hidden;padding:16px;margin-bottom:12px;background:#0f1623">' +
+    '<div id="' + id + '" style="position:relative;border-radius:16px;border:1px solid var(--tile-border);' +
+      'overflow:hidden;padding:16px;margin-bottom:12px;background:var(--tile)">' +
     '<div style="position:absolute;top:-50px;right:-40px;width:180px;height:180px;border-radius:50%;' +
       'background:radial-gradient(circle,' + gs + ' 0%,' + gf + ' 55%,transparent 75%);pointer-events:none"></div>' +
     '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;position:relative;z-index:1">' +
@@ -4257,8 +4263,8 @@ function aiCoachCard(id, textId, title, colorKey, initialText, footerHtml) {
 function aiCoachTeaser(title, colorKey, blurb) {
   const [gs, gf, accent] = GLOW_COLORS[colorKey] || GLOW_COLORS.gold;
   return (
-    '<div style="position:relative;border-radius:16px;border:1px solid rgba(255,255,255,0.08);' +
-      'overflow:hidden;padding:16px;margin-bottom:12px;background:#0f1623">' +
+    '<div style="position:relative;border-radius:16px;border:1px solid var(--tile-border);' +
+      'overflow:hidden;padding:16px;margin-bottom:12px;background:var(--tile)">' +
     '<div style="position:absolute;top:-50px;right:-40px;width:180px;height:180px;border-radius:50%;' +
       'background:radial-gradient(circle,' + gs + ' 0%,' + gf + ' 55%,transparent 75%);pointer-events:none"></div>' +
     '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;position:relative;z-index:1">' +
@@ -4292,7 +4298,7 @@ function showBigToast(msg, type) {
   const icon = '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="'+color+'" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">'+iconPath+'</svg>';
   const t = document.createElement('div');
   t.id = 'fcf-big-toast';
-  t.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#0f1623;border:2px solid '+color+';color:#e2e8f0;padding:28px 36px;border-radius:16px;font-size:1.125rem;font-weight:700;z-index:9999;box-shadow:0 8px 48px rgba(0,0,0,0.7);text-align:center;min-width:200px;transition:opacity 0.4s';
+  t.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--panel);border:2px solid '+color+';color:var(--text);padding:28px 36px;border-radius:16px;font-size:1.125rem;font-weight:700;z-index:9999;box-shadow:0 8px 48px rgba(0,0,0,0.7);text-align:center;min-width:200px;transition:opacity 0.4s';
   t.innerHTML = '<div style="display:flex;justify-content:center;margin-bottom:12px">'+icon+'</div><div>'+msg+'</div>';
   document.body.appendChild(t);
   const bg = document.createElement('div');
@@ -4971,7 +4977,7 @@ function renderTrackingToggles() {
   const row = (key, label, sub) => {
     const on = !!ST[key];
     const knobLeft = on ? '23px' : '3px';
-    const bg       = on ? 'var(--gold)' : 'rgba(255,255,255,0.12)';
+    const bg       = on ? 'var(--gold)' : 'var(--raise)';
     return (
       '<div class="fb" style="padding:12px 0;border-bottom:1px solid var(--border);align-items:center">' +
         '<div style="flex:1;padding-right:16px">' +
@@ -4997,6 +5003,65 @@ function renderTrackingToggles() {
     '</div>';
 }
 
+// ─── APPEARANCE (More > App settings) ───────────────────────────────────────
+// 'dark' (the original), 'light' (owner's pick A "Daylight", Oct 23 2026) or
+// 'auto' (follow the phone). index.html applies the saved choice before the
+// first paint; this is the same logic for changes made while the app runs.
+const THEMES = [
+  { key: 'dark',  label: 'Dark' },
+  { key: 'light', label: 'Light' },
+  { key: 'auto',  label: 'Auto' },
+];
+const THEME_LS_KEY = 'fcf_theme';
+function themeEntry(key) { return THEMES.find(t => t.key === key) || THEMES[0]; }
+function resolvedTheme(key) {
+  if (key !== 'auto') return key;
+  try { return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; } catch (e) { return 'dark'; }
+}
+function applyTheme(key) {
+  const entry = themeEntry(key);
+  const light = resolvedTheme(entry.key) === 'light';
+  const root = document.documentElement;
+  if (light) root.setAttribute('data-theme', 'light'); else root.removeAttribute('data-theme');
+  const meta = document.getElementById('metaThemeColor');
+  if (meta) meta.setAttribute('content', light ? '#ffffff' : '#0a0f1a');
+  // The iPhone shell paints the status bar area itself; tell it which way to go.
+  try { if (window.FCFBridge && typeof FCFBridge.setAppearance === 'function') FCFBridge.setAppearance(light ? 'light' : 'dark'); } catch (e) { /* older shell */ }
+  return entry.key;
+}
+function currentTheme() {
+  try { return themeEntry(localStorage.getItem(THEME_LS_KEY)).key; } catch (e) { return 'dark'; }
+}
+// Auto follows the phone while the app is open, not only at launch.
+try {
+  const mq = window.matchMedia('(prefers-color-scheme: light)');
+  const onChange = () => { if (currentTheme() === 'auto') applyTheme('auto'); };
+  if (mq.addEventListener) mq.addEventListener('change', onChange); else if (mq.addListener) mq.addListener(onChange);
+} catch (e) { /* no matchMedia */ }
+function renderThemeControl() {
+  const cur = currentTheme();
+  const btns = THEMES.map(t => {
+    const on = t.key === cur;
+    return '<button onclick="haptic(\'selection\');setTheme(\'' + t.key + '\')" style="' +
+      'flex:1;min-width:0;padding:10px 2px;border-radius:10px;cursor:pointer;font-family:\'Inter\',sans-serif;font-weight:600;font-size:0.75rem;' +
+      'border:1px solid ' + (on ? 'var(--gold)' : 'var(--border)') + ';background:' + (on ? 'var(--gold-tint)' : 'transparent') + ';color:' + (on ? 'var(--gold)' : 'var(--text)') + '">' + t.label + '</button>';
+  }).join('');
+  return '<div class="card mb12">' +
+    '<div style="font-size:0.875rem">Appearance</div>' +
+    '<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px;margin-bottom:10px">Dark is the original. Light is easier in daylight. Auto follows your phone.</div>' +
+    '<div style="display:flex;gap:6px;align-items:stretch">' + btns + '</div></div>';
+}
+async function setTheme(key) {
+  const applied = applyTheme(key);
+  try { localStorage.setItem(THEME_LS_KEY, applied); } catch (e) { /* private mode */ }
+  renderPage();
+  try {
+    const profile = (await dbGetProfile()) || {};
+    profile.theme = applied;
+    await dbSetProfile(profile);
+  } catch (e) { console.warn('setTheme save error:', e); }
+}
+
 // Text size picker (More > Display). Four buttons, the active one in gold.
 // Each button's own label is drawn at that step's size so the choice can
 // be judged before tapping it.
@@ -5012,7 +5077,7 @@ function renderTextSizeControl() {
       'font-family:\'Inter\',sans-serif;font-weight:600;line-height:1.1;' +
       'font-size:'+(0.7 * t.scale / curScale).toFixed(3)+'rem;' +
       'border:1px solid '+(on ? 'var(--gold)' : 'var(--border)')+';' +
-      'background:'+(on ? 'rgba(212,175,55,0.15)' : 'transparent')+';' +
+      'background:'+(on ? 'var(--gold-tint)' : 'transparent')+';' +
       'color:'+(on ? 'var(--gold)' : 'var(--text)')+'">'+t.label+'</button>';
   }).join('');
   return '<div class="section-label" style="margin-top:20px">DISPLAY</div>' +
@@ -5218,7 +5283,7 @@ function renderMedicationEditor() {
   // (a .field-wrapped native checkbox would inherit the input reset and
   // render invisible).
   const knobLeft = d.remind ? '23px' : '3px';
-  const knobBg   = d.remind ? 'var(--gold)' : 'rgba(255,255,255,0.12)';
+  const knobBg   = d.remind ? 'var(--gold)' : 'var(--raise)';
   parts.push('<div class="fb" style="padding:10px 0 14px;align-items:center">' +
     '<div style="flex:1;padding-right:16px"><div style="font-size:0.875rem">Remind me</div>' +
     '<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">Phone notification at each time above (iOS app)</div></div>' +
@@ -5513,7 +5578,7 @@ function buildMedsTodayInner(ctx) {
     parts.push('<div class="fb" style="padding:10px 0;'+border+'cursor:pointer;align-items:center;-webkit-tap-highlight-color:transparent" onclick="toggleMedTaken(\''+d.med.id+'\',\''+d.time+'\')">');
     parts.push('<span style="font-family:var(--mono);font-size:0.75rem;color:'+timeColor+';min-width:52px">'+d.time+'</span>');
     parts.push('<span style="flex:1;font-size:0.875rem;'+(taken?'color:var(--muted);text-decoration:line-through;':'')+'">'+d.med.name+(d.med.dose != null ? ' <span style="color:var(--muted);font-size:0.75rem">'+medDoseLabel(d.med)+'</span>' : '')+'</span>');
-    parts.push('<span style="width:26px;height:26px;border-radius:50%;border:1.5px solid '+(taken?'var(--gold)':'var(--border)')+';background:'+(taken?'var(--gold)':'transparent')+';display:flex;align-items:center;justify-content:center;font-size:0.875rem;color:#0b0f18;flex-shrink:0">'+(taken?'✓':'')+'</span>');
+    parts.push('<span style="width:26px;height:26px;border-radius:50%;border:1.5px solid '+(taken?'var(--gold)':'var(--border)')+';background:'+(taken?'var(--gold)':'transparent')+';display:flex;align-items:center;justify-content:center;font-size:0.875rem;color:var(--on-gold);flex-shrink:0">'+(taken?'✓':'')+'</span>');
     parts.push('</div>');
   });
   parts.push('</div>');
@@ -9072,7 +9137,7 @@ async function renderPreflight(p) {
       parts.push('<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);letter-spacing:0.05em;margin-bottom:6px">1 = BARELY RECOVERED · 5 = FULLY RECOVERED</div>');
       parts.push('<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:8px">');
       for (let i=1;i<=5;i++) {
-        parts.push('<div class="env-btn" style="padding:8px 2px'+(ST.readiness===i?';border-color:var(--gold);background:rgba(212,175,55,0.08)':'')+'" onclick="setReadiness('+i+')"><div style="font-size:0.9375rem;font-weight:700">'+i+'</div></div>');
+        parts.push('<div class="env-btn" style="padding:8px 2px'+(ST.readiness===i?';border-color:var(--gold);background:var(--gold-tint)':'')+'" onclick="setReadiness('+i+')"><div style="font-size:0.9375rem;font-weight:700">'+i+'</div></div>');
       }
       parts.push('</div>');
       const condMeta = {go:[statusDot('go'),'GO: full protocol'], marginal:[statusDot('marginal'),'MARGINAL: light only'], nogo:[statusDot('nogo'),'NO-GO: mobility only']}[ST.fatigue];
@@ -9369,7 +9434,7 @@ function runWeekProgressHtml() {
       '<span style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.14em;color:var(--muted)">🏃 THIS WEEK</span>' +
       '<span style="font-family:var(--mono);font-size:0.75rem;color:' + (done ? 'var(--green)' : 'var(--text)') + '">' + (done ? '✓ ' : '') + w.miles + ' / ' + w.plan.weeklyMiles + ' mi · ' + w.days + ' of ' + w.plan.daysPerWeek + ' runs</span>' +
     '</div>' +
-    '<div style="height:6px;border-radius:3px;background:rgba(255,255,255,0.08);overflow:hidden"><div style="height:100%;width:' + pct + '%;background:' + (done ? 'var(--green)' : 'var(--gold)') + ';border-radius:3px"></div></div>' +
+    '<div style="height:6px;border-radius:3px;background:var(--raise);overflow:hidden"><div style="height:100%;width:' + pct + '%;background:' + (done ? 'var(--green)' : 'var(--gold)') + ';border-radius:3px"></div></div>' +
     '<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px;line-height:1.5">Today: ' + next.note + '</div>' +
   '</div>';
 }
@@ -9414,7 +9479,7 @@ function stepGoalProgressHtml(steps) {
       '<span style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.14em;color:var(--muted)">🚶 STEP GOAL</span>' +
       '<span style="font-family:var(--mono);font-size:0.75rem;color:'+(done?'var(--green)':'var(--text)')+'">'+(done?'✓ ':'')+steps.toLocaleString()+' / '+goal.toLocaleString()+'</span>' +
     '</div>' +
-    '<div style="height:6px;border-radius:3px;background:rgba(255,255,255,0.08);overflow:hidden">' +
+    '<div style="height:6px;border-radius:3px;background:var(--raise);overflow:hidden">' +
       '<div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:3px"></div>' +
     '</div>' +
     stepStreakLineHtml() +
@@ -12655,7 +12720,7 @@ function runningCardHtml(stats) {
   parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">' +
     glowTile('WEEK MI', stats.weekMiles, 'gold') + glowTile(monthName.slice(0, 3).toUpperCase() + ' MI', stats.monthMiles, 'blue') + glowTile('YEAR MI', stats.yearMiles, 'teal') + '</div>');
   parts.push('<div class="fb" style="align-items:baseline;margin-bottom:6px"><span style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.14em;color:var(--muted)">' + monthName.toUpperCase() + ' CHALLENGE</span><span style="font-family:var(--mono);font-size:0.75rem;color:' + (stats.monthChallengeMet ? 'var(--green)' : 'var(--text)') + '">' + (stats.monthChallengeMet ? '✓ ' : '') + stats.monthMiles + ' / ' + stats.monthGoal + ' mi</span></div>');
-  parts.push('<div style="height:6px;border-radius:3px;background:rgba(255,255,255,0.08);overflow:hidden;margin-bottom:4px"><div style="height:100%;width:' + pct + '%;background:' + (stats.monthChallengeMet ? 'var(--green)' : 'var(--gold)') + ';border-radius:3px"></div></div>');
+  parts.push('<div style="height:6px;border-radius:3px;background:var(--raise);overflow:hidden;margin-bottom:4px"><div style="height:100%;width:' + pct + '%;background:' + (stats.monthChallengeMet ? 'var(--green)' : 'var(--gold)') + ';border-radius:3px"></div></div>');
   parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-bottom:14px">' + (stats.monthChallengeMet ? 'Challenge done: the Monthly Miles badge is yours.' : (Math.round((stats.monthGoal - stats.monthMiles) * 10) / 10) + ' miles to go this month. ' + (isRunner() ? 'Set from your weekly target.' : 'Pick Runner as your objective to set your own target.')) + '</div>');
   parts.push('<div style="font-size:0.625rem;color:var(--muted);letter-spacing:.14em;font-family:var(--mono);margin-bottom:6px">LAST 8 WEEKS</div>');
   parts.push('<div style="display:flex;align-items:flex-end;gap:4px;height:56px;margin-bottom:4px">' + stats.weeks.map((w, i) => '<div title="' + w.start + ': ' + w.miles + ' mi" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%"><div style="height:' + Math.max(w.miles ? 4 : 1, Math.round(w.miles / maxW * 52)) + 'px;background:' + (i === 7 ? 'var(--gold)' : 'rgba(201,168,76,0.45)') + ';border-radius:3px 3px 0 0"></div></div>').join('') + '</div>');
@@ -13098,7 +13163,7 @@ function renderWisdom(p) {
   parts.push('<div class="wisdom-card"><div>');
   parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--gold);letter-spacing:0.1em;margin-bottom:12px">BRIEFING '+num+' / '+WISDOM.length+'</div>');
   parts.push('<div style="font-size:1.125rem;font-weight:700;color:var(--text);margin-bottom:14px">'+card.title+'</div>');
-  parts.push('<div style="font-size:0.8125rem;line-height:1.8;color:#94a3b8">'+card.text+'</div>');
+  parts.push('<div style="font-size:0.8125rem;line-height:1.8;color:var(--muted)">'+card.text+'</div>');
   parts.push('</div><div><a class="modal-link" href="'+card.link+'" '+externalLinkAttrs()+'>📖 Read more →</a></div></div>');
   parts.push('<div class="wisdom-counter">'+(activeIdx+1)+' of '+WISDOM.length+(isAutoRotated?' · rotates daily':'')+'</div>');
   parts.push('<div class="wisdom-nav"><button class="btn btn-outline" onclick="prevWisdom()">← PREV</button><button class="btn btn-outline" onclick="nextWisdom()">NEXT →</button></div>');
@@ -15092,7 +15157,7 @@ function renderMedical(p) {
 }
 
 function medHomeHtml(rec) {
-  const parts = ['<div class="section-label">FAA MEDICAL · PREVIEW</div>'];
+  const parts = ['<div class="section-label">FAA MEDICAL</div>'];
   const today = localDateStr(new Date());
   const privs = medicalPrivileges(rec.cls, rec.examDate, rec.dob);
   const item = (icon, title, sub, view) => '<div class="card mb12" style="cursor:pointer" onclick="medicalSetView(\'' + view + '\')"><div class="fb"><div style="display:flex;align-items:center;gap:12px"><div style="font-size:1.375rem">' + icon + '</div><div><div style="font-size:0.875rem;font-weight:600">' + title + '</div><div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">' + sub + '</div></div></div><div style="color:var(--muted)">→</div></div></div>';
@@ -15458,6 +15523,7 @@ function renderMore(p) {
 
   parts.push('<div class="section-label" style="margin-top:20px">APP SETTINGS</div>');
   parts.push(renderTextSizeControl());
+  parts.push(renderThemeControl());
   parts.push(renderTrackingToggles());
 
   parts.push('<div class="section-label" style="margin-top:20px">SUBSCRIPTION</div>');
@@ -17026,7 +17092,7 @@ function noRingDataCardHtml() {
     : 'Oura has no readiness or sleep score for today' + (lastDay ? ', the latest is from ' + lastDay : '') + '. If you wore the ring, open the Oura app so it syncs, then tap Sync. Otherwise tell us how recovered you feel so today\'s plan is based on you, not on yesterday.') + '</div>');
   p.push('<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);letter-spacing:0.05em;margin-bottom:6px">1 = BARELY RECOVERED · 5 = FULLY RECOVERED</div>');
   p.push('<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:8px">');
-  for (let i = 1; i <= 5; i++) p.push('<div class="env-btn" style="padding:8px 2px' + (ST.readiness === i ? ';border-color:var(--gold);background:rgba(212,175,55,0.08)' : '') + '" onclick="setReadinessFromToday(' + i + ')"><div style="font-size:0.9375rem;font-weight:700">' + i + '</div></div>');
+  for (let i = 1; i <= 5; i++) p.push('<div class="env-btn" style="padding:8px 2px' + (ST.readiness === i ? ';border-color:var(--gold);background:var(--gold-tint)' : '') + '" onclick="setReadinessFromToday(' + i + ')"><div style="font-size:0.9375rem;font-weight:700">' + i + '</div></div>');
   p.push('</div>');
   if (ST.readiness) p.push('<div style="font-size:0.75rem">Pilot Condition: <strong>' + condMeta[0] + ' ' + condMeta[1] + '</strong></div>');
   p.push('</div>');

@@ -220,3 +220,45 @@ alter table crew_reports add column if not exists dismissed_at timestamptz;
 grant select on crew_profiles, crew_follows, crew_activities, crew_kudos, crew_comments, crew_blocks, crew_reports to anon;
 grant select, insert, update, delete on crew_profiles, crew_follows, crew_activities, crew_kudos, crew_comments, crew_blocks, crew_reports to authenticated;
 grant select, insert, update, delete on crew_profiles, crew_follows, crew_activities, crew_kudos, crew_comments, crew_blocks, crew_reports to service_role;
+
+-- ── Photos on posts (Oct 26 2026) ────────────────────────────────────────
+-- A member can attach up to 4 photos to one of their own posts (the gym, the
+-- equipment). Files live in the public 'crew-photos' bucket under
+-- <user_id>/<activity_id>/<random>.jpg; crew_photos rows tie them to the post.
+-- Public bucket: a photo on a followers-only post is still reachable by anyone
+-- who has its URL, so the client tells members not to post anything private.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('crew-photos', 'crew-photos', true, 3145728, array['image/jpeg','image/png','image/webp'])
+on conflict (id) do nothing;
+create policy "crew photos public read" on storage.objects for select using (bucket_id = 'crew-photos');
+create policy "crew photos own upload" on storage.objects for insert to authenticated
+  with check (bucket_id = 'crew-photos' and (auth.uid())::text = (storage.foldername(name))[1]);
+create policy "crew photos own delete" on storage.objects for delete to authenticated
+  using (bucket_id = 'crew-photos' and (auth.uid())::text = (storage.foldername(name))[1]);
+
+create table if not exists crew_photos (
+  id          uuid primary key default gen_random_uuid(),
+  activity_id uuid not null references crew_activities(id) on delete cascade,
+  user_id     uuid not null references auth.users(id) on delete cascade,
+  path        text not null unique,
+  created_at  timestamptz not null default now()
+);
+create index if not exists crew_photos_activity on crew_photos (activity_id, created_at);
+alter table crew_photos enable row level security;
+create policy crew_photos_read on crew_photos for select to authenticated using (
+  exists (select 1 from crew_activities a where a.id = activity_id) and not crew_blocked((select auth.uid()), user_id));
+-- The cap counts through a definer function: a policy that reads its own
+-- table recurses ("infinite recursion detected in policy").
+create or replace function crew_photo_count(p_activity uuid) returns bigint
+language sql stable security definer set search_path = public as $$
+  select count(*) from crew_photos where activity_id = p_activity;
+$$;
+revoke execute on function crew_photo_count(uuid) from anon;
+grant execute on function crew_photo_count(uuid) to authenticated;
+create policy crew_photos_ins on crew_photos for insert to authenticated with check (
+  (select auth.uid()) = user_id
+  and exists (select 1 from crew_activities a where a.id = activity_id and a.user_id = (select auth.uid()))
+  and crew_photo_count(activity_id) < 4);
+create policy crew_photos_del on crew_photos for delete to authenticated using ((select auth.uid()) = user_id);
+grant select, insert, delete on crew_photos to authenticated;
+grant select, insert, update, delete on crew_photos to service_role;

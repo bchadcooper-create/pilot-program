@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.48.2 / 20261026_1
+ * Version/build: fcf-v5.48.3 / 20261026_2
  */
 
-const FCF_VERSION = 'fcf-v5.48.2';
-const FCF_BUILD   = '20261026_1';
+const FCF_VERSION = 'fcf-v5.48.3';
+const FCF_BUILD   = '20261026_2';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -2580,9 +2580,10 @@ async function loadLeaderboardGlance() {
 // Everything is enforced by row-level security in sql/crew_feed.sql; this
 // file only asks.
 // ═══════════════════════════════════════════════════════════════════════════
-const CREW_RULES = 'Be the crew member you would want on the jumpseat. Encourage, do not mock. No harassment, no slurs, no sexual content, no selling. Nothing that identifies a passenger, a flight number or a company incident. Report what breaks this and block who you need to; reports go to the owner and repeat offenders are removed.';
+const CREW_RULES = 'Be the crew member you would want on the jumpseat. Encourage, do not mock. No harassment, no slurs, no sexual content, no selling. Nothing that identifies a passenger, a flight number or a company incident. Photos show the gym and the gear, not other people. Report what breaks this and block who you need to; reports go to the owner and repeat offenders are removed.';
 const CREW_ENV_WORD = { comm: 'gym', hotel: 'hotel gym', room: 'hotel room', band: 'bands' };
-if (!ST.crew) ST.crew = { profile: null, loaded: false, scope: 'following', feed: [], view: 'feed', viewUser: null, comments: {}, open: {}, find: '' };
+if (!ST.crew) ST.crew = { profile: null, loaded: false, scope: 'following', feed: [], view: 'feed', viewUser: null, comments: {}, open: {}, find: '', photos: {} };
+if (!ST.crew.photos) ST.crew.photos = {};
 
 function crewEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function crewAgo(iso, now) {
@@ -2669,6 +2670,74 @@ async function crewLoadFeed(more) {
   if (error) throw error;
   c.feed = more ? c.feed.concat(data || []) : (data || []);
   c.feedEnd = (data || []).length < 30;
+  await crewLoadPhotos((data || []).map(a => a.id));
+}
+// Photos come in a second read so crew_feed's return shape stays put.
+async function crewLoadPhotos(ids) {
+  if (!ids.length) return;
+  try {
+    const { data } = await withTimeout(SB.from('crew_photos').select('id,activity_id,user_id,path,created_at').in('activity_id', ids).order('created_at'), 10000);
+    ids.forEach(id => { ST.crew.photos[id] = []; });
+    (data || []).forEach(ph => { (ST.crew.photos[ph.activity_id] = ST.crew.photos[ph.activity_id] || []).push(ph); });
+  } catch (e) { /* keep what we had */ }
+}
+const CREW_PHOTO_MAX = 4;
+function crewPhotoUrl(path) { return SB.storage.from('crew-photos').getPublicUrl(path).data.publicUrl; }
+// Shrink to 1600 px on the long side and re-encode as JPEG so a phone photo
+// (3 to 8 MB) goes up as a few hundred KB. HEIC arrives already converted by
+// the file picker on iOS.
+async function crewShrinkPhoto(file) {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement('canvas'); cv.width = Math.round(bmp.width * scale); cv.height = Math.round(bmp.height * scale);
+  cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+  return new Promise(res => cv.toBlob(b => res(b), 'image/jpeg', 0.82));
+}
+function crewAddPhoto(id) {
+  const a = ST.crew.feed.find(x => x.id === id); if (!a || a.user_id !== ST.user.id) return;
+  if ((ST.crew.photos[id] || []).length >= CREW_PHOTO_MAX) { showToast('Up to ' + CREW_PHOTO_MAX + ' photos per post.'); return; }
+  const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*';
+  input.onchange = async () => {
+    const file = input.files[0]; if (!file) return;
+    showToast('Uploading photo…');
+    try {
+      const blob = await crewShrinkPhoto(file);
+      const path = ST.user.id + '/' + id + '/' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8) + '.jpg';
+      const up = await SB.storage.from('crew-photos').upload(path, blob, { upsert: false, contentType: 'image/jpeg' });
+      if (up.error) throw up.error;
+      const { data, error } = await withTimeout(SB.from('crew_photos').insert({ activity_id: id, user_id: ST.user.id, path }).select('id,activity_id,user_id,path,created_at').single());
+      if (error) { SB.storage.from('crew-photos').remove([path]).then(() => {}, () => {}); throw error; }
+      (ST.crew.photos[id] = ST.crew.photos[id] || []).push(data);
+      haptic('light'); crewRedrawCard(id); showToast('Photo added.');
+    } catch (e) { console.warn('crew photo', e); showToast('Could not add the photo.'); }
+  };
+  document.body.appendChild(input); input.click(); setTimeout(() => input.remove(), 5000);
+}
+async function crewDeletePhoto(actId, photoId) {
+  const ph = (ST.crew.photos[actId] || []).find(p => p.id === photoId); if (!ph) return;
+  if (!(await appConfirm('Remove this photo?', 'Remove'))) return;
+  try {
+    const { error } = await withTimeout(SB.from('crew_photos').delete().eq('id', photoId)); if (error) throw error;
+    SB.storage.from('crew-photos').remove([ph.path]).then(() => {}, () => {});
+    ST.crew.photos[actId] = (ST.crew.photos[actId] || []).filter(p => p.id !== photoId);
+    closeModal(); crewRedrawCard(actId);
+  } catch (e) { showToast('Could not remove.'); }
+}
+function crewViewPhoto(actId, photoId) {
+  const ph = (ST.crew.photos[actId] || []).find(p => p.id === photoId); if (!ph) return;
+  const mine = ph.user_id === ST.user.id;
+  document.getElementById('modalRoot').innerHTML =
+    '<div class="modal-bg" style="display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)closeModal()">' +
+    '<div style="max-width:100%;max-height:100%;display:flex;flex-direction:column;gap:10px;align-items:center">' +
+    '<img src="' + crewPhotoUrl(ph.path) + '" alt="" style="max-width:100%;max-height:80vh;border-radius:12px;object-fit:contain">' +
+    '<div style="display:flex;gap:8px">' + (mine ? '<button class="btn btn-red-outline" style="width:auto;padding:0 16px" onclick="crewDeletePhoto(\'' + actId + '\',\'' + photoId + '\')">Remove</button>' : '<button class="btn btn-outline" style="width:auto;padding:0 16px" onclick="closeModal();crewReport(\'activity\',\'' + actId + '\')">Report</button>') +
+    '<button class="btn btn-outline" style="width:auto;padding:0 16px" onclick="closeModal()">Close</button></div></div></div>';
+}
+function crewPhotosHtml(a) {
+  const list = ST.crew.photos[a.id] || []; if (!list.length) return '';
+  const one = list.length === 1;
+  return '<div style="display:grid;grid-template-columns:' + (one ? '1fr' : '1fr 1fr') + ';gap:6px;margin:8px 0 2px">' +
+    list.map(ph => '<img src="' + crewPhotoUrl(ph.path) + '" alt="" loading="lazy" style="width:100%;' + (one ? 'max-height:320px' : 'aspect-ratio:1;height:auto') + ';object-fit:cover;border-radius:10px;cursor:pointer;background:var(--tile)" onclick="crewViewPhoto(\'' + a.id + '\',\'' + ph.id + '\')">').join('') + '</div>';
 }
 
 // ── Actions ───────────────────────────────────────────────────────────────
@@ -2875,7 +2944,7 @@ function crewSetScope(s) { ST.crew.scope = s; ST.crew.feed = []; ST.crew.loadedK
 function crewJoinCardHtml() {
   return '<div class="card mb12" style="border-color:var(--gold)">' +
     '<div style="font-size:1rem;font-weight:600;margin-bottom:6px">Join the crew feed</div>' +
-    '<div style="font-size:0.75rem;color:var(--muted);line-height:1.6;margin-bottom:12px">See what other pilots and crew are running and lifting, give kudos, follow people, and find crew at your base. Your workouts post under your call sign: what you did, distance, time and where (gym, hotel) but never an address or a route. You can hide any post, turn posting off, or leave at any time. Your last 14 days of workouts are shared when you join so your feed is not empty.</div>' +
+    '<div style="font-size:0.75rem;color:var(--muted);line-height:1.6;margin-bottom:12px">See what other pilots and crew are running and lifting, give kudos, follow people, and find crew at your base. Your workouts post under your call sign: what you did, distance, time and where (gym, hotel) but never an address or a route. You can add photos of the gym or the gear to your own posts. You can hide any post, turn posting off, or leave at any time. Your last 14 days of workouts are shared when you join so your feed is not empty.</div>' +
     '<div class="field"><label>Call sign</label><input id="crewCallsign" type="text" maxlength="20" value="' + crewEsc(ST.username || '') + '" placeholder="e.g. Maverick"></div>' +
     '<div class="field-row"><div class="field"><label>Home base</label><input id="crewBase" type="text" maxlength="4" list="bmBaseList" placeholder="PHX" autocapitalize="characters" style="text-transform:uppercase" value="' + crewEsc(ST.homeBase || '') + '"><datalist id="bmBaseList">' + HOME_BASES.map(b => '<option value="' + b + '">').join('') + '</datalist></div>' +
     '<div class="field"><label>Who sees my posts</label><select id="crewVis"><option value="everyone">Everyone on the feed</option><option value="followers">Only people I approve</option></select></div></div>' +
@@ -2892,9 +2961,11 @@ function crewCardHtml(a) {
   h += '<div style="font-size:1rem;font-weight:600;margin-bottom:2px">' + icon + ' ' + crewEsc(a.title) + '</div>';
   const stat = crewStatLine(a); if (stat) h += '<div style="font-family:var(--mono);font-size:0.75rem;color:var(--gold);margin-bottom:6px">' + crewEsc(stat) + '</div>';
   if (a.note) h += '<div style="font-size:0.8125rem;line-height:1.5;margin-bottom:6px">' + crewEsc(a.note) + '</div>';
+  h += crewPhotosHtml(a);
   h += '<div style="display:flex;gap:8px;margin-top:8px">' +
     '<button class="btn-ghost" style="padding:6px 10px;font-size:0.8125rem;border:1px solid ' + (a.my_kudos ? 'var(--gold)' : 'var(--border)') + ';border-radius:8px;color:' + (a.my_kudos ? 'var(--gold)' : 'var(--text)') + '" onclick="crewKudos(\'' + a.id + '\')">👏 ' + (a.kudos_count || 0) + '</button>' +
-    '<button class="btn-ghost" style="padding:6px 10px;font-size:0.8125rem;border:1px solid var(--border);border-radius:8px" onclick="crewToggleComments(\'' + a.id + '\')">💬 ' + (a.comment_count || 0) + '</button></div>';
+    '<button class="btn-ghost" style="padding:6px 10px;font-size:0.8125rem;border:1px solid var(--border);border-radius:8px" onclick="crewToggleComments(\'' + a.id + '\')">💬 ' + (a.comment_count || 0) + '</button>' +
+    (mine && (ST.crew.photos[a.id] || []).length < CREW_PHOTO_MAX ? '<button class="btn-ghost" style="padding:6px 10px;font-size:0.8125rem;border:1px solid var(--border);border-radius:8px;margin-left:auto" title="Add a photo of the gym or the gear" onclick="crewAddPhoto(\'' + a.id + '\')">📷 Photo</button>' : '') + '</div>';
   if (open) {
     h += '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">';
     if (!cmts) h += '<div style="font-size:0.75rem;color:var(--muted)">Loading…</div>';

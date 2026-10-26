@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.48.1 / 20261023_3
+ * Version/build: fcf-v5.48.2 / 20261026_1
  */
 
-const FCF_VERSION = 'fcf-v5.48.1';
-const FCF_BUILD   = '20261023_3';
+const FCF_VERSION = 'fcf-v5.48.2';
+const FCF_BUILD   = '20261026_1';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -8183,6 +8183,22 @@ const EXERCISE_SYNONYMS = {
   'weighted burpee': 'Medicine Ball Burpee',
   'ball burpee': 'Medicine Ball Burpee',
   'slam ball burpee': 'Medicine Ball Burpee',
+  'seated medicine ball vertical jump': 'Seated Med Ball Vertical Jump',
+  'seated med ball jump': 'Seated Med Ball Vertical Jump',
+  'seated medicine ball jump': 'Seated Med Ball Vertical Jump',
+  'seated vertical jump': 'Seated Med Ball Vertical Jump',
+  'seated jump': 'Seated Med Ball Vertical Jump',
+  'bench jump': 'Seated Med Ball Vertical Jump',
+  'seated medicine ball box jump': 'Seated Med Ball Box Jump',
+  'seated box jump': 'Seated Med Ball Box Jump',
+  'slam ball seated slam to vertical jump': 'Seated Med Ball Slam to Jump',
+  'seated slam to vertical jump': 'Seated Med Ball Slam to Jump',
+  'seated slam jump': 'Seated Med Ball Slam to Jump',
+  'seated slam ball jump': 'Seated Med Ball Slam to Jump',
+  'medicine ball squat jump throw': 'Med Ball Squat Jump Throw',
+  'med ball jump throw': 'Med Ball Squat Jump Throw',
+  'squat jump throw': 'Med Ball Squat Jump Throw',
+  'med ball throw jump': 'Med Ball Squat Jump Throw',
   'rear delt fly': 'Dumbbell Reverse Fly',
   'db rear delt fly': 'Dumbbell Reverse Fly',
   'rear delt raise': 'Dumbbell Reverse Fly',
@@ -8277,6 +8293,12 @@ const CATALOG_EXTRAS = [
   ex('x_lm_twist',  'Landmine Twist',           '3×10/side', 3, 'Hold the bar end with straight arms, rotate it from one hip to the other, pivoting your feet as you turn. Core and obliques. Start light.'),
   ex('x_burpee',    'Burpee',                   '3×10', 3, 'Squat, hands to the floor, jump the feet back to a plank, chest to the floor, jump the feet in, then jump up with hands overhead. Step back and forward instead of jumping to make it easier.', false, 'reps_only'),
   ex('x_mb_burpee', 'Medicine Ball Burpee',     '3×10', 3, 'Set the ball on the floor, hands on the ball, jump the feet back to a plank, jump them in, then stand and lift the ball overhead. Log the weight of the ball.'),
+  // Seated medicine ball jumps (Oct 26 2026). Power from a dead stop: the
+  // seated start removes the countermovement, so every rep is pure drive.
+  ex('x_mb_seatjump',  'Seated Med Ball Vertical Jump', '4×4', 4, 'Sit on a flat bench or box, feet planted, medicine ball held at the chest. Drive through the feet, extend ankles, knees and hips together, and launch straight up off the bench with the ball locked at the chest. Land soft with bent knees, sit back down, reset. Full rest between sets. Log the weight of the ball.'),
+  ex('x_mb_seatbox',   'Seated Med Ball Box Jump',      '4×3', 4, 'Sit on a bench facing a box or platform, ball at the chest. Explode up out of the seat and land on top of the box, soft knees, ball still at the chest. Step down, never jump down. Log reps and the box height.', false, 'reps_height'),
+  ex('x_mb_seatslam',  'Seated Med Ball Slam to Jump',  '3×5', 3, 'Sit on a bench with a slam ball at the chest. Lift the ball overhead, slam it into the floor in front of you, then immediately drive up into a vertical jump. Pick it up, sit, repeat. Use a ball that will not bounce. Log the weight of the ball.'),
+  ex('x_mb_sqthrow',   'Med Ball Squat Jump Throw',     '3×5', 3, 'Ball at the chest, sink into a squat, then jump and throw the ball straight up as high as you can at the top. Let it land on the floor, not in your hands. Outdoors or a high ceiling. Log the weight of the ball.'),
   // Hotel cable column (Oct 22 2026, from an HD1900 exercise card). Names
   // match the card so a search for what the sticker says finds the move.
   ex('x_cab_legcurl',  'Standing Leg Curl (Cable)',   '3×12/leg', 3, 'Ankle cuff on the low pulley, face the stack, curl the heel to the glute without moving the thigh. Slow on the way down.'),
@@ -10057,6 +10079,7 @@ const ALTERNATES = {
     {name:'Seated Row (Machine)',target:'3×12',note:'Chest supported. Same squeeze, less lower-back demand.'},
   ],
   'Box Jump': [
+    {name:'Seated Med Ball Vertical Jump', target:'4×4',note:'Dead-stop power from a bench. No countermovement, no box.'},
     {name:'Broad Jump',         target:'5×3',note:'Horizontal power. Same explosive hip extension.',inputType:'reps_distance'},
     {name:'Squat Jump',         target:'4×5',note:'No box needed. Same power demand.',inputType:'reps_only'},
     {name:'DB Jump Squat',      target:'4×5',note:'Light DBs add load without a box.'},
@@ -10165,9 +10188,27 @@ const ALTERNATES = {
     {name:'Towel Curl',target:'3×12',note:'No equipment needed; partner or fixed object required.'},
   ],
   'Bench/Box Jump': [
+    {name:'Seated Med Ball Vertical Jump',target:'4×4',note:'Sit on the bench, ball at the chest, explode up. Dead-stop power.'},
     {name:'Broad Jump',target:'5×3',note:'Horizontal power, no box height needed.',inputType:'reps_distance'},
     {name:'Squat Jump',target:'4×5',note:'No box needed; same explosive demand.',inputType:'reps_only'},
     {name:'DB Jump Squat',target:'4×5',note:'Light DBs add load without needing a box.'},
+  ],
+  'Seated Med Ball Vertical Jump': [
+    {name:'Seated Med Ball Box Jump',target:'4×3',note:'Same start, land on a box instead of the floor.',inputType:'reps_height'},
+    {name:'Squat Jump',target:'4×5',note:'No bench or ball needed.',inputType:'reps_only'},
+    {name:'Box Jump',target:'5×3',note:'Standing start, box landing.',inputType:'reps_height'},
+  ],
+  'Seated Med Ball Box Jump': [
+    {name:'Seated Med Ball Vertical Jump',target:'4×4',note:'Same start, land on the floor. No box needed.'},
+    {name:'Box Jump',target:'5×3',note:'Standing start onto the same box.',inputType:'reps_height'},
+  ],
+  'Seated Med Ball Slam to Jump': [
+    {name:'Seated Med Ball Vertical Jump',target:'4×4',note:'Drop the slam; keep the ball at the chest.'},
+    {name:'Medicine Ball Slam',target:'3×10',note:'Slams only, no jump.'},
+  ],
+  'Med Ball Squat Jump Throw': [
+    {name:'Seated Med Ball Vertical Jump',target:'4×4',note:'Keep the ball at the chest when the ceiling is low.'},
+    {name:'Squat Jump',target:'4×5',note:'No ball needed.',inputType:'reps_only'},
   ],
   'Broad Jump': [
     {name:'Squat Jump',target:'4×5',note:'Vertical power substitute, no space needed.',inputType:'reps_only'},

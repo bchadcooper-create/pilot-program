@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.48.3 / 20261026_2
+ * Version/build: fcf-v5.48.4 / 20261026_3
  */
 
-const FCF_VERSION = 'fcf-v5.48.3';
-const FCF_BUILD   = '20261026_2';
+const FCF_VERSION = 'fcf-v5.48.4';
+const FCF_BUILD   = '20261026_3';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -65,6 +65,29 @@ const SB = supabase.createClient(
   'https://dnxkydxbyihgsictbzjz.supabase.co',
   SB_ANON_KEY
 );
+// BUG FIX (reported Oct 26 2026: opened in airplane mode, the app sat on the
+// loader and then showed the signed-out page). Before any table query or
+// rpc, supabase-js checks the saved session and, when the access token has
+// expired, tries to refresh it with retries and backoff: about seven
+// seconds per query with no network, and the boot runs several in a row.
+// When the device itself reports no connection, answer every query at once
+// with the same { data: null, error } shape a failed fetch produces, so
+// every caller takes its existing fall-back-to-the-device-copy path.
+(function offlineShortCircuit() {
+  try {
+    let proto = SB.from('user_profiles').select('user_id');
+    while (proto && !Object.prototype.hasOwnProperty.call(proto, 'then')) proto = Object.getPrototypeOf(proto);
+    if (!proto) return;
+    const origThen = proto.then;
+    proto.then = function (onOk, onErr) {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        const res = { data: null, error: { message: 'offline', code: 'OFFLINE' }, count: null, status: 0, statusText: 'offline' };
+        return (this.shouldThrowOnError ? Promise.reject(new Error('offline')) : Promise.resolve(res)).then(onOk, onErr);
+      }
+      return origThen.call(this, onOk, onErr);
+    };
+  } catch (e) { console.warn('offline short-circuit not installed', e); }
+})();
 
 
 // ─── SUBSCRIPTION TIERS ─────────────────────────────────────────────────
@@ -1579,6 +1602,13 @@ const BIO_INFO = {
 // but a real, free fix: capture the timer id and always clear it once
 // either side of the race settles, regardless of which one wins.
 function withTimeout(promise, ms) {
+  // Device reports no connection: fail at once instead of waiting out the
+  // timer. Every caller already falls back to the device copy on a
+  // rejection, and supabase-js would otherwise spend ten seconds or more
+  // retrying its token refresh inside each query (reported Oct 26 2026:
+  // the app opened in airplane mode sat on the loader, then showed the
+  // signed-out page).
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return Promise.reject(new Error('offline'));
   let timerId;
   const timeout = new Promise((_, reject) => {
     timerId = setTimeout(() => reject(new Error('timeout')), ms || 6000);
@@ -1877,10 +1907,47 @@ async function dbGetLastSession() {
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 async function checkAuth() {
+  const stored = storedAuthSession();
+  // Device says offline: do not ask supabase-js at all. It would retry the
+  // refresh with backoff for ten seconds or more before giving up.
+  if (stored?.user && navigator.onLine === false) { ST.authOffline = true; return stored.user; }
   try {
-    const { data: { session } } = await SB.auth.getSession();
-    return session?.user || null;
-  } catch(e) { return null; }
+    // Online by the flag but the network may still be dead (airplane mode
+    // on some phones keeps onLine true). Give the refresh four seconds,
+    // then fall back to the stored session the same way.
+    const res = await Promise.race([
+      SB.auth.getSession(),
+      new Promise(r => setTimeout(() => r({ data: { session: null }, error: { name: 'AuthRetryableFetchError', message: 'getSession timeout' } }), stored?.user ? 4000 : 20000))
+    ]);
+    const session = res?.data?.session, error = res?.error;
+    if (session?.user) return session.user;
+    // BUG FIX (reported Oct 26 2026: "when I open the app offline it defaults
+    // to the website homepage"). supabase-js tries to refresh an expired
+    // access token inside getSession(), and when the refresh call cannot
+    // reach the network it reports no session at all, so the signed-in
+    // member landed on the signed-out page. The stored session is still
+    // good; the token is simply stale. Use its user when the device is
+    // offline or the failure was a network error. The client refreshes the
+    // token on its own once the network is back.
+    if (stored?.user && (navigator.onLine === false || isNetworkAuthError(error))) { ST.authOffline = true; return stored.user; }
+    return null;
+  } catch(e) {
+    if (stored?.user && (navigator.onLine === false || isNetworkAuthError(e))) { ST.authOffline = true; return stored.user; }
+    return null;
+  }
+}
+// The session supabase-js keeps in localStorage (its default key for this
+// project). Read only; the client owns writes.
+function storedAuthSession() {
+  try {
+    const raw = localStorage.getItem('sb-dnxkydxbyihgsictbzjz-auth-token');
+    const s = raw ? JSON.parse(raw) : null;
+    return s && s.user && s.refresh_token ? s : null;
+  } catch (e) { return null; }
+}
+function isNetworkAuthError(e) {
+  if (!e) return false;
+  return e.name === 'AuthRetryableFetchError' || /fetch|network|timeout|Load failed/i.test(e.message || '');
 }
 // Sign in with Apple only works when BOTH the native bridge is present (iOS
 // app) and the Apple provider is enabled in Supabase Auth. The second part is
@@ -5966,7 +6033,7 @@ async function refreshOnReconnect() {
   if (ST.ouraConnected && ST.ouraAccessToken) syncOuraData().catch(() => {});
   renderPage();
 }
-window.addEventListener('online', () => { refreshOnReconnect(); });
+window.addEventListener('online', () => { ST.authOffline = false; refreshOnReconnect(); });
 window.addEventListener('offline', () => { _wasEverOffline = true; setDbStatus('local'); });
 
 // Resync all active timers the instant the app returns to the foreground.

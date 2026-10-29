@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.48.4 / 20261026_3
+ * Version/build: fcf-v5.48.5 / 20261029_1
  */
 
-const FCF_VERSION = 'fcf-v5.48.4';
-const FCF_BUILD   = '20261026_3';
+const FCF_VERSION = 'fcf-v5.48.5';
+const FCF_BUILD   = '20261029_1';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -8431,6 +8431,9 @@ const CATALOG_EXTRAS = [
   ex('x_lm_twist',  'Landmine Twist',           '3×10/side', 3, 'Hold the bar end with straight arms, rotate it from one hip to the other, pivoting your feet as you turn. Core and obliques. Start light.'),
   ex('x_burpee',    'Burpee',                   '3×10', 3, 'Squat, hands to the floor, jump the feet back to a plank, chest to the floor, jump the feet in, then jump up with hands overhead. Step back and forward instead of jumping to make it easier.', false, 'reps_only'),
   ex('x_mb_burpee', 'Medicine Ball Burpee',     '3×10', 3, 'Set the ball on the floor, hands on the ball, jump the feet back to a plank, jump them in, then stand and lift the ball overhead. Log the weight of the ball.'),
+  // Calm-down options for when NSDR's five minutes lying flat is not possible.
+  ex('x_legsupwall',   'Legs Up the Wall',          '3 min', 1, 'Lie on your back with your legs straight up a wall or resting on a bed. Arms out, slow nose breathing. Drains the legs after a long day on your feet or in the seat.', true, 'timed'),
+  ex('x_physsigh',     'Physiological Sigh',        '5 breaths', 1, 'Two inhales through the nose, one full and one short top-up, then one long slow exhale through the mouth. The quickest way to settle down after training; about a minute.', false, 'reps_only'),
   // Seated medicine ball jumps (Oct 26 2026). Power from a dead stop: the
   // seated start removes the countermovement, so every rep is pure drive.
   ex('x_mb_seatjump',  'Seated Med Ball Vertical Jump', '4×4', 4, 'Sit on a flat bench or box, feet planted, medicine ball held at the chest. Drive through the feet, extend ankles, knees and hips together, and launch straight up off the bench with the ball locked at the chest. Land soft with bent knees, sit back down, reset. Full rest between sets. Log the weight of the ball.'),
@@ -10151,6 +10154,15 @@ async function loadSessionCache(isRetry) {
 
 // ─── ALTERNATE EXERCISE SYSTEM ───────────────────────────────────────────────
 const ALTERNATES = {
+  // NSDR needs a place to lie flat for five minutes. These keep the same
+  // job (shift into rest-and-digest after training) when that is not
+  // possible: a crowded hotel gym, a crew room, a seat before a van ride.
+  'Non-Sleep Deep Rest (NSDR)': [
+    {name:'Box Breathing',target:'3 min',note:'Sit or stand. 4 seconds in, 4 hold, 4 out, 4 hold. Works anywhere, no lying down.',inputType:'timed'},
+    {name:'Legs Up the Wall',target:'3 min',note:'Lie on your back with your legs up a wall or on a bed. Slow nose breathing. Good in a hotel room.',inputType:'timed'},
+    {name:'Physiological Sigh',target:'5 breaths',note:'Two inhales through the nose (one full, one short top-up), then one long slow exhale through the mouth. Fastest way to calm down; about a minute.',inputType:'reps_only'},
+    {name:'Diaphragmatic Breathing',target:'10 breaths',note:'Seated or lying. Inhale 4 counts into the belly, hold 2, exhale 6.',inputType:'reps_only'},
+  ],
   'Standing Calf Stretch': [
     {name:'Seated Calf Stretch (Strap or Towel)',target:'2×30s/leg',note:'Same muscle, no wall needed. Good for a hotel room floor.',inputType:'timed_bilateral'},
     {name:'Downward Dog Calf Pumps',target:'2×10/leg',note:'Alternating heel drives. Dynamic instead of static, works well as a warmup too.',inputType:'reps_only'},

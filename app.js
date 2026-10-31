@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.48.5 / 20261029_1
+ * Version/build: fcf-v5.48.6 / 20261031_1
  */
 
-const FCF_VERSION = 'fcf-v5.48.5';
-const FCF_BUILD   = '20261029_1';
+const FCF_VERSION = 'fcf-v5.48.6';
+const FCF_BUILD   = '20261031_1';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -16597,12 +16597,16 @@ function getTripBounds(schedule, now) {
   });
   if (cur.length) trips.push(cur);
 
+  // BUG FIX (reported Oct 31 2026, on day 1 of vacation: the card said
+  // "Day 1: good day for the heavy lift... Day 2: favor recovery work
+  // tonight" about a trip that had landed at home the afternoon before).
+  // A trip that has ended has nothing left to plan, so it no longer
+  // qualifies. The old code kept an ended trip "active" for 20 hours after
+  // the last leg, a rule borrowed from the trip-partitioning logic, and the
+  // AI wrote a forward-looking plan for days that were already over.
   let activeTrip = trips.find(trip => trip.some(e => t >= e.s && t <= e.en))
                  || trips.find(trip => t >= trip[0].s && t <= trip[trip.length-1].en);
   if (!activeTrip) {
-    const ended = trips.filter(trip => trip[trip.length-1].en < t)
-                        .sort((a,b) => b[b.length-1].en - a[a.length-1].en);
-    if (ended.length && (t - ended[0][ended[0].length-1].en) <= DUTYFREE_GAP_MS) activeTrip = ended[0];
     const upcoming = trips.filter(trip => trip[0].s > t)
                            .sort((a,b) => a[0].s - b[0].s);
     // A trip that hasn't started yet but is visible on the calendar still
@@ -16617,6 +16621,8 @@ function getTripBounds(schedule, now) {
 
   const flightsOnly = activeTrip.filter(e => e.type === 'flight');
   if (!flightsOnly.length) return null; // shouldn't happen, but never plan around zero flights
+  // Last leg landed: the trip is over even if a trailing event runs on.
+  if (t > Math.max(...flightsOnly.map(f => f.en))) return null;
 
   const tripStartDay = new Date(flightsOnly[0].s); tripStartDay.setHours(0,0,0,0);
   const tripEndDay = new Date(activeTrip[activeTrip.length-1].en); tripEndDay.setHours(0,0,0,0);

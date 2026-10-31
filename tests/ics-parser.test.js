@@ -1673,6 +1673,22 @@ test('after a workout is logged today, the Today card no longer offers another o
   ctx.isPro = realPro; ctx.ST.workout = sv;
 });
 
+console.log('\nTrip plan after the trip (reported Oct 31: plan for a finished trip on a vacation day):');
+test('no trip plan once the last leg has landed; plan during and just before a trip', () => {
+  const ctx = loadAppJS();
+  const sched = [
+    { type: 'flight', start: '2026-10-29T14:47:00Z', end: '2026-10-29T18:14:00Z' },
+    { type: 'layover', start: '2026-10-29T18:14:00Z', end: '2026-10-30T12:00:00Z', airport: 'SEA' },
+    { type: 'flight', start: '2026-10-30T13:00:00Z', end: '2026-10-30T16:06:00Z' },
+    { type: 'flight', start: '2026-10-30T20:10:00Z', end: '2026-10-30T22:19:00Z' },
+    { type: 'other', start: '2026-10-31T07:00:00Z', end: '2026-11-07T06:58:59Z', summary: 'Vacation' },
+  ];
+  assertEqual(ctx.getTripBounds(sched, new Date('2026-10-31T19:07:00Z')), null, 'vacation day after the trip: no plan');
+  assertEqual(ctx.getTripBounds(sched, new Date('2026-10-31T02:06:00Z')), null, 'evening after landing home: no plan');
+  assertEqual(!!ctx.getTripBounds(sched, new Date('2026-10-30T02:00:00Z')), true, 'on the layover: plan');
+  assertEqual(!!ctx.getTripBounds(sched, new Date('2026-10-28T20:00:00Z')), true, 'day before the trip: plan');
+});
+
 console.log('\nBetween legs (reported Oct 23: "I am not doing a workout between flights"):');
 test('a sit between two legs today is flagged; a layover, the first leg and the last leg are not', () => {
   assertEqual(ctx.betweenLegsOnDuty({ legsTodayCompleted: 1, legsTodayRemaining: 2, current: null }), true, 'in the terminal between legs');

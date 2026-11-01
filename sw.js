@@ -1,6 +1,6 @@
 // Flight Crew Fitness — Service Worker
-// Version: 5.48.7
-const CACHE = 'fcf-v5.48.7';
+// Version: 5.48.8
+const CACHE = 'fcf-v5.48.8';
 const CORE = [
   './',
   './index.html',
@@ -96,10 +96,11 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  if (isPassthrough) {
-    e.respondWith(fetch(e.request));
-    return;
-  }
+  // Passthrough: do not touch the request at all; the browser sends it as
+  // if no service worker existed. Re-sending it with fetch(e.request) from
+  // here can drop an upload body on the iPhone (reported Nov 1 2026:
+  // progress photo "No content provided").
+  if (isPassthrough) return;
 
   // Network-first for core app files — ensures WKWebView always gets the
   // latest version. Falls back to cache only when offline.

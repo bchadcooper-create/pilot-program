@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.48.7 / 20261101_1
+ * Version/build: fcf-v5.48.8 / 20261101_2
  */
 
-const FCF_VERSION = 'fcf-v5.48.7';
-const FCF_BUILD   = '20261101_1';
+const FCF_VERSION = 'fcf-v5.48.8';
+const FCF_BUILD   = '20261101_2';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -14498,7 +14498,18 @@ async function uploadProgressPhoto(useCamera) {
       // Filename: photoDate-uploadTimestamp.ext
       // photoDate is shown in the timeline; timestamp ensures uniqueness
       const path = ST.user.id+'/'+photoDate+'-'+Date.now()+'.'+ext;
-      const { error } = await SB.storage.from('progress-photos').upload(path, file, { upsert: false, contentType: file.type });
+      // BUG FIX (reported Nov 1 2026: "Upload failed: No content provided"
+      // from both the library and the camera on the iPhone). The picked
+      // File went straight into the upload request. In the iPhone app's
+      // web view a file-backed body can reach the network empty when the
+      // request passes through the service worker, and Storage rejects an
+      // empty body with exactly that message. Crew photos never hit this
+      // because they are re-drawn into a new in-memory image first. Read
+      // the bytes into memory here and upload that copy instead.
+      const bytes = await file.arrayBuffer();
+      if (!bytes.byteLength) throw new Error('the photo came through empty. Try picking it again');
+      const body = new Blob([bytes], { type: file.type || 'image/jpeg' });
+      const { error } = await SB.storage.from('progress-photos').upload(path, body, { upsert: false, contentType: file.type || 'image/jpeg' });
       if (error) throw error;
       showBigToast('Photo saved! Taken: '+photoDate,'ok');
       await loadPhotoTimeline();

@@ -5,12 +5,12 @@ P = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'a
 s = open(P).read()
 
 # Each entry: generic, brands, bucket, note, optional wait/flag/aliases.
-# Sources (checked Oct 19 2026): FAA DNI/DNF tables PDF; FAA Allergy
+# Sources (checked Nov 1 2026): FAA DNI/DNF tables PDF; FAA Allergy
 # Antihistamine PDF; FAA Sleep Aids page; FAA ED/BPH page; FAA Antidepressant
 # Medications PDF; FAA Weight Loss pharm PDF + CACI; FAA Migraine Medication
 # PDF; FAA Acceptable Combinations of Diabetes Medications; FAA Pharm
 # Antihypertensives PDF; FAA Cholesterol Medications PDF; FAA Smoking
-# Cessation PDF; FAA Anticoagulants page; FAA Controlled Substances and CBD
+# Cessation PDF; FAA Anticoagulants page; FAA Biologics PDF; FAA Controlled Substances and CBD
 # PDF; FAA OTC medications PDF; leftseat.com accepted-medication list (for
 # categories the FAA pages do not name drug by drug).
 OK, SI, DNI, DNF = 'ok', 'si', 'dni', 'dnf'
@@ -60,6 +60,7 @@ add('adalimumab', 'Humira', OK, 'Biologics for arthritis, Crohn\'s or psoriasis 
 add('etanercept', 'Enbrel', OK, 'Same as adalimumab.', flag=True)
 add('infliximab', 'Remicade', OK, 'Same as adalimumab.', flag=True)
 add('upadacitinib', 'Rinvoq', OK, 'Case by case, like the other biologics.', flag=True)
+add('bimekizumab', 'Bimzelx', OK, 'Biologic for psoriasis and related conditions, on the FAA biologics list. Accepted if the condition qualifies, after a 2-week ground trial, with a 4-hour no-fly time after each dose.', wait='4 hours after each dose', flag=True)
 # ── Allergy, cold, sinus
 add('loratadine', 'Claritin, Alavert', OK, 'Non-sedating antihistamine, accepted with no observation time.')
 add('desloratadine', 'Clarinex', OK, 'Non-sedating antihistamine, accepted.')
@@ -91,7 +92,7 @@ add('guaifenesin', 'Mucinex, Robitussin (plain)', OK, 'Expectorant, accepted. Mu
 add('dextromethorphan', 'Robitussin DM, Delsym, Mucinex DM', DNF, 'Cough suppressant with a drowsiness warning. No flying with it active; the label rule applies.', wait='5 x dosing interval, about 30 hours')
 add('benzonatate', 'Tessalon Perles', DNF, 'Cough capsule. AME guidance gives a 36-hour wait after use.', wait='36 hours')
 add('montelukast', 'Singulair', OK, 'Accepted for asthma or allergies. The FAA added a boxed-warning note about mood effects; mention any to your AME.', flag=True)
-add('allergy shots', 'immunotherapy', OK, 'Accepted. Do not fly for the observation period your allergist sets after each shot.')
+add('allergy shots', 'immunotherapy, sublingual immunotherapy (SLIT)', OK, 'Accepted. The FAA asks for a 4-hour wait after each shot or under-the-tongue dose.', wait='4 hours after each dose')
 add('epinephrine auto-injector', 'EpiPen, Auvi-Q', OK, 'Carry it if prescribed. After using it, no flying until a physician clears you. The allergy itself may need FAA review.', flag=True)
 add('cetirizine eye drops', 'Zerviate', OK, 'Allergy eye drops are accepted; do not put drops in right before or during flight.')
 add('ketotifen eye drops', 'Alaway, Zaditor', OK, 'Accepted; not immediately before flight.')
@@ -140,6 +141,7 @@ add('clonidine', 'Catapres, Kapvay', DNI, 'Centrally acting blood pressure drug.
 add('guanfacine', 'Tenex, Intuniv', DNI, 'Centrally acting. The AME cannot issue.')
 add('methyldopa', 'Aldomet', DNI, 'Centrally acting. The AME cannot issue.')
 add('nitroglycerin', 'Nitrostat, Imdur, isosorbide', DNI, 'Nitrates mean angina, and angina is disqualifying until the FAA reviews it.')
+add('benztropine', 'Cogentin', DNI, 'Oral anticholinergic on the FAA Do Not Issue list.')
 add('ranolazine', 'Ranexa', DNI, 'Angina drug on the Do Not Issue list.')
 add('amiodarone', 'Pacerone, Cordarone', OK, 'Accepted for atrial fibrillation up to 200 mg a day, but the rhythm problem itself needs a full FAA cardiac review.', flag=True)
 add('flecainide', 'Tambocor', OK, 'Rhythm drug, case by case with a full cardiac work-up.', flag=True)
@@ -163,8 +165,8 @@ add('fenofibrate', 'Tricor, Trilipix', OK, 'Accepted.')
 add('gemfibrozil', 'Lopid', OK, 'Accepted.')
 add('icosapent ethyl', 'Vascepa, Lovaza (omega-3)', OK, 'Accepted.')
 add('niacin', 'Niaspan', OK, 'Accepted.')
-add('evolocumab', 'Repatha', OK, 'PCSK9 injections are accepted.')
-add('alirocumab', 'Praluent', OK, 'PCSK9 injections are accepted.')
+add('evolocumab', 'Repatha', OK, 'PCSK9 injections are conditionally accepted, with a 4-hour no-fly time after each dose (FAA cholesterol table).', wait='4 hours after each dose')
+add('alirocumab', 'Praluent', OK, 'PCSK9 injections are conditionally accepted, with a 4-hour no-fly time after each dose (FAA cholesterol table).', wait='4 hours after each dose')
 add('bempedoic acid', 'Nexletol', OK, 'Accepted.')
 # ── Diabetes, weight
 add('metformin', 'Glucophage, Fortamet', OK, 'Accepted, 14-day observation when new. A diabetes diagnosis itself needs FAA paperwork (A1c, doctor status report). For weight loss alone the FAA has a separate one-week rule.', flag=True)
@@ -265,6 +267,10 @@ add('duloxetine', 'Cymbalta', SI, 'SNRI on the FAA list, even when prescribed fo
 add('bupropion (SR/XL)', 'Wellbutrin SR, Wellbutrin XL', SI, 'Added to the FAA antidepressant path in 2023 (slow-release forms only). Same HIMS AME process and 3-month stable period. As Zyban for quitting smoking: no medical during a first course, 7-day wait after the last dose.')
 add('vilazodone', 'Viibryd', SI, 'On the FAA antidepressant list. Same special issuance path.')
 add('paroxetine', 'Paxil', DNI, 'Not on the FAA list of allowed antidepressants, so the AME cannot issue. Ask about switching to a listed one.')
+add('fluvoxamine', 'Luvox', DNI, 'Not on the FAA list of allowed antidepressants, so the AME cannot issue.')
+add('vortioxetine', 'Trintellix', DNI, 'Listed as unacceptable on the FAA antidepressant table.')
+add('levomilnacipran', 'Fetzima', DNI, 'Listed as unacceptable on the FAA antidepressant table.')
+add('esketamine', 'Spravato', DNI, 'Listed as unacceptable on the FAA antidepressant table.')
 add('mirtazapine', 'Remeron', DNI, 'Not on the FAA allowed list; also sedating.')
 add('trazodone', 'Desyrel', DNI, 'Not on the FAA allowed list, and it is used as a sleep aid, which is a do-not-fly category.')
 add('amitriptyline', 'Elavil', DNI, 'Tricyclic antidepressants are unacceptable, even for migraine or nerve pain.')
@@ -275,6 +281,7 @@ add('lorazepam', 'Ativan', DNF, 'Same as alprazolam.', wait='5 x half-life, seve
 add('clonazepam', 'Klonopin', DNF, 'Benzodiazepine with a long half-life. Same rule; the wait runs over a week.', wait='5 x half-life, over a week')
 add('diazepam', 'Valium', DNF, 'Benzodiazepine, long half-life. Same rule.', wait='5 x half-life, over a week')
 add('temazepam', 'Restoril', DNF, 'Benzodiazepine sleep aid. FAA wait: 72 hours.', wait='72 hours')
+add('triazolam', 'Halcion', DNF, 'Benzodiazepine sleep aid on the FAA Do Not Fly list. Not on the FAA sleep-aid wait table, so the general 5-half-lives rule applies; routine use means the AME defers.', wait='5 x half-life')
 add('zolpidem', 'Ambien, Ambien CR', DNF, 'Sleep aid. FAA wait: 24 hours. Occasional use for a time-zone problem is tolerated with the wait; routine use means the AME defers.', wait='24 hours')
 add('zolpidem (sublingual)', 'Edluar, Intermezzo', DNF, 'Different formulation, longer wait: 36 hours.', wait='36 hours')
 add('zolpidem (oral spray)', 'Zolpimist', DNF, 'FAA wait: 48 hours.', wait='48 hours')
@@ -305,10 +312,16 @@ add('zolmitriptan', 'Zomig', DNF, TRIP, wait='24 hours')
 add('eletriptan', 'Relpax', DNF, 'Accepted for occasional use with a 48-hour wait.', wait='48 hours')
 add('rimegepant', 'Nurtec', DNF, 'Accepted for occasional use (not daily), 24-hour wait.', wait='24 hours')
 add('ubrogepant', 'Ubrelvy', DNF, 'Accepted for occasional use, 24-hour wait.', wait='24 hours')
+add('zavegepant', 'Zavzpret', DNF, 'Nasal CGRP rescue spray. Accepted for occasional use, 24-hour wait (FAA migraine table).', wait='24 hours')
+add('naratriptan', 'Amerge', DNF, TRIP, wait='24 hours')
+add('almotriptan', 'Axert', DNF, TRIP, wait='24 hours')
+add('frovatriptan', 'Frova', DNF, 'Longer-acting triptan. Accepted for occasional use with a 48-hour wait (FAA migraine table).', wait='48 hours')
+add('dihydroergotamine', 'Migranal, DHE', DNF, 'Ergot migraine rescue. Accepted for occasional use with a 48-hour wait (FAA migraine table).', wait='48 hours')
 add('erenumab', 'Aimovig', OK, 'Monthly CGRP injection for prevention, accepted after a 7-day trial, no wait.')
 add('galcanezumab', 'Emgality', OK, 'Same as erenumab.')
 add('fremanezumab', 'Ajovy', OK, 'Same as erenumab.')
 add('atogepant', 'Qulipta', OK, 'Daily CGRP tablet for prevention, accepted after a 7-day trial.')
+add('eptinezumab', 'Vyepti', OK, 'CGRP infusion for prevention, accepted after a 7-day trial, no wait (FAA migraine table).')
 add('botulinum toxin', 'Botox', OK, 'For migraine: special issuance with a 72-hour wait. Cosmetic use: case by case.', flag=True, wait='72 hours (migraine use)')
 # ── Eyes, skin, bone, other
 add('latanoprost', 'Xalatan', OK, 'Glaucoma drops are accepted after a proper eye evaluation.', flag=True)
@@ -321,6 +334,8 @@ add('apremilast', 'Otezla', OK, 'Case by case for psoriasis.', flag=True)
 add('cabergoline', 'Dostinex', OK, 'Accepted.')
 add('ropinirole', 'Requip', DNI, 'Dopamine agonists (also pramipexole, Mirapex) are on the Do Not Issue list, including for restless legs.')
 add('pramipexole', 'Mirapex', DNI, 'Dopamine agonist, Do Not Issue.')
+add('bromocriptine', 'Cycloset, Parlodel', DNI, 'Dopamine agonist, on the FAA Do Not Issue list.')
+add('rotigotine', 'Neupro patch', DNI, 'Dopamine agonist patch, on the FAA Do Not Issue list.')
 add('carbidopa-levodopa', 'Sinemet', OK, 'Case by case; Parkinson\'s itself is reviewed by the FAA.', flag=True)
 # ── Supplements, substances
 add('creatine', '', OK, 'A supplement, not a medication. Nothing to report.')

@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.48.6 / 20261031_1
+ * Version/build: fcf-v5.48.7 / 20261101_1
  */
 
-const FCF_VERSION = 'fcf-v5.48.6';
-const FCF_BUILD   = '20261031_1';
+const FCF_VERSION = 'fcf-v5.48.7';
+const FCF_BUILD   = '20261101_1';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -14779,7 +14779,7 @@ function renderProfile(p) {
 // to the server, sent to the AI coach, or included in the data export.
 const MEDICAL_OWNER_IDS = ['7e41ca46-6e00-4c54-bc3f-2e45d923fe0b'];
 const MEDICAL_STORE_KEY = 'fcf_medical_v1';
-const MEDICAL_GUIDE_CHECKED = 'October 19, 2026';
+const MEDICAL_GUIDE_CHECKED = 'November 1, 2026';
 const FAA_STANDARDS_URL = 'https://www.faa.gov/ame_guide/standards';
 const FAA_DNI_DNF_URL = 'https://www.faa.gov/ame_guide/pharm/dni_dnf';
 const MED_CLASS_WORD = ['', 'first', 'second', 'third'];
@@ -14935,6 +14935,7 @@ const FAA_MEDS = [
   {"g": "etanercept", "b": "Enbrel", "k": "ok", "n": "Same as adalimumab.", "flag": true},
   {"g": "infliximab", "b": "Remicade", "k": "ok", "n": "Same as adalimumab.", "flag": true},
   {"g": "upadacitinib", "b": "Rinvoq", "k": "ok", "n": "Case by case, like the other biologics.", "flag": true},
+  {"g": "bimekizumab", "b": "Bimzelx", "k": "ok", "n": "Biologic for psoriasis and related conditions, on the FAA biologics list. Accepted if the condition qualifies, after a 2-week ground trial, with a 4-hour no-fly time after each dose.", "wait": "4 hours after each dose", "flag": true},
   {"g": "loratadine", "b": "Claritin, Alavert", "k": "ok", "n": "Non-sedating antihistamine, accepted with no observation time."},
   {"g": "desloratadine", "b": "Clarinex", "k": "ok", "n": "Non-sedating antihistamine, accepted."},
   {"g": "fexofenadine", "b": "Allegra", "k": "ok", "n": "Non-sedating antihistamine, accepted with no observation time."},
@@ -14965,7 +14966,7 @@ const FAA_MEDS = [
   {"g": "dextromethorphan", "b": "Robitussin DM, Delsym, Mucinex DM", "k": "dnf", "n": "Cough suppressant with a drowsiness warning. No flying with it active; the label rule applies.", "wait": "5 x dosing interval, about 30 hours"},
   {"g": "benzonatate", "b": "Tessalon Perles", "k": "dnf", "n": "Cough capsule. AME guidance gives a 36-hour wait after use.", "wait": "36 hours"},
   {"g": "montelukast", "b": "Singulair", "k": "ok", "n": "Accepted for asthma or allergies. The FAA added a boxed-warning note about mood effects; mention any to your AME.", "flag": true},
-  {"g": "allergy shots", "b": "immunotherapy", "k": "ok", "n": "Accepted. Do not fly for the observation period your allergist sets after each shot."},
+  {"g": "allergy shots", "b": "immunotherapy, sublingual immunotherapy (SLIT)", "k": "ok", "n": "Accepted. The FAA asks for a 4-hour wait after each shot or under-the-tongue dose.", "wait": "4 hours after each dose"},
   {"g": "epinephrine auto-injector", "b": "EpiPen, Auvi-Q", "k": "ok", "n": "Carry it if prescribed. After using it, no flying until a physician clears you. The allergy itself may need FAA review.", "flag": true},
   {"g": "cetirizine eye drops", "b": "Zerviate", "k": "ok", "n": "Allergy eye drops are accepted; do not put drops in right before or during flight."},
   {"g": "ketotifen eye drops", "b": "Alaway, Zaditor", "k": "ok", "n": "Accepted; not immediately before flight."},
@@ -15011,6 +15012,7 @@ const FAA_MEDS = [
   {"g": "guanfacine", "b": "Tenex, Intuniv", "k": "dni", "n": "Centrally acting. The AME cannot issue."},
   {"g": "methyldopa", "b": "Aldomet", "k": "dni", "n": "Centrally acting. The AME cannot issue."},
   {"g": "nitroglycerin", "b": "Nitrostat, Imdur, isosorbide", "k": "dni", "n": "Nitrates mean angina, and angina is disqualifying until the FAA reviews it."},
+  {"g": "benztropine", "b": "Cogentin", "k": "dni", "n": "Oral anticholinergic on the FAA Do Not Issue list."},
   {"g": "ranolazine", "b": "Ranexa", "k": "dni", "n": "Angina drug on the Do Not Issue list."},
   {"g": "amiodarone", "b": "Pacerone, Cordarone", "k": "ok", "n": "Accepted for atrial fibrillation up to 200 mg a day, but the rhythm problem itself needs a full FAA cardiac review.", "flag": true},
   {"g": "flecainide", "b": "Tambocor", "k": "ok", "n": "Rhythm drug, case by case with a full cardiac work-up.", "flag": true},
@@ -15031,8 +15033,8 @@ const FAA_MEDS = [
   {"g": "gemfibrozil", "b": "Lopid", "k": "ok", "n": "Accepted."},
   {"g": "icosapent ethyl", "b": "Vascepa, Lovaza (omega-3)", "k": "ok", "n": "Accepted."},
   {"g": "niacin", "b": "Niaspan", "k": "ok", "n": "Accepted."},
-  {"g": "evolocumab", "b": "Repatha", "k": "ok", "n": "PCSK9 injections are accepted."},
-  {"g": "alirocumab", "b": "Praluent", "k": "ok", "n": "PCSK9 injections are accepted."},
+  {"g": "evolocumab", "b": "Repatha", "k": "ok", "n": "PCSK9 injections are conditionally accepted, with a 4-hour no-fly time after each dose (FAA cholesterol table).", "wait": "4 hours after each dose"},
+  {"g": "alirocumab", "b": "Praluent", "k": "ok", "n": "PCSK9 injections are conditionally accepted, with a 4-hour no-fly time after each dose (FAA cholesterol table).", "wait": "4 hours after each dose"},
   {"g": "bempedoic acid", "b": "Nexletol", "k": "ok", "n": "Accepted."},
   {"g": "metformin", "b": "Glucophage, Fortamet", "k": "ok", "n": "Accepted, 14-day observation when new. A diabetes diagnosis itself needs FAA paperwork (A1c, doctor status report). For weight loss alone the FAA has a separate one-week rule.", "flag": true},
   {"g": "semaglutide", "b": "Ozempic, Wegovy, Rybelsus", "k": "ok", "n": "Accepted for diabetes (30-day observation when new) or for weight loss (one week, plus 48 hours after each dose change, no diabetes, A1c never 6.5 or more). Bring a recent clinical note.", "flag": true},
@@ -15126,6 +15128,10 @@ const FAA_MEDS = [
   {"g": "bupropion (SR/XL)", "b": "Wellbutrin SR, Wellbutrin XL", "k": "si", "n": "Added to the FAA antidepressant path in 2023 (slow-release forms only). Same HIMS AME process and 3-month stable period. As Zyban for quitting smoking: no medical during a first course, 7-day wait after the last dose."},
   {"g": "vilazodone", "b": "Viibryd", "k": "si", "n": "On the FAA antidepressant list. Same special issuance path."},
   {"g": "paroxetine", "b": "Paxil", "k": "dni", "n": "Not on the FAA list of allowed antidepressants, so the AME cannot issue. Ask about switching to a listed one."},
+  {"g": "fluvoxamine", "b": "Luvox", "k": "dni", "n": "Not on the FAA list of allowed antidepressants, so the AME cannot issue."},
+  {"g": "vortioxetine", "b": "Trintellix", "k": "dni", "n": "Listed as unacceptable on the FAA antidepressant table."},
+  {"g": "levomilnacipran", "b": "Fetzima", "k": "dni", "n": "Listed as unacceptable on the FAA antidepressant table."},
+  {"g": "esketamine", "b": "Spravato", "k": "dni", "n": "Listed as unacceptable on the FAA antidepressant table."},
   {"g": "mirtazapine", "b": "Remeron", "k": "dni", "n": "Not on the FAA allowed list; also sedating."},
   {"g": "trazodone", "b": "Desyrel", "k": "dni", "n": "Not on the FAA allowed list, and it is used as a sleep aid, which is a do-not-fly category."},
   {"g": "amitriptyline", "b": "Elavil", "k": "dni", "n": "Tricyclic antidepressants are unacceptable, even for migraine or nerve pain."},
@@ -15136,6 +15142,7 @@ const FAA_MEDS = [
   {"g": "clonazepam", "b": "Klonopin", "k": "dnf", "n": "Benzodiazepine with a long half-life. Same rule; the wait runs over a week.", "wait": "5 x half-life, over a week"},
   {"g": "diazepam", "b": "Valium", "k": "dnf", "n": "Benzodiazepine, long half-life. Same rule.", "wait": "5 x half-life, over a week"},
   {"g": "temazepam", "b": "Restoril", "k": "dnf", "n": "Benzodiazepine sleep aid. FAA wait: 72 hours.", "wait": "72 hours"},
+  {"g": "triazolam", "b": "Halcion", "k": "dnf", "n": "Benzodiazepine sleep aid on the FAA Do Not Fly list. Not on the FAA sleep-aid wait table, so the general 5-half-lives rule applies; routine use means the AME defers.", "wait": "5 x half-life"},
   {"g": "zolpidem", "b": "Ambien, Ambien CR", "k": "dnf", "n": "Sleep aid. FAA wait: 24 hours. Occasional use for a time-zone problem is tolerated with the wait; routine use means the AME defers.", "wait": "24 hours"},
   {"g": "zolpidem (sublingual)", "b": "Edluar, Intermezzo", "k": "dnf", "n": "Different formulation, longer wait: 36 hours.", "wait": "36 hours"},
   {"g": "zolpidem (oral spray)", "b": "Zolpimist", "k": "dnf", "n": "FAA wait: 48 hours.", "wait": "48 hours"},
@@ -15164,10 +15171,16 @@ const FAA_MEDS = [
   {"g": "eletriptan", "b": "Relpax", "k": "dnf", "n": "Accepted for occasional use with a 48-hour wait.", "wait": "48 hours"},
   {"g": "rimegepant", "b": "Nurtec", "k": "dnf", "n": "Accepted for occasional use (not daily), 24-hour wait.", "wait": "24 hours"},
   {"g": "ubrogepant", "b": "Ubrelvy", "k": "dnf", "n": "Accepted for occasional use, 24-hour wait.", "wait": "24 hours"},
+  {"g": "zavegepant", "b": "Zavzpret", "k": "dnf", "n": "Nasal CGRP rescue spray. Accepted for occasional use, 24-hour wait (FAA migraine table).", "wait": "24 hours"},
+  {"g": "naratriptan", "b": "Amerge", "k": "dnf", "n": "Accepted for occasional use with a 24-hour wait after a dose (FAA migraine table). Frequent migraines are reviewed as a condition.", "wait": "24 hours"},
+  {"g": "almotriptan", "b": "Axert", "k": "dnf", "n": "Accepted for occasional use with a 24-hour wait after a dose (FAA migraine table). Frequent migraines are reviewed as a condition.", "wait": "24 hours"},
+  {"g": "frovatriptan", "b": "Frova", "k": "dnf", "n": "Longer-acting triptan. Accepted for occasional use with a 48-hour wait (FAA migraine table).", "wait": "48 hours"},
+  {"g": "dihydroergotamine", "b": "Migranal, DHE", "k": "dnf", "n": "Ergot migraine rescue. Accepted for occasional use with a 48-hour wait (FAA migraine table).", "wait": "48 hours"},
   {"g": "erenumab", "b": "Aimovig", "k": "ok", "n": "Monthly CGRP injection for prevention, accepted after a 7-day trial, no wait."},
   {"g": "galcanezumab", "b": "Emgality", "k": "ok", "n": "Same as erenumab."},
   {"g": "fremanezumab", "b": "Ajovy", "k": "ok", "n": "Same as erenumab."},
   {"g": "atogepant", "b": "Qulipta", "k": "ok", "n": "Daily CGRP tablet for prevention, accepted after a 7-day trial."},
+  {"g": "eptinezumab", "b": "Vyepti", "k": "ok", "n": "CGRP infusion for prevention, accepted after a 7-day trial, no wait (FAA migraine table)."},
   {"g": "botulinum toxin", "b": "Botox", "k": "ok", "n": "For migraine: special issuance with a 72-hour wait. Cosmetic use: case by case.", "wait": "72 hours (migraine use)", "flag": true},
   {"g": "latanoprost", "b": "Xalatan", "k": "ok", "n": "Glaucoma drops are accepted after a proper eye evaluation.", "flag": true},
   {"g": "timolol eye drops", "b": "Timoptic", "k": "ok", "n": "Glaucoma drops, accepted after evaluation.", "flag": true},
@@ -15179,6 +15192,8 @@ const FAA_MEDS = [
   {"g": "cabergoline", "b": "Dostinex", "k": "ok", "n": "Accepted."},
   {"g": "ropinirole", "b": "Requip", "k": "dni", "n": "Dopamine agonists (also pramipexole, Mirapex) are on the Do Not Issue list, including for restless legs."},
   {"g": "pramipexole", "b": "Mirapex", "k": "dni", "n": "Dopamine agonist, Do Not Issue."},
+  {"g": "bromocriptine", "b": "Cycloset, Parlodel", "k": "dni", "n": "Dopamine agonist, on the FAA Do Not Issue list."},
+  {"g": "rotigotine", "b": "Neupro patch", "k": "dni", "n": "Dopamine agonist patch, on the FAA Do Not Issue list."},
   {"g": "carbidopa-levodopa", "b": "Sinemet", "k": "ok", "n": "Case by case; Parkinson's itself is reviewed by the FAA.", "flag": true},
   {"g": "creatine", "b": "", "k": "ok", "n": "A supplement, not a medication. Nothing to report."},
   {"g": "caffeine", "b": "coffee, pre-workout, energy drinks", "k": "ok", "n": "Nothing to report. Heavy doses raise heart rate and blood pressure at the exam."},

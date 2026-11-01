@@ -86,3 +86,7 @@ From weight_log: latest BP vs 155/95; fasting glucose vs 100 (prediabetes) and 1
 - Near-vision self-check: useful, or more worry than help?
 - Medication buckets: anything he would word differently, and how he handles GLP-1s and TRT today.
 - Would he put his name to it, review it quarterly, or neither?
+
+## Changes log
+
+- 2026-11-01 (monthly check): sources checked: FAA DNI/DNF tables (09/30/2026), Pharmaceuticals index (10/28/2026), Allergy/antihistamine PDF (09/30/2026), Sleep aids, ED/BPH, Antidepressant PDF, Weight loss pharm PDF and CACI (09/30/2026), Migraine PDF (08/26/2026), Diabetes combinations (09/30/2026), Antihypertensives (09/30/2026), Cholesterol, Smoking cessation, Anticoagulants, Controlled substances/CBD, OTC, Biologics (08/26/2026), AME Guide update log (10/28/2026), 14 CFR 61.23 (eCFR), Synopsis of medical standards (ECG, vision), Item 55 blood pressure. Changes: allergy shots now 4-hour wait after each dose; evolocumab and alirocumab now 4-hour no-fly after each dose; added 15 FAA-named drugs (bimekizumab, triazolam, zavegepant, naratriptan, almotriptan, frovatriptan, dihydroergotamine, eptinezumab, benztropine, bromocriptine, rotigotine, fluvoxamine, vortioxetine, levomilnacipran, esketamine); list now 312 entries. 61.23 durations, ECG, vision and 155/95 unchanged. Wisdom links: 0 replaced (102 ok on two runs).

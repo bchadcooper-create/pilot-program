@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.49.1 / 20261104_3
+ * Version/build: fcf-v5.49.2 / 20261104_4
  */
 
-const FCF_VERSION = 'fcf-v5.49.1';
-const FCF_BUILD   = '20261104_3';
+const FCF_VERSION = 'fcf-v5.49.2';
+const FCF_BUILD   = '20261104_4';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -4453,52 +4453,50 @@ function showToast(msg) { showBigToast(msg, 'info'); }
 // CSVs can't carry an executable "system prompt" — ChatGPT/Gemini just see it
 // as data. This is the copy-paste prompt users attach alongside the CSV upload
 // so the receiving AI knows how to read our specific column schema.
-// Revised Nov 4 2026 after reviewing a real Gemini answer to the old
-// prompt. That answer got several e1RM numbers wrong (70 x 6 called 90,
-// 295 x 1 called 305), stated guesses as facts ("water retention caused by
-// high-altitude sodium retention"), assumed every hotel rack stops at
-// 50 lb while the same report quoted 55 and 60 lb hotel dumbbells, hinted
-// at a medication dose change, and never used the Oura, nutrition or daily
-// sections at all. Each rule below closes one of those gaps.
-const AI_ANALYSIS_PROMPT = `You are analyzing my personal training, health and schedule data, exported from Flight Crew Fitness, a training app I use. I am an airline pilot or flight crew member. Don't give generic fitness platitudes. Look at the actual numbers and tell me what is really happening.
+// Revised twice on Nov 4 2026 after two real Gemini answers.
+// Round 1 (old prompt): wrong e1RM math, guesses stated as facts, a hinted
+// dose change, and the Oura, nutrition and daily sections ignored.
+// Round 2 (a math-heavy prompt): Gemini loaded the file, never computed
+// anything, then invented most of its numbers (an 85 lb DB bench where the
+// best logged was 70, a 275 lb squat where the best was 225, 44 blood
+// pressure readings averaging 129/83 where there were 17 averaging 116/78),
+// buried the owner under per-session math he did not want, suggested
+// magnetic fractional plates, and told him to hand his log to his AME.
+// Owner's rules (Nov 4 2026): trends and summaries, not math; positives and
+// areas to improve; schedule-to-training and schedule-to-supplement
+// observations; practical recommendations; and NEVER suggest raising
+// anything with an AME that the AME has not asked about.
+const AI_ANALYSIS_PROMPT = `I'm an airline pilot. Attached is my data export from Flight Crew Fitness, a training app I use, and possibly my flight schedule as an .ics file. Read it like a coach who understands airline life, and tell me in plain language what is working, what isn't, and what to do about it.
 
 WHAT IS IN THE CSV
-The file has labelled sections, each starting with a line that begins "###":
-- PROFILE AND TARGETS: goal, level, age, sex, height, injuries, and nutrition targets with the date they were set.
-- WORKOUTS (one row per set): Date, Day, Muscle Group, Environment (Commercial Gym / Hotel Gym / Hotel Room / bands), Goal, Fatigue (my readiness that day: go / marginal / nogo), Level, Duration (min), Phase (Taxi = warm-up, Takeoff = heavy compound lifts, En Route = accessory work, Landing = cool-down), Exercise, Set #, Reps, Weight (lb), Seconds, Height (in), Distance (in), Seconds Left/Right, the day's biometrics, and Source ("logged in app", or "Oura import" for an activity the ring recorded, such as a walk). A row whose Exercise is "(session summary)" is attendance only, with no performance data.
-- BODY MEASUREMENTS: every weigh-in, waist, blood pressure and fasting glucose entry, including rest days.
-- OURA DAILY: readiness, sleep score, HRV balance, activity, temperature deviation, sleep hours.
-- NUTRITION · ITEMS: food I logged. Logging may be partial or switched off for stretches.
-- DAILY INPUTS: water, flight hours, sleep hours, self-rated readiness.
-- FLIGHT SCHEDULE: duty, flights, layovers (with airport) and days off, in my phone's local time.
-- MEDICATIONS & SUPPLEMENTS and MEDICATION LOG: what I take, the schedule, and each dose I checked off.
-If I also attach an .ics calendar file, it is the same schedule; use whichever is more complete.
+Sections start with a line beginning "###":
+- PROFILE AND TARGETS: goal, level, age, height, injuries, nutrition targets.
+- WORKOUTS: one row per set (date, muscle group, environment such as Commercial Gym or Hotel Gym, readiness that day, exercise, reps, weight, the day's biometrics). Source says "logged in app" or "Oura import" (an activity the ring recorded, such as a walk or yard work). "(session summary)" rows are attendance only.
+- BODY MEASUREMENTS: every weight, waist, blood pressure and fasting glucose entry.
+- OURA DAILY: readiness, sleep score, HRV balance, sleep hours.
+- NUTRITION · ITEMS and DAILY INPUTS: food, water, flight hours, readiness I entered. Often sparse.
+- FLIGHT SCHEDULE: flights, layovers (with airport and hours) and days off.
+- MEDICATIONS & SUPPLEMENTS and MEDICATION LOG: what I take and each dose I checked off.
 
-HOW TO ANALYZE
-1. Strength. For each main lift, use the best set of each session. Estimate a one-rep max only for sets of 1 to 10 reps, with the Epley formula: weight x (1 + reps / 30); for a 1-rep set the estimate is the weight itself. For sets above 10 reps, compare reps at a given weight instead. Show the weight, reps and estimate for every number you quote. Treat differently named exercises as different lifts. When a change lines up with a change of Environment, say so before calling it a gain or a loss.
-2. Consistency. Count strength sessions separately from cardio, walks and Oura imports, and give sessions per week for each. List gaps of 4 or more days and what the flight schedule shows during them.
-3. Biometrics. These are my own home readings. Say how many readings support each trend. One reading is not a diagnosis. Compare against standard ranges and name them: fasting glucose (American Diabetes Association: under 100 normal, 100 to 125 prediabetes range, 126 or more diabetes range), blood pressure (ACC/AHA categories), and the FAA medical line of 155/95 for blood pressure.
-4. Recovery. Use OURA DAILY and DAILY INPUTS: do readiness, sleep and HRV dip around particular trips, and does training quality follow?
-5. Nutrition. If food logging is sparse or missing, say so and do not estimate my actual intake or burn from it. Use the targets in PROFILE AND TARGETS only as targets.
-6. Equipment. Judge what equipment I had from the Environment column and the weights I actually logged, not from assumptions about hotel gyms.
+GROUND RULES
+- Work only from the file. If you use code, run it and use its output; never write a number you did not read or compute from the file. If a section won't load or is too thin, say so instead of filling the gap.
+- Start with one line: the date range covered and how many workouts, body measurements, Oura days and flights you found. That's how I'll know you read the right file.
+- I don't want tables of calculations. Use numbers only as evidence inside a sentence, for example "squat went from 205 x 8 in June to 185 x 8 in October".
+- Correlation is not causation. Say how often a pattern happened ("4 of 5 trips with a layover under 12 hours"). Call something a likely cause only when it repeats and the timing fits; otherwise call it a possible link.
+- Health numbers: compare them to standard ranges in a sentence. Don't tell me to report anything to an AME or the FAA, or to bring my logs to a medical exam. If something deserves a doctor's look, say my personal doctor.
+- Medications and supplements: you can describe known effects and timing. Never suggest starting, stopping or changing a dose; that's for my prescriber.
+- Recommendations must be practical for someone on four-day trips: what to do, when in the trip, with equipment I've actually logged using. Don't suggest buying gear.
 
-RULES FOR WHAT YOU WRITE
-- Every claim cites dates and values from the file.
-- Keep what the data shows separate from possible explanations. Label explanations as possible ("this may be..."), and don't state physiological causes as fact.
-- Medications and supplements: describe their known effects and how sure that knowledge is. Never suggest starting, stopping, or changing a dose; for dose questions, tell me to ask my prescriber. If something could matter for an FAA medical certificate, tell me to raise it with my AME.
-- Before answering, recheck your arithmetic and make sure no two statements contradict each other.
-- If something in the data is concerning, say so plainly rather than softening it.
+WHAT I WANT BACK (about one page)
+1. Bottom line: three or four sentences on where I stand and the single most important thing to change.
+2. What's going well: the positives, with evidence.
+3. Areas to improve: what's stalling or slipping, with evidence.
+4. Schedule and training: how trips, layover length, early reports and days off line up with when and how I train, which lifts drop off on the road, and how sleep and readiness track the schedule.
+5. Schedule and supplements: whether doses get missed on certain kinds of days, and any link between the medication log and my training, weight or readiness.
+6. Recommendations: three to five, each tied to something you observed above.
+7. Data gaps: one or two things to log so next time is sharper.
 
-WHAT I WANT BACK
-1. Strength trends: up, flat or down for each key lift, with plateaus named.
-2. Consistency: strength sessions per week, cardio and walks per week, and gaps tied to the schedule.
-3. Biometric trends, with the ranges above and anything moving the wrong way.
-4. Recovery and travel: how trips, sleep and readiness line up with training and biometrics.
-5. Medications: adherence from the log, and any effect worth discussing with my prescriber or AME.
-6. Three to five concrete recommendations: what to progress, what is stalling, what to prioritize, and how to do it with the equipment I actually had.
-7. Data gaps: what is missing or too thin to judge, and what to log so next week's analysis is better.
-
-If I add anything below this prompt (a medication not in the list, an injury, a goal), take it into account.`;
+If I add anything below this prompt, take it into account.`;
 
 function showAIPromptModal() {
   const root = document.getElementById('modalRoot');
@@ -15504,7 +15502,7 @@ function medicalBioFlags(row, heightIn) {
   }
   const g = row.fasting_glucose;
   if (g != null) {
-    if (g >= 126) flags.push({ tone: 'red', title: 'Fasting glucose ' + g, body: 'In the diabetes range (126 and over). A diabetes diagnosis needs FAA paperwork before the exam, not at it. See your doctor and call your AME.' });
+    if (g >= 126) flags.push({ tone: 'red', title: 'Fasting glucose ' + g, body: 'In the diabetes range (126 and over). A diabetes diagnosis needs FAA paperwork before the exam, not at it. See your doctor first, and ask your union\'s aeromedical office how it affects your medical.' });
     else if (g >= 100) flags.push({ tone: 'amber', title: 'Fasting glucose ' + g, body: 'Prediabetes range (100 to 125). Not an FAA issue by itself, and the exam urine test only shows glucose when it is well above this. A good time to work on it.' });
     else flags.push({ tone: 'green', title: 'Fasting glucose ' + g, body: 'Normal fasting range.' });
   }

@@ -106,6 +106,8 @@ function assertEqual(actual, expected, label) {
   }
 }
 
+const assertEqualTop = assertEqual;
+
 // ─── Fixtures ───────────────────────────────────────────────────────────────
 // Wraps a single VEVENT block in the minimal VCALENDAR structure the parser
 // expects — real exports have more headers than this, but parseFlightScheduleICS
@@ -1015,6 +1017,54 @@ test('reps and weight that look swapped are spotted, with a one-tap fix', () => 
   assertEqual(ctx.looksSwapped({ inputType: 'reps_only', target: '3×50' }, { reps: '50', weight: '' }), false, 'reps-only never flags');
   const fb = ctx.autoregSuggestion(rw, [{ reps: '130', weight: '6' }], 'comm');
   assertEqual(/swapped/i.test(fb.text), true, 'the set feedback says so'); assertEqual(fb.action, 'swap', 'and offers to swap them');
+});
+
+console.log('\nRep ranges (owner, Nov 4: "a rep range is better than a rep target"):');
+test('ranges follow the mission objective and the exercise role', () => {
+  const assertEqual = (a, b, m) => assertEqualTop(JSON.stringify(a), JSON.stringify(b), m);
+  const sq = { name: 'Back Squat', target: '4×8', inputType: 'reps_weight' };
+  const row = { name: 'DB Row', target: '3×10', inputType: 'reps_weight' };
+  const curl = { name: 'DB Curl', target: '3×12', inputType: 'reps_weight' };
+  assertEqual(ctx.repRangeFor(sq, 'takeoff', 'strength', 'intermediate', 'male'), { lo: 4, hi: 6 }, 'strength compound 4-6');
+  assertEqual(ctx.repRangeFor(sq, 'takeoff', 'strength', 'beginner', 'male'), { lo: 6, hi: 10 }, 'beginner strength uses the next band (ACSM)');
+  assertEqual(ctx.repRangeFor(sq, 'takeoff', 'muscle', 'intermediate', 'male'), { lo: 6, hi: 10 }, 'muscle compound 6-10');
+  assertEqual(ctx.repRangeFor(row, 'enroute', 'fatloss', 'intermediate', 'male'), { lo: 10, hi: 15 }, 'fat loss accessory 10-15');
+  assertEqual(ctx.repRangeFor(row, 'enroute', 'muscle', 'intermediate', 'female'), { lo: 10, hi: 14 }, 'women: accessory range up 2');
+  assertEqual(ctx.repRangeFor(curl, 'enroute', 'muscle', 'intermediate', 'male'), { lo: 12, hi: 15 }, 'isolation 12-15');
+  assertEqual(ctx.repRangeFor({ name: 'Box Jump', target: '5×3', inputType: 'reps_height' }, 'takeoff', 'jump', 'intermediate', 'male'), null, 'jumps measured in inches: no range');
+  assertEqual(ctx.repRangeFor({ name: 'Kettlebell Clean & Press', target: '4×5', inputType: 'reps_weight' }, 'takeoff', 'muscle', 'intermediate', 'male'), { lo: 3, hi: 6 }, 'power work 3-6 whatever the goal');
+  assertEqual(ctx.repRangeFor({ name: 'Hip 90/90 Stretch', target: '60s', timed: true, inputType: 'timed' }, 'taxi', 'muscle', 'intermediate', 'male'), null, 'timed work: no range');
+  assertEqual(ctx.repRangeFor({ name: 'Standing Calf Raise', target: '3×20', inputType: 'reps_weight' }, 'enroute', 'strength', 'intermediate', 'male'), { lo: 18, hi: 20 }, 'a 20-rep exercise keeps a high range');
+  assertEqual(ctx.repRangeFor({ name: 'Conventional Deadlift', target: '5×3', inputType: 'reps_weight' }, 'takeoff', 'strength', 'intermediate', 'male'), { lo: 3, hi: 5 }, 'heavy triples keep a low range');
+});
+test('the card label becomes a range and the suffix survives', () => {
+  const assertEqual = (a, b, m) => assertEqualTop(JSON.stringify(a), JSON.stringify(b), m);
+  const g = ctx.ST.goal, l = ctx.ST.level, x = ctx.ST.sex; ctx.ST.goal = 'muscle'; ctx.ST.level = 'intermediate'; ctx.ST.sex = 'male';
+  const out = ctx.withRepRange({ name: 'Single Leg Split Squat', target: '3×8/leg', sets: 3, inputType: 'reps_only' }, 'enroute');
+  assertEqual(out.target, '3 × 8-12/leg', 'label'); assertEqual(out.repRange, { lo: 8, hi: 12 }, 'range stored'); assertEqual(out.baseTarget, '3×8/leg', 'original kept');
+  assertEqual(ctx.parseTargetReps(out.target), 8, 'old readers see the bottom of the range');
+  assertEqual(ctx.restSecondsForTarget(out.target), 75, 'rest timer reads the range');
+  ctx.ST.goal = g; ctx.ST.level = l; ctx.ST.sex = x;
+});
+test('double progression: weight goes up only when every set reached the top', () => {
+  const lp = { name: 'Leg Press', target: '3 × 10-12', repRange: { lo: 10, hi: 12 } };
+  const stay = ctx.overloadTarget(lp, { lastWeight: 553, lastReps: 10, lastSets: [{ reps: '10' }, { reps: '10' }, { reps: '10' }], env: 'comm', phaseKey: 'enroute' });
+  assertEqual(stay.kind, 'reps', 'same weight'); assertEqual(/553 lb, 12 on every set/.test(stay.label), true, stay.label);
+  const up = ctx.overloadTarget(lp, { lastWeight: 553, lastReps: 12, lastSets: [{ reps: '12' }, { reps: '12' }, { reps: '12' }], env: 'comm', phaseKey: 'enroute' });
+  assertEqual(up.kind, 'weight', 'weight up'); assertEqual(up.lb, 568, '2.5% rounded to 5 lb');
+  assertEqual(ctx.nextWeightFrom(225, 'Back Squat', 'takeoff'), 230, 'squat +5');
+  assertEqual(ctx.nextWeightFrom(50, 'Cable Row', 'enroute'), 52.5, 'light upper work +2.5');
+  assertEqual(ctx.nextWeightFrom(295, 'Conventional Deadlift', 'takeoff'), 300, 'deadlift +5');
+});
+test('set feedback speaks in the range', () => {
+  const lp = { name: 'Leg Press', target: '3 × 10-12', repRange: { lo: 10, hi: 12 }, inputType: 'reps_weight' };
+  assertEqual(ctx.autoregSuggestion(lp, [{ reps: '10', weight: '553' }, { reps: '', weight: '' }, { reps: '', weight: '' }], 'comm'), null, '10 is in range: quiet mid-exercise');
+  const under = ctx.autoregSuggestion(lp, [{ reps: '8', weight: '553' }, { reps: '', weight: '' }, { reps: '', weight: '' }], 'comm');
+  assertEqual(/8, under the 10 to 12 range/.test(under.text), true, under.text);
+  const top = ctx.autoregSuggestion(lp, [{ reps: '12', weight: '553' }, { reps: '12', weight: '553' }, { reps: '12', weight: '553' }], 'comm');
+  assertEqual(top.tone === 'positive' && /weight goes up, to about 568 lb/.test(top.text), true, top.text);
+  const mid = ctx.autoregSuggestion(lp, [{ reps: '12', weight: '553' }, { reps: '11', weight: '553' }, { reps: '10', weight: '553' }], 'comm');
+  assertEqual(/inside the 10 to 12 range/.test(mid.text) && /work toward 12/.test(mid.text), true, mid.text);
 });
 
 console.log('\nHotel dumbbells top out at 50 lb (feedback: once you max the rack there is no heavier weight to suggest):');

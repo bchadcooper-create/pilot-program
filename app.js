@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.49.3 / 20261104_5
+ * Version/build: fcf-v5.50.0 / 20261104_6
  */
 
-const FCF_VERSION = 'fcf-v5.49.3';
-const FCF_BUILD   = '20261104_5';
+const FCF_VERSION = 'fcf-v5.50.0';
+const FCF_BUILD   = '20261104_6';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -10032,7 +10032,7 @@ function getCombinedWorkout(env, muscleGroup) {
       if (t !== out.target) out = { ...out, target: t };
     }
     out = applyInjuryFilter(out);
-    return out;
+    return withRepRange(out, phase);
   });
   const wk = {
     taxi:    mapPhase(base.taxi, 'taxi'),
@@ -10042,7 +10042,7 @@ function getCombinedWorkout(env, muscleGroup) {
   };
   // Custom exercises get added to enroute by default (volume/accessory slot)
   const customForThis = ST.customExercises.filter(c => c.env === env && c.muscleGroup === muscleGroup);
-  if (customForThis.length) wk.enroute = [...wk.enroute, ...customForThis.map(c => c.exercise)];
+  if (customForThis.length) wk.enroute = [...wk.enroute, ...customForThis.map(c => withRepRange(c.exercise, 'enroute'))];
   return wk;
 }
 
@@ -10148,6 +10148,22 @@ function lastLoggedReps(exId, exName) {
   for (const id of ids) {
     const ls = ST.lastSession?.sets?.[id];
     if (ls) { const r = ls.map(s=>parseInt(s.reps)||0).filter(r=>r>0); if(r.length) return Math.max(...r); }
+  }
+  return null;
+}
+// The set list from the most recent session that logged this movement.
+function lastLoggedSets(exId, exName) {
+  const ids = equivalentExerciseIds(exId, exName);
+  const all = ST.sessionCache || [];
+  for (let i = all.length-1; i >= 0; i--) {
+    for (const id of ids) {
+      const sets = all[i].sets?.[id];
+      if (sets && sets.some(s => parseInt(s.reps) > 0)) return sets;
+    }
+  }
+  for (const id of ids) {
+    const ls = ST.lastSession?.sets?.[id];
+    if (ls && ls.some(s => parseInt(s.reps) > 0)) return ls;
   }
   return null;
 }
@@ -10309,10 +10325,20 @@ function atHotelDumbbellCap(exName, env, weight) {
 function overloadTarget(exItem, o) {
   const last = o.lastWeight;
   if (!last) return null;
+  const range = repRangeOf(exItem);
   if (atHotelDumbbellCap(exItem.name, o.env, last)) {
     const base = Math.max(o.lastReps || 0, parseTargetReps(exItem.target) || 0);
     const reps = base + 2;
     return { kind: 'reps', lb: last, reps, label: last + ' lb × ' + reps + ' reps' };
+  }
+  // Double progression (ACSM 2009): the weight goes up once every set
+  // reaches the top of the range; until then the target is the same
+  // weight for more reps. With the last session's sets in hand the rule
+  // is applied set by set; with only the best set known, that set decides.
+  if (range && range.hi > range.lo) {
+    const lastSets = Array.isArray(o.lastSets) ? o.lastSets.map(x => parseInt(x.reps)).filter(n => !isNaN(n) && n > 0) : null;
+    const allAtTop = lastSets && lastSets.length ? lastSets.every(n => n >= range.hi) : (o.lastReps || 0) >= range.hi;
+    if (!allAtTop) return { kind: 'reps', lb: last, reps: range.hi, label: last + ' lb, ' + range.hi + ' on every set' };
   }
   const lb = nextWeightFrom(last, exItem.name, o.phaseKey);
   return { kind: 'weight', lb, label: lb + ' lb' };
@@ -10334,7 +10360,12 @@ function nextWeightFrom(last, exName, phaseKey) {
   if (isDumbbell) {
     return Math.ceil((last + 0.01) / 5) * 5;
   }
-  const increment = (phaseKey==='takeoff' && isLower) ? 5 : 2.5;
+  // About 2.5% of the load (ACSM 2009 says 2 to 10%), rounded to real
+  // plates: 5 lb steps on lower-body work and machines, 2.5 lb on
+  // upper-body barbell and cable work, never less than one step.
+  const lowerLike = isLower || name.includes('leg press') || name.includes('hip thrust') || name.includes('leg curl') || name.includes('leg extension') || name.includes('calf') || name.includes('hack');
+  const step = lowerLike ? 5 : 2.5;
+  const increment = Math.max(step, Math.round(last * 0.025 / step) * step);
   return last + increment;
 }
 // Workout history for everything that looks back (trends, coach, badges,
@@ -11280,7 +11311,7 @@ function swapExercise(exId, alt) {
     // custom exercise also link correctly across sessions.
     const catalogMatch = buildExerciseCatalog().find(e => e.name === alt.name);
     const newId = catalogMatch ? catalogMatch.id : 'swap_' + slugify(alt.name);
-    const newEx = exFromAlternate(newId, alt, catalogMatch || null);
+    const newEx = withRepRange(exFromAlternate(newId, alt, catalogMatch || null), phase);
     ST.workout[phase][idx] = newEx;
     // BUG FIX (reported: "No place to record sets! Clicking add set does
     // nothing"). The old exercise's sets were deleted AFTER the new ones
@@ -11520,7 +11551,7 @@ function buildExCard(exItem, phaseKey) {
     if (!exItem.timed && exItem.inputType !== 'reps_only' && exItem.inputType !== 'reps_height' && exItem.inputType !== 'reps_distance' && exItem.inputType !== 'nsdr' && !exItem.custom) {
       const lastW = lastLoggedMax(exItem.id, exItem.name);
       const lastR = lastLoggedReps(exItem.id, exItem.name);
-      const next = overloadTarget(exItem, { lastWeight: lastW, lastReps: lastR, env: ST.env, phaseKey });
+      const next = overloadTarget(exItem, { lastWeight: lastW, lastReps: lastR, lastSets: lastLoggedSets(exItem.id, exItem.name), env: ST.env, phaseKey });
       const suggested = next ? next.label : null;
       if (lastW !== null) {
         parts.push('<div class="stat-banner">');
@@ -11529,7 +11560,10 @@ function buildExCard(exItem, phaseKey) {
         parts.push('<span style="font-size:0.75rem">Last: <strong style="color:var(--text)">'+lastW+' lb'+(lastR?' × '+lastR+' reps':'')+'</strong></span>');
         parts.push('<span style="color:var(--gold);font-weight:700;font-size:0.75rem">Target → '+suggested+'</span>');
         parts.push('</div>');
-        if (next && next.kind === 'reps') parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:4px">Hotel racks usually stop at '+HOTEL_DB_MAX_LB+' lb, so progress here is reps: add a rep or two per set, slow the lowering, or shorten the rest.</div>');
+        const rr = repRangeOf(exItem);
+        if (next && next.kind === 'reps' && atHotelDumbbellCap(exItem.name, ST.env, lastW)) parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:4px">Hotel racks usually stop at '+HOTEL_DB_MAX_LB+' lb, so progress here is reps: add a rep or two per set, slow the lowering, or shorten the rest.</div>');
+        else if (next && next.kind === 'reps' && rr) parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:4px">Range '+repRangeLabel(rr)+'. The weight goes up once every set reaches '+rr.hi+'.</div>');
+        else if (next && next.kind === 'weight' && rr && rr.hi > rr.lo) parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:4px">Every set reached '+rr.hi+' last time, so the weight goes up. Range '+repRangeLabel(rr)+'.</div>');
         parts.push('</div>');
       } else {
         const variant = lastLoggedFamilyVariant(exItem.id, exItem.name);
@@ -11969,6 +12003,99 @@ function formatStopwatch(sec) {
 // compared a logged rep count against a distance or a time ("12 of 500
 // reps is a real miss"). The number now only counts when what follows it
 // is rep-shaped: nothing, a range, '/side', 'reps' or 'steps'.
+// ─── REP RANGES ──────────────────────────────────────────────────────────────
+// Owner, Nov 4 2026: "a rep range is better than a rep target." Each
+// working-phase exercise (Takeoff, En Route) gets a range instead of one
+// number, chosen by the mission objective and the exercise's job, and
+// weight goes up only once every set reaches the top of the range
+// ("double progression"). Sources:
+//   ACSM position stand, Progression models in resistance training for
+//     healthy adults (Med Sci Sports Exerc 2009): novice/intermediate
+//     strength 8-12 reps at 60-70% 1RM, advanced 1-12 periodized with
+//     emphasis on heavier loads; hypertrophy 6-12 (1-12 periodized);
+//     local endurance 15-25 with short rest; power 1-5 at light loads;
+//     add 2-10% load once 1-2 reps over target are possible.
+//   NSCA Essentials of Strength Training and Conditioning (4th ed.):
+//     strength <= 6 reps at >= 85% 1RM, hypertrophy 6-12, endurance >= 12,
+//     power 1-5.
+//   Schoenfeld, Grgic, Ogborn, Krieger, J Strength Cond Res 2017
+//     (meta-analysis): muscle growth similar across loads when sets are
+//     near failure; heavy loads build more maximal strength.
+//   Schoenfeld, Grgic, Van Every, Plotkin, Sports 2021: hypertrophy occurs
+//     across a wide loading range; the strict "repetition continuum" is
+//     not supported.
+//   ACSM/AHA physical activity for older adults (2007) and ACSM 2009:
+//     10-15 reps at moderate effort for general health and older adults.
+//   Blagrove, Howatson, Hayes, Sports Med 2018 (review): heavy and
+//     explosive strength work improves running economy in distance runners.
+//   Hunter, Acta Physiol 2014: women are more fatigue resistant at a given
+//     relative load, so the accessory range shifts up 2 reps for women.
+// Ranges are [compound, accessory, isolation]; power work is 3-6 for all.
+const REP_RANGES = {
+  strength:  { compound: [4, 6],  accessory: [6, 10],  isolation: [10, 15] },
+  jump:      { compound: [3, 6],  accessory: [6, 10],  isolation: [10, 15] },
+  muscle:    { compound: [6, 10], accessory: [8, 12],  isolation: [12, 15] },
+  chest:     { compound: [6, 10], accessory: [8, 12],  isolation: [12, 15] },
+  glute:     { compound: [6, 10], accessory: [8, 12],  isolation: [12, 15] },
+  fatloss:   { compound: [8, 12], accessory: [10, 15], isolation: [15, 20] },
+  longevity: { compound: [8, 12], accessory: [10, 15], isolation: [12, 15] },
+  walking:   { compound: [10, 15], accessory: [10, 15], isolation: [12, 15] },
+  runner:    { compound: [6, 10], accessory: [8, 12],  isolation: [12, 15] },
+};
+const POWER_RANGE = [3, 6];
+const POWER_NAME = /jump|clean|snatch|push press|throw|slam|swing|thruster|pogo|hop|depth drop|plyo/i;
+const ISOLATION_NAME = /curl|raise|fly|flye|pull-apart|pull apart|face pull|pushdown|extension|kickback|calf|shrug|crunch|abduction|adduction|rear delt|preacher|tricep|pullover|rotation|y-t-w|band/i;
+function exerciseRole(exItem, phase) {
+  if (POWER_NAME.test(exItem.name || '')) return 'power';
+  if (phase === 'takeoff') return 'compound';
+  return ISOLATION_NAME.test(exItem.name || '') ? 'isolation' : 'accessory';
+}
+// The range for one exercise, or null when reps are not what it counts
+// (timed work, jumps measured in inches, warm-ups and cool-downs).
+function repRangeFor(exItem, phase, goal, level, sex) {
+  if (!exItem || exItem.timed) return null;
+  if (exItem.inputType !== 'reps_weight' && exItem.inputType !== 'reps_only') return null;
+  if (phase !== 'takeoff' && phase !== 'enroute') return null;
+  const anchor = parseTargetReps(exItem.target);
+  if (!anchor) return null;
+  const role = exerciseRole(exItem, phase);
+  let lo, hi;
+  if (role === 'power') { [lo, hi] = POWER_RANGE; }
+  else {
+    const table = REP_RANGES[goal] || REP_RANGES.muscle;
+    // ACSM 2009: beginners build strength in the 8-12 zone before heavy
+    // low-rep work, so a beginner on the strength plan uses the next band.
+    const key = (role === 'compound' && level === 'beginner' && (goal === 'strength' || goal === 'jump')) ? 'accessory' : role;
+    [lo, hi] = table[key];
+    if (sex === 'female' && phase === 'enroute' && role !== 'power') { lo += 2; hi += 2; }
+  }
+  // An exercise written for a very different rep count keeps a range around
+  // its own number: 3x20 calf raises stay high, 5x3 heavy triples stay low.
+  // Ordinary 8s and 10s take the objective's range.
+  if (anchor <= 3 && anchor < lo) { lo = anchor; hi = anchor + 2; }
+  else if (anchor >= 15 && anchor > hi) { hi = anchor; lo = Math.max(1, anchor - 2); }
+  return { lo, hi };
+}
+// Rewrites "4×10/leg" as "4 × 8-12/leg" and records the range on the item.
+function withRepRange(exItem, phase) {
+  const range = repRangeFor(exItem, phase, ST.goal, ST.level, ST.sex);
+  if (!range) return exItem;
+  const m = String(exItem.target || '').match(/^(\d+)\s*[×x]\s*(\d+)(.*)$/i);
+  const target = m ? m[1] + ' × ' + range.lo + '-' + range.hi + (m[3] || '') : exItem.target;
+  return Object.assign({}, exItem, { target, repRange: range, baseTarget: exItem.baseTarget || exItem.target });
+}
+// Range for any exercise, old or new: items made before ranges existed carry
+// a single number, which reads as a range with the same top and bottom.
+function repRangeOf(exItem) {
+  if (exItem && exItem.repRange) return exItem.repRange;
+  const t = String((exItem && exItem.target) || '');
+  const m = t.match(/[×x]\s*(\d+)\s*-\s*(\d+)/i);
+  if (m) return { lo: parseInt(m[1], 10), hi: parseInt(m[2], 10) };
+  const n = parseTargetReps(t);
+  return n ? { lo: n, hi: n } : null;
+}
+function repRangeLabel(r) { return r.lo === r.hi ? String(r.lo) : r.lo + ' to ' + r.hi; }
+
 function parseTargetReps(target) {
   if (!target) return null;
   let m = target.match(/[×x]\s*(\d+)(?!\d)(?=\s*(?:$|-\s*\d|\/|reps?\b|steps?\b))/i);
@@ -12067,9 +12194,9 @@ function queueSetFeedback(exId, i, leftField) {
         // typing pause never produces a miss: that waits for the field to
         // be left. A hit at or above target may still show, since no later
         // digit can turn it into a miss.
-        const target = found ? parseTargetReps(found.exItem.target) : null;
+        const rr = found ? repRangeOf(found.exItem) : null;
         const reps = parseInt(set.reps, 10);
-        if (stillInTile && !(target && reps >= target)) return;
+        if (stillInTile && !(rr && reps >= rr.lo)) return;
       }
       if (!setFeedbackReady(set, leftField, repsOnly)) return;
     }
@@ -12100,8 +12227,11 @@ function looksSwapped(exItem, set) {
   return reps >= 40 && reps >= 3 * target && weight < Math.max(2 * target, 12) && weight < reps / 4;
 }
 function autoregSuggestion(exItem, sets, env) {
-  const target = parseTargetReps(exItem.target);
-  if (!target || target <= 0) return null;
+  const range = repRangeOf(exItem);
+  if (!range || range.lo <= 0) return null;
+  // Bottom of the range is the bar for a miss; the top is where weight goes up.
+  const target = range.lo, top = range.hi, ranged = top > target;
+  const rangeText = repRangeLabel(range);
   let lastIdx = -1;
   for (let i = sets.length - 1; i >= 0; i--) {
     if (sets[i].reps !== '' && sets[i].reps !== undefined && sets[i].reps !== null) { lastIdx = i; break; }
@@ -12116,13 +12246,28 @@ function autoregSuggestion(exItem, sets, env) {
   }
   const where = env === undefined ? (ST.env || null) : env;
   const missedBy = target - actual;
-  if (missedBy <= 0) return null; // hit or beat target — nothing to say
+  const isFinalSet = lastIdx === sets.length - 1;
+  const loaded = exItem.inputType !== 'reps_only' && sets.some(s => parseFloat(s.weight) > 0);
+  const lastWeight = parseFloat(last.weight);
+  if (missedBy <= 0) {
+    // In the range. Mid-exercise: quiet. Final set with a real range: say
+    // where the exercise landed and what that means for next time.
+    if (!ranged || !isFinalSet) return null;
+    const done = sets.map(x => parseInt(x.reps)).filter(n => !isNaN(n) && n > 0);
+    const capped = loaded && atHotelDumbbellCap(exItem.name, where, lastWeight);
+    const wtNote = loaded && !isNaN(lastWeight) && lastWeight > 0 ? ' at ' + lastWeight + ' lb' : '';
+    if (done.length && done.every(n => n >= top)) {
+      if (capped) return { tone: 'positive', text: 'Every set reached ' + top + wtNote + '. Hotel racks stop at ' + HOTEL_DB_MAX_LB + ' lb, so next session slow the lowering or shorten the rest to keep it hard.' };
+      if (loaded) return { tone: 'positive', text: 'Every set reached ' + top + wtNote + ', the top of the range. Next session the weight goes up, to about ' + nextWeightFrom(lastWeight, exItem.name, null) + ' lb.' };
+      return { tone: 'positive', text: 'Every set reached ' + top + ', the top of the range. Next session, make it harder: a tougher variation or added weight.' };
+    }
+    return { tone: 'positive', text: 'All sets inside the ' + rangeText + ' range' + wtNote + '. ' + (loaded ? 'Keep this weight' : 'Keep this version') + ' next session and work toward ' + top + ' on every set; then it goes up.' };
+  }
 
   // Was this set's weight higher than the set before it? Only meaningful
   // when both sets actually logged a weight — bodyweight/reps-only work
   // has no weight field to compare, so this naturally falls through to
   // the normal miss/near-miss messages for those exercise types.
-  const lastWeight = parseFloat(last.weight);
   let priorWeight = null;
   for (let i = lastIdx - 1; i >= 0; i--) {
     const w = parseFloat(sets[i].weight);
@@ -12141,19 +12286,17 @@ function autoregSuggestion(exItem, sets, env) {
   //      two sets at 2 min. Finishing 2 short after beating target early
   //      is a full, productive session.
   // "8/10" also read like an effort rating, so the copy now says "8 of 10".
-  const isFinalSet = lastIdx === sets.length - 1;
   // No load to adjust on a reps-only exercise, or on a weighted one logged
   // without a weight. "Drop the weight 5%" means nothing for a pullup, so
   // those get rest and easier-variation advice instead.
-  const loaded = exItem.inputType !== 'reps_only' && sets.some(s => parseFloat(s.weight) > 0);
-  const repsLabel = actual + ' of ' + target;
+  const repsLabel = ranged ? actual + ', under the ' + rangeText + ' range' : actual + ' of ' + target;
   const wt = !isNaN(lastWeight) && lastWeight > 0 ? ' at ' + lastWeight + ' lb' : '';
   const missedPct = missedBy / target;
 
   if (wentUpInWeight && missedPct <= 0.25) {
     // A near-miss immediately after adding weight is the expected, GOOD
     // outcome of testing a heavier load — not something to correct.
-    return { tone: 'positive', text: repsLabel + ' reps at a heavier weight than the set before. That\'s a strong effort, not a miss, and roughly where a top set on a weight increase should land.' };
+    return { tone: 'positive', text: (ranged ? actual + ' reps, just under the ' + rangeText + ' range,' : repsLabel + ' reps') + ' at a heavier weight than the set before. That\'s a strong effort, not a miss, and roughly where a top set on a weight increase should land.' };
   }
 
   if (isFinalSet) {
@@ -12171,26 +12314,26 @@ function autoregSuggestion(exItem, sets, env) {
     // the target is beaten on every set, not after one strong set.
     const capped = loaded && atHotelDumbbellCap(exItem.name, where, lastWeight);
     const nextTime = capped
-      ? ' Hotel racks stop at ' + HOTEL_DB_MAX_LB + ' lb, so next session keep ' + lastWeight + ' lb and work toward ' + (target + 2) + ' reps on every set, or slow the lowering.'
+      ? ' Hotel racks stop at ' + HOTEL_DB_MAX_LB + ' lb, so next session keep ' + lastWeight + ' lb and work toward ' + (ranged ? top : target + 2) + ' reps on every set, or slow the lowering.'
       : loaded
-      ? ' Keep this weight next session and add more once every set reaches ' + target + '.'
-      : ' Next session, aim for ' + target + ' on every set before making it harder.';
+      ? ' Keep this weight next session and add more once every set reaches ' + top + '.'
+      : ' Next session, aim for ' + top + ' on every set before making it harder.';
     if (missedPct <= 0.25) {
-      return { tone: 'positive', text: 'Strong finish: ' + repsLabel + ' on the last set' + wt + '. Losing a couple of reps by the final set is normal fatigue.' + volumeNote + nextTime };
+      return { tone: 'positive', text: 'Strong finish: ' + (ranged ? actual + ' on the last set, just under the ' + rangeText + ' range' : repsLabel + ' on the last set') + wt + '. Losing a couple of reps by the final set is normal fatigue.' + volumeNote + nextTime };
     }
     return { tone: 'major', text: loaded
-      ? 'Last set came in at ' + repsLabel + wt + '. Next session, keep the weight or drop about 5% so every set can reach ' + target + '.'
-      : 'Last set came in at ' + repsLabel + '. Next session, rest a little longer between sets or use an easier variation so every set can reach ' + target + '.' };
+      ? 'Last set came in at ' + repsLabel + wt + '. Next session, keep the weight or drop about 5% so every set can reach ' + target + (ranged ? ', the bottom of the range' : '') + '.'
+      : 'Last set came in at ' + repsLabel + '. Next session, rest a little longer between sets or use an easier variation so every set can reach ' + target + (ranged ? ', the bottom of the range' : '') + '.' };
   }
 
   if (missedPct <= 0.2) {
     return { tone: 'minor', text: loaded
-      ? repsLabel + ' reps, close. Stay at this weight and rest about 2 minutes before the next set to get back toward ' + target + '.'
-      : repsLabel + ' reps, close. Rest about 2 minutes before the next set to get back toward ' + target + '.' };
+      ? repsLabel + (ranged ? '' : ' reps') + ', close. Stay at this weight and rest about 2 minutes before the next set to get back to ' + target + '.'
+      : repsLabel + (ranged ? '' : ' reps') + ', close. Rest about 2 minutes before the next set to get back to ' + target + '.' };
   }
   return { tone: 'major', text: loaded
-    ? repsLabel + ' reps is a real miss, not just an off rep. Drop the weight about 5-10% for the next set so you can reach the target range.'
-    : repsLabel + ' reps is a real miss, not just an off rep. Take a longer rest, or switch to an easier variation for the next set so you can reach the target range.' };
+    ? repsLabel + (ranged ? '' : ' reps') + ' is a real miss, not just an off rep. Drop the weight about 5-10% for the next set so you can reach the ' + (ranged ? rangeText + ' range' : 'target range') + '.'
+    : repsLabel + (ranged ? '' : ' reps') + ' is a real miss, not just an off rep. Take a longer rest, or switch to an easier variation for the next set so you can reach the ' + (ranged ? rangeText + ' range' : 'target range') + '.' };
 }
 
 function parseTargetSeconds(target) {

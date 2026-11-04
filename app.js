@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.49.2 / 20261104_4
+ * Version/build: fcf-v5.49.3 / 20261104_5
  */
 
-const FCF_VERSION = 'fcf-v5.49.2';
-const FCF_BUILD   = '20261104_4';
+const FCF_VERSION = 'fcf-v5.49.3';
+const FCF_BUILD   = '20261104_5';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -4462,6 +4462,10 @@ function showToast(msg) { showBigToast(msg, 'info'); }
 // pressure readings averaging 129/83 where there were 17 averaging 116/78),
 // buried the owner under per-session math he did not want, suggested
 // magnetic fractional plates, and told him to hand his log to his AME.
+// Round 3 (this prompt, first version): format and tone right, numbers
+// mostly real, but July bests were quoted as September and called
+// "retained" when squat and RDL had dropped, and the morning and evening
+// creatine doses were lumped together. Two rules added for those.
 // Owner's rules (Nov 4 2026): trends and summaries, not math; positives and
 // areas to improve; schedule-to-training and schedule-to-supplement
 // observations; practical recommendations; and NEVER suggest raising
@@ -4482,6 +4486,8 @@ GROUND RULES
 - Work only from the file. If you use code, run it and use its output; never write a number you did not read or compute from the file. If a section won't load or is too thin, say so instead of filling the gap.
 - Start with one line: the date range covered and how many workouts, body measurements, Oura days and flights you found. That's how I'll know you read the right file.
 - I don't want tables of calculations. Use numbers only as evidence inside a sentence, for example "squat went from 205 x 8 in June to 185 x 8 in October".
+- For each main lift, compare my most recent session with my best and give the date of each. A lift I haven't logged in 30 days or more counts as dropped, not maintained.
+- For supplements, look at each scheduled time separately (a morning dose and an evening dose are different habits), and remember a dose missing from the log may have been taken and not logged.
 - Correlation is not causation. Say how often a pattern happened ("4 of 5 trips with a layover under 12 hours"). Call something a likely cause only when it repeats and the timing fits; otherwise call it a possible link.
 - Health numbers: compare them to standard ranges in a sentence. Don't tell me to report anything to an AME or the FAA, or to bring my logs to a medical exam. If something deserves a doctor's look, say my personal doctor.
 - Medications and supplements: you can describe known effects and timing. Never suggest starting, stopping or changing a dose; that's for my prescriber.

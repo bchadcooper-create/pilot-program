@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.50.0 / 20261104_6
+ * Version/build: fcf-v5.50.1 / 20261104_7
  */
 
-const FCF_VERSION = 'fcf-v5.50.0';
-const FCF_BUILD   = '20261104_6';
+const FCF_VERSION = 'fcf-v5.50.1';
+const FCF_BUILD   = '20261104_7';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -12348,6 +12348,12 @@ function parseTargetSeconds(target) {
 }
 function startStopwatch(exId, side, targetSec) {
   if (ST.stopwatch.interval) clearInterval(ST.stopwatch.interval);
+  // BUG FIX (reported Nov 4 2026: "I did not hear a sound or a vibration"
+  // when a stretch stopwatch passed its target). Only the rest timer
+  // unlocked the iPhone's audio on the tap, so the stopwatch's chime was
+  // created later with no tap behind it and iOS dropped it silently. It
+  // also never asked for a vibration. Unlock here, buzz at the target.
+  unlockChimeAudio();
   ST.stopwatch = { active: true, seconds: 0, exId, side: side||null, interval: null, startTs: Date.now(), targetSec: targetSec||null, chimed: false };
   persistTimerState();
   renderFlight(document.getElementById('mainPage'));
@@ -12360,6 +12366,7 @@ function tickStopwatch(exId, side) {
     ST.stopwatch.chimed = true;
     persistTimerState();
     playChime();
+    haptic('success');
     showToast('🔔 Target time reached. Stop when ready.');
   }
   const domId = side ? exId+'_'+side : exId;
@@ -12408,6 +12415,7 @@ function buildNSDRWidget(exId, currentVal) {
   return parts.join('');
 }
 function startNSDR(exId) {
+  unlockChimeAudio(); // same fix as startStopwatch: unlock on the tap
   ST.nsdrTimer = { active: true, seconds: 0, interval: null, chimed: false, exId, startTs: Date.now() };
   persistTimerState();
   renderFlight(document.getElementById('mainPage'));
@@ -12422,6 +12430,7 @@ function tickNSDR(exId) {
     ST.nsdrTimer.chimed = true;
     persistTimerState();
     playChime();
+    haptic('success');
     showToast('🔔 5 minutes complete. Continue or stop and save.');
   }
 }
@@ -12446,6 +12455,9 @@ function playChime() {
     // a NEW AudioContext here (inside a setInterval callback, no user
     // gesture) is the failure mode this used to hit silently.
     const ctx = _chimeCtx || new (window.AudioContext || window.webkitAudioContext)();
+    // iOS suspends the context after an interruption (a call, Siri, another
+    // app taking audio); ask it to resume before scheduling the tones.
+    if (ctx.state === 'suspended' && ctx.resume) ctx.resume();
     [880, 1320].forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();

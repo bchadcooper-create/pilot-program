@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.49.0 / 20261104_2
+ * Version/build: fcf-v5.49.1 / 20261104_3
  */
 
-const FCF_VERSION = 'fcf-v5.49.0';
-const FCF_BUILD   = '20261104_2';
+const FCF_VERSION = 'fcf-v5.49.1';
+const FCF_BUILD   = '20261104_3';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -4453,35 +4453,52 @@ function showToast(msg) { showBigToast(msg, 'info'); }
 // CSVs can't carry an executable "system prompt" — ChatGPT/Gemini just see it
 // as data. This is the copy-paste prompt users attach alongside the CSV upload
 // so the receiving AI knows how to read our specific column schema.
-const AI_ANALYSIS_PROMPT = `You are analyzing my personal workout and biometric data, exported from Flight Crew Fitness, a training app I use. Don't give generic fitness platitudes. Look at the actual numbers and tell me what's really happening.
+// Revised Nov 4 2026 after reviewing a real Gemini answer to the old
+// prompt. That answer got several e1RM numbers wrong (70 x 6 called 90,
+// 295 x 1 called 305), stated guesses as facts ("water retention caused by
+// high-altitude sodium retention"), assumed every hotel rack stops at
+// 50 lb while the same report quoted 55 and 60 lb hotel dumbbells, hinted
+// at a medication dose change, and never used the Oura, nutrition or daily
+// sections at all. Each rule below closes one of those gaps.
+const AI_ANALYSIS_PROMPT = `You are analyzing my personal training, health and schedule data, exported from Flight Crew Fitness, a training app I use. I am an airline pilot or flight crew member. Don't give generic fitness platitudes. Look at the actual numbers and tell me what is really happening.
 
-ABOUT THE CSV
-Each row is one logged set:
-- Date, Day: when the session happened
-- Muscle Group, Environment, Goal, Fatigue, Level: session context (Fatigue is my self-reported readiness that day: go / marginal / nogo)
-- Duration (min): total session length
-- Phase: Taxi (warmup) / Takeoff (heavy compound lifts) / En Route (accessory work) / Landing (cooldown/stretching)
-- Exercise, Set #, Reps, Weight (lb): standard strength sets
-- Seconds: held-stretch duration (mostly Landing phase)
-- Height (in): box jump height, Distance (in): broad jump distance
-- Seconds Left / Seconds Right: independently-timed left/right stretches
-- Body Weight (lb), Waist (in), Systolic/Diastolic BP, Fasting Glucose (mg/dL): my daily biometrics, repeated on every row logged that day
-- Rows marked "(session summary)" mean I logged a session without a full exercise breakdown; treat those as attendance only, not performance data
+WHAT IS IN THE CSV
+The file has labelled sections, each starting with a line that begins "###":
+- PROFILE AND TARGETS: goal, level, age, sex, height, injuries, and nutrition targets with the date they were set.
+- WORKOUTS (one row per set): Date, Day, Muscle Group, Environment (Commercial Gym / Hotel Gym / Hotel Room / bands), Goal, Fatigue (my readiness that day: go / marginal / nogo), Level, Duration (min), Phase (Taxi = warm-up, Takeoff = heavy compound lifts, En Route = accessory work, Landing = cool-down), Exercise, Set #, Reps, Weight (lb), Seconds, Height (in), Distance (in), Seconds Left/Right, the day's biometrics, and Source ("logged in app", or "Oura import" for an activity the ring recorded, such as a walk). A row whose Exercise is "(session summary)" is attendance only, with no performance data.
+- BODY MEASUREMENTS: every weigh-in, waist, blood pressure and fasting glucose entry, including rest days.
+- OURA DAILY: readiness, sleep score, HRV balance, activity, temperature deviation, sleep hours.
+- NUTRITION · ITEMS: food I logged. Logging may be partial or switched off for stretches.
+- DAILY INPUTS: water, flight hours, sleep hours, self-rated readiness.
+- FLIGHT SCHEDULE: duty, flights, layovers (with airport) and days off, in my phone's local time.
+- MEDICATIONS & SUPPLEMENTS and MEDICATION LOG: what I take, the schedule, and each dose I checked off.
+If I also attach an .ics calendar file, it is the same schedule; use whichever is more complete.
 
-OPTIONAL: MY FLIGHT SCHEDULE
-If I've also attached an .ics calendar file, it's my flight/duty schedule. Cross-reference it against the training data: layovers, long duty days, red-eyes, and time zone changes all affect recovery, sleep, and which environment (hotel room / hotel gym / commercial gym) I had access to. If I attached this file, factor travel load into your analysis rather than treating training gaps or off-trend days as unexplained.
+HOW TO ANALYZE
+1. Strength. For each main lift, use the best set of each session. Estimate a one-rep max only for sets of 1 to 10 reps, with the Epley formula: weight x (1 + reps / 30); for a 1-rep set the estimate is the weight itself. For sets above 10 reps, compare reps at a given weight instead. Show the weight, reps and estimate for every number you quote. Treat differently named exercises as different lifts. When a change lines up with a change of Environment, say so before calling it a gain or a loss.
+2. Consistency. Count strength sessions separately from cardio, walks and Oura imports, and give sessions per week for each. List gaps of 4 or more days and what the flight schedule shows during them.
+3. Biometrics. These are my own home readings. Say how many readings support each trend. One reading is not a diagnosis. Compare against standard ranges and name them: fasting glucose (American Diabetes Association: under 100 normal, 100 to 125 prediabetes range, 126 or more diabetes range), blood pressure (ACC/AHA categories), and the FAA medical line of 155/95 for blood pressure.
+4. Recovery. Use OURA DAILY and DAILY INPUTS: do readiness, sleep and HRV dip around particular trips, and does training quality follow?
+5. Nutrition. If food logging is sparse or missing, say so and do not estimate my actual intake or burn from it. Use the targets in PROFILE AND TARGETS only as targets.
+6. Equipment. Judge what equipment I had from the Environment column and the weights I actually logged, not from assumptions about hotel gyms.
 
-WHAT I WANT FROM YOU
-1. Trend analysis: is my strength on key lifts trending up, flat, or down over the logged period? Call out any plateaus by name.
-2. Consistency: how many sessions per week am I actually completing, and are there concerning gaps?
-3. Biometric trends: track body weight, waist, blood pressure, and fasting glucose over time. Flag anything moving the wrong direction or outside normal ranges.
-4. Cross-reference: connect biometric shifts to training patterns (e.g. did BP or glucose move after a change in training volume or a gap in sessions?), and to my flight schedule if I attached it (e.g. did a rough travel stretch line up with a training gap or a biometric dip?).
-5. Direct recommendations: 3-5 concrete bullet points on what to change next: which lifts need progression, what's stalling, what to prioritize.
+RULES FOR WHAT YOU WRITE
+- Every claim cites dates and values from the file.
+- Keep what the data shows separate from possible explanations. Label explanations as possible ("this may be..."), and don't state physiological causes as fact.
+- Medications and supplements: describe their known effects and how sure that knowledge is. Never suggest starting, stopping, or changing a dose; for dose questions, tell me to ask my prescriber. If something could matter for an FAA medical certificate, tell me to raise it with my AME.
+- Before answering, recheck your arithmetic and make sure no two statements contradict each other.
+- If something in the data is concerning, say so plainly rather than softening it.
 
-Reference actual numbers and dates from the data, not general advice. If something in the biometric data looks concerning, say so plainly rather than softening it.
+WHAT I WANT BACK
+1. Strength trends: up, flat or down for each key lift, with plateaus named.
+2. Consistency: strength sessions per week, cardio and walks per week, and gaps tied to the schedule.
+3. Biometric trends, with the ranges above and anything moving the wrong way.
+4. Recovery and travel: how trips, sleep and readiness line up with training and biometrics.
+5. Medications: adherence from the log, and any effect worth discussing with my prescriber or AME.
+6. Three to five concrete recommendations: what to progress, what is stalling, what to prioritize, and how to do it with the equipment I actually had.
+7. Data gaps: what is missing or too thin to judge, and what to log so next week's analysis is better.
 
-MEDICATIONS & SUPPLEMENTS
-The CSV may also contain a "### MEDICATIONS & SUPPLEMENTS" section (what I take, dose, schedule) and a "### MEDICATION LOG" section (each dose I checked off, by date and time). If present, factor their expected physiological effects into the analysis, and note any adherence gaps that line up with off-trend stretches. If I mention anything else below this prompt (e.g. hormone therapy, GLP-1/GIP medications, peptides), treat it the same way.`;
+If I add anything below this prompt (a medication not in the list, an injury, a goal), take it into account.`;
 
 function showAIPromptModal() {
   const root = document.getElementById('modalRoot');
@@ -13668,6 +13685,11 @@ async function fetchAllRows(makeQuery) {
 // The "who is this and what are they aiming for" block at the top of the
 // export. Two columns, Item and Value. Only things that are actually set are
 // listed, except nutrition targets, where "not set" is itself useful to know.
+// Lets an AI tell a ring-recorded walk from a session logged in the app.
+function exportSessionSource(s) {
+  if (s && s.importedFromOura) return 'Oura import' + (s.ouraActivity ? ' (' + s.ouraActivity + ')' : '');
+  return 'logged in app';
+}
 function exportProfileRows(st) {
   const rows = [];
   const add = (k, v) => { if (v !== undefined && v !== null && v !== '') rows.push([k, v]); };
@@ -13779,7 +13801,7 @@ async function exportCSV() {
   const rows = [['### PROFILE AND TARGETS'], ['Item','Value'], ...exportProfileRows(ST), [],
     ['### WORKOUTS (one row per set)']];
   // Build CSV: one row per exercise set
-  rows.push(['Date','Day','Muscle Group','Environment','Goal','Fatigue','Level','Duration (min)','Phase','Exercise','Set #','Reps','Weight (lb)','Seconds','Height (in)','Distance (in)','Seconds Left','Seconds Right','Body Weight (lb)','Waist (in)','Systolic BP','Diastolic BP','Fasting Glucose (mg/dL)']);
+  rows.push(['Date','Day','Muscle Group','Environment','Goal','Fatigue','Level','Duration (min)','Phase','Exercise','Set #','Reps','Weight (lb)','Seconds','Height (in)','Distance (in)','Seconds Left','Seconds Right','Body Weight (lb)','Waist (in)','Systolic BP','Diastolic BP','Fasting Glucose (mg/dL)','Source']);
 
   sessions.forEach(s => {
     const date = new Date(s.date);
@@ -13802,7 +13824,7 @@ async function exportCSV() {
             phase, exportExerciseName(exItem), i+1,
             set.reps||'', set.weight||'', set.seconds||'', set.height||'', set.distance||'', set.seconds_left||'', set.seconds_right||'',
             bio.weight_lb||'', bio.waist_in||'', bio.systolic_bp||'',
-            bio.diastolic_bp||'', bio.fasting_glucose||'',
+            bio.diastolic_bp||'', bio.fasting_glucose||'', exportSessionSource(s),
           ]);
           hasRows = true;
         });
@@ -13812,7 +13834,7 @@ async function exportCSV() {
     if (!hasRows) {
       rows.push([dateStr, dayStr, s.muscle_group||'', s.env||'', s.goal||'', s.fatigue||'', s.level||'',
         s.durationMinutes||'', '', '(session summary)', '', '', '', '', '', '', '', '',
-        bio.weight_lb||'', bio.waist_in||'', bio.systolic_bp||'', bio.diastolic_bp||'', bio.fasting_glucose||'']);
+        bio.weight_lb||'', bio.waist_in||'', bio.systolic_bp||'', bio.diastolic_bp||'', bio.fasting_glucose||'', exportSessionSource(s)]);
     }
   });
 

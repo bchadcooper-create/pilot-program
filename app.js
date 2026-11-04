@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.48.9 / 20261104_1
+ * Version/build: fcf-v5.49.0 / 20261104_2
  */
 
-const FCF_VERSION = 'fcf-v5.48.9';
-const FCF_BUILD   = '20261104_1';
+const FCF_VERSION = 'fcf-v5.49.0';
+const FCF_BUILD   = '20261104_2';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -5535,7 +5535,9 @@ function pendingMedOps() {
 // offline collapses to one entry instead of replaying both.
 function queueMedOp(medId, date, time, taken) {
   const list = pendingMedOps().filter(o => !(o.user === ST.user.id && o.med_id === medId && o.date === date && o.time === time));
-  list.push({ id: newMedId(), user: ST.user.id, med_id: medId, date, time, taken, at: new Date().toISOString() });
+  const today = localDateStr(new Date());
+  const at = date === today ? new Date().toISOString() : new Date(date + 'T' + time + ':00').toISOString();
+  list.push({ id: newMedId(), user: ST.user.id, med_id: medId, date, time, taken, at });
   writeLocalJSON(MEDS_PENDING_KEY, list);
 }
 
@@ -5680,6 +5682,173 @@ function queueOfflineMedTap(medId, date, time, taken) {
   }
 }
 
+// ── Past days (owner, Nov 4 2026: "if I took a medicine or supplement
+// yesterday but forgot to log it, I want to be able to add that") ────────
+// A strip under the Trends training calendar shows taken/due for each of
+// the last MED_HISTORY_DAYS days; tapping a day opens that day's doses to
+// check off or clear. Uses the same medication_logs rows and the same
+// offline queue as the Today card, just with another date.
+const MED_HISTORY_DAYS = 28;
+ST.medLogRange = ST.medLogRange || {};   // 'YYYY-MM-DD' -> { 'medId|HH:MM': true }
+
+function medHistoryStartDate() {
+  const d = new Date(); d.setHours(12, 0, 0, 0);
+  d.setDate(d.getDate() - (MED_HISTORY_DAYS - 1));
+  return d;
+}
+
+async function loadMedLogRange() {
+  ST.medLogRange = {};
+  if (!ST.user) return;
+  const start = localDateStr(medHistoryStartDate());
+  try {
+    await flushPendingMedOps();
+    const { data, error } = await withTimeout(SB.from('medication_logs').select('med_id,date,time')
+      .eq('user_id', ST.user.id).gte('date', start));
+    if (error) throw error;
+    (data || []).forEach(r => { (ST.medLogRange[r.date] = ST.medLogRange[r.date] || {})[r.med_id + '|' + r.time] = true; });
+  } catch (e) { /* offline: show what is known below */ }
+  // Today's card is the freshest copy for today; offline taps win for any day.
+  const today = localDateStr(new Date());
+  if (ST.medsTakenDate === today) ST.medLogRange[today] = Object.assign({}, ST.medsTakenToday);
+  pendingMedOps().forEach(o => {
+    if (!ST.user || o.user !== ST.user.id) return;
+    const day = (ST.medLogRange[o.date] = ST.medLogRange[o.date] || {});
+    if (o.taken) day[o.med_id + '|' + o.time] = true; else delete day[o.med_id + '|' + o.time];
+  });
+}
+
+// Doses due on a date, plus every other dose slot as "extra" so an
+// as-needed supplement or a pill taken on an off day can still be logged.
+function medDosesForDate(date) {
+  const due = [], extra = [];
+  (ST.medications || []).forEach(m => {
+    const list = medIsDueOn(m, date) ? due : extra;
+    m.times.forEach(t => list.push({ med: m, time: t, key: m.id + '|' + t }));
+  });
+  const order = (a, b) => a.time.localeCompare(b.time) || a.med.name.localeCompare(b.med.name);
+  return { due: due.sort(order), extra: extra.sort(order) };
+}
+
+function medHistoryStripHtml() {
+  if (!(ST.medications || []).length) return '';
+  const start = medHistoryStartDate();
+  const todayStr = localDateStr(new Date());
+  const parts = [];
+  parts.push('<div class="card mb12" id="medHistoryCard">');
+  parts.push('<div class="section-label" style="margin-bottom:4px;margin-top:0">💊 MEDS &amp; SUPPLEMENTS</div>');
+  parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:8px">Tap a day to add a dose you forgot to log, or clear one.</div>');
+  parts.push('<div id="medScroll" style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;touch-action:pan-x;padding-bottom:2px;scrollbar-width:none">');
+  for (let i = 0; i < MED_HISTORY_DAYS; i++) {
+    const d = new Date(start.getTime()); d.setDate(start.getDate() + i);
+    const iso = localDateStr(d);
+    const { due } = medDosesForDate(d);
+    const log = ST.medLogRange[iso] || {};
+    const taken = Object.keys(log).length;
+    const dueTaken = due.filter(x => log[x.key]).length;
+    const all = due.length > 0 && dueTaken >= due.length;
+    const some = taken > 0 && !all;
+    const bg = all ? 'background:rgba(34,197,94,0.12);border-color:rgba(34,197,94,0.4)'
+             : some ? 'background:var(--gold-tint);border-color:var(--gold)' : '';
+    const label = due.length ? dueTaken + '/' + due.length : (taken ? '+' + taken : '–');
+    parts.push('<div style="flex:0 0 46px;min-height:58px;scroll-snap-align:center;text-align:center;border:1.5px solid var(--border);border-radius:8px;padding:7px 2px;cursor:pointer;' + (iso === todayStr ? 'border-color:var(--gold);' : '') + bg + '" onclick="openMedDay(\'' + iso + '\')">');
+    parts.push('<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted)">' + d.toLocaleDateString('en-US', { weekday: 'short' }).charAt(0) + '</div>');
+    parts.push('<div style="font-size:0.8125rem;font-weight:600;margin-top:2px">' + d.getDate() + '</div>');
+    parts.push('<div style="font-family:var(--mono);font-size:0.625rem;margin-top:3px;color:' + (all ? 'var(--green)' : some ? 'var(--gold)' : 'var(--muted)') + '">' + label + '</div>');
+    parts.push('</div>');
+  }
+  parts.push('</div></div>');
+  return parts.join('');
+}
+
+function refreshMedHistoryStrip() {
+  const el = document.getElementById('medHistoryCard');
+  if (!el) return;
+  const t = document.createElement('div'); t.innerHTML = medHistoryStripHtml();
+  if (t.firstChild) el.replaceWith(t.firstChild);
+  scrollMedStripToToday();
+}
+function scrollMedStripToToday() {
+  requestAnimationFrame(() => { const el = document.getElementById('medScroll'); if (el) el.scrollLeft = el.scrollWidth; });
+}
+
+let _medDayOpen = null;
+function openMedDay(iso) {
+  _medDayOpen = iso;
+  const d = new Date(iso + 'T12:00:00');
+  const todayIso = localDateStr(new Date());
+  const minIso = localDateStr(medHistoryStartDate());
+  const log = iso === todayIso ? (ST.medsTakenToday || {}) : (ST.medLogRange[iso] || {});
+  const { due, extra } = medDosesForDate(d);
+  const prev = new Date(d.getTime()); prev.setDate(d.getDate() - 1);
+  const next = new Date(d.getTime()); next.setDate(d.getDate() + 1);
+  const prevIso = localDateStr(prev), nextIso = localDateStr(next);
+  const row = (x, i, n) => {
+    const taken = !!log[x.key];
+    return '<div class="fb" style="padding:10px 0;' + (i < n - 1 ? 'border-bottom:1px solid var(--border);' : '') + 'cursor:pointer;align-items:center;-webkit-tap-highlight-color:transparent" onclick="toggleMedTakenOn(\'' + iso + '\',\'' + x.med.id + '\',\'' + x.time + '\')">' +
+      '<span style="font-family:var(--mono);font-size:0.75rem;color:var(--muted);min-width:52px">' + x.time + '</span>' +
+      '<span style="flex:1;font-size:0.875rem">' + x.med.name + (x.med.dose != null ? ' <span style="color:var(--muted);font-size:0.75rem">' + medDoseLabel(x.med) + '</span>' : '') + '</span>' +
+      '<span style="width:26px;height:26px;border-radius:50%;border:1.5px solid ' + (taken ? 'var(--gold)' : 'var(--border)') + ';background:' + (taken ? 'var(--gold)' : 'transparent') + ';display:flex;align-items:center;justify-content:center;font-size:0.875rem;color:var(--on-gold);flex-shrink:0">' + (taken ? '✓' : '') + '</span></div>';
+  };
+  const navBtn = (target, label, ok) => '<button class="btn-ghost" style="font-size:1.25rem;padding:4px 12px;' + (ok ? '' : 'opacity:0.25;pointer-events:none') + '" onclick="openMedDay(\'' + target + '\')">' + label + '</button>';
+  const parts = [];
+  parts.push('<div class="modal-bg" onclick="if(event.target===this)closeMedDay()"><div class="modal-sheet"><div class="modal-handle"></div>');
+  parts.push('<div class="fb" style="align-items:center;margin-bottom:6px">' + navBtn(prevIso, '‹', prevIso >= minIso) +
+    '<div style="text-align:center"><div class="modal-title" style="margin:0">' + d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }) + '</div>' +
+    '<div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);letter-spacing:.1em">MEDS &amp; SUPPLEMENTS</div></div>' +
+    navBtn(nextIso, '›', nextIso <= todayIso) + '</div>');
+  if (due.length) {
+    parts.push('<div class="section-label" style="margin-top:8px">SCHEDULED THIS DAY</div><div class="card mb12" style="padding-top:4px;padding-bottom:4px">');
+    due.forEach((x, i) => parts.push(row(x, i, due.length)));
+    parts.push('</div>');
+  }
+  if (extra.length) {
+    parts.push('<div class="section-label" style="margin-top:8px">NOT SCHEDULED THIS DAY</div><div style="font-size:0.6875rem;color:var(--muted);margin:-4px 0 6px">For a dose taken on an off day.</div><div class="card mb12" style="padding-top:4px;padding-bottom:4px">');
+    extra.forEach((x, i) => parts.push(row(x, i, extra.length)));
+    parts.push('</div>');
+  }
+  parts.push('<button class="btn btn-outline mt8" onclick="closeMedDay()">Done</button></div></div>');
+  document.getElementById('modalRoot').innerHTML = parts.join('');
+}
+function closeMedDay() { _medDayOpen = null; closeModal(); refreshMedHistoryStrip(); }
+
+// Check off or clear a dose on any day in the window. Today goes through
+// the Today card's own toggle so both stay in step.
+async function toggleMedTakenOn(iso, medId, time) {
+  const todayIso = localDateStr(new Date());
+  if (iso > todayIso || iso < localDateStr(medHistoryStartDate())) return;
+  const key = medId + '|' + time;
+  if (iso === todayIso) {
+    await toggleMedTaken(medId, time);
+    ST.medLogRange[iso] = Object.assign({}, ST.medsTakenToday);
+    if (_medDayOpen === iso) openMedDay(iso);
+    return;
+  }
+  const flightKey = iso + '|' + key;
+  if (_medToggleInFlight.has(flightKey)) return;
+  const day = (ST.medLogRange[iso] = ST.medLogRange[iso] || {});
+  const nowTaken = !day[key];
+  if (nowTaken) day[key] = true; else delete day[key];
+  haptic(nowTaken ? 'medium' : 'light');
+  if (_medDayOpen === iso) openMedDay(iso);
+  if (!ST.user) return;
+  // Stamp the dose at its scheduled time on that day, not at the moment of logging.
+  const at = new Date(iso + 'T' + time + ':00').toISOString();
+  dropPendingMedOp(medId, iso, time);
+  if (navigator.onLine === false) { queueMedOp(medId, iso, time, nowTaken); showToast('Saved on this phone. It will sync when you are back online.'); return; }
+  _medToggleInFlight.add(flightKey);
+  try {
+    await sendMedOp({ med_id: medId, date: iso, time, taken: nowTaken, at });
+  } catch (e) {
+    if (isConnectionError(e)) { queueMedOp(medId, iso, time, nowTaken); showToast('Saved on this phone. It will sync when you are back online.'); }
+    else {
+      if (nowTaken) delete day[key]; else day[key] = true;
+      if (_medDayOpen === iso) openMedDay(iso);
+      showBigToast('Could not save that dose. Try again in a moment.', 'warn');
+    }
+  } finally { _medToggleInFlight.delete(flightKey); }
+}
+
 // ── Today card ────────────────────────────────────────────────────────────
 // The card lives in its own #medsTodaySection wrapper so a check-off can
 // redraw just this card. A full renderPage() on Today empties the whole
@@ -5719,8 +5888,14 @@ function buildMedsTodayInner(ctx) {
     parts.push('<span style="width:26px;height:26px;border-radius:50%;border:1.5px solid '+(taken?'var(--gold)':'var(--border)')+';background:'+(taken?'var(--gold)':'transparent')+';display:flex;align-items:center;justify-content:center;font-size:0.875rem;color:var(--on-gold);flex-shrink:0">'+(taken?'✓':'')+'</span>');
     parts.push('</div>');
   });
+  parts.push('<button class="btn-ghost" style="font-size:0.75rem;color:var(--muted);padding:8px 0 0;text-decoration:underline" onclick="openMedDayFromToday()">Log a dose from an earlier day</button>');
   parts.push('</div>');
   return parts.join('');
+}
+async function openMedDayFromToday() {
+  await withDialogSpinner('Loading…', () => loadMedLogRange());
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  openMedDay(localDateStr(y));
 }
 
 // What the native shell needs to schedule reminders: one entry per dose
@@ -12996,6 +13171,7 @@ async function renderTrends(p) {
   const rangeData = await loadCalendarRange();
   parts.push('<div class="section-label" style="margin-top:0">📅 TRAINING CALENDAR</div>');
   parts.push(buildCalendarHTML(rangeData));
+  if ((ST.medications || []).length) { await loadMedLogRange(); parts.push(medHistoryStripHtml()); }
   parts.push(runningCardHtml(runStats(ST.sessionCache || [])));
 
   parts.push('<div class="card mb12">');
@@ -13082,6 +13258,7 @@ async function renderTrends(p) {
 
   p.innerHTML = parts.join('');
   scrollCalendarToToday();
+  scrollMedStripToToday();
   setTimeout(() => loadAndDrawCharts(), 50);
   // Fired after innerHTML so the card element definitely exists
   if (isPro()) loadProgressionAnalytics();

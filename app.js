@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.48.8 / 20261101_2
+ * Version/build: fcf-v5.48.9 / 20261104_1
  */
 
-const FCF_VERSION = 'fcf-v5.48.8';
-const FCF_BUILD   = '20261101_2';
+const FCF_VERSION = 'fcf-v5.48.9';
+const FCF_BUILD   = '20261104_1';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -7513,6 +7513,44 @@ function ouraRowIsToday() {
 function ouraMissingToday() {
   return !!ST.ouraConnected && !ouraRowIsToday();
 }
+// Health data loading window (owner, Nov 4 2026: "No ring data for last
+// night" showed for the first seconds after opening, before the Oura sync
+// had even run). For the first few seconds after the app opens, and until
+// the first Oura sync of this session finishes, Today shows a loading card
+// instead of the no-data card. After HEALTH_LOAD_WAIT_MS with nothing,
+// the no-data card appears; a sync that lands later still replaces it.
+const HEALTH_LOAD_WAIT_MS = 5000;
+let _healthLoadStartedAt = null;
+let _ouraFirstSyncDone = false;
+let _healthLoadTimer = null;
+function healthStillLoading() {
+  if (_healthLoadStartedAt === null) _healthLoadStartedAt = Date.now();
+  if (Date.now() - _healthLoadStartedAt >= HEALTH_LOAD_WAIT_MS) return false;
+  if (ST.ouraConnected && ST.ouraAccessToken && !_ouraFirstSyncDone) return true;
+  return false;
+}
+// In the iPhone app, Apple Health steps arrive a moment after launch.
+function stepsStillLoading() {
+  if (_healthLoadStartedAt === null) _healthLoadStartedAt = Date.now();
+  if (Date.now() - _healthLoadStartedAt >= HEALTH_LOAD_WAIT_MS) return false;
+  const native = typeof FCFBridge !== 'undefined' && FCFBridge.isNative;
+  return native && !(ST.healthkit && ST.healthkit.stepsToday != null);
+}
+// Redraw Today's top section once the wait runs out, so the loading card
+// never sits there forever.
+function scheduleHealthLoadTimeout() {
+  if (_healthLoadTimer) return;
+  const left = Math.max(0, HEALTH_LOAD_WAIT_MS - (Date.now() - (_healthLoadStartedAt || Date.now()))) + 50;
+  _healthLoadTimer = setTimeout(() => { if (ST.tab === 'today') updateOuraTopSection(); }, left);
+}
+function healthLoadingCardHtml() {
+  return '<div class="card mb12" id="noRingCard" style="border-left:3px solid var(--border)">' +
+    '<div style="display:flex;align-items:center;gap:12px">' +
+      '<div class="fcf-spinner" style="width:22px;height:22px;margin:0;flex-shrink:0"></div>' +
+      '<div><div style="font-size:1rem;font-weight:600;letter-spacing:-.01em">Loading last night\'s data</div>' +
+      '<div style="font-size:0.75rem;color:var(--muted);margin-top:2px">Checking Oura for your readiness and sleep.</div></div>' +
+    '</div></div>';
+}
 
 // Does a saved session fall on the same LOCAL calendar day as `now`?
 //
@@ -9632,7 +9670,9 @@ function stepGoalProgressHtml(steps) {
   const goal = activeStepGoal();
   if (!goal) return '';
   if (steps === null || steps === undefined) {
-    return '<div style="font-size:0.6875rem;color:var(--muted);margin:-6px 0 14px;line-height:1.5">🚶 Step goal '+goal.toLocaleString()+'. Steps show here from Apple Health in the iOS app, or from an Oura ring.</div>';
+    if (healthStillLoading() || stepsStillLoading()) { scheduleHealthLoadTimeout(); return '<div style="font-size:0.6875rem;color:var(--muted);margin:-6px 0 14px;line-height:1.5">🚶 Step goal '+goal.toLocaleString()+'. Loading today\'s steps…</div>'; }
+    const hasSource = ST.ouraConnected || (typeof FCFBridge !== 'undefined' && FCFBridge.isNative);
+    return '<div style="font-size:0.6875rem;color:var(--muted);margin:-6px 0 14px;line-height:1.5">🚶 Step goal '+goal.toLocaleString()+'. ' + (hasSource ? 'No steps yet today from Apple Health or Oura.' : 'Steps show here from Apple Health in the iOS app, or from an Oura ring.') + '</div>';
   }
   const pct = Math.min(100, Math.round(steps / goal * 100));
   const done = steps >= goal;
@@ -14388,10 +14428,13 @@ async function syncOuraData(force) {
     // whatever it got called with at initial boot — so re-run it here too
     // rather than leaving it stuck on its first, possibly-null-readiness
     // answer for the rest of the session.
+    _ouraFirstSyncDone = true;
     if (ST.tab === 'today') { updateOuraTopSection(); if (isPro()) loadFatigueCalibration(getTodayContext()); }
 
   } catch(e) {
     if (force) showBigToast('Oura sync failed: '+e.message,'warn');
+  } finally {
+    if (!_ouraFirstSyncDone) { _ouraFirstSyncDone = true; if (ST.tab === 'today') updateOuraTopSection(); }
   }
 }
 
@@ -17247,7 +17290,10 @@ function buildOuraTopSectionHTML(ctx) {
   parts.push(runWeekProgressHtml());
   parts.push(stepGoalProgressHtml(ctx.oura.steps));
 
-  if (ctx.oura.missingToday) {
+  if (ctx.oura.missingToday && healthStillLoading()) {
+    parts.push(healthLoadingCardHtml());
+    scheduleHealthLoadTimeout();
+  } else if (ctx.oura.missingToday) {
     parts.push(noRingDataCardHtml());
   } else if (ST.ouraConnected && ctx.oura.readiness !== null) {
     parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">');

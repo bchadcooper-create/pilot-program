@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.51.1 / 20261104_9
+ * Version/build: fcf-v5.51.2 / 20261105_1
  */
 
-const FCF_VERSION = 'fcf-v5.51.1';
-const FCF_BUILD   = '20261104_9';
+const FCF_VERSION = 'fcf-v5.51.2';
+const FCF_BUILD   = '20261105_1';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -2746,14 +2746,15 @@ async function crewLoadFounders(userIds) {
   if (!ids.length) return;
   if (!ST.crew.founders) ST.crew.founders = new Set();
   try {
-    const { data } = await withTimeout(SB.from('crew_profiles').select('user_id').in('user_id', ids).eq('founding_crew', true), 10000);
-    (data || []).forEach(r => ST.crew.founders.add(r.user_id));
+    const { data } = await withTimeout(SB.from('crew_profiles').select('user_id,founding_number').in('user_id', ids).eq('founding_crew', true), 10000);
+    if (!ST.crew.founderNo) ST.crew.founderNo = {};
+    (data || []).forEach(r => { ST.crew.founders.add(r.user_id); if (r.founding_number) ST.crew.founderNo[r.user_id] = r.founding_number; });
   } catch (e) { /* the badge is decoration; the feed works without it */ }
 }
 function foundingChip(userId) {
-  return ST.crew.founders && ST.crew.founders.has(userId)
-    ? ' <span title="Founding Crew: joined before launch pricing ended" style="font-family:var(--mono);font-size:0.5625rem;letter-spacing:.08em;color:var(--gold);border:1px solid var(--gold);border-radius:4px;padding:1px 5px;vertical-align:middle">✈ FOUNDING CREW</span>'
-    : '';
+  if (!(ST.crew.founders && ST.crew.founders.has(userId))) return '';
+  const n = ST.crew.founderNo && ST.crew.founderNo[userId];
+  return ' <span title="Founding Crew: one of the first 100 Pro members" style="font-family:var(--mono);font-size:0.5625rem;letter-spacing:.08em;color:var(--gold);border:1px solid var(--gold);border-radius:4px;padding:1px 5px;vertical-align:middle;white-space:nowrap">✈ FOUNDING CREW' + (n ? ' #' + n : '') + '</span>';
 }
 async function crewLoadPhotos(ids) {
   if (!ids.length) return;
@@ -3154,11 +3155,11 @@ async function crewLoadProfileHeader(userId) {
   const box = document.getElementById('crewProfileHead'); if (!box) return;
   try {
     const [{ data: p }, { data: c }] = await Promise.all([
-      withTimeout(SB.from('crew_profiles').select('user_id,callsign,base,airline,bio,visibility,founding_crew').eq('user_id', userId).maybeSingle()),
+      withTimeout(SB.from('crew_profiles').select('user_id,callsign,base,airline,bio,visibility,founding_crew,founding_number').eq('user_id', userId).maybeSingle()),
       withTimeout(SB.rpc('crew_profile_counts', { p_user: userId })) ]);
     if (!p) { box.innerHTML = '<div style="font-size:0.75rem;color:var(--muted)">This member has left the crew feed.</div>'; return; }
     const k = (c && c[0]) || {}; const me = userId === ST.user.id; const f = ST.crew.followingSet && ST.crew.followingSet.has(userId); const pend = ST.crew.pendingSet && ST.crew.pendingSet.has(userId);
-    if (p.founding_crew) { if (!ST.crew.founders) ST.crew.founders = new Set(); ST.crew.founders.add(p.user_id); }
+    if (p.founding_crew) { if (!ST.crew.founders) ST.crew.founders = new Set(); ST.crew.founders.add(p.user_id); if (p.founding_number) (ST.crew.founderNo = ST.crew.founderNo || {})[p.user_id] = p.founding_number; }
     const champ = p.base ? await crewBaseLeaders(p.base) : null;
     const wonLast = champ && champ.last && champ.last.user_id === p.user_id;
     box.innerHTML = '<div class="fb" style="align-items:flex-start"><div><div style="font-size:1.125rem;font-weight:600">' + crewEsc(p.callsign) + foundingChip(p.user_id) + '</div>' +
@@ -4750,6 +4751,34 @@ async function withDialogSpinner(label, fn) {
 // Shown when a gated capability is reached, naming the specific thing that
 // was blocked rather than a generic upsell — someone who just hit the photo
 // limit should be told that, not sold a feature list.
+// ─── FOUNDING CREW OFFER ─────────────────────────────────────────────────
+// Chad, Nov 5 2026: Founding Crew is the first 100 paying Pro members.
+// They keep the launch price for as long as they stay subscribed and get
+// the Founding Crew badge. The database numbers them (founding_members,
+// granted by a trigger on subscriptions; promo accounts never count).
+// The banner stays OFF while the app is in App Review, since the review
+// notes describe the purchase screen as it is now. Turn it on the day
+// Apple approves (post-approval checklist).
+const FOUNDING_OFFER_LIVE = false;
+const FOUNDING_TOTAL = 100;
+function foundingOfferHtml() {
+  if (!FOUNDING_OFFER_LIVE) return '';
+  setTimeout(loadFoundingSpots, 0);
+  return '<div id="foundingOffer" style="border:1px solid var(--gold);border-radius:10px;padding:10px 12px;margin-bottom:12px;background:var(--gold-tint)">' +
+    '<div style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.1em;color:var(--gold)">✈ FOUNDING CREW</div>' +
+    '<div style="font-size:0.8125rem;line-height:1.5;margin-top:4px">The first ' + FOUNDING_TOTAL + ' Pro members keep this price for as long as they stay subscribed, and wear the Founding Crew badge on the crew feed.</div>' +
+    '<div id="foundingSpots" style="font-size:0.75rem;color:var(--muted);margin-top:4px"></div></div>';
+}
+async function loadFoundingSpots() {
+  try {
+    const { data, error } = await withTimeout(SB.rpc('founding_spots_left'), 8000); if (error) throw error;
+    const el = document.getElementById('foundingSpots'); if (!el) return;
+    const left = Number(data);
+    if (!(left > 0)) { const box = document.getElementById('foundingOffer'); if (box) box.remove(); return; }
+    el.textContent = left + ' of ' + FOUNDING_TOTAL + ' spots left.';
+  } catch (e) { /* the offer text still stands without the count */ }
+}
+
 function showPaywall(reason) {
   haptic('medium');
   const root = document.getElementById('modalRoot');
@@ -4777,6 +4806,7 @@ function showPaywall(reason) {
   });
   parts.push('</div>');
 
+  parts.push(foundingOfferHtml());
   parts.push('<button class="btn btn-gold" onclick="startProPurchase(\''+PRO_PRODUCT_ANNUAL+'\')">'+proPrice(PRO_PRODUCT_ANNUAL, PRO_ANNUAL_PRICE)+' / year</button>');
   // Currency-neutral: a fixed "$5.00 a month" is wrong outside the US.
   parts.push('<div style="text-align:center;font-size:0.6875rem;color:var(--muted);margin:6px 0 10px">Saves about 37% vs monthly</div>');
@@ -16262,6 +16292,7 @@ function renderMore(p) {
       parts.push('<div style="font-size:0.6875rem;color:'+proColor+';padding:8px 0 8px 8px;'+border+';text-align:center;font-weight:'+(pro!=='–'?'600':'400')+';position:relative">'+pro+'</div>');
     });
     parts.push('</div>');
+    parts.push(foundingOfferHtml());
     parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px">');
     parts.push('<button class="btn btn-gold" onclick="haptic(\'medium\');startProPurchase(\''+PRO_PRODUCT_ANNUAL+'\')"><div style="font-size:0.8125rem;font-weight:700">❖ '+proPrice(PRO_PRODUCT_ANNUAL, PRO_ANNUAL_PRICE)+'</div><div style="font-size:0.625rem;opacity:0.8;margin-top:2px">per year</div></button>');
     parts.push('<button class="btn btn-outline" onclick="haptic(\'medium\');startProPurchase(\''+PRO_PRODUCT_MONTHLY+'\')"><div style="font-size:0.8125rem;font-weight:700">'+proPrice(PRO_PRODUCT_MONTHLY, PRO_MONTHLY_PRICE)+'</div><div style="font-size:0.625rem;opacity:0.8;margin-top:2px">per month</div></button>');

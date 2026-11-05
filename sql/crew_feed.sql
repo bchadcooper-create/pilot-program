@@ -303,3 +303,66 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke execute on function crew_base_leaders(text) from anon, public;
 grant execute on function crew_base_leaders(text) to authenticated;
+
+-- ── Founding Crew = first 100 paying Pro members (Nov 5 2026) ─────────────
+-- Replaces the manual award above. A trigger on subscriptions numbers each
+-- member whose subscription becomes active on ios or web (promo and comp
+-- accounts never count). The crew badge follows founding_members and can
+-- never be set from a member's own app.
+create table if not exists founding_members (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  number int not null unique check (number between 1 and 100),
+  granted_at timestamptz not null default now()
+);
+alter table founding_members enable row level security;
+create policy founding_members_own on founding_members for select to authenticated using ((select auth.uid()) = user_id);
+revoke all on founding_members from anon;
+revoke insert, update, delete, truncate, references, trigger on founding_members from authenticated;
+grant select on founding_members to authenticated;
+grant select, insert, update, delete on founding_members to service_role;
+alter table crew_profiles add column if not exists founding_number int;
+
+create or replace function grant_founding(p_user uuid) returns int
+language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  lock table founding_members in exclusive mode;
+  select number into n from founding_members where user_id = p_user;
+  if n is not null then return n; end if;
+  select count(*) into n from founding_members;
+  if n >= 100 then return null; end if;
+  n := n + 1;
+  insert into founding_members (user_id, number) values (p_user, n);
+  update crew_profiles set founding_crew = true, founding_number = n where user_id = p_user;
+  return n;
+end $$;
+revoke execute on function grant_founding(uuid) from public, anon, authenticated;
+
+create or replace function subscriptions_grant_founding() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.tier = 'pro' and new.status = 'active' and new.platform in ('ios', 'web') then
+    perform grant_founding(new.user_id);
+  end if;
+  return new;
+end $$;
+create trigger subscriptions_grant_founding after insert or update on subscriptions
+  for each row execute function subscriptions_grant_founding();
+
+create or replace function crew_profiles_protect_founding() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  if coalesce((select auth.role()), '') in ('authenticated', 'anon') then
+    select number into n from founding_members where user_id = new.user_id;
+    new.founding_crew := n is not null;
+    new.founding_number := n;
+  end if;
+  return new;
+end $$;
+
+create or replace function founding_spots_left() returns int
+language sql stable security definer set search_path = public as $$
+  select greatest(0, 100 - count(*))::int from founding_members;
+$$;
+grant execute on function founding_spots_left() to anon, authenticated;

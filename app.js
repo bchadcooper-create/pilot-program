@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.51.4 / 20261105_3
+ * Version/build: fcf-v5.51.5 / 20261105_4
  */
 
-const FCF_VERSION = 'fcf-v5.51.4';
-const FCF_BUILD   = '20261105_3';
+const FCF_VERSION = 'fcf-v5.51.5';
+const FCF_BUILD   = '20261105_4';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -6764,6 +6764,48 @@ window.addEventListener('fcf:healthkit', (e) => {
   }
   requestNativeRepaint();
 });
+
+// ─── SYNC BUTTON FEEDBACK ───────────────────────────────────────────────────
+// Owner, Nov 5 2026: "I'm not getting any haptic or visual cue when I press
+// sync" (Apple Health Refresh, Oura Sync Now, Sync Oura on Today). Each
+// button now buzzes on the tap, shows a spinner and "Syncing…" while the
+// work runs, buzzes again and reads "✓ Updated" when it lands, then
+// redraws the screen so new numbers show.
+async function runSyncButton(btn, work, doneText) {
+  if (btn && btn.dataset.busy) return;
+  haptic('light');
+  const original = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.dataset.busy = '1'; btn.disabled = true;
+    btn.innerHTML = '<span class="fcf-spinner" style="display:inline-block;width:14px;height:14px;margin:0 8px -2px 0;border-width:2px"></span>Syncing…';
+  }
+  let ok = true;
+  try { ok = (await work()) !== false; } catch (e) { ok = false; }
+  if (!btn) return;
+  btn.innerHTML = ok ? '✓ ' + (doneText || 'Updated') : 'Could not sync. Try again.';
+  haptic(ok ? 'success' : 'warning');
+  setTimeout(() => { if (!btn.isConnected) return; btn.innerHTML = original; btn.disabled = false; delete btn.dataset.busy; }, 1800);
+}
+// Apple Health answers through the fcf:healthkit event, not a promise.
+// Wait for it (8 s at most), then redraw this screen with the new values.
+function refreshHealthKitNow(btn) {
+  return runSyncButton(btn, () => new Promise(resolve => {
+    if (typeof FCFBridge === 'undefined' || !FCFBridge.syncHealthKit) { resolve(false); return; }
+    let done = false;
+    const finish = ok => { if (done) return; done = true; window.removeEventListener('fcf:healthkit', onData); resolve(ok); };
+    const onData = () => finish(true);
+    window.addEventListener('fcf:healthkit', onData);
+    setTimeout(() => finish(!!ST.healthkit), 8000);
+    try { FCFBridge.syncHealthKit(); } catch (e) { finish(false); }
+  }).then(ok => { if (ok && ST.tab !== 'today') setTimeout(renderPage, 1900); return ok; }), 'Apple Health updated');
+}
+function syncOuraNow(btn) {
+  return runSyncButton(btn, async () => {
+    await syncOuraData(true);
+    if (ST.tab !== 'today') setTimeout(renderPage, 1900);
+    return !ST.ouraLastSyncError;
+  }, 'Oura synced');
+}
 
 // ─── FRESH STEP COUNTS ──────────────────────────────────────────────────────
 // BUG FIX (reported: Today showed 1,432 steps at 11:45 while Apple Health
@@ -14747,8 +14789,10 @@ async function resolveOuraDuplicate(choice) {
 async function syncOuraData(force) {
   if (!ST.user || !ST.ouraAccessToken) {
     showBigToast('Connect Oura Ring first.','warn');
+    ST.ouraLastSyncError = 'not connected';
     return;
   }
+  ST.ouraLastSyncError = null;
   try {
     // BUG FIX: Oura's `day` field is the user's LOCAL calendar day, but
     // these were UTC dates. UTC midnight is 5pm in Arizona, so from 5pm
@@ -14897,6 +14941,7 @@ async function syncOuraData(force) {
     if (ST.tab === 'today') { updateOuraTopSection(); if (isPro()) loadFatigueCalibration(getTodayContext()); }
 
   } catch(e) {
+    ST.ouraLastSyncError = e.message || 'failed';
     if (force) showBigToast('Oura sync failed: '+e.message,'warn');
   } finally {
     if (!_ouraFirstSyncDone) { _ouraFirstSyncDone = true; if (ST.tab === 'today') updateOuraTopSection(); }
@@ -16401,7 +16446,7 @@ function renderDevices(p) {
       parts.push('</div>');
     }
 
-    parts.push('<button class="btn btn-outline" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.syncHealthKit()">↻ Refresh</button>');
+    parts.push('<button class="btn btn-outline" onclick="refreshHealthKitNow(this)">↻ Refresh</button>');
 
     // If Oura is detected via HealthKit, note that direct Oura OAuth gives richer data
     if (ouraHK) {
@@ -16439,7 +16484,7 @@ function renderDevices(p) {
       parts.push('</div>');
     }
     parts.push('</div>');
-    parts.push('<button class="btn btn-outline" onclick="syncOuraData(true)">↻ Sync Now</button>');
+    parts.push('<button class="btn btn-outline" onclick="syncOuraNow(this)">↻ Sync Now</button>');
     parts.push('<button class="btn btn-outline mt8" onclick="importHistoricalOura(180)">📥 Import Last 6 Months</button>');
   } else {
     parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:14px;line-height:1.65">Optional: connect directly to Oura for full readiness scores used to auto-set your Pilot Condition. Readiness 70+ = GO, 60–69 = MARGINAL, below 60 = NO-GO.</div>');
@@ -17823,7 +17868,7 @@ function noRingDataCardHtml() {
   p.push('<div class="card mb12" id="noRingCard" style="border-left:3px solid var(--amber)">');
   const offlineTitle = typeof navigator !== 'undefined' && navigator.onLine === false;
   p.push('<div class="fb" style="align-items:center;margin-bottom:6px"><div style="font-size:1.0625rem;font-weight:600;letter-spacing:-.01em">' + (offlineTitle ? 'Ring scores unavailable offline' : 'No ring data for last night') + '</div>');
-  p.push('<button class="btn btn-outline" style="padding:6px 10px;font-size:0.6875rem" onclick="haptic(\'light\');syncOuraData(true)">↻ Sync Oura</button></div>');
+  p.push('<button class="btn btn-outline" style="padding:6px 10px;font-size:0.6875rem" onclick="syncOuraNow(this)">↻ Sync Oura</button></div>');
   const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
   p.push('<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6;margin-bottom:10px">' + (offline
     ? 'You\'re offline, so today\'s ring scores can\'t be fetched right now. Tell us how recovered you feel and the plan will use that until you reconnect.'

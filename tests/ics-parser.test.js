@@ -1431,7 +1431,7 @@ test('the Today card asks instead of showing stale tiles, with a Sync button', (
   ringState(yesterdayStr, 68);
   const html = ctx.buildOuraTopSectionHTML(ctx.getTodayContext());
   assertEqual(/No ring data for last night/.test(html), true, 'says so');
-  assertEqual(/syncOuraData\(true\)/.test(html), true, 'sync button');
+  assertEqual(/syncOuraNow\(this\)/.test(html), true, 'sync button');
   assertEqual(/setReadinessFromToday\(3\)/.test(html), true, 'self-check picker');
   assertEqual(/>68</.test(html), false, 'no stale 68 tile');
   ringState(todayStr, 68);

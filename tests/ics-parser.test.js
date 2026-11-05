@@ -1962,6 +1962,14 @@ test('the Apple Health tile shows Oura\'s total, never build 6\'s fragment', () 
   assertEqual(ctx.lastSleepMinutes(null), null, 'no Apple Health data');
 });
 
+test('Today\'s Sleep tile shows hours under the score', () => {
+  assertEqual(ctx.fmtSleepHM(25620), '7h 7m', 'Chad\'s Nov 5 night');
+  assertEqual(ctx.fmtSleepHM(null), null, 'unknown'); assertEqual(ctx.fmtSleepHM(0), null, 'zero');
+  const t = ctx.glowTile('SLEEP', 72, 'blue', null, '7h 7m');
+  assertEqual(t.includes('tile-sub') && t.includes('7h 7m') && t.includes('>72<'), true, 'hours and score both in the tile');
+  assertEqual(ctx.glowTile('SLEEP', 72, 'blue').includes('tile-sub'), false, 'no hours line when unknown');
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

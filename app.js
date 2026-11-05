@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.51.6 / 20261105_5
+ * Version/build: fcf-v5.51.7 / 20261105_6
  */
 
-const FCF_VERSION = 'fcf-v5.51.6';
-const FCF_BUILD   = '20261105_5';
+const FCF_VERSION = 'fcf-v5.51.7';
+const FCF_BUILD   = '20261105_6';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -4384,13 +4384,15 @@ const GLOW_COLORS = {
   amber: ['rgba(245,158,11,calc(0.2 * var(--glow-alpha)))',  'rgba(245,158,11,calc(0.06 * var(--glow-alpha)))',  'var(--amber)'],
   red:   ['rgba(239,68,68,calc(0.2 * var(--glow-alpha)))',   'rgba(239,68,68,calc(0.06 * var(--glow-alpha)))',   'var(--red)'],
 };
-function glowTile(label, value, colorKey, valueColor) {
+// sub: optional small line under the label (e.g. sleep hours under the score).
+function glowTile(label, value, colorKey, valueColor, sub) {
   const [gs, gf, accent] = GLOW_COLORS[colorKey] || GLOW_COLORS.blue;
   const vc = valueColor || 'var(--text)';
   return (
     '<div style="position:relative;border-radius:16px;border:1px solid var(--tile-border);overflow:hidden;padding:12px 10px 10px;min-height:90px;background:var(--tile)">' +
     '<div style="position:absolute;top:-28px;right:-28px;width:110px;height:110px;border-radius:50%;background:radial-gradient(circle,' + gs + ' 0%,' + gf + ' 50%,transparent 75%);pointer-events:none"></div>' +
     '<div style="font-family:var(--mono);font-size:0.5rem;letter-spacing:.12em;color:' + accent + ';opacity:0.9;position:relative;z-index:1">' + label + '</div>' +
+    (sub ? '<div class="tile-sub" style="font-family:var(--mono);font-size:0.75rem;color:var(--muted);margin-top:4px;position:relative;z-index:1">' + sub + '</div>' : '') +
     '<div style="position:absolute;bottom:10px;left:10px;font-family:var(--mono);font-size:1.875rem;font-weight:700;color:' + vc + ';line-height:1;z-index:1">' + (value ?? '–') + '</div>' +
     '</div>'
   );
@@ -7845,6 +7847,12 @@ function localDateStr(d) {
 // and the coach all treat readiness as unknown and ask instead.
 function ouraRowIsToday() {
   return !!(ST.ouraData && ST.ouraData.date === localDateStr(new Date()));
+}
+// Seconds of sleep as "7h 7m", or null when unknown.
+function fmtSleepHM(sec) {
+  if (!sec || sec <= 0) return null;
+  const m = Math.round(sec / 60);
+  return Math.floor(m / 60) + 'h ' + (m % 60) + 'm';
 }
 // Minutes of last night's sleep for the Apple Health card, or null.
 function lastSleepMinutes(hk) {
@@ -17844,9 +17852,11 @@ function buildOuraTopSectionHTML(ctx) {
     parts.push(noRingDataCardHtml());
   } else if (ST.ouraConnected && ctx.oura.readiness !== null) {
     parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">');
-    [['READINESS',ctx.oura.readiness,'gold'],['SLEEP',ctx.oura.sleep,'blue'],['ACTIVITY',ctx.oura.activity,'teal']].forEach(([l,v,col]) => {
+    // Sleep hours sit in the Sleep tile under the label (Chad, Nov 5).
+    const sleepHrs = ouraRowIsToday() ? fmtSleepHM(ST.ouraData.total_sleep_seconds) : null;
+    [['READINESS',ctx.oura.readiness,'gold'],['SLEEP',ctx.oura.sleep,'blue',sleepHrs],['ACTIVITY',ctx.oura.activity,'teal']].forEach(([l,v,col,sub]) => {
       const vc = v===null?'var(--muted)':v>=85?'var(--green)':v>=70?'var(--text)':v>=60?'var(--amber)':'var(--red)';
-      parts.push(glowTile(l,v,col,vc));
+      parts.push(glowTile(l,v,col,vc,sub));
     });
     parts.push('</div>');
   }

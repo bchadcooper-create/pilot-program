@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.50.1 / 20261104_7
+ * Version/build: fcf-v5.51.0 / 20261104_8
  */
 
-const FCF_VERSION = 'fcf-v5.50.1';
-const FCF_BUILD   = '20261104_7';
+const FCF_VERSION = 'fcf-v5.51.0';
+const FCF_BUILD   = '20261104_8';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -2737,9 +2737,24 @@ async function crewLoadFeed(more) {
   if (error) throw error;
   c.feed = more ? c.feed.concat(data || []) : (data || []);
   c.feedEnd = (data || []).length < 30;
-  await crewLoadPhotos((data || []).map(a => a.id));
+  await Promise.all([crewLoadPhotos((data || []).map(a => a.id)), crewLoadFounders((data || []).map(a => a.user_id))]);
 }
 // Photos come in a second read so crew_feed's return shape stays put.
+// Founding Crew flags for the authors on screen (set server-side only).
+async function crewLoadFounders(userIds) {
+  const ids = [...new Set(userIds)].filter(Boolean);
+  if (!ids.length) return;
+  if (!ST.crew.founders) ST.crew.founders = new Set();
+  try {
+    const { data } = await withTimeout(SB.from('crew_profiles').select('user_id').in('user_id', ids).eq('founding_crew', true), 10000);
+    (data || []).forEach(r => ST.crew.founders.add(r.user_id));
+  } catch (e) { /* the badge is decoration; the feed works without it */ }
+}
+function foundingChip(userId) {
+  return ST.crew.founders && ST.crew.founders.has(userId)
+    ? ' <span title="Founding Crew: joined before launch pricing ended" style="font-family:var(--mono);font-size:0.5625rem;letter-spacing:.08em;color:var(--gold);border:1px solid var(--gold);border-radius:4px;padding:1px 5px;vertical-align:middle">✈ FOUNDING CREW</span>'
+    : '';
+}
 async function crewLoadPhotos(ids) {
   if (!ids.length) return;
   try {
@@ -3023,7 +3038,7 @@ function crewCardHtml(a) {
   const icon = a.kind === 'run' ? '🏃' : a.kind === 'walk' ? '🚶' : '🏋️';
   const open = ST.crew.open[a.id]; const cmts = ST.crew.comments[a.id];
   let h = '<div class="card mb12" id="crewCard_' + a.id + '">';
-  h += '<div class="fb" style="align-items:flex-start;margin-bottom:8px"><div style="cursor:pointer" onclick="crewGo(\'profile\',\'' + a.user_id + '\')"><div style="font-size:0.875rem;font-weight:600">' + crewEsc(a.callsign) + (a.base ? ' <span style="font-weight:400;color:var(--muted);font-size:0.75rem">· ' + crewEsc(a.base) + '</span>' : '') + '</div><div style="font-size:0.625rem;color:var(--muted)">' + crewAgo(a.performed_at) + (a.visibility === 'private' ? ' · hidden' : a.visibility === 'followers' ? ' · followers' : '') + '</div></div>' +
+  h += '<div class="fb" style="align-items:flex-start;margin-bottom:8px"><div style="cursor:pointer" onclick="crewGo(\'profile\',\'' + a.user_id + '\')"><div style="font-size:0.875rem;font-weight:600">' + crewEsc(a.callsign) + foundingChip(a.user_id) + (a.base ? ' <span style="font-weight:400;color:var(--muted);font-size:0.75rem">· ' + crewEsc(a.base) + '</span>' : '') + '</div><div style="font-size:0.625rem;color:var(--muted)">' + crewAgo(a.performed_at) + (a.visibility === 'private' ? ' · hidden' : a.visibility === 'followers' ? ' · followers' : '') + '</div></div>' +
     '<button class="btn-ghost" style="padding:4px 8px;font-size:1rem;line-height:1" onclick="crewMenu(\'' + a.id + '\')">···</button></div>';
   h += '<div style="font-size:1rem;font-weight:600;margin-bottom:2px">' + icon + ' ' + crewEsc(a.title) + '</div>';
   const stat = crewStatLine(a); if (stat) h += '<div style="font-family:var(--mono);font-size:0.75rem;color:var(--gold);margin-bottom:6px">' + crewEsc(stat) + '</div>';
@@ -3086,7 +3101,7 @@ function crewFindHtml() {
   return '<div class="card mb12"><div class="section-label" style="margin-top:0">FIND CREW</div>' +
     '<div class="field"><input id="crewFindInput" type="text" placeholder="Search by call sign" value="' + crewEsc(ST.crew.find || '') + '" oninput="crewFindTyped(this.value)"></div>' +
     '<div id="crewFindResults"></div></div>' +
-    (ST.crew.profile.base ? '<div class="card mb12"><div class="section-label" style="margin-top:0">CREW AT ' + crewEsc(ST.crew.profile.base) + ' · THIS MONTH</div><div id="crewBaseBoard"><div style="font-size:0.75rem;color:var(--muted)">Loading…</div></div></div>' : '<div class="card mb12" style="font-size:0.75rem;color:var(--muted)">Set your home base in Crew settings to see the crew at your base.</div>');
+    (ST.crew.profile.base ? '<div class="card mb12"><div class="section-label" style="margin-top:0">CREW AT ' + crewEsc(ST.crew.profile.base) + ' · THIS MONTH</div><div id="crewBaseLeaders"></div><div id="crewBaseBoard"><div style="font-size:0.75rem;color:var(--muted)">Loading…</div></div></div>' : '<div class="card mb12" style="font-size:0.75rem;color:var(--muted)">Set your home base in Crew settings to see the crew at your base.</div>');
 }
 let _crewFindTimer = null;
 function crewFindTyped(v) { ST.crew.find = v; clearTimeout(_crewFindTimer); _crewFindTimer = setTimeout(crewFindRun, 300); }
@@ -3105,8 +3120,31 @@ function crewPersonRow(r) {
   return '<div class="fb" style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="cursor:pointer" onclick="crewGo(\'profile\',\'' + r.user_id + '\')"><div style="font-size:0.875rem;font-weight:600">' + crewEsc(r.callsign) + (me ? ' (you)' : '') + '</div><div style="font-size:0.6875rem;color:var(--muted)">' + [r.base, r.month_miles != null ? Number(r.month_miles) + ' mi' : null, r.month_sessions != null ? r.month_sessions + ' sessions' : null].filter(Boolean).join(' · ') + '</div></div>' +
     (me ? '' : '<button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid ' + (f ? 'var(--border)' : 'var(--gold)') + ';border-radius:8px;color:' + (f ? 'var(--muted)' : 'var(--gold)') + '" onclick="crewFollow(\'' + r.user_id + '\',' + (f || pend ? 'false' : 'true') + ')">' + (f ? 'Following' : pend ? 'Requested' : 'Follow') + '</button>') + '</div>';
 }
+// Monthly base leader (most strength sessions; sets break a tie). Cached per
+// base for the session so the profile header and Find share one read.
+const _baseLeaderCache = {};
+async function crewBaseLeaders(base) {
+  const key = base + '|' + localDateStr(new Date()).slice(0, 7);
+  if (_baseLeaderCache[key]) return _baseLeaderCache[key];
+  try {
+    const { data, error } = await withTimeout(SB.rpc('crew_base_leaders', { p_base: base }), 10000); if (error) throw error;
+    const out = { this: (data || []).find(r => r.period === 'this') || null, last: (data || []).find(r => r.period === 'last') || null };
+    _baseLeaderCache[key] = out; return out;
+  } catch (e) { return null; }
+}
+function crewLastMonthName() { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return d.toLocaleDateString('en-US', { month: 'long' }); }
+function crewBaseLeadersHtml(base, L) {
+  if (!L || (!L.this && !L.last)) return '';
+  const nowName = new Date().toLocaleDateString('en-US', { month: 'long' });
+  const row = (label, r, gold) => r ? '<div class="fb" style="padding:6px 0;cursor:pointer" onclick="crewGo(\'profile\',\'' + r.user_id + '\')"><div style="font-size:0.8125rem">' + label + '</div><div style="font-size:0.8125rem;font-weight:600;color:' + (gold ? 'var(--gold)' : 'var(--text)') + '">' + crewEsc(r.callsign) + ' <span style="font-weight:400;color:var(--muted);font-size:0.6875rem">' + r.sessions + ' sessions</span></div></div>' : '';
+  return '<div style="border:1px solid var(--gold);border-radius:10px;padding:8px 12px;margin-bottom:10px">' +
+    row('🏆 ' + crewLastMonthName() + ' winner', L.last, true) + row('Leading ' + nowName, L.this, false) +
+    '<div style="font-size:0.625rem;color:var(--muted);margin-top:2px">Most strength sessions shared at ' + crewEsc(base) + '. Hidden posts do not count.</div></div>';
+}
 async function crewLoadBaseBoard() {
   const box = document.getElementById('crewBaseBoard'); if (!box || !ST.crew.profile.base) return;
+  const lead = document.getElementById('crewBaseLeaders');
+  if (lead) crewBaseLeaders(ST.crew.profile.base).then(L => { lead.innerHTML = crewBaseLeadersHtml(ST.crew.profile.base, L); });
   try {
     const { data, error } = await withTimeout(SB.rpc('crew_base_board', { p_base: ST.crew.profile.base })); if (error) throw error;
     box.innerHTML = (data || []).map(crewPersonRow).join('') || '<div style="font-size:0.75rem;color:var(--muted)">You are the first at ' + crewEsc(ST.crew.profile.base) + '. Tell your crew.</div>';
@@ -3116,11 +3154,15 @@ async function crewLoadProfileHeader(userId) {
   const box = document.getElementById('crewProfileHead'); if (!box) return;
   try {
     const [{ data: p }, { data: c }] = await Promise.all([
-      withTimeout(SB.from('crew_profiles').select('user_id,callsign,base,airline,bio,visibility').eq('user_id', userId).maybeSingle()),
+      withTimeout(SB.from('crew_profiles').select('user_id,callsign,base,airline,bio,visibility,founding_crew').eq('user_id', userId).maybeSingle()),
       withTimeout(SB.rpc('crew_profile_counts', { p_user: userId })) ]);
     if (!p) { box.innerHTML = '<div style="font-size:0.75rem;color:var(--muted)">This member has left the crew feed.</div>'; return; }
     const k = (c && c[0]) || {}; const me = userId === ST.user.id; const f = ST.crew.followingSet && ST.crew.followingSet.has(userId); const pend = ST.crew.pendingSet && ST.crew.pendingSet.has(userId);
-    box.innerHTML = '<div class="fb" style="align-items:flex-start"><div><div style="font-size:1.125rem;font-weight:600">' + crewEsc(p.callsign) + '</div><div style="font-size:0.75rem;color:var(--muted)">' + [p.base, p.airline].filter(Boolean).map(crewEsc).join(' · ') + '</div>' + (p.bio ? '<div style="font-size:0.8125rem;margin-top:6px;line-height:1.5">' + crewEsc(p.bio) + '</div>' : '') + '</div>' +
+    if (p.founding_crew) { if (!ST.crew.founders) ST.crew.founders = new Set(); ST.crew.founders.add(p.user_id); }
+    const champ = p.base ? await crewBaseLeaders(p.base) : null;
+    const wonLast = champ && champ.last && champ.last.user_id === p.user_id;
+    box.innerHTML = '<div class="fb" style="align-items:flex-start"><div><div style="font-size:1.125rem;font-weight:600">' + crewEsc(p.callsign) + foundingChip(p.user_id) + '</div>' +
+      (wonLast ? '<div style="font-size:0.75rem;color:var(--gold);margin-top:2px">🏆 Top lifter at ' + crewEsc(p.base) + ', ' + crewLastMonthName() + '</div>' : '') + '<div style="font-size:0.75rem;color:var(--muted)">' + [p.base, p.airline].filter(Boolean).map(crewEsc).join(' · ') + '</div>' + (p.bio ? '<div style="font-size:0.8125rem;margin-top:6px;line-height:1.5">' + crewEsc(p.bio) + '</div>' : '') + '</div>' +
       (me ? '<button class="btn-ghost" style="font-size:0.75rem;color:var(--gold)" onclick="crewGo(\'settings\')">Settings</button>' : '<div style="display:flex;flex-direction:column;gap:6px"><button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid ' + (f ? 'var(--border)' : 'var(--gold)') + ';border-radius:8px;color:' + (f ? 'var(--muted)' : 'var(--gold)') + '" onclick="crewFollow(\'' + userId + '\',' + (f || pend ? 'false' : 'true') + ')">' + (f ? 'Following' : pend ? 'Requested' : (p.visibility === 'followers' ? 'Request to follow' : 'Follow')) + '</button><button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewReport(\'profile\',\'' + userId + '\')">Report</button><button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewBlock(\'' + userId + '\',\'' + crewEsc(p.callsign).replace(/'/g, '') + '\')">Block</button></div>') + '</div>' +
       '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:12px">' + [['FOLLOWERS', k.followers], ['FOLLOWING', k.following], ['POSTS', k.activities], ['MI THIS MO', Number(k.month_miles || 0)]].map(([l, v]) => '<div style="text-align:center"><div style="font-family:var(--mono);font-size:1rem;font-weight:600">' + (v ?? 0) + '</div><div style="font-size:0.5625rem;color:var(--muted);letter-spacing:.1em">' + l + '</div></div>').join('') + '</div>';
   } catch (e) { box.innerHTML = '<div style="font-size:0.75rem;color:var(--muted)">Could not load this profile.</div>'; }
@@ -4625,6 +4667,22 @@ function shareApp() {
     '<button class="btn btn-outline" onclick="copyShareLink()">Copy link</button>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">Done</button>' +
     '</div></div>';
+}
+
+// "Send to a crew member" for the free tools (Contagious plan, Nov 4 2026:
+// useful things get passed on). Same route as Share the app: the iPhone
+// share sheet in the app, the browser's share sheet, or a copied link.
+const MED_CALC_URL = 'https://flightcrew.fit/tools/faa-medical-expiration-calculator.html';
+function shareCrewLink(url) {
+  haptic('light');
+  awardLiveBadge('recruiter').catch(() => {});
+  if (window.webkit?.messageHandlers?.share) { window.webkit.messageHandlers.share.postMessage({ url }); return; }
+  if (navigator.share) { navigator.share({ url }).catch(() => {}); return; }
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(url).then(() => showToast('Link copied. Paste it to your crew.')).catch(() => showToast(url));
+  else showToast(url);
+}
+function shareCrewButton(url, label) {
+  return '<button class="btn btn-outline mb12" onclick="shareCrewLink(\'' + url + '\')">📤 ' + label + '</button>';
 }
 
 function copyShareLink() {
@@ -15794,6 +15852,8 @@ function medHomeHtml(rec) {
   parts.push(item('👂', 'Hearing and color vision', 'What the exam does, and the AirPods Pro test', 'hearing'));
   parts.push(item('📋', 'What the exam checks', 'First, second and third class standards', 'standards'));
   parts.push(item('🔒', 'Privacy and PIN', rec.pinHash ? 'PIN on · data stays on this phone' : 'No PIN · data stays on this phone', 'privacy'));
+  parts.push(shareCrewButton(MED_CALC_URL, 'Send the free medical date calculator to a crew member'));
+  parts.push('<div style="font-size:0.625rem;color:var(--muted);margin:-6px 0 12px;line-height:1.5">They don\'t need an account. Your own medical details are never part of the link.</div>');
   return parts.join('');
 }
 
@@ -15914,7 +15974,8 @@ function medMedsHtml() {
     '<div class="card mb12"><div class="field"><label>Medication or brand name</label><input id="medQuery" type="search" placeholder="e.g. finasteride, Benadryl, Ozempic" value="' + sanitizeUserText(q) + '" oninput="ST.medQuery=this.value;document.getElementById(\'medResults\').innerHTML=medMedsListHtml()"></div>' +
     '<div id="medResults">' + list + '</div></div>' +
     medCard('HOW TO READ THE TAGS', '<div style="font-size:0.75rem;line-height:1.7"><span style="color:var(--green);font-family:var(--mono)">OK</span> generally accepted; still list it on MedXPress.<br><span style="color:var(--amber);font-family:var(--mono)">WAIT</span> do not fly until the wait has passed; routine use is a problem.<br><span style="color:var(--amber);font-family:var(--mono)">SI</span> allowed only through the FAA special issuance process, usually a HIMS AME; call before you start it.<br><span style="color:var(--red);font-family:var(--mono)">DNI</span> the AME cannot issue while you take it.<br><span style="font-family:var(--mono)">ASK AME</span> accepted in general, with a wrinkle worth a call first.</div>' +
-      '<div style="font-size:0.6875rem;color:var(--muted);margin-top:10px;line-height:1.5">General FAA rule for anything sedating: wait 5 times the drug\'s longest half-life, or 5 times the dosing interval if the half-life is unknown. Any label that says "may cause drowsiness" means no flying while it is active. This list is not all-inclusive.</div>');
+      '<div style="font-size:0.6875rem;color:var(--muted);margin-top:10px;line-height:1.5">General FAA rule for anything sedating: wait 5 times the drug\'s longest half-life, or 5 times the dosing interval if the half-life is unknown. Any label that says "may cause drowsiness" means no flying while it is active. This list is not all-inclusive.</div>') +
+    shareCrewButton('https://flightcrew.fit/?utm_source=share&utm_medium=app&utm_campaign=med-check', 'Send the medication checker to a crew member');
 }
 function medXpressHtml() {
   const q = (n, t, body, flag) => '<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div style="font-size:0.8125rem;font-weight:600">' + n + ' · ' + t + '</div><div style="font-size:0.75rem;color:var(--muted);line-height:1.55;margin-top:3px">' + body + '</div>' + (flag ? '<div style="font-size:0.6875rem;color:var(--amber);margin-top:4px">' + flag + '</div>' : '') + '</div>';

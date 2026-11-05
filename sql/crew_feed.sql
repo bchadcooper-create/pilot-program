@@ -262,3 +262,44 @@ create policy crew_photos_ins on crew_photos for insert to authenticated with ch
 create policy crew_photos_del on crew_photos for delete to authenticated using ((select auth.uid()) = user_id);
 grant select, insert, delete on crew_photos to authenticated;
 grant select, insert, update, delete on crew_photos to service_role;
+
+-- ── Founding Crew badge and monthly base leader (Nov 4 2026) ─────────────
+-- From the Contagious (STEPPS) plan, claude/contagious-stepps-plan.md.
+-- founding_crew is set only by the server. A member's own app can never
+-- set it: the trigger keeps the old value for the authenticated role.
+-- To award it (Chad decides the cutoff), run as the service role, e.g.:
+--   update crew_profiles set founding_crew = true where user_id in (...);
+alter table crew_profiles add column if not exists founding_crew boolean not null default false;
+create or replace function crew_profiles_protect_founding() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  if coalesce((select auth.role()), '') in ('authenticated', 'anon') then
+    if tg_op = 'INSERT' then new.founding_crew := false;
+    else new.founding_crew := old.founding_crew; end if;
+  end if;
+  return new;
+end $$;
+create trigger crew_profiles_protect_founding before insert or update on crew_profiles
+  for each row execute function crew_profiles_protect_founding();
+
+-- Most strength sessions shared at a base, this month and last month.
+create or replace function crew_base_leaders(p_base text)
+returns table (period text, user_id uuid, callsign citext, sessions bigint, sets bigint)
+language sql stable security definer set search_path = public as $$
+  with months as (
+    select 'this'::text as period, date_trunc('month', now()) as s, date_trunc('month', now()) + interval '1 month' as e
+    union all
+    select 'last', date_trunc('month', now()) - interval '1 month', date_trunc('month', now())
+  ), ranked as (
+    select m.period, p.user_id, p.callsign, count(a.id) as sessions, coalesce(sum(a.sets_logged), 0) as sets,
+           row_number() over (partition by m.period order by count(a.id) desc, coalesce(sum(a.sets_logged), 0) desc, min(a.performed_at)) as rk
+    from months m
+    join crew_activities a on a.performed_at >= m.s and a.performed_at < m.e and a.kind = 'workout' and a.visibility <> 'private'
+    join crew_profiles p on p.user_id = a.user_id and p.base = p_base
+    where not crew_blocked((select auth.uid()), p.user_id)
+    group by m.period, p.user_id, p.callsign
+  )
+  select period, user_id, callsign, sessions, sets from ranked where rk = 1;
+$$;
+revoke execute on function crew_base_leaders(text) from anon, public;
+grant execute on function crew_base_leaders(text) to authenticated;

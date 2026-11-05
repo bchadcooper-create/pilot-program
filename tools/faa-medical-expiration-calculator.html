@@ -94,6 +94,7 @@
   <div class="f optional" id="ecgBox"><label for="ecg">Date of your last ECG <span class="hint">Optional. Only matters for first class at 35 and over.</span></label><input type="date" id="ecg"></div>
   <div class="result" id="result" aria-live="polite"></div>
   <p class="private">Nothing you type leaves this page. It is worked out in your browser and is not sent anywhere.</p>
+  <div class="actions" style="margin-top:14px"><button class="btn2" type="button" id="shareBtn">Send to a crew member</button></div>
 </div>
 
 <div class="ctabox"><div class="txt"><b>The date is the easy part.</b><span>What decides the exam is blood pressure, weight and sleep. Flight Crew Fitness tracks those with the proper protocol and builds the training that moves them, around your trips.</span></div><a class="btn" href="/?utm_source=tool&amp;utm_medium=cta&amp;utm_campaign=medical-calculator">Start free</a></div>
@@ -230,6 +231,16 @@
     res.innerHTML = html;
     var b = $('icsBtn'); if (b) b.onclick = downloadIcs;
   }
+
+  // Share the calculator itself, never the dates typed into it.
+  (function () {
+    var b = $('shareBtn'); if (!b) return;
+    var url = 'https://flightcrew.fit/tools/faa-medical-expiration-calculator.html';
+    b.onclick = function () {
+      if (navigator.share) { navigator.share({ title: 'FAA medical expiration calculator', url: url }).catch(function () {}); return; }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(function () { b.textContent = 'Link copied'; setTimeout(function () { b.textContent = 'Send to a crew member'; }, 2000); });
+    };
+  })();
 
   function downloadIcs() {
     if (!lastIcs) return;

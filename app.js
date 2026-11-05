@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.51.5 / 20261105_4
+ * Version/build: fcf-v5.51.6 / 20261105_5
  */
 
-const FCF_VERSION = 'fcf-v5.51.5';
-const FCF_BUILD   = '20261105_4';
+const FCF_VERSION = 'fcf-v5.51.6';
+const FCF_BUILD   = '20261105_5';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -7846,6 +7846,14 @@ function localDateStr(d) {
 function ouraRowIsToday() {
   return !!(ST.ouraData && ST.ouraData.date === localDateStr(new Date()));
 }
+// Minutes of last night's sleep for the Apple Health card, or null.
+function lastSleepMinutes(hk) {
+  if (ST.ouraConnected && ouraRowIsToday() && ST.ouraData.total_sleep_seconds) {
+    return Math.round(ST.ouraData.total_sleep_seconds / 60);
+  }
+  if (hk && hk.sleepMinutes != null && (hk.sleepCalc || 0) >= 2) return hk.sleepMinutes;
+  return null;
+}
 // Oura is connected but has nothing for last night (ring not worn, not
 // charged, or the app has not synced yet).
 function ouraMissingToday() {
@@ -14421,6 +14429,20 @@ async function ouraFetch(endpoint) {
   return res.json();
 }
 
+// Oura's daily_sleep only has the score; the hours live in the separate
+// `sleep` endpoint, one document per sleep period. Sum the main-sleep
+// periods for a day (a night split by a long wake-up is two long_sleep
+// periods). If Oura tagged none as long_sleep, use the longest period.
+// Naps ('late_nap', 'rest') and 'deleted' periods are left out.
+function ouraNightTotals(periods, day) {
+  const all = (periods || []).filter(p => p && p.day === day && p.type !== 'deleted' && p.total_sleep_duration);
+  if (!all.length) return null;
+  let main = all.filter(p => p.type === 'long_sleep');
+  if (!main.length) main = [all.reduce((a, b) => (b.total_sleep_duration > a.total_sleep_duration ? b : a))];
+  const sum = k => main.reduce((t, p) => t + (p[k] || 0), 0);
+  return { total: sum('total_sleep_duration'), deep: sum('deep_sleep_duration'), rem: sum('rem_sleep_duration') };
+}
+
 // One-time backfill — pulls a wider date range than the daily sync and
 // upserts every day found, so Trends charts have history from before you
 // connected the ring (or from a gap where the app wasn't syncing).
@@ -14434,10 +14456,11 @@ async function importHistoricalOura(days) {
     const today = new Date().toISOString().slice(0,10);
     const startDate = new Date(Date.now() - days*86400000).toISOString().slice(0,10);
 
-    const [readiness, sleep, activity] = await Promise.all([
+    const [readiness, sleep, activity, sleepPeriods] = await Promise.all([
       ouraFetch('daily_readiness?start_date='+startDate+'&end_date='+today).catch(()=>null),
       ouraFetch('daily_sleep?start_date='+startDate+'&end_date='+today).catch(()=>null),
       ouraFetch('daily_activity?start_date='+startDate+'&end_date='+today).catch(()=>null),
+      ouraFetch('sleep?start_date='+startDate+'&end_date='+localDateStr(new Date(Date.now()+86400000))).catch(()=>null),
     ]);
 
     const readinessByDate = {}, sleepByDate = {}, activityByDate = {};
@@ -14455,6 +14478,7 @@ async function importHistoricalOura(days) {
       const readinessItem = readinessByDate[date];
       const sleepItem = sleepByDate[date];
       const activityItem = activityByDate[date];
+      const night = ouraNightTotals(sleepPeriods?.data, date);
       return {
         user_id: ST.user.id,
         date: date,
@@ -14464,9 +14488,9 @@ async function importHistoricalOura(days) {
         resting_heart_rate: null,
         temperature_deviation: readinessItem?.temperature_deviation || null,
         activity_score: activityItem?.score || null,
-        total_sleep_seconds: sleepItem?.total_sleep_duration || null,
-        deep_sleep_seconds: sleepItem?.deep_sleep_duration || null,
-        rem_sleep_seconds: sleepItem?.rem_sleep_duration || null,
+        total_sleep_seconds: night?.total || null,
+        deep_sleep_seconds: night?.deep || null,
+        rem_sleep_seconds: night?.rem || null,
         raw_readiness: readinessItem || null,
         raw_sleep: sleepItem || null,
         synced_at: new Date().toISOString(),
@@ -14808,12 +14832,14 @@ async function syncOuraData(force) {
     const fetchEnd = localDateStr(new Date(Date.now()+86400000));
 
     // Fetch readiness, sleep, and activity in parallel
-    const [readiness, sleep, activity] = await Promise.all([
+    const [readiness, sleep, activity, sleepPeriods] = await Promise.all([
       ouraFetch('daily_readiness?start_date='+yesterday+'&end_date='+fetchEnd).catch(()=>null),
       ouraFetch('daily_sleep?start_date='+yesterday+'&end_date='+fetchEnd).catch(()=>null),
       // A week back (only activity) so the step streak has Oura's final
       // counts for earlier days; today's row is still matched by day below.
       ouraFetch('daily_activity?start_date='+localDateStr(new Date(Date.now()-6*86400000))+'&end_date='+fetchEnd).catch(()=>null),
+      // Sleep periods carry the hours (daily_sleep only has the score).
+      ouraFetch('sleep?start_date='+yesterday+'&end_date='+fetchEnd).catch(()=>null),
     ]);
     // Awaited now rather than fire-and-forget (see the removed renderPage()
     // call inside this function for why) — this does mean syncOuraData
@@ -14859,6 +14885,7 @@ async function syncOuraData(force) {
     }
 
     const score = readinessItem.score;
+    const night = ouraNightTotals(sleepPeriods?.data, readinessItem.day);
     const row = {
       user_id:             ST.user.id,
       date:                readinessItem.day,
@@ -14868,9 +14895,9 @@ async function syncOuraData(force) {
       resting_heart_rate:  null, // from heart rate endpoint (separate call if needed)
       temperature_deviation: readinessItem.temperature_deviation || null,
       activity_score:      activityItem?.score || null,
-      total_sleep_seconds: sleepItem?.total_sleep_duration || null,
-      deep_sleep_seconds:  sleepItem?.deep_sleep_duration || null,
-      rem_sleep_seconds:   sleepItem?.rem_sleep_duration || null,
+      total_sleep_seconds: night?.total || null,
+      deep_sleep_seconds:  night?.deep || null,
+      rem_sleep_seconds:   night?.rem || null,
       raw_readiness:       readinessItem,
       raw_sleep:           sleepItem || null,
       synced_at:           new Date().toISOString(),
@@ -16433,8 +16460,14 @@ function renderDevices(p) {
     if (hk.stepsToday != null) statsRows.push(['Steps Today', hk.stepsToday.toLocaleString()]);
     if (hk.restingHR != null) statsRows.push(['Resting HR', hk.restingHR + ' bpm']);
     if (hk.hrv != null) statsRows.push(['HRV (SDNN)', hk.hrv + ' ms']);
-    if (hk.sleepMinutes != null) {
-      const h = Math.floor(hk.sleepMinutes / 60), m = hk.sleepMinutes % 60;
+    // Last Sleep: build 6 of the iPhone app reports only the longest
+    // unbroken stretch of sleep (every wake-up splits the night, so a full
+    // night showed as 0h 52m). Builds that add up the whole night send
+    // sleepCalc 2. Until then, use Oura's own total when it is connected,
+    // and otherwise leave the tile off rather than show a wrong number.
+    const sleepMin = lastSleepMinutes(hk);
+    if (sleepMin != null) {
+      const h = Math.floor(sleepMin / 60), m = sleepMin % 60;
       statsRows.push(['Last Sleep', h + 'h ' + m + 'm']);
     }
     if (statsRows.length > 0) {

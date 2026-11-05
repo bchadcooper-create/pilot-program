@@ -175,6 +175,9 @@ class HealthKitManager {
         querySleep(start: calendar.date(byAdding: .hour, value: -24, to: now) ?? now, end: now) { minutes, source in
             if let m = minutes { setPayload("sleepMinutes", m) }
             if let s = source { setPayload("sleepSource", s) }
+            // Tells the web app this build adds up the whole night
+            // (build 6 reported only the longest unbroken stretch).
+            setPayload("sleepCalc", 2)
             group.leave()
         }
 
@@ -384,27 +387,43 @@ class HealthKitManager {
                 .filter { asleepValues.contains($0.value) }
                 .sorted { $0.startDate < $1.startDate }
 
-            var mergedIntervals: [(start: Date, end: Date, source: String)] = []
+            // BUG FIX (Nov 5 2026, v5.51.6): Oura and Apple Watch write a
+            // night as many stage samples (core, deep, REM) with "awake"
+            // samples between them. Awake samples are filtered out above,
+            // so every wake-up left a gap, and the old code reported only
+            // the longest unbroken stretch (52 minutes for a full night).
+            // Now: merge overlaps (no double counting across sources), then
+            // join blocks less than 90 minutes apart into one sleep session,
+            // and report the asleep minutes of the biggest session.
+            var merged: [(start: Date, end: Date, source: String)] = []
             for sample in asleepSamples {
                 let sourceName = sample.sourceRevision.source.name
-                if let last = mergedIntervals.last, sample.startDate <= last.end {
-                    // Overlaps (or touches) the previous merged block — extend it
-                    // rather than counting this sample's own span again.
+                if let last = merged.last, sample.startDate <= last.end {
                     if sample.endDate > last.end {
-                        mergedIntervals[mergedIntervals.count - 1].end = sample.endDate
+                        merged[merged.count - 1].end = sample.endDate
                     }
                 } else {
-                    mergedIntervals.append((start: sample.startDate, end: sample.endDate, source: sourceName))
+                    merged.append((start: sample.startDate, end: sample.endDate, source: sourceName))
                 }
             }
 
-            guard let longest = mergedIntervals.max(by: {
-                $0.end.timeIntervalSince($0.start) < $1.end.timeIntervalSince($1.start)
-            }) else {
+            let maxGap: TimeInterval = 90 * 60
+            var sessions: [(end: Date, asleep: TimeInterval, source: String)] = []
+            for block in merged {
+                let span = block.end.timeIntervalSince(block.start)
+                if let last = sessions.last, block.start.timeIntervalSince(last.end) < maxGap {
+                    sessions[sessions.count - 1].end = block.end
+                    sessions[sessions.count - 1].asleep += span
+                } else {
+                    sessions.append((end: block.end, asleep: span, source: block.source))
+                }
+            }
+
+            guard let night = sessions.max(by: { $0.asleep < $1.asleep }) else {
                 completion(nil, nil); return
             }
-            let minutes = Int(longest.end.timeIntervalSince(longest.start) / 60)
-            completion(minutes > 0 ? minutes : nil, longest.source)
+            let minutes = Int(night.asleep / 60)
+            completion(minutes > 0 ? minutes : nil, night.source)
         }
         store.execute(query)
     }

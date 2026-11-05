@@ -1934,6 +1934,34 @@ testAsync('an offline open shows the morning check-offs, and reconnecting sends 
   SBc.from = realFrom; ctx.localStorage = realLS;
 });
 
+console.log('\nLast Sleep (reported: Apple Health card showed 0h 52m for a full night):');
+test('Oura sleep periods add up the main night, not naps or deleted periods', () => {
+  const d = '2026-11-05';
+  const periods = [
+    { day: d, type: 'long_sleep', total_sleep_duration: 6*3600, deep_sleep_duration: 3600, rem_sleep_duration: 5400 },
+    { day: d, type: 'long_sleep', total_sleep_duration: 3600, deep_sleep_duration: 600, rem_sleep_duration: 900 },
+    { day: d, type: 'late_nap', total_sleep_duration: 1800 },
+    { day: d, type: 'deleted', total_sleep_duration: 9000 },
+    { day: '2026-11-04', type: 'long_sleep', total_sleep_duration: 8*3600 },
+  ];
+  const n = ctx.ouraNightTotals(periods, d);
+  assertEqual(n.total, 7*3600, 'two long_sleep pieces of a split night'); assertEqual(n.deep, 4200, 'deep summed'); assertEqual(n.rem, 6300, 'REM summed');
+  assertEqual(ctx.ouraNightTotals([{ day: d, type: 'sleep', total_sleep_duration: 1200 }, { day: d, type: 'sleep', total_sleep_duration: 5000 }], d).total, 5000, 'no long_sleep: longest period');
+  assertEqual(ctx.ouraNightTotals([], d), null, 'nothing for the day');
+  assertEqual(ctx.ouraNightTotals(null, d), null, 'failed request');
+});
+test('the Apple Health tile shows Oura\'s total, never build 6\'s fragment', () => {
+  const hk6 = { sleepMinutes: 52 }, hk7 = { sleepMinutes: 431, sleepCalc: 2 };
+  ctx.ST.ouraConnected = true; ctx.ST.ouraData = { date: todayStr, total_sleep_seconds: 25920 };
+  assertEqual(ctx.lastSleepMinutes(hk6), 432, 'Oura total wins (7h 12m)');
+  ctx.ST.ouraData = { date: yesterdayStr, total_sleep_seconds: 25920 };
+  assertEqual(ctx.lastSleepMinutes(hk6), null, 'build 6 fragment hidden, stale Oura row not used');
+  assertEqual(ctx.lastSleepMinutes(hk7), 431, 'build 7 whole-night number shown');
+  ctx.ST.ouraConnected = false;
+  assertEqual(ctx.lastSleepMinutes(hk6), null, 'no Oura, build 6: tile left off');
+  assertEqual(ctx.lastSleepMinutes(null), null, 'no Apple Health data');
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

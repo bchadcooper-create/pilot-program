@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.51.2 / 20261105_1
+ * Version/build: fcf-v5.51.3 / 20261105_2
  */
 
-const FCF_VERSION = 'fcf-v5.51.2';
-const FCF_BUILD   = '20261105_1';
+const FCF_VERSION = 'fcf-v5.51.3';
+const FCF_BUILD   = '20261105_2';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -4759,14 +4759,26 @@ async function withDialogSpinner(label, fn) {
 // The banner stays OFF while the app is in App Review, since the review
 // notes describe the purchase screen as it is now. Turn it on the day
 // Apple approves (post-approval checklist).
+//
+// Pricing frame (Chad, Nov 5 2026, from Contagious): the regular price is
+// the high one, and the first 100 get it discounted. The App Store and
+// Stripe products stay at the founding price ($59.99 / $7.99) until the
+// 100th founder joins; then both are raised to the regular price with
+// "preserve prices for existing subscribers", so founders never move up.
+// The regular price is stated as what Pro costs AFTER the first 100,
+// never as a former price ("was $99.99"): it has not been charged yet.
+// Rule of 100: both prices are under $100, so the saving reads as a
+// percent (40% off annual, 33% off monthly).
 const FOUNDING_OFFER_LIVE = false;
 const FOUNDING_TOTAL = 100;
+const REGULAR_ANNUAL_PRICE = '$99.99';
+const REGULAR_MONTHLY_PRICE = '$11.99';
 function foundingOfferHtml() {
   if (!FOUNDING_OFFER_LIVE) return '';
   setTimeout(loadFoundingSpots, 0);
   return '<div id="foundingOffer" style="border:1px solid var(--gold);border-radius:10px;padding:10px 12px;margin-bottom:12px;background:var(--gold-tint)">' +
-    '<div style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.1em;color:var(--gold)">✈ FOUNDING CREW</div>' +
-    '<div style="font-size:0.8125rem;line-height:1.5;margin-top:4px">The first ' + FOUNDING_TOTAL + ' Pro members keep this price for as long as they stay subscribed, and wear the Founding Crew badge on the crew feed.</div>' +
+    '<div style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.1em;color:var(--gold)">✈ FOUNDING CREW · 40% OFF</div>' +
+    '<div style="font-size:0.8125rem;line-height:1.5;margin-top:4px">The first ' + FOUNDING_TOTAL + ' members pay the founding price below and keep it for as long as they stay subscribed, plus a numbered Founding Crew badge. After the first ' + FOUNDING_TOTAL + ', Pro is ' + REGULAR_ANNUAL_PRICE + ' a year or ' + REGULAR_MONTHLY_PRICE + ' a month.</div>' +
     '<div id="foundingSpots" style="font-size:0.75rem;color:var(--muted);margin-top:4px"></div></div>';
 }
 async function loadFoundingSpots() {

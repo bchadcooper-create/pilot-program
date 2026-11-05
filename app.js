@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.51.0 / 20261104_8
+ * Version/build: fcf-v5.51.1 / 20261104_9
  */
 
-const FCF_VERSION = 'fcf-v5.51.0';
-const FCF_BUILD   = '20261104_8';
+const FCF_VERSION = 'fcf-v5.51.1';
+const FCF_BUILD   = '20261104_9';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -15975,7 +15975,7 @@ function medMedsHtml() {
     '<div id="medResults">' + list + '</div></div>' +
     medCard('HOW TO READ THE TAGS', '<div style="font-size:0.75rem;line-height:1.7"><span style="color:var(--green);font-family:var(--mono)">OK</span> generally accepted; still list it on MedXPress.<br><span style="color:var(--amber);font-family:var(--mono)">WAIT</span> do not fly until the wait has passed; routine use is a problem.<br><span style="color:var(--amber);font-family:var(--mono)">SI</span> allowed only through the FAA special issuance process, usually a HIMS AME; call before you start it.<br><span style="color:var(--red);font-family:var(--mono)">DNI</span> the AME cannot issue while you take it.<br><span style="font-family:var(--mono)">ASK AME</span> accepted in general, with a wrinkle worth a call first.</div>' +
       '<div style="font-size:0.6875rem;color:var(--muted);margin-top:10px;line-height:1.5">General FAA rule for anything sedating: wait 5 times the drug\'s longest half-life, or 5 times the dosing interval if the half-life is unknown. Any label that says "may cause drowsiness" means no flying while it is active. This list is not all-inclusive.</div>') +
-    shareCrewButton('https://flightcrew.fit/?utm_source=share&utm_medium=app&utm_campaign=med-check', 'Send the medication checker to a crew member');
+    shareCrewButton('https://flightcrew.fit/tools/faa-medication-checker.html', 'Send the free medication checker to a crew member');
 }
 function medXpressHtml() {
   const q = (n, t, body, flag) => '<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div style="font-size:0.8125rem;font-weight:600">' + n + ' · ' + t + '</div><div style="font-size:0.75rem;color:var(--muted);line-height:1.55;margin-top:3px">' + body + '</div>' + (flag ? '<div style="font-size:0.6875rem;color:var(--amber);margin-top:4px">' + flag + '</div>' : '') + '</div>';

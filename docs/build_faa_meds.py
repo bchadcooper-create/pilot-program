@@ -366,3 +366,6 @@ end = s.index('];', start) + 2
 s = s[:start] + body + s[end:]
 open(P, 'w').write(s)
 print(len(M), 'entries')
+# The public checker page is built from the same list.
+import subprocess, sys
+subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'build_med_page.py')], check=True)

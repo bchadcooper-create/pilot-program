@@ -186,13 +186,13 @@ HEAD = """<!DOCTYPE html>
 <body>
 <header class="top"><div class="wrap wide">
   <a class="logo" href="/">✈ FLIGHT CREW FITNESS</a>
-  <nav class="topnav"><a href="/blog/">Blog</a><a href="/tools/faa-medical-expiration-calculator.html">Medical calculator</a><a href="/#faq">FAQ</a><a class="cta" href="/">Start free</a></nav>
+  <nav class="topnav"><a href="/blog/">Blog</a><a href="/tools/faa-medication-checker.html">Medication checker</a><a href="/tools/faa-medical-expiration-calculator.html">Medical calculator</a><a class="cta" href="/">Start free</a></nav>
 </div></header>
 """
 
 FOOT = """
 <footer class="bottom"><div class="wrap wide">
-  <a href="/">Flight Crew Fitness</a><a href="/blog/">Blog</a><a href="/tools/faa-medical-expiration-calculator.html">FAA medical calculator</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="https://www.facebook.com/1374735345726996">Facebook</a>
+  <a href="/">Flight Crew Fitness</a><a href="/blog/">Blog</a><a href="/tools/faa-medication-checker.html">FAA medication checker</a><a href="/tools/faa-medical-expiration-calculator.html">FAA medical calculator</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="https://www.facebook.com/1374735345726996">Facebook</a>
   <p class="disc">Flight Crew Fitness is a training tool, not medical advice. Nothing on this site diagnoses a condition or replaces your doctor or your AME. Consult a physician before beginning any new exercise program.</p>
 </div></footer>
 </body>
@@ -430,7 +430,7 @@ def make_og(meta):
     img.save(os.path.join(OUT, "og", meta["slug"] + ".png"), optimize=True)
 
 
-TOOLS = [("faa-medical-expiration-calculator.html", "2026-10-19")]
+TOOLS = [("faa-medical-expiration-calculator.html", "2026-10-19"), ("faa-medication-checker.html", "2026-11-04")]
 
 
 def write_sitemap(arts):

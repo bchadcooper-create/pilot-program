@@ -2,7 +2,8 @@
 // base leader in Find and on the winner's profile, and "Send to a crew
 // member" buttons on the medical tools and the public calculator.
 // Needs e2e-bot (base PHX) to have founding_crew = true, set by SQL as the
-// service role before the run (the app cannot set it). Reset it after.
+// service role before the run, with founding_number = 7 (the app cannot set
+// either). Reset both after.
 const { chromium, devices } = require('playwright');
 const fs = require('fs'); const S = process.env.SHOTS_DIR || __dirname;
 const env = {}; for (const l of fs.readFileSync('/home/claude/pilot-program/tests/e2e/.env','utf8').split('\n')) { const m = l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/); if (m) env[m[1]] = m[2].replace(/^["']|["']$/g,''); }
@@ -25,7 +26,7 @@ let fail = 0; const check = (n, c, g) => { console.log((c ? 'PASS ' : 'FAIL ') +
   const actId = await p.evaluate(async () => { await loadCrewProfile(); const { data } = await SB.from('crew_activities').insert({ user_id: ST.user.id, session_key: 'e2e-contagious-' + Date.now(), kind: 'workout', title: 'Founding test', env: 'comm', sets_logged: 12, performed_at: new Date().toISOString(), visibility: 'everyone' }).select('id').single(); return data && data.id; });
   await p.evaluate(() => { ST.ranksSeg = 'crew'; switchTab('leaderboard'); crewGo('profile', ST.user.id); }); await p.waitForTimeout(3000);
   const head = await p.textContent('#crewProfileHead');
-  check('profile header shows the Founding Crew chip', /FOUNDING CREW/.test(head), head.slice(0, 120));
+  check('profile header shows the Founding Crew chip with its number', /FOUNDING CREW #7/.test(head), head.slice(0, 120));
   check('feed card shows the chip too', /FOUNDING CREW/.test(await p.textContent('#crewCard_' + actId)));
   await p.locator('#crewProfileHead').screenshot({ path: S + '/contagious-01-profile.png' });
   await p.evaluate(() => crewGo('find')); await p.waitForTimeout(3000);
@@ -39,7 +40,7 @@ let fail = 0; const check = (n, c, g) => { console.log((c ? 'PASS ' : 'FAIL ') +
   const shared = await p.evaluate(async () => { let got = null; Object.defineProperty(navigator, 'share', { value: o => { got = o; return Promise.resolve(); }, configurable: true }); shareCrewLink(MED_CALC_URL); return got && got.url; });
   check('share hands over the public calculator link only', shared === 'https://flightcrew.fit/tools/faa-medical-expiration-calculator.html', shared);
   await p.evaluate(() => medicalSetView('meds')); await p.waitForTimeout(400);
-  check('medication check has the send-to-crew button', !!(await p.locator('button', { hasText: 'Send the medication checker' }).count()));
+  check('medication check has the send-to-crew button', !!(await p.locator('button', { hasText: 'Send the free medication checker' }).count()));
   // Public calculator page
   const q = await ctx.newPage();
   await q.goto(base + '/tools/faa-medical-expiration-calculator.html?e2e=' + Date.now(), { waitUntil: 'load' });

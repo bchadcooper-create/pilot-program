@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.51.3 / 20261105_2
+ * Version/build: fcf-v5.51.4 / 20261105_3
  */
 
-const FCF_VERSION = 'fcf-v5.51.3';
-const FCF_BUILD   = '20261105_2';
+const FCF_VERSION = 'fcf-v5.51.4';
+const FCF_BUILD   = '20261105_3';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -14641,10 +14641,17 @@ function passesWalkIntensityCheck(ev) {
 
 async function syncOuraWorkouts() {
   if (!ST.user || !ST.ouraAccessToken) return;
-  const today = new Date().toISOString().slice(0,10);
-  const weekAgo = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
+  // BUG FIX (reported Nov 5 2026: a 39-minute walk Oura recorded that
+  // morning never showed up in Trends). The window ended at today's date,
+  // and Oura treats end_date as the end of the range, not including it, so
+  // anything recorded today was left out until tomorrow's sync. The window
+  // also used UTC dates, which in Phoenix roll over at 5 PM. The readiness
+  // and steps requests were fixed the same way earlier: local dates, with
+  // the end pushed one day past today.
+  const fetchEnd = localDateStr(new Date(Date.now() + 86400000));
+  const weekAgo = localDateStr(new Date(Date.now() - 7*86400000));
   let res;
-  try { res = await ouraFetch('workout?start_date='+weekAgo+'&end_date='+today); } catch(e) { return; }
+  try { res = await ouraFetch('workout?start_date='+weekAgo+'&end_date='+fetchEnd); } catch(e) { return; }
   const overlapFiltered = filterOuraInternalOverlaps(res?.data || []);
   // Applied AFTER overlap-collapsing, not before — a short entry that's
   // actually the same real workout as a longer overlapping one should still

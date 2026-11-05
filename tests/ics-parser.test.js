@@ -1019,6 +1019,17 @@ test('reps and weight that look swapped are spotted, with a one-tap fix', () => 
   assertEqual(/swapped/i.test(fb.text), true, 'the set feedback says so'); assertEqual(fb.action, 'swap', 'and offers to swap them');
 });
 
+console.log('\nOura workouts recorded today (reported Nov 5: a morning walk never reached Trends):');
+test('the workout request window includes today, in local dates', () => {
+  const c = loadAppJS(); let asked = null;
+  // The request is made synchronously, before the function's first await.
+  c.ouraFetch = path => { asked = path; return Promise.resolve({ data: [] }); };
+  c.ST.user = { id: 'u' }; c.ST.ouraAccessToken = 't';
+  c.syncOuraWorkouts();
+  const end = (asked.match(/end_date=([0-9-]+)/) || [])[1];
+  assertEqual(end > c.localDateStr(new Date()), true, 'end_date is after today: ' + asked);
+});
+
 console.log('\nRep ranges (owner, Nov 4: "a rep range is better than a rep target"):');
 test('ranges follow the mission objective and the exercise role', () => {
   const assertEqual = (a, b, m) => assertEqualTop(JSON.stringify(a), JSON.stringify(b), m);

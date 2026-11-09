@@ -192,7 +192,7 @@ HEAD = """<!DOCTYPE html>
 
 FOOT = """
 <footer class="bottom"><div class="wrap wide">
-  <a href="/">Flight Crew Fitness</a><a href="/blog/">Blog</a><a href="/tools/faa-medication-checker.html">FAA medication checker</a><a href="/tools/faa-medical-expiration-calculator.html">FAA medical calculator</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="https://www.facebook.com/1374735345726996">Facebook</a>
+  <a href="/">Flight Crew Fitness</a><a href="/blog/">Blog</a><a href="/tools/faa-medication-checker.html">FAA medication checker</a><a href="/tools/faa-medical-expiration-calculator.html">FAA medical calculator</a><a href="/tools/">All free tools</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="https://www.facebook.com/1374735345726996">Facebook</a>
   <p class="disc">Flight Crew Fitness is a training tool, not medical advice. Nothing on this site diagnoses a condition or replaces your doctor or your AME. Consult a physician before beginning any new exercise program.</p>
 </div></footer>
 </body>
@@ -432,6 +432,50 @@ def make_og(meta):
 
 TOOLS = [("faa-medical-expiration-calculator.html", "2026-10-19"), ("faa-medication-checker.html", "2026-11-04")]
 
+# The /tools/ hub page. Each entry: file, card title, card text.
+TOOL_CARDS = [
+    ("faa-medical-expiration-calculator.html", "FAA medical expiration calculator",
+     "Enter your birth date, exam date and seat. See the exact day each privilege (first, second and third class) ends, and whether to expect an ECG at your next exam."),
+    ("faa-medication-checker.html", "FAA medication checker",
+     "Search more than 300 prescription and over-the-counter drugs, by brand or generic name, against the FAA Do Not Issue and Do Not Fly lists, with wait times."),
+]
+TOOLS_INDEX_DATE = "2026-11-09"
+
+
+def render_tools_index():
+    url = f"{SITE}/tools/"
+    graph = {
+        "@context": "https://schema.org",
+        "@graph": [
+            {"@type": "CollectionPage", "@id": url, "name": "Free pilot tools", "url": url,
+             "description": "Free FAA medical tools for pilots: a medical expiration calculator and a medication checker. No signup.",
+             "isPartOf": {"@type": "WebSite", "url": SITE + "/", "name": "Flight Crew Fitness"},
+             "mainEntity": {"@type": "ItemList", "itemListElement": [
+                 {"@type": "ListItem", "position": i + 1, "name": t, "url": f"{SITE}/tools/{f}"}
+                 for i, (f, t, _) in enumerate(TOOL_CARDS)]}},
+            {"@type": "BreadcrumbList", "itemListElement": [
+                {"@type": "ListItem", "position": 1, "name": "Flight Crew Fitness", "item": SITE + "/"},
+                {"@type": "ListItem", "position": 2, "name": "Free pilot tools", "item": url}]},
+        ],
+    }
+    desc = "Free FAA medical tools for pilots: a medical expiration calculator and a medication checker. No signup, no app. Built by a working airline captain."
+    out = [HEAD.format(seo_title="Free FAA Medical Tools for Pilots | Flight Crew Fitness", description=esc(desc), url=url,
+                       og_type="website", og_title="Free pilot tools", og_image=SITE + "/og-image.png", jsonld=json.dumps(graph))]
+    out.append('<main class="wrap wide">')
+    out.append('<div class="crumbs"><a href="/">Home</a> / Free pilot tools</div>')
+    out.append('<h1>Free pilot tools</h1>')
+    out.append('<p class="intro" style="max-width:640px">Two free tools for the FAA medical. No signup and no app needed. Built by a working airline captain, with every rule sourced to the FAA.</p>')
+    out.append('<div class="grid" style="margin-top:22px">' + "".join(
+        f'<a class="card" href="/tools/{f}"><span class="cat">The FAA medical</span><h3>{esc(t)}</h3><p>{esc(d)}</p>'
+        f'<span class="meta">Free · No signup</span></a>' for f, t, d in TOOL_CARDS) + "</div>")
+    out.append('<p style="font-size:.875rem;color:var(--muted);margin-top:18px">These tools give general information from published FAA guidance. They are not medical advice and do not replace your AME.</p>')
+    out.append(CTA_HTML.format(head="Train for the medical, not just the trip",
+                               sub="Flight Crew Fitness builds workouts around your trips and layovers, and tracks the numbers the FAA checks.",
+                               slug="tools-index"))
+    out.append("</main>")
+    out.append(FOOT)
+    return "".join(out)
+
 
 def write_sitemap(arts):
     today = date.today().isoformat()
@@ -442,6 +486,7 @@ def write_sitemap(arts):
     for a in arts:
         rows.append(f"  <url><loc>{SITE}/blog/{a['slug']}.html</loc><lastmod>{a.get('updated', a['date'])}</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>")
     # Free tools (hand-written pages, not built from Markdown).
+    rows.append(f"  <url><loc>{SITE}/tools/</loc><lastmod>{TOOLS_INDEX_DATE}</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>")
     for t, mod in TOOLS:
         rows.append(f"  <url><loc>{SITE}/tools/{t}</loc><lastmod>{mod}</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>")
     rows.append(f"  <url><loc>{SITE}/support.html</loc><lastmod>2026-10-14</lastmod><changefreq>monthly</changefreq><priority>0.4</priority></url>")
@@ -459,8 +504,9 @@ def main():
         make_og(a)
         print(f"  {a['slug']}.html  ({a['words']} words)")
     open(os.path.join(OUT, "index.html"), "w", encoding="utf-8").write(render_index(arts))
+    open(os.path.join(ROOT, "tools", "index.html"), "w", encoding="utf-8").write(render_tools_index())
     write_sitemap(arts)
-    print(f"built {len(arts)} articles + index + sitemap")
+    print(f"built {len(arts)} articles + index + tools index + sitemap")
 
 
 if __name__ == "__main__":

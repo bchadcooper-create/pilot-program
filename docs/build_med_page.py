@@ -173,7 +173,7 @@ details p{color:var(--muted);font-size:.9rem;line-height:1.6}
   <nav class="topnav"><a href="/blog/">Blog</a><a href="/tools/faa-medication-checker.html">Medication checker</a><a href="/tools/faa-medical-expiration-calculator.html">Medical calculator</a><a class="cta" href="/?utm_source=tool&amp;utm_medium=nav&amp;utm_campaign=medication-checker">Start free</a></nav>
 </div></header>
 <main class="wrap"><article>
-<div class="crumbs"><a href="/">Home</a> / Free tools / FAA medication checker</div>
+<div class="crumbs"><a href="/">Home</a> / <a href="/tools/">Free tools</a> / FAA medication checker</div>
 <span class="cat">Free tool · no signup</span>
 <h1>Is my medication FAA approved?</h1>
 <p class="intro">%(n)d prescription drugs, over-the-counter medicines and supplements, checked against the FAA AME Guide on %(checked)s.</p>
@@ -209,7 +209,7 @@ details p{color:var(--muted);font-size:.9rem;line-height:1.6}
 <div class="author"><div class="av">CC</div><div><b>Chad Cooper</b><p>Airline captain and founder of Flight Crew Fitness. More on the medical: <a href="/tools/faa-medical-expiration-calculator.html">when your medical expires</a>, <a href="/blog/faa-blood-pressure-limits.html">FAA blood pressure limits</a>, <a href="/blog/faa-weight-bmi-sleep-apnea.html">weight, BMI and sleep apnea</a>.</p></div></div>
 </article></main>
 <footer class="bottom"><div class="wrap wide">
-  <a href="/">Flight Crew Fitness</a><a href="/blog/">Blog</a><a href="/tools/faa-medication-checker.html">FAA medication checker</a><a href="/tools/faa-medical-expiration-calculator.html">FAA medical calculator</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="https://www.facebook.com/1374735345726996">Facebook</a>
+  <a href="/">Flight Crew Fitness</a><a href="/blog/">Blog</a><a href="/tools/faa-medication-checker.html">FAA medication checker</a><a href="/tools/faa-medical-expiration-calculator.html">FAA medical calculator</a><a href="/tools/">All free tools</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="https://www.facebook.com/1374735345726996">Facebook</a>
   <p class="disc">Flight Crew Fitness is a training tool, not medical advice. Nothing on this site diagnoses a condition or replaces your doctor or your AME.</p>
 </div></footer>
 <script>

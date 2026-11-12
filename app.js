@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.52.1 / 20261112_4
+ * Version/build: fcf-v5.52.2 / 20261112_5
  */
 
-const FCF_VERSION = 'fcf-v5.52.1';
-const FCF_BUILD   = '20261112_4';
+const FCF_VERSION = 'fcf-v5.52.2';
+const FCF_BUILD   = '20261112_5';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -4767,11 +4767,11 @@ function haptic(style) {
 // label stays readable on the light theme; the glow dims there (--glow-alpha).
 const GLOW_COLORS = {
   gold:  ['rgba(201,168,76,calc(0.2 * var(--glow-alpha)))',  'rgba(201,168,76,calc(0.06 * var(--glow-alpha)))',  'var(--gold)'],
-  blue:  ['rgba(96,165,250,calc(0.2 * var(--glow-alpha)))',  'rgba(96,165,250,calc(0.06 * var(--glow-alpha)))',  'var(--blue2)'],
-  teal:  ['rgba(45,212,191,calc(0.2 * var(--glow-alpha)))',  'rgba(45,212,191,calc(0.06 * var(--glow-alpha)))',  'var(--teal)'],
-  green: ['rgba(34,197,94,calc(0.2 * var(--glow-alpha)))',   'rgba(34,197,94,calc(0.06 * var(--glow-alpha)))',   'var(--green)'],
-  amber: ['rgba(245,158,11,calc(0.2 * var(--glow-alpha)))',  'rgba(245,158,11,calc(0.06 * var(--glow-alpha)))',  'var(--amber)'],
-  red:   ['rgba(239,68,68,calc(0.2 * var(--glow-alpha)))',   'rgba(239,68,68,calc(0.06 * var(--glow-alpha)))',   'var(--red)'],
+  blue:  ['rgba(92,184,255,calc(0.2 * var(--glow-alpha)))',  'rgba(92,184,255,calc(0.06 * var(--glow-alpha)))',  'var(--blue2)'],
+  teal:  ['rgba(0,210,224,calc(0.2 * var(--glow-alpha)))',  'rgba(0,210,224,calc(0.06 * var(--glow-alpha)))',  'var(--teal)'],
+  green: ['rgba(48,209,88,calc(0.2 * var(--glow-alpha)))',   'rgba(48,209,88,calc(0.06 * var(--glow-alpha)))',   'var(--green)'],
+  amber: ['rgba(255,146,48,calc(0.2 * var(--glow-alpha)))',  'rgba(255,146,48,calc(0.06 * var(--glow-alpha)))',  'var(--amber)'],
+  red:   ['rgba(255,66,69,calc(0.2 * var(--glow-alpha)))',   'rgba(255,66,69,calc(0.06 * var(--glow-alpha)))',   'var(--red)'],
 };
 // sub: optional small line under the label (e.g. sleep hours under the score).
 function glowTile(label, value, colorKey, valueColor, sub) {
@@ -4857,7 +4857,7 @@ function showBigToast(msg, type) {
   if (old) old.remove();
   const bg2 = document.getElementById('fcf-big-toast-bg');
   if (bg2) bg2.remove();
-  const color = type === 'ok' ? '#22c55e' : type === 'warn' ? '#f59e0b' : '#3b82f6';
+  const color = type === 'ok' ? 'var(--green)' : type === 'warn' ? 'var(--amber)' : 'var(--blue)';
   // Icon standardization: swapped emoji (✅⚠️ℹ️, which render inconsistently
   // across platforms) for a small inline SVG matching the app's outline
   // icon language (same style as the tab bar). Tinted via `color` so it
@@ -6260,7 +6260,7 @@ function medHistoryStripHtml() {
     const dueTaken = due.filter(x => log[x.key]).length;
     const all = due.length > 0 && dueTaken >= due.length;
     const some = taken > 0 && !all;
-    const bg = all ? 'background:rgba(34,197,94,0.12);border-color:rgba(34,197,94,0.4)'
+    const bg = all ? 'background:rgba(48,209,88,0.12);border-color:rgba(48,209,88,0.4)'
              : some ? 'background:var(--gold-tint);border-color:var(--gold)' : '';
     const label = due.length ? dueTaken + '/' + due.length : (taken ? '+' + taken : '–');
     parts.push('<div style="flex:0 0 46px;min-height:58px;scroll-snap-align:center;text-align:center;border:1.5px solid var(--border);border-radius:8px;padding:7px 2px;cursor:pointer;' + (iso === todayStr ? 'border-color:var(--gold);' : '') + bg + '" onclick="openMedDay(\'' + iso + '\')">');
@@ -6519,7 +6519,7 @@ function appConfirm(message, confirmLabel) {
       '<div class="modal-handle"></div>' +
       '<div class="modal-title">Are you sure?</div>' +
       '<div class="modal-body" id="appConfirmMsg" style="margin-bottom:14px"></div>' +
-      '<button class="btn" style="background:var(--red,#ef4444);color:#fff" onclick="haptic(\'medium\');_appConfirmAnswer(true)"></button>' +
+      '<button class="btn" style="background:var(--red-fill);color:#fff" onclick="haptic(\'medium\');_appConfirmAnswer(true)"></button>' +
       '<button class="btn btn-outline mt8" onclick="_appConfirmAnswer(false)">Cancel</button>' +
       '</div></div>';
     root.querySelector('#appConfirmMsg').textContent = message;
@@ -8342,7 +8342,7 @@ function buildCalendarHTML(rangeData) {
     const dateNum = day.date.getDate();
     const hasWorkout = day.sessions.length > 0;
     const cellStyle = isToday ? 'border-color:var(--gold)' : '';
-    const bg = hasWorkout ? 'background:rgba(34,197,94,0.12);border-color:rgba(34,197,94,0.4)' : '';
+    const bg = hasWorkout ? 'background:rgba(48,209,88,0.12);border-color:rgba(48,209,88,0.4)' : '';
     parts.push('<div style="flex:0 0 46px;min-height:64px;scroll-snap-align:center;text-align:center;border:1.5px solid var(--border);border-radius:8px;padding:7px 2px;cursor:pointer;'+cellStyle+';'+bg+'" onclick="'+(hasWorkout?'showCalendarDay(\''+localDateStr(day.date)+'\')':'openNewSessionEditor(\''+localDateStr(day.date)+'\')')+'">');
     parts.push('<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted)">'+dow+'</div>');
     parts.push('<div style="font-size:0.8125rem;font-weight:600;margin-top:2px">'+dateNum+'</div>');
@@ -9652,7 +9652,7 @@ function confirmDeleteSession(key) {
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">Delete this workout?</div>' +
     '<div class="modal-body" style="margin-bottom:14px">This permanently removes the session and all its logged sets. This cannot be undone.</div>' +
-    '<button class="btn" style="background:var(--red);color:#fff" onclick="deleteSessionConfirmed(\''+key+'\')">🗑 CONFIRM DELETE</button>' +
+    '<button class="btn" style="background:var(--red-fill);color:#fff" onclick="deleteSessionConfirmed(\''+key+'\')">🗑 CONFIRM DELETE</button>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">CANCEL</button>' +
     '</div></div>';
 }
@@ -9909,7 +9909,7 @@ function confirmDeleteCustomProfile(id) {
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">Delete "'+cp.name+'"?</div>' +
     '<div class="modal-body" style="margin-bottom:14px">This permanently deletes the saved routine. Completed sessions logged with it stay in your history.</div>' +
-    '<button class="btn" style="background:var(--red);color:#fff" onclick="deleteCustomProfileConfirmed(\''+id+'\')">🗑 CONFIRM DELETE</button>' +
+    '<button class="btn" style="background:var(--red-fill);color:#fff" onclick="deleteCustomProfileConfirmed(\''+id+'\')">🗑 CONFIRM DELETE</button>' +
     '<button class="btn btn-outline mt8" onclick="haptic(\'light\');openProfileManager()">CANCEL</button>' +
     '</div></div>';
 }
@@ -10117,7 +10117,7 @@ async function renderPreflight(p) {
     if (ST.injuries.length) {
       parts.push('<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">');
       ST.injuries.forEach(r => {
-        parts.push('<div style="display:flex;align-items:center;gap:6px;background:rgba(245,158,11,0.1);border:1px solid var(--amber);border-radius:16px;padding:4px 10px;font-size:0.6875rem;color:var(--amber)">'+INJURY_REGIONS[r].label+' <span style="cursor:pointer" onclick="toggleInjury(\''+r+'\')">✕</span></div>');
+        parts.push('<div style="display:flex;align-items:center;gap:6px;background:rgba(255,146,48,0.1);border:1px solid var(--amber);border-radius:16px;padding:4px 10px;font-size:0.6875rem;color:var(--amber)">'+INJURY_REGIONS[r].label+' <span style="cursor:pointer" onclick="toggleInjury(\''+r+'\')">✕</span></div>');
       });
       parts.push('</div>');
     } else {
@@ -10126,7 +10126,7 @@ async function renderPreflight(p) {
     parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">');
     Object.keys(INJURY_REGIONS).forEach(r => {
       const on = ST.injuries.includes(r);
-      parts.push('<div class="env-btn" style="padding:8px'+(on?';border-color:var(--amber);background:rgba(245,158,11,0.08)':'')+'" onclick="toggleInjury(\''+r+'\')"><div style="font-size:0.6875rem">'+INJURY_REGIONS[r].label+'</div></div>');
+      parts.push('<div class="env-btn" style="padding:8px'+(on?';border-color:var(--amber);background:rgba(255,146,48,0.08)':'')+'" onclick="toggleInjury(\''+r+'\')"><div style="font-size:0.6875rem">'+INJURY_REGIONS[r].label+'</div></div>');
     });
     parts.push('</div>');
     parts.push('</div>');
@@ -12089,9 +12089,9 @@ function buildExCard(exItem, phaseKey) {
   parts.push('<div class="ex-card'+(exItem.custom?' custom-ex':'')+'" id="excard_'+exItem.id+'">');
   parts.push('<div class="ex-hdr"><div style="flex:1;cursor:pointer" onclick="toggleEx(\''+exItem.id+'\')"><div class="ex-name">'+exItem.name+(exItem.custom?' <span style="font-size:0.5625rem;color:var(--gold)">CUSTOM</span>':'')+'</div><div class="ex-target">'+exItem.target+(exItem.timed?' · ⏱ TIMED':'')+'</div></div><div class="ex-right"><button class="btn-ghost" style="font-size:0.6875rem;padding:4px 8px;margin-right:4px;color:var(--blue)" onclick="event.stopPropagation();openExerciseGuide(\''+jsArg(exItem.name)+'\')">ⓘ Guide</button><div class="ex-done '+(hasData?'ok':'')+'" id="exdone_'+exItem.id+'">'+(hasData?'✓':'')+'</div><div class="ex-caret '+(isOpen?'open':'')+'">⌄</div></div></div>');
   if (exItem.swappedForInjury) {
-    parts.push('<div style="padding:6px 14px;background:rgba(56,189,248,0.08);border-top:1px solid var(--border);font-size:0.625rem;color:var(--blue)">🩹 Swapped from '+exItem.originalName+': '+exItem.flaggedRegion+' flagged</div>');
+    parts.push('<div style="padding:6px 14px;background:rgba(60,211,254,0.08);border-top:1px solid var(--border);font-size:0.625rem;color:var(--blue)">🩹 Swapped from '+exItem.originalName+': '+exItem.flaggedRegion+' flagged</div>');
   } else if (exItem.injuryCaution) {
-    parts.push('<div style="padding:6px 14px;background:rgba(245,158,11,0.08);border-top:1px solid var(--border);font-size:0.625rem;color:var(--amber)">⚠️ May stress your flagged '+exItem.flaggedRegion+'. No safer swap found: go light or skip it.</div>');
+    parts.push('<div style="padding:6px 14px;background:rgba(255,146,48,0.08);border-top:1px solid var(--border);font-size:0.625rem;color:var(--amber)">⚠️ May stress your flagged '+exItem.flaggedRegion+'. No safer swap found: go light or skip it.</div>');
   }
 
   if (isOpen) {
@@ -12266,11 +12266,11 @@ function buildExCard(exItem, phaseKey) {
 
     if (!exItem.custom) {
       parts.push('<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">');
-      parts.push('<button class="btn-info" style="border-color:rgba(167,139,250,0.4);color:var(--violet)" onclick="showAlternates(\''+exItem.id+'\',\''+jsArg(exItem.name)+'\',\''+phaseKey+'\')">⇄ Alternate</button>');
-      parts.push('<button class="btn-info" style="color:var(--red-soft);border-color:rgba(239,68,68,0.3)" onclick="confirmRemoveExercise(\''+exItem.id+'\',\''+jsArg(exItem.name)+'\',false)">✕ Remove</button>');
+      parts.push('<button class="btn-info" style="border-color:rgba(167,170,255,0.4);color:var(--violet)" onclick="showAlternates(\''+exItem.id+'\',\''+jsArg(exItem.name)+'\',\''+phaseKey+'\')">⇄ Alternate</button>');
+      parts.push('<button class="btn-info" style="color:var(--red-soft);border-color:rgba(255,66,69,0.3)" onclick="confirmRemoveExercise(\''+exItem.id+'\',\''+jsArg(exItem.name)+'\',false)">✕ Remove</button>');
       parts.push('</div>');
     } else {
-      parts.push('<div style="margin-top:10px"><button class="btn-info" style="color:var(--red-soft);border-color:rgba(239,68,68,0.3)" onclick="confirmRemoveExercise(\''+exItem.id+'\',\''+jsArg(exItem.name)+'\',true)">✕ Remove</button></div>');
+      parts.push('<div style="margin-top:10px"><button class="btn-info" style="color:var(--red-soft);border-color:rgba(255,66,69,0.3)" onclick="confirmRemoveExercise(\''+exItem.id+'\',\''+jsArg(exItem.name)+'\',true)">✕ Remove</button></div>');
     }
     parts.push('</div>');
   }
@@ -13203,7 +13203,7 @@ function confirmRemoveExercise(exId, exName, isCustom) {
     '<div class="modal-handle"></div>' +
     '<div class="modal-title">Remove '+exName+'?</div>' +
     '<div class="modal-body" style="margin-bottom:14px">This removes it from today\'s workout. Any sets already logged for it will be discarded when you set the chocks. This only affects today. It won\'t change tomorrow\'s plan.</div>' +
-    '<button class="btn" style="background:var(--red);color:#fff" onclick="'+(isCustom?'deleteCustomExercise':'removeCatalogExercise')+'(\''+exId+'\')">✕ CONFIRM REMOVE</button>' +
+    '<button class="btn" style="background:var(--red-fill);color:#fff" onclick="'+(isCustom?'deleteCustomExercise':'removeCatalogExercise')+'(\''+exId+'\')">✕ CONFIRM REMOVE</button>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">CANCEL</button>' +
     '</div></div>';
 }
@@ -14158,12 +14158,19 @@ async function loadAndDrawCharts() {
   // Hide the faint raw underlays from legends — they're context, not a series.
   const legendFilter = (item) => !(item.text||'').endsWith(' raw');
 
+  // Chart.js draws on a canvas, which cannot read CSS variables, so the
+  // theme's colors are looked up here each time the charts are drawn. (They
+  // were typed in as dark-theme hex values, so the light theme got a navy
+  // grid and off-palette lines.)
+  const cssVar = (name, fallback) => { try { return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback; } catch (e) { return fallback; } };
+  const C = { grid: cssVar('--border', '#1e2d45'), tick: cssVar('--muted', '#8899b4'), blue: cssVar('--blue', '#0091ff'), gold: cssVar('--gold', '#c9a84c'),
+    green: cssVar('--green', '#30d158'), red: cssVar('--red', '#ff4245'), amber: cssVar('--amber', '#ff9230'), violet: cssVar('--violet', '#a7aaff'), cyan: cssVar('--cyan', '#3cd3fe') };
   const OPTS = {
     responsive:true, maintainAspectRatio:false,
     plugins:{ legend:{ display:false } },
     scales:{
-      x:{ grid:{color:'#1a2438'}, ticks:{font:{size:9,family:'Share Tech Mono'},color:'#64748b',maxRotation:45} },
-      y:{ grid:{color:'#1a2438'}, ticks:{font:{size:9,family:'Share Tech Mono'},color:'#64748b'} },
+      x:{ grid:{color:C.grid}, ticks:{font:{size:9,family:'Share Tech Mono'},color:C.tick,maxRotation:45} },
+      y:{ grid:{color:C.grid}, ticks:{font:{size:9,family:'Share Tech Mono'},color:C.tick} },
     }
   };
   function mkChart(id, labels, datasets, legendOn) {
@@ -14206,23 +14213,23 @@ async function loadAndDrawCharts() {
         d.pointHitRadius = 8;
       });
     }
-    ST.chartInst[key] = new Chart(ctx2d, { type:'line', data:{labels,datasets}, options:{...OPTS, plugins:{legend:{display:!!legendOn,labels:{filter:legendFilter,font:{size:9,family:'Share Tech Mono'},color:'#64748b'}}}} });
+    ST.chartInst[key] = new Chart(ctx2d, { type:'line', data:{labels,datasets}, options:{...OPTS, plugins:{legend:{display:!!legendOn,labels:{filter:legendFilter,font:{size:9,family:'Share Tech Mono'},color:C.tick}}}} });
   }
   const refLine = (n,val,color) => ({ data:Array.from({length:n},()=>val), borderColor:color, borderDash:[4,3], pointRadius:0, fill:false });
 
   const wt = metricSeries('weight_lb');
-  mkChart('chartWt', wt.labels, [{ data:wt.values, borderColor:'#3b82f6', backgroundColor:'#3b82f622', tension:0.35, fill:true, pointRadius:4, pointBackgroundColor:'#3b82f6', label:'Weight' }]);
+  mkChart('chartWt', wt.labels, [{ data:wt.values, borderColor:C.blue, backgroundColor:C.blue+'22', tension:0.35, fill:true, pointRadius:4, pointBackgroundColor:C.blue, label:'Weight' }]);
 
   const waist = metricSeries('waist_in');
   mkChart('chartWaist', waist.labels, [
-    { data:waist.values, borderColor:'#c9a84c', backgroundColor:'#c9a84c22', tension:0.35, fill:true, pointRadius:4, pointBackgroundColor:'#c9a84c', label:'Waist' },
-    { ...refLine(waist.values.length,40,'#ef444488'), label:'Risk (over 40in)' },
+    { data:waist.values, borderColor:C.gold, backgroundColor:C.gold+'22', tension:0.35, fill:true, pointRadius:4, pointBackgroundColor:C.gold, label:'Waist' },
+    { ...refLine(waist.values.length,40,C.red+'88'), label:'Risk (over 40in)' },
   ], true);
 
   const gluc = metricSeries('fasting_glucose');
   mkChart('chartGluc', gluc.labels, [
-    { data:gluc.values, borderColor:'#22c55e', backgroundColor:'#22c55e22', tension:0.35, fill:true, pointRadius:4, pointBackgroundColor:'#22c55e', label:'Glucose' },
-    { ...refLine(gluc.values.length,100,'#f59e0b88'), label:'Pre-diabetic (100)' },
+    { data:gluc.values, borderColor:C.green, backgroundColor:C.green+'22', tension:0.35, fill:true, pointRadius:4, pointBackgroundColor:C.green, label:'Glucose' },
+    { ...refLine(gluc.values.length,100,C.amber+'88'), label:'Pre-diabetic (100)' },
   ], true);
 
   const bp = metricSeriesMulti(['systolic_bp','diastolic_bp']);
@@ -14235,12 +14242,12 @@ async function loadAndDrawCharts() {
       ST.chartInst['c_chartBP'] = new Chart(bpCanvas.getContext('2d'), {
         type:'line',
         data:{ labels: bp.labels, datasets: applyTrendSmoothing(bp.labels, [
-          { data:bp.rows.map(d=>d.systolic_bp),  borderColor:'#ef4444', backgroundColor:'#ef444411', tension:0.35, fill:false, pointRadius:4, pointBackgroundColor:'#ef4444', label:'Systolic' },
-          { data:bp.rows.map(d=>d.diastolic_bp), borderColor:'#f59e0b', backgroundColor:'#f59e0b11', tension:0.35, fill:false, pointRadius:4, pointBackgroundColor:'#f59e0b', label:'Diastolic' },
-          { ...refLine(bp.rows.length,120,'#ef444455'), label:'Sys target (120)' },
-          { ...refLine(bp.rows.length,80,'#f59e0b55'),  label:'Dia target (80)' },
+          { data:bp.rows.map(d=>d.systolic_bp),  borderColor:C.red, backgroundColor:C.red+'11', tension:0.35, fill:false, pointRadius:4, pointBackgroundColor:C.red, label:'Systolic' },
+          { data:bp.rows.map(d=>d.diastolic_bp), borderColor:C.amber, backgroundColor:C.amber+'11', tension:0.35, fill:false, pointRadius:4, pointBackgroundColor:C.amber, label:'Diastolic' },
+          { ...refLine(bp.rows.length,120,C.red+'55'), label:'Sys target (120)' },
+          { ...refLine(bp.rows.length,80,C.amber+'55'),  label:'Dia target (80)' },
         ])},
-        options:{ ...OPTS, plugins:{ legend:{ display:true, labels:{filter:legendFilter,font:{size:9,family:'Share Tech Mono'},color:'#64748b'} } } }
+        options:{ ...OPTS, plugins:{ legend:{ display:true, labels:{filter:legendFilter,font:{size:9,family:'Share Tech Mono'},color:C.tick} } } }
       });
     } else if (bpCard) {
       bpCard.style.display = 'none'; // nothing logged for BP yet — hide the whole card
@@ -14261,15 +14268,15 @@ async function loadAndDrawCharts() {
 
     // Chart 1: Readiness score with GO/MARGINAL reference lines
     mkChart('chartOuraReadiness', ouraLabels, [
-      { data:ouraRows.map(d=>d.readiness_score), borderColor:'#22c55e', backgroundColor:'#22c55e22', tension:0.35, fill:true, pointRadius:4, pointBackgroundColor:'#22c55e', label:'Readiness' },
-      { ...refLine(ouraRows.length,70,'#22c55e55'), label:'GO (70)' },
-      { ...refLine(ouraRows.length,60,'#f59e0b55'), label:'MARGINAL (60)' },
+      { data:ouraRows.map(d=>d.readiness_score), borderColor:C.green, backgroundColor:C.green+'22', tension:0.35, fill:true, pointRadius:4, pointBackgroundColor:C.green, label:'Readiness' },
+      { ...refLine(ouraRows.length,70,C.green+'55'), label:'GO (70)' },
+      { ...refLine(ouraRows.length,60,C.amber+'55'), label:'MARGINAL (60)' },
     ], true);
 
     // Chart 2: Sleep score + HRV balance on same axis (both 0-100)
     mkChart('chartOuraSleep', ouraLabels, [
-      { data:ouraRows.map(d=>d.sleep_score),   borderColor:'#818cf8', backgroundColor:'#818cf811', tension:0.35, fill:false, pointRadius:4, pointBackgroundColor:'#818cf8', label:'Sleep Score' },
-      { data:ouraRows.map(d=>d.hrv_balance),   borderColor:'#38bdf8', backgroundColor:'#38bdf811', tension:0.35, fill:false, pointRadius:4, pointBackgroundColor:'#38bdf8', label:'HRV Balance' },
+      { data:ouraRows.map(d=>d.sleep_score),   borderColor:C.violet, backgroundColor:C.violet+'11', tension:0.35, fill:false, pointRadius:4, pointBackgroundColor:C.violet, label:'Sleep Score' },
+      { data:ouraRows.map(d=>d.hrv_balance),   borderColor:C.cyan, backgroundColor:C.cyan+'11', tension:0.35, fill:false, pointRadius:4, pointBackgroundColor:C.cyan, label:'HRV Balance' },
     ], true);
   } catch(e) { /* Oura data not yet available */ }
 }
@@ -15618,7 +15625,7 @@ function buildPhotoTimelineHTML() {
       parts.push('<img src="'+p.url+'" style="width:100%;aspect-ratio:3/4;object-fit:cover;display:block">');
       parts.push('<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.65);display:flex;justify-content:space-between;align-items:center;padding:4px 6px">');
       parts.push('<span style="font-family:var(--mono);font-size:0.5625rem;color:#fff">'+p.date+'</span>');
-      parts.push('<button onclick="deleteProgressPhoto('+photoIdx+')" aria-label="Delete photo from '+p.date+'" style="background:rgba(239,68,68,0.8);border:none;color:white;font-size:0.875rem;min-width:36px;min-height:36px;margin:-4px -2px;border-radius:6px;cursor:pointer">✕</button>');
+      parts.push('<button onclick="deleteProgressPhoto('+photoIdx+')" aria-label="Delete photo from '+p.date+'" style="background:rgba(255,66,69,0.8);border:none;color:white;font-size:0.875rem;min-width:36px;min-height:36px;margin:-4px -2px;border-radius:6px;cursor:pointer">✕</button>');
       parts.push('</div>');
       parts.push('</div>');
     });
@@ -16898,7 +16905,7 @@ function renderDevices(p) {
     const scoreColor = ST.ouraScore >= 70 ? 'var(--green)' : ST.ouraScore >= 60 ? 'var(--amber)' : 'var(--red)';
     const scoreCondition = ST.ouraScore >= 70 ? 'go' : ST.ouraScore >= 60 ? 'marginal' : 'nogo';
     const scoreLabel = statusDot(scoreCondition)+' '+(scoreCondition==='go'?'GO':scoreCondition==='marginal'?'MARGINAL':'NO-GO');
-    parts.push('<div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:8px;padding:12px;margin-bottom:12px">');
+    parts.push('<div style="background:rgba(48,209,88,0.08);border:1px solid rgba(48,209,88,0.25);border-radius:8px;padding:12px;margin-bottom:12px">');
     parts.push('<div class="fb"><span style="font-size:0.75rem;color:var(--muted)">Connected ✓</span><button class="btn-ghost" style="font-size:0.6875rem;padding:4px 8px" onclick="disconnectOura()">Disconnect</button></div>');
     if (ouraRowIsToday()) {
       parts.push('<div class="fb mt8"><span style="font-size:0.8125rem">Today\'s Readiness</span><span style="font-family:var(--mono);font-size:1.125rem;font-weight:700;color:'+scoreColor+'">'+ST.ouraScore+'</span></div>');

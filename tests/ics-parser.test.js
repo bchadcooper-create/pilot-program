@@ -2050,6 +2050,23 @@ test('Today\'s Sleep tile shows hours under the score', () => {
   assertEqual(ctx.glowTile('SLEEP', 72, 'blue').includes('tile-sub'), false, 'no hours line when unknown');
 });
 
+console.log('\nColors (Nov 12 2026 review against Apple\'s Human Interface Guidelines):');
+test('every text color is at least 4.5:1 on its theme\'s surfaces, and button text on its fill', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const block = (re) => { const m = html.match(re); const o = {}; (m[1].match(/--[a-z0-9-]+:\s*#[0-9a-fA-F]{6}\b/g) || []).forEach(d => { const [k, v] = d.split(/:\s*/); o[k] = v; }); return o; };
+  const dark = block(/:root \{([\s\S]*?)\n\}/), light = Object.assign({}, dark, block(/:root\[data-theme="light"\] \{([\s\S]*?)\n\}/));
+  const lum = h => { const c = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255).map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+  const cr = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+  const bad = [];
+  const text = ['--gold', '--green', '--red', '--amber', '--blue', '--blue2', '--teal', '--cyan', '--violet', '--muted', '--text', '--red-soft', '--amber-soft', '--green-soft'];
+  [['light', light, ['--panel', '--bg']], ['dark', dark, ['--panel', '--bg', '--tile']]].forEach(([name, t, surfaces]) => {
+    text.forEach(k => surfaces.forEach(sf => { const r = cr(t[k], t[sf]); if (r < 4.5) bad.push(name + ' ' + k + ' on ' + sf + ' ' + r.toFixed(2)); }));
+    [['--on-green', '--green-fill'], ['#ffffff', '--red-fill'], ['#ffffff', '--blue-fill']].forEach(([fg, bg]) => { const r = cr(t[fg] || fg, t[bg]); if (r < 4.5) bad.push(name + ' text on ' + bg + ' ' + r.toFixed(2)); });
+  });
+  assertEqual(bad.join('; '), '', 'Apple: "make sure the contrast ratio between colors is no lower than 4.5:1"');
+  assertEqual(light['--green-fill'].toLowerCase(), '#34c759', 'light green button is Apple system green');
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

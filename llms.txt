@@ -20,6 +20,7 @@ Key facts:
 
 All tools: https://flightcrew.fit/tools/
 
+- [FAA near vision test](https://flightcrew.fit/tools/faa-near-vision-test.html): checks each eye against the FAA near vision standard of 20/40 at 16 inches, with the screen calibrated against a credit card. Free, no signup, runs in the browser; a screening aid, not a replacement for the AME.
 - [FAA medication checker](https://flightcrew.fit/tools/faa-medication-checker.html): search about 300 prescription and over-the-counter drugs and supplements against the FAA Do Not Issue and Do Not Fly lists, with FAA wait times. Free, no signup, runs in the browser.
 - [FAA medical expiration calculator](https://flightcrew.fit/tools/faa-medical-expiration-calculator.html): enter birth date, exam date, class and seat to see when each privilege ends under 14 CFR 61.23, which date grounds you, and whether to expect an ECG. Runs in the browser; nothing is sent anywhere.
 

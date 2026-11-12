@@ -186,20 +186,20 @@ HEAD = """<!DOCTYPE html>
 <body>
 <header class="top"><div class="wrap wide">
   <a class="logo" href="/">✈ FLIGHT CREW FITNESS</a>
-  <nav class="topnav"><a href="/blog/">Blog</a><a href="/tools/faa-medication-checker.html">Medication checker</a><a href="/tools/faa-medical-expiration-calculator.html">Medical calculator</a><a class="cta" href="/">Start free</a></nav>
+  <nav class="topnav"><a href="/blog/">Blog</a><a href="/tools/faa-medication-checker.html">Medication checker</a><a href="/tools/faa-medical-expiration-calculator.html">Medical calculator</a><a class="cta" href="/?signup=1&amp;utm_source=tool&amp;utm_medium=nav&amp;utm_campaign=tools-hub">Start free</a></nav>
 </div></header>
 """
 
 FOOT = """
 <footer class="bottom"><div class="wrap wide">
-  <a href="/">Flight Crew Fitness</a><a href="/blog/">Blog</a><a href="/tools/faa-medication-checker.html">FAA medication checker</a><a href="/tools/faa-medical-expiration-calculator.html">FAA medical calculator</a><a href="/tools/">All free tools</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="https://www.facebook.com/1374735345726996">Facebook</a>
+  <a href="/">Flight Crew Fitness</a><a href="/blog/">Blog</a><a href="/tools/faa-near-vision-test.html">FAA near vision test</a><a href="/tools/faa-medication-checker.html">FAA medication checker</a><a href="/tools/faa-medical-expiration-calculator.html">FAA medical calculator</a><a href="/tools/">All free tools</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="https://www.facebook.com/1374735345726996">Facebook</a>
   <p class="disc">Flight Crew Fitness is a training tool, not medical advice. Nothing on this site diagnoses a condition or replaces your doctor or your AME. Consult a physician before beginning any new exercise program.</p>
 </div></footer>
 </body>
 </html>
 """
 
-CTA_HTML = """<div class="ctabox"><div class="txt"><b>{head}</b><span>{sub}</span></div><a class="btn" href="/?utm_source=blog&amp;utm_medium=cta&amp;utm_campaign={slug}">Start free</a></div>"""
+CTA_HTML = """<div class="ctabox"><div class="txt"><b>{head}</b><span>{sub}</span></div><a class="btn" href="/?signup=1&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign={slug}">Start free</a></div>"""
 
 CTA_BY_CAT = {
     "training": ("Flying a four-day with hotel gyms only?", "Flight Crew Fitness builds the session around what is actually in the room, and backs off on the days your sleep says to."),

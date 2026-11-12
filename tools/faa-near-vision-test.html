@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Free FAA Near Vision Test for Pilots | Flight Crew Fitness</title>
+<meta name="description" content="Free FAA near vision test for pilots. Check each eye against the 20/40 at 16 inches standard on your phone in two minutes, before your AME does. No signup.">
+<link rel="canonical" href="https://flightcrew.fit/tools/faa-near-vision-test.html">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Pilots: can you still read 20/40 at 16 inches? Free check">
+<meta property="og:description" content="The FAA near vision line, sized to your phone screen. Two minutes, each eye, glasses allowed. Find out before your AME does.">
+<meta property="og:url" content="https://flightcrew.fit/tools/faa-near-vision-test.html">
+<meta property="og:image" content="https://flightcrew.fit/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:site_name" content="Flight Crew Fitness">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Pilots: can you still read 20/40 at 16 inches? Free check">
+<meta name="twitter:description" content="The FAA near vision line, sized to your phone screen. Two minutes, each eye, glasses allowed.">
+<meta name="twitter:image" content="https://flightcrew.fit/og-image.png">
+<meta name="theme-color" content="#0a0f1a">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/blog/blog.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[
+{"@type":"WebApplication","@id":"https://flightcrew.fit/tools/faa-near-vision-test.html#app","name":"FAA Near Vision Test for Pilots","url":"https://flightcrew.fit/tools/faa-near-vision-test.html","applicationCategory":"HealthApplication","operatingSystem":"Any (runs in the browser)","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"description":"A screen check of near vision against the FAA standard of 20/40 at 16 inches, each eye separately. The screen is calibrated with a credit card so the letters are the true size. A screening aid, not a replacement for the Aviation Medical Examiner.","publisher":{"@type":"Organization","name":"Flight Crew Fitness","url":"https://flightcrew.fit/"}},
+{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://flightcrew.fit/"},{"@type":"ListItem","position":2,"name":"Free pilot tools","item":"https://flightcrew.fit/tools/"},{"@type":"ListItem","position":3,"name":"FAA near vision test"}]},
+{"@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"What is the FAA near vision standard for pilots?","acceptedAnswer":{"@type":"Answer","text":"20/40 or better at 16 inches in each eye separately, with or without corrective lenses. It is the same for first, second and third class medical certificates."}},
+{"@type":"Question","name":"Can I wear glasses or contacts for the FAA vision test?","acceptedAnswer":{"@type":"Answer","text":"Yes. The standards are met with or without correction. If you need lenses to meet a standard, the certificate carries a limitation saying you must wear or have them available while flying."}},
+{"@type":"Question","name":"What is the FAA intermediate vision requirement?","acceptedAnswer":{"@type":"Answer","text":"From age 50, first and second class applicants must also read 20/40 or better at 32 inches in each eye separately, with or without correction. Third class has no intermediate requirement."}},
+{"@type":"Question","name":"What is the FAA distant vision standard?","acceptedAnswer":{"@type":"Answer","text":"20/20 or better in each eye separately for first and second class, and 20/40 or better for third class, with or without corrective lenses."}},
+{"@type":"Question","name":"Is a phone vision test accurate enough for the FAA medical?","acceptedAnswer":{"@type":"Answer","text":"No screen check replaces the examiner's chart. This one sizes the letters correctly once the screen is calibrated, so a miss is a good reason to see an optometrist before the exam, and a pass means no obvious problem. The AME's result is the one that counts."}}
+]}]}</script>
+<style>
+.tool{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:20px;margin:0 0 26px}
+.step{font-family:var(--mono);font-size:.6875rem;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin:0 0 8px}
+.tool p.how{font-size:.9375rem;color:var(--body);margin:0 0 12px;line-height:1.55}
+.tool p.how b{color:#fff}
+#calWrap{width:100vw;margin:0 0 12px calc(50% - 50vw);overflow:hidden}
+#calBar{height:46px;background:var(--gold-grad);border-radius:0 4px 4px 0}
+#calSlider{width:100%;accent-color:var(--gold);min-height:36px}
+.nudge{display:flex;gap:8px;align-items:center;margin:6px 0 12px}
+.nudge button{width:56px;flex:none}
+.nudge div{flex:1;text-align:center;font-family:var(--mono);font-size:.75rem;color:var(--muted)}
+.btn2{display:inline-block;background:transparent;border:1px solid var(--gold);color:var(--gold2);font-weight:700;font-size:.8125rem;letter-spacing:.04em;text-transform:uppercase;padding:12px 16px;border-radius:10px;cursor:pointer;font-family:var(--sans);min-height:46px}
+.btn2:hover{background:rgba(201,168,76,.1)}
+.btn2.on{background:rgba(201,168,76,.16);color:#fff}
+button.btn{border:0;cursor:pointer;font-family:var(--sans);min-height:46px}
+.eyes{display:flex;gap:8px;margin:0 0 12px}
+.eyes .btn2{flex:1;text-transform:none;letter-spacing:0;font-size:.875rem}
+.chart{-webkit-text-size-adjust:100%;text-size-adjust:100%;background:#fff;color:#000;border-radius:10px;padding:8px 0;margin:0 0 10px}
+.vline{display:flex;align-items:center;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.vline .l{flex:1;text-align:center;font-family:Arial,Helvetica,sans-serif;font-weight:700;letter-spacing:.25em;line-height:1.1;white-space:nowrap;padding-left:.25em}
+.vline .s{width:62px;flex:none;text-align:right;padding-right:8px;font-size:11px;color:#6b7280;white-space:nowrap}
+.vline .pad{width:62px;flex:none}
+.vline.std{border-top:1px dashed #d4a017;border-bottom:1px dashed #d4a017}
+.vline.std .s b{display:block;font-size:8px;color:#a16207}
+.vline.sel{background:#fde68a}
+.vline.sel .s{color:#000;font-weight:700}
+.small{font-size:.75rem;color:var(--muted);line-height:1.5;margin:0}
+.verdict{border-radius:14px;padding:16px 18px;margin:0 0 12px;border:1px solid var(--border);background:var(--bg2)}
+.verdict.ok{border-color:rgba(74,222,128,.5)}
+.verdict.warn{border-color:rgba(251,191,36,.65)}
+.verdict .k{font-family:var(--mono);font-size:.6875rem;letter-spacing:.12em;text-transform:uppercase}
+.verdict.ok .k{color:#4ade80}.verdict.warn .k{color:#fbbf24}
+.verdict .d{font-size:1.25rem;font-weight:800;color:#fff;line-height:1.25;margin:6px 0 4px}
+.verdict .s2{font-size:.9rem;color:var(--body);line-height:1.5}
+.next{background:linear-gradient(135deg,rgba(201,168,76,.14),rgba(201,168,76,.04));border:1px solid rgba(201,168,76,.45);border-radius:14px;padding:18px;margin:0 0 4px}
+.next b{display:block;color:#fff;font-size:1.0625rem;margin:0 0 6px}
+.next ul{margin:0 0 14px;padding-left:20px;font-size:.9rem;color:var(--body)}
+.next li{margin:3px 0}
+.next .btn{display:block;text-align:center;font-size:.9375rem;padding:15px 20px}
+.next .fine{font-size:.75rem;color:var(--muted);text-align:center;margin:8px 0 0}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.hide{display:none}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap wide">
+  <a class="logo" href="/">✈ FLIGHT CREW FITNESS</a>
+  <nav class="topnav"><a href="/blog/">Blog</a><a href="/tools/">Free tools</a><a class="cta" href="/?signup=1&amp;utm_source=tool&amp;utm_medium=nav&amp;utm_campaign=vision-test">Start free</a></nav>
+</div></header>
+<main class="wrap"><article>
+<div class="crumbs"><a href="/">Home</a> / <a href="/tools/">Free tools</a> / Near vision</div>
+<span class="cat">Free tool · 2 minutes · No signup</span>
+<h1>FAA Near Vision Test for Pilots</h1>
+<p class="intro">The FAA wants 20/40 at 16 inches from each eye. This puts that exact line on your phone, at true size, so you find out today and not in the AME's chair. Wear the glasses or contacts you fly with.</p>
+
+<div class="tool" id="tool">
+  <div id="calStep">
+    <div class="step">Step 1 of 2 · Size the screen</div>
+    <p class="how">Lay the <b>short edge</b> of any credit or debit card along the gold bar, one corner at the left edge of the screen. Drag the slider until the bar is exactly as long as that edge.</p>
+    <div id="calWrap"><div id="calBar"></div></div>
+    <input id="calSlider" type="range" min="150" max="600" value="330" aria-label="Bar length">
+    <div class="nudge"><button class="btn2" type="button" id="calMinus" aria-label="Shorter">−</button><div id="calPx">330 px</div><button class="btn2" type="button" id="calPlus" aria-label="Longer">+</button></div>
+    <button class="btn" type="button" id="calSave">It matches my card</button>
+    <p class="small" style="margin-top:12px">Every bank card is the same size, so this tells the page how big your screen really is. Do not pinch to zoom after this step.</p>
+  </div>
+  <div id="chartStep" class="hide">
+    <div class="step">Step 2 of 2 · Read the chart</div>
+    <p class="how">Hold the phone <b>16 inches</b> away: about a sheet of letter paper plus a hand. Full brightness.</p>
+    <div class="eyes"><button class="btn2" type="button" id="eyeR">Right eye</button><button class="btn2" type="button" id="eyeL">Left eye</button></div>
+    <p class="how" id="coverMsg"></p>
+    <div class="chart" id="chart"></div>
+    <p class="small">The dashed line is the FAA line. If you cannot read even the top line, tap it. <a href="#" id="recal">Size the screen again</a></p>
+  </div>
+  <div id="result" aria-live="polite" style="margin-top:16px"></div>
+  <p class="small" style="margin-top:12px">Nothing here leaves this page. Your result stays in your browser and is not sent anywhere.</p>
+</div>
+
+<div class="ctabox"><div class="txt"><b>Near vision is one line on the form.</b><span>The free Flight Crew Fitness app also checks mid range and distance vision, tracks your medical dates and shows blood pressure against the FAA limits.</span></div><a class="btn" href="/?signup=1&amp;utm_source=tool&amp;utm_medium=cta&amp;utm_campaign=vision-test">Start free</a></div>
+
+<h2 id="standards">FAA vision standards by class</h2>
+<p>Each eye is tested separately, with or without corrective lenses. The numbers come from 14 CFR Part 67 and the FAA Guide for Aviation Medical Examiners.</p>
+<table>
+<thead><tr><th>Vision</th><th>First and second class</th><th>Third class</th></tr></thead>
+<tbody>
+<tr><td>Distant</td><td>20/20 or better</td><td>20/40 or better</td></tr>
+<tr><td>Near, at 16 inches</td><td>20/40 or better</td><td>20/40 or better</td></tr>
+<tr><td>Intermediate, at 32 inches</td><td>20/40 or better, age 50 and over</td><td>No requirement</td></tr>
+</tbody></table>
+
+<h2 id="why-40">Why this gets harder after 40</h2>
+<p>The lens inside the eye stiffens with age, so close focus drifts out. It is called presbyopia and it is the reason menus and approach plates end up at arm's length. It arrives gradually, which is why a lot of pilots first hear about it from the examiner.</p>
+<div class="note"><b class="lbl">Captain's note</b><p>If the 20/40 line took effort, book the optometrist before the AME. Walking in with new readers is a non-event. Missing the line in the chair turns a routine exam into a follow-up.</p></div>
+
+<h2 id="glasses">Glasses and the certificate</h2>
+<p>Needing lenses does not cost you the medical. If you need them to meet a standard, the certificate carries a limitation that you must wear corrective lenses, or have glasses for near vision available, while you fly.</p>
+
+<h2 id="accuracy">How accurate a screen check is</h2>
+<p>A 20/20 letter covers 5 minutes of arc. At 16 inches that is 0.59 mm tall, and a 20/40 letter is twice that. Once the screen is sized against a card, this page draws the letters to those measurements. Lighting, glare and how exactly you hold 16 inches still move the result, so treat a miss as a reason to get checked and a pass as no obvious problem.</p>
+
+<section class="faq">
+<h2>FAQ</h2>
+<details><summary>What is the FAA near vision standard for pilots?</summary><p>20/40 or better at 16 inches in each eye separately, with or without corrective lenses. It is the same for first, second and third class medical certificates.</p></details>
+<details><summary>Can I wear glasses or contacts for the FAA vision test?</summary><p>Yes. The standards are met with or without correction. If you need lenses to meet a standard, the certificate carries a limitation saying you must wear or have them available while flying.</p></details>
+<details><summary>What is the FAA intermediate vision requirement?</summary><p>From age 50, first and second class applicants must also read 20/40 or better at 32 inches in each eye separately, with or without correction. Third class has no intermediate requirement.</p></details>
+<details><summary>What is the FAA distant vision standard?</summary><p>20/20 or better in each eye separately for first and second class, and 20/40 or better for third class, with or without corrective lenses.</p></details>
+<details><summary>Is a phone vision test accurate enough for the FAA medical?</summary><p>No screen check replaces the examiner's chart. This one sizes the letters correctly once the screen is calibrated, so a miss is a good reason to see an optometrist before the exam, and a pass means no obvious problem. The AME's result is the one that counts.</p></details>
+</section>
+
+<section class="refs"><h2>Sources</h2><ol>
+<li><a href="https://www.faa.gov/ame_guide/media/VisualAcuityStandards.pdf">FAA Guide for Aviation Medical Examiners, Visual Acuity Standards</a>. Distant, near and intermediate standards by class.</li>
+<li><a href="https://www.ecfr.gov/current/title-14/chapter-I/subchapter-D/part-67">14 CFR Part 67, Medical Standards and Certification (eCFR)</a>. Eye standards in sections 67.103, 67.203 and 67.303.</li>
+</ol><p>Checked November 12, 2026. This is a screening aid, not a medical exam. It does not diagnose anything and does not replace your optometrist or your AME.</p></section>
+
+<div class="author"><div class="av">CC</div><div><b>Chad Cooper</b><p>Airline captain and founder of Flight Crew Fitness. More on the medical: <a href="/tools/faa-medical-expiration-calculator.html">medical expiration calculator</a>, <a href="/tools/faa-medication-checker.html">medication checker</a>, <a href="/blog/faa-blood-pressure-limits.html">FAA blood pressure limits</a>.</p></div></div>
+</article></main>
+<footer class="bottom"><div class="wrap wide">
+  <a href="/">Flight Crew Fitness</a><a href="/blog/">Blog</a><a href="/tools/faa-near-vision-test.html">FAA near vision test</a><a href="/tools/faa-medication-checker.html">FAA medication checker</a><a href="/tools/faa-medical-expiration-calculator.html">FAA medical calculator</a><a href="/tools/">All free tools</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="https://www.facebook.com/1374735345726996">Facebook</a>
+  <p class="disc">Flight Crew Fitness is a training tool, not medical advice. Nothing on this site diagnoses a condition or replaces your doctor or your AME. Consult a physician before beginning any new exercise program.</p>
+</div></footer>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var KEY = 'fcf_vision_v1';
+  var CARD_SHORT_MM = 53.98;           // ISO/IEC 7810 ID-1 card, short edge
+  var DIST_MM = 406.4;                 // 16 inches
+  var STD = 40;                        // FAA near standard, all classes
+  var LINES = [100, 70, 50, 40, 30, 25, 20];
+  var SLOAN = ['C', 'D', 'H', 'K', 'N', 'O', 'R', 'S', 'V', 'Z'];
+  var CAP = 0.716;                     // Arial cap height as a share of font size
+  var SIGNUP = '/?signup=1&utm_source=tool&utm_medium=result&utm_campaign=vision-test';
+  var st = { cal: null, eye: 'right', right: null, left: null };
+
+  // A 20/20 letter subtends 5 minutes of arc.
+  function letterMm(den) { return DIST_MM * Math.tan(5 / 60 * Math.PI / 180) * den / 20; }
+  // Five different letters per line, fixed until the next test so lines do not reshuffle on redraw.
+  var rows = {};
+  function letters(key, n) { if (!rows[key]) { var a = SLOAN.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } rows[key] = a.slice(0, 5).join(''); } return rows[key].slice(0, n); }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify({ cal: st.cal, right: st.right, left: st.left })); } catch (e) {} }
+  function load() { try { var s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.cal > 2 && s.cal < 30) { st.cal = s.cal; st.right = s.right || null; st.left = s.left || null; } } catch (e) {} }
+
+  function calDraw() { var v = $('calSlider').value; $('calBar').style.width = v + 'px'; $('calPx').textContent = v + ' px'; }
+  function calSetup() {
+    var sl = $('calSlider');
+    var max = Math.max(200, Math.min(700, document.documentElement.clientWidth - 4));
+    sl.max = max;
+    sl.value = Math.min(max, st.cal ? Math.round(st.cal * CARD_SHORT_MM) : 330);
+    calDraw();
+  }
+  function nudge(d) { var sl = $('calSlider'); sl.value = Math.max(+sl.min, Math.min(+sl.max, +sl.value + d)); calDraw(); }
+
+  function drawChart() {
+    var avail = Math.max(120, $('tool').clientWidth - 40 - 124);
+    var html = '';
+    LINES.forEach(function (den, i) {
+      var px = letterMm(den) * st.cal / CAP;
+      if (px > avail) return;
+      var n = Math.max(1, Math.min(5, Math.floor(avail / (px * 1.0))));
+      var sel = st[st.eye] === den;
+      html += '<div role="button" tabindex="0" class="vline' + (den === STD ? ' std' : '') + (sel ? ' sel' : '') + '" data-den="' + den + '" style="padding:' + Math.max(6, px * 0.22).toFixed(1) + 'px 0">' +
+        '<div class="pad"></div><div class="l" style="font-size:' + px.toFixed(2) + 'px">' + letters(st.eye + den, n) + '</div>' +
+        '<div class="s">' + (sel ? '✓ ' : '') + '20/' + den + (den === STD ? '<b>FAA LINE</b>' : '') + '</div></div>';
+    });
+    $('chart').innerHTML = html;
+    $('eyeR').className = 'btn2' + (st.eye === 'right' ? ' on' : '');
+    $('eyeL').className = 'btn2' + (st.eye === 'left' ? ' on' : '');
+    $('eyeR').textContent = 'Right eye' + (st.right ? ' · 20/' + st.right : '');
+    $('eyeL').textContent = 'Left eye' + (st.left ? ' · 20/' + st.left : '');
+    $('coverMsg').innerHTML = '<b>Cover your ' + (st.eye === 'right' ? 'left' : 'right') + ' eye.</b> Read down from the top, then tap the smallest line you can read without guessing.';
+  }
+
+  function drawResult() {
+    var r = $('result');
+    if (!st.right && !st.left) { r.innerHTML = ''; return; }
+    if (!st.right || !st.left) { r.innerHTML = '<div class="verdict"><div class="s2">' + (st.right ? 'Right eye: 20/' + st.right + '. Now cover your right eye and read with the left.' : 'Left eye: 20/' + st.left + '. Now cover your left eye and read with the right.') + '</div></div>'; return; }
+    var ok = st.right <= STD && st.left <= STD;
+    var line = 'Right eye 20/' + st.right + ' · Left eye 20/' + st.left + ' at 16 inches';
+    var html = ok
+      ? '<div class="verdict ok"><div class="k">Reaches the FAA near line</div><div class="d">' + line + '</div><div class="s2">Both eyes reach 20/40 on this screen check. That means no obvious problem, not a pass at the exam. If it felt like a strain, an optometrist can still make the exam easier.</div></div>'
+      : '<div class="verdict warn"><div class="k">Short of the FAA near line</div><div class="d">' + line + '</div><div class="s2">At least one eye did not reach 20/40 on this screen check. See an optometrist before your medical. Reading glasses or an updated prescription usually settle it, and the certificate then carries a near vision limitation.</div></div>';
+    html += '<div class="next"><b>' + (ok ? 'Near is done. Two more to check.' : 'Check the rest before the exam.') + '</b><ul>' +
+      '<li>Mid range, 32 inches: required from age 50 for first and second class</li>' +
+      '<li>Distance: 20/20 for first and second class</li>' +
+      '<li>Your medical dates, and blood pressure against the FAA limits</li></ul>' +
+      '<a class="btn" href="' + SIGNUP + '">Create my free account</a>' +
+      '<p class="fine">Free. No credit card. Your medical data stays on your phone.</p></div>' +
+      '<div class="actions"><button class="btn2" type="button" id="shareBtn">Send to a crew member</button><button class="btn2" type="button" id="againBtn">Test again</button></div>';
+    r.innerHTML = html;
+    $('againBtn').onclick = function () { st.right = st.left = null; st.eye = 'right'; rows = {}; save(); show(); };
+    var b = $('shareBtn'), url = 'https://flightcrew.fit/tools/faa-near-vision-test.html';
+    // Share the tool itself, never the result.
+    b.onclick = function () {
+      if (navigator.share) { navigator.share({ title: 'FAA near vision test for pilots', url: url }).catch(function () {}); return; }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(function () { b.textContent = 'Link copied'; setTimeout(function () { b.textContent = 'Send to a crew member'; }, 2000); });
+    };
+  }
+
+  function show() {
+    var calibrated = !!st.cal;
+    $('calStep').className = calibrated ? 'hide' : '';
+    $('chartStep').className = calibrated ? '' : 'hide';
+    if (calibrated) drawChart(); else calSetup();
+    drawResult();
+  }
+  function pick(den) {
+    st[st.eye] = den;
+    if (st.eye === 'right' && !st.left) st.eye = 'left';
+    else if (st.eye === 'left' && !st.right) st.eye = 'right';
+    save(); show();
+    if (st.right && st.left) $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  $('calSlider').addEventListener('input', calDraw);
+  $('calMinus').onclick = function () { nudge(-1); };
+  $('calPlus').onclick = function () { nudge(1); };
+  $('calSave').onclick = function () { st.cal = +$('calSlider').value / CARD_SHORT_MM; save(); show(); };
+  $('recal').onclick = function (e) { e.preventDefault(); st.cal = null; show(); };
+  $('eyeR').onclick = function () { st.eye = 'right'; show(); };
+  $('eyeL').onclick = function () { st.eye = 'left'; show(); };
+  $('chart').addEventListener('click', function (e) { var n = e.target.closest ? e.target.closest('.vline') : null; if (n) pick(+n.getAttribute('data-den')); });
+  $('chart').addEventListener('keydown', function (e) { if (e.key !== 'Enter' && e.key !== ' ') return; var n = e.target.closest ? e.target.closest('.vline') : null; if (n) { e.preventDefault(); pick(+n.getAttribute('data-den')); } });
+  window.addEventListener('resize', function () { if (st.cal) drawChart(); });
+  load(); show();
+  window.__fcfVision = { letterMm: letterMm, state: st };
+})();
+</script>
+</body>
+</html>

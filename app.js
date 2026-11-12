@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.51.7 / 20261105_6
+ * Version/build: fcf-v5.51.8 / 20261112_1
  */
 
-const FCF_VERSION = 'fcf-v5.51.7';
-const FCF_BUILD   = '20261105_6';
+const FCF_VERSION = 'fcf-v5.51.8';
+const FCF_BUILD   = '20261112_1';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -148,11 +148,13 @@ async function loadSubscription() {
 
 
 // ─── APP STATE ────────────────────────────────────────────────────────────────
+const WANTS_SIGNUP = typeof location !== 'undefined' && /[?&]signup=1(&|$)/.test(location.search || '');
 const ST = {
   authed: false,
   user: null,
-  showLanding: true,
-  authMode: 'signin', // 'signin' | 'signup'
+  // /?signup=1 (used by the free tools and blog buttons) opens the sign-up form directly.
+  showLanding: !WANTS_SIGNUP,
+  authMode: WANTS_SIGNUP ? 'signup' : 'signin', // 'signin' | 'signup'
   authView: 'default', // 'default' | 'forgot' | 'recovery'
   authErr: '',
   authInfo: '',
@@ -2020,6 +2022,7 @@ function renderAuth(root) {
   parts.push('<div class="landing" style="display:flex;flex-direction:column;justify-content:center">');
   parts.push('<div class="auth-wrap">');
   parts.push('<div style="text-align:center;margin-bottom:24px"><div class="landing-logo">✈ FLIGHT CREW FITNESS</div></div>');
+  if (isSignup) parts.push('<div style="text-align:center;font-size:0.8125rem;color:var(--muted);line-height:1.55;margin:-8px 0 18px"><b style="color:var(--text)">Free account. No credit card.</b><br>Workouts built around your trips, plus the FAA medical tools.</div>');
   parts.push('<div class="auth-tabs">');
   parts.push('<div class="auth-tab '+(!isSignup?'active':'')+'" onclick="ST.authMode=\'signin\';ST.authErr=\'\';ST.authInfo=\'\';renderRoot()">Sign In</div>');
   parts.push('<div class="auth-tab '+(isSignup?'active':'')+'" onclick="ST.authMode=\'signup\';ST.authErr=\'\';ST.authInfo=\'\';renderRoot()">Sign Up</div>');

@@ -1,6 +1,6 @@
 // Flight Crew Fitness — Service Worker
-// Version: 5.51.7
-const CACHE = 'fcf-v5.51.7';
+// Version: 5.51.8
+const CACHE = 'fcf-v5.51.8';
 const CORE = [
   './',
   './index.html',
@@ -66,6 +66,7 @@ self.addEventListener('fetch', e => {
     url.pathname.startsWith('/crashpads/') ||   // separate app hosted under this site; never cache it
     url.pathname.startsWith('/blog/') ||        // static marketing pages; always fresh, never part of the offline app
     url.pathname.startsWith('/tools/') ||       // free public tools (medical calculator); same rule as the blog
+    url.pathname.startsWith('/vision') ||       // short link that forwards to the vision test tool
     url.pathname === '/llms.txt' ||
     url.hostname.includes('supabase.co') ||
     url.hostname.includes('jsdelivr.net') ||

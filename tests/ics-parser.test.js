@@ -793,6 +793,36 @@ test('a workout reopened mid-session drops a caution that no longer applies', ()
   assertEqual(wk.takeoff[0].flaggedRegion, 'Shoulder and Elbow / Wrist', 'bench press picks up its caution');
   assertEqual(wk.enroute[0].flaggedRegion, 'Shoulder', 'real caution kept');
 });
+test('a flagged stretch with no safe alternate swaps to a safe move for the same body area', () => {
+  ctx.ST.injuries = ['shoulder', 'elbow_wrist'];
+  const used = new Set(['Doorframe Chest Stretch', 'Lat Overhead Stretch', 'Diaphragmatic Breathing']);
+  const a = ctx.applyInjuryFilter({ id: 'l1', name: 'Doorframe Chest Stretch', target: '60s/side', sets: 1, note: '', timed: true, inputType: 'timed_bilateral' }, 'landing', used);
+  const b = ctx.applyInjuryFilter({ id: 'l2', name: 'Lat Overhead Stretch', target: '60s/side', sets: 1, note: '', timed: true, inputType: 'timed_bilateral' }, 'landing', used);
+  const c = ctx.applyInjuryFilter({ id: 'e1', name: 'Lateral Raise (Machine)', target: '3×12', sets: 3, note: '', timed: false, inputType: 'reps_weight' }, 'enroute', used);
+  ctx.ST.injuries = [];
+  assertEqual(a.swappedForInjury, true, 'chest stretch swapped'); assertEqual(b.swappedForInjury, true, 'lat stretch swapped');
+  assertEqual(a.name !== b.name, true, 'two different stand-ins (' + a.name + ', ' + b.name + ')');
+  assertEqual([a, b].some(x => x.name === 'Diaphragmatic Breathing'), false, 'never doubles an exercise already in the workout');
+  [a, b].forEach(x => assertEqual(ctx.exerciseRegionTags(x.name).some(t => t === 'shoulder' || t === 'elbow_wrist'), false, x.name + ' is safe for both flags'));
+  assertEqual(c.injuryCaution, true, 'lateral raise: no honest swap, caution stays'); assertEqual(!!c.swappedForInjury, false, 'not swapped');
+});
+test('every stand-in is a real catalog exercise', () => {
+  const names = new Set(ctx.buildExerciseCatalog().map(e => e.name));
+  const pools = vm.runInContext('INJURY_PHASE_POOLS', ctx);
+  const missing = [].concat(...Object.values(pools).map(p => [...p.upper, ...p.lower])).filter(n => !names.has(n));
+  assertEqual(missing.join(', '), '', 'pool names must exist in the catalog');
+});
+test('reopening a workout swaps untouched flagged exercises and leaves logged ones', () => {
+  ctx.ST.injuries = ['shoulder'];
+  const sets = { l1: [{ seconds_left: '', seconds_right: '' }], l2: [{ seconds_left: '60', seconds_right: '' }] };
+  const wk = ctx.refreshInjuryCautions({ taxi: [], takeoff: [], enroute: [],
+    landing: [{ id: 'l1', name: 'Doorframe Chest Stretch', target: '60s/side', sets: 1, timed: true, inputType: 'timed_bilateral', injuryCaution: true, flaggedRegion: 'Shoulder' },
+              { id: 'l2', name: 'Lat Overhead Stretch', target: '60s/side', sets: 1, timed: true, inputType: 'timed_bilateral', injuryCaution: true, flaggedRegion: 'Shoulder' }] }, sets);
+  ctx.ST.injuries = [];
+  assertEqual(wk.landing[0].swappedForInjury, true, 'untouched stretch swapped'); assertEqual(sets.l1, undefined, 'its blank boxes cleared');
+  assertEqual(wk.landing[1].name, 'Lat Overhead Stretch', 'a stretch with time logged stays'); assertEqual(wk.landing[1].injuryCaution, true, 'and keeps its caution');
+  assertEqual(sets.l2[0].seconds_left, '60', 'logged time kept');
+});
 test('names outside the catalog use whole-word patterns', () => {
   const t = n => ctx.exerciseRegionTags(n).join(',');
   assertEqual(t('Reverse Crunch on Bench'), 'lower_back', 'custom crunch');
@@ -828,17 +858,20 @@ test('every possible injury swap: boxes match the label and the fields match the
   let swaps = 0; const bad = [];
   for (const e of all.values()) for (const r of regions) {
     ctx.ST.injuries = [r];
-    const out = ctx.applyInjuryFilter(e);
+    // Once bare, once as a cool-down, so the stand-in pools are swept too.
+    for (const out of [ctx.applyInjuryFilter(e), ctx.applyInjuryFilter(e, 'landing'), ctx.applyInjuryFilter(e, 'taxi')]) {
     if (!out.swappedForInjury) continue;
     swaps++;
+    if (ctx.exerciseRegionTags(out.name).includes(r)) bad.push(e.name + ' -> ' + out.name + ': the swap loads the flagged ' + r);
     const alt = ctx.getAlternates(e.name).find(a => a.name === out.name);
     const lab = (out.target || '').match(/^(\d+)\s*[x×]/i);
     if (lab && parseInt(lab[1], 10) !== out.sets) bad.push(e.name + ' -> ' + out.name + ': label ' + lab[1] + ', sets ' + out.sets);
     if (!lab && /\d\s*(min|s)\b/.test(out.target || '') && ctx.blankSetsFor(out).length !== 1) bad.push(e.name + ' -> ' + out.name + ' (' + out.target + '): a single duration drew ' + ctx.blankSetsFor(out).length + ' boxes');
-    if (alt.inputType && alt.inputType !== out.inputType) bad.push(e.name + ' -> ' + out.name + ': fields ' + out.inputType + ', alternate says ' + alt.inputType);
+    if (alt && alt.inputType && alt.inputType !== out.inputType) bad.push(e.name + ' -> ' + out.name + ': fields ' + out.inputType + ', alternate says ' + alt.inputType);
     const timedType = out.inputType === 'timed' || out.inputType === 'timed_bilateral' || out.inputType === 'timed_distance' || out.inputType === 'nsdr';
     if (!!out.timed !== timedType && !(out.timed && out.inputType === 'timed')) bad.push(e.name + ' -> ' + out.name + ': timed=' + out.timed + ' but fields ' + out.inputType);
     if (out.originalName !== e.name || !out.flaggedRegion) bad.push(e.name + ': lost the swap banner details');
+    }
   }
   ctx.ST.injuries = [];
   assertEqual(swaps > 30, true, 'sweep actually covered swaps (' + swaps + ')');

@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.52.0 / 20261112_3
+ * Version/build: fcf-v5.52.1 / 20261112_4
  */
 
-const FCF_VERSION = 'fcf-v5.52.0';
-const FCF_BUILD   = '20261112_3';
+const FCF_VERSION = 'fcf-v5.52.1';
+const FCF_BUILD   = '20261112_4';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -1402,7 +1402,7 @@ const EX_REGION_TAGS = {
   "Table / Inverted Row": 'E',
   "Thoracic Extension (chair)": '',
   "Thoracic Rotation (seated)": '',
-  "Thread the Needle": '',
+  "Thread the Needle": 'S',
   "Toe Raise (Cable)": 'A',
   "Torso Rotation (Machine)": 'B',
   "Towel Curl": 'E',
@@ -1471,43 +1471,92 @@ function exFromAlternate(id, alt, catalogMatch) {
   return ex(id, alt.name, alt.target, setsCount, alt.note||'Alternate exercise.', isTimed, iType);
 }
 
-function applyInjuryFilter(exItem) {
+// Warm-up and cool-down stand-ins, used when an exercise's own alternates all
+// load the flagged region. Ordered by preference; "upper" and "lower" follow
+// the body area the original works, so a chest stretch is never replaced by
+// a calf stretch. Every name is a catalog exercise.
+const INJURY_PHASE_POOLS = {
+  taxi: {
+    upper: ['Thoracic Rotation (seated)', 'Thoracic Extension (chair)', 'Cat-Cow', 'Shoulder Rolls', 'Seated Arm Circles', 'Bird Dog', 'Dead Bug'],
+    lower: ['Glute Bridge', 'Leg Swings (Front & Side)', 'Ankle Circles', 'Bird Dog', 'Dead Bug', 'Cat-Cow', 'March in Place'],
+  },
+  landing: {
+    upper: ['Thoracic Rotation (seated)', 'Cat-Cow', "Child's Pose", 'Diaphragmatic Breathing', 'Box Breathing', 'Legs Up the Wall'],
+    lower: ['Supine Hamstring Stretch', 'Lying Hamstring Stretch (Strap)', 'Seated Figure-4 Stretch', 'Standing Hip Flexor Stretch', 'Seated Calf Stretch (Strap or Towel)', 'Legs Up the Wall', 'Diaphragmatic Breathing'],
+  },
+};
+
+// The best replacement for an exercise that loads a flagged region, or null.
+// Looks in three places, in order (Chad, Nov 12: "automatically swap it for
+// something else that is better if possible"):
+//   1. its own curated alternates
+//   2. the alternates of those alternates (same muscles, one step removed)
+//   3. warm-up / cool-down only: a safe move for the same body area
+// Strength work with no safe relative is left with a caution: there is no
+// honest swap for a lateral raise on a flagged shoulder. `used` holds names
+// already in the workout so a swap never doubles an exercise.
+function findInjurySafeSwap(exItem, phase, used) {
+  const safe = n => n !== exItem.name && !(used && used.has(n)) && !exerciseRegionTags(n).some(t => ST.injuries.includes(t));
+  const alts = getAlternates(exItem.name);
+  const first = alts.find(a => safe(a.name));
+  if (first) return first;
+  for (const a of alts) {
+    const second = getAlternates(a.name).find(x => safe(x.name));
+    if (second) return second;
+  }
+  const pools = INJURY_PHASE_POOLS[phase];
+  if (!pools) return null;
+  const tags = exerciseRegionTags(exItem.name);
+  const lower = tags.some(t => ['hip','knee','ankle_foot'].includes(t)) && !tags.some(t => ['shoulder','elbow_wrist','neck'].includes(t));
+  const name = pools[lower ? 'lower' : 'upper'].find(safe);
+  if (!name) return null;
+  const cat = buildExerciseCatalog().find(e => e.name === name);
+  return cat ? { name: cat.name, target: cat.target, note: cat.note, inputType: cat.inputType } : null;
+}
+
+function applyInjuryFilter(exItem, phase, used) {
   if (!ST.injuries || !ST.injuries.length) return exItem;
   const tags = exerciseRegionTags(exItem.name);
   const flagged = tags.filter(t => ST.injuries.includes(t));
   if (!flagged.length) return exItem;
+  const flaggedRegion = flagged.map(t => INJURY_REGIONS[t].label).join(' and ');
 
-  const alts = getAlternates(exItem.name);
-  const safeAlt = alts.find(a => {
-    const altTags = exerciseRegionTags(a.name);
-    return !altTags.some(t => ST.injuries.includes(t));
-  });
-
+  const safeAlt = findInjurySafeSwap(exItem, phase, used);
   if (safeAlt) {
+    if (used) used.add(safeAlt.name);
     return {
       ...exItem,
       ...exFromAlternate('inj_' + slugify(safeAlt.name), safeAlt),
-      swappedForInjury: true, originalName: exItem.name,
-      flaggedRegion: flagged.map(t => INJURY_REGIONS[t].label).join(' and '),
+      swappedForInjury: true, originalName: exItem.name, flaggedRegion,
     };
   }
-  return { ...exItem, injuryCaution: true, flaggedRegion: flagged.map(t => INJURY_REGIONS[t].label).join(' and ') };
+  return { ...exItem, injuryCaution: true, flaggedRegion };
 }
 
-// A workout saved mid-session keeps the caution lines it was built with.
-// Re-check them on reopen so a corrected flag does not linger. Cautions
-// only: an exercise already swapped stays swapped, and nothing new is
-// swapped in the middle of a session. With no injuries in state the workout
-// is left alone, since that can also mean the profile did not load (offline).
-function refreshInjuryCautions(workout) {
+// A workout saved mid-session keeps the flags it was built with. Re-check
+// them on reopen: a caution that no longer applies is dropped, and an
+// exercise that should be swapped is swapped, but only if nothing has been
+// logged on it yet. An exercise already swapped stays as it is. With no
+// injuries in state the workout is left alone, since that can also mean the
+// profile did not load (offline).
+function refreshInjuryCautions(workout, sets) {
   if (!workout || !ST.injuries || !ST.injuries.length) return workout;
-  ['taxi','takeoff','enroute','landing'].forEach(ph => {
+  const phases = ['taxi','takeoff','enroute','landing'];
+  const used = new Set();
+  phases.forEach(ph => (workout[ph] || []).forEach(e => e && used.add(e.name)));
+  const touched = e => Array.isArray(sets && sets[e.id]) && sets[e.id].some(st => st && Object.values(st).some(v => v !== '' && v != null));
+  phases.forEach(ph => {
     if (!Array.isArray(workout[ph])) return;
     workout[ph] = workout[ph].map(e => {
       if (!e || e.swappedForInjury) return e;
-      const flagged = exerciseRegionTags(e.name).filter(t => (ST.injuries || []).includes(t));
       const { injuryCaution, flaggedRegion, ...rest } = e;
-      return flagged.length ? { ...rest, injuryCaution: true, flaggedRegion: flagged.map(t => INJURY_REGIONS[t].label).join(' and ') } : rest;
+      const out = touched(e) || e.custom ? applyInjuryFilter(rest, null, null) : applyInjuryFilter(rest, ph, used);
+      if (out.swappedForInjury) {
+        if (touched(e) || e.custom) return { ...rest, injuryCaution: true, flaggedRegion: out.flaggedRegion };
+        if (sets) delete sets[e.id];
+        return withRepRange(out, ph);
+      }
+      return out;
     });
   });
   return workout;
@@ -6532,8 +6581,8 @@ function restoreWorkoutState() {
       localStorage.removeItem(WORKOUT_STATE_KEY);
       return false;
     }
-    ST.workout = refreshInjuryCautions(saved.workout);
-    ST.sets = saved.sets;
+    ST.sets = saved.sets || {};
+    ST.workout = refreshInjuryCautions(saved.workout, ST.sets);
     ST.env = saved.env;
     ST.muscleGroup = saved.muscleGroup;
     ST.goal = saved.goal;
@@ -10521,6 +10570,9 @@ function getCombinedWorkout(env, muscleGroup) {
   const swaps = ov?.swaps?.[env]?.[muscleGroup] || null;
   const retarget = ov?.retarget || null;
   const female = ST.sex === 'female';
+  // Names already in this workout, so an injury swap never doubles one.
+  const usedNames = new Set();
+  ['taxi','takeoff','enroute','landing'].forEach(ph => (base[ph] || []).forEach(e => usedNames.add(e.name)));
   const mapPhase = (list, phase) => list.map(e => {
     let out = e;
     if (swaps && swaps[phase] && swaps[phase][e.name]) out = swaps[phase][e.name];
@@ -10529,7 +10581,7 @@ function getCombinedWorkout(env, muscleGroup) {
       const t = femaleTargetBump(out.target);
       if (t !== out.target) out = { ...out, target: t };
     }
-    out = applyInjuryFilter(out);
+    out = applyInjuryFilter(out, phase, usedNames);
     return withRepRange(out, phase);
   });
   const wk = {
@@ -12039,7 +12091,7 @@ function buildExCard(exItem, phaseKey) {
   if (exItem.swappedForInjury) {
     parts.push('<div style="padding:6px 14px;background:rgba(56,189,248,0.08);border-top:1px solid var(--border);font-size:0.625rem;color:var(--blue)">🩹 Swapped from '+exItem.originalName+': '+exItem.flaggedRegion+' flagged</div>');
   } else if (exItem.injuryCaution) {
-    parts.push('<div style="padding:6px 14px;background:rgba(245,158,11,0.08);border-top:1px solid var(--border);font-size:0.625rem;color:var(--amber)">⚠️ May stress your flagged '+exItem.flaggedRegion+'; consider Alternate below</div>');
+    parts.push('<div style="padding:6px 14px;background:rgba(245,158,11,0.08);border-top:1px solid var(--border);font-size:0.625rem;color:var(--amber)">⚠️ May stress your flagged '+exItem.flaggedRegion+'. No safer swap found: go light or skip it.</div>');
   }
 
   if (isOpen) {

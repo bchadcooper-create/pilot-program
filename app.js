@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.51.9 / 20261112_2
+ * Version/build: fcf-v5.52.0 / 20261112_3
  */
 
-const FCF_VERSION = 'fcf-v5.51.9';
-const FCF_BUILD   = '20261112_2';
+const FCF_VERSION = 'fcf-v5.52.0';
+const FCF_BUILD   = '20261112_3';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -1098,26 +1098,344 @@ function femaleTargetBump(target) {
 }
 
 // ─── INJURY-AWARE FILTERING ───────────────────────────────────────────────────
-// Conservative, name-based heuristic — not a medical assessment. Flags which
-// body regions an exercise plausibly loads, based on movement pattern
-// keywords in its name. Used to auto-swap to a known-safer alternative where
-// one exists (via the same ALTERNATES data the manual Alternate button uses),
-// and to caution-flag exercises where no confident substitute exists.
+// Not a medical assessment. Says which body regions an exercise puts
+// meaningful load on, so a flagged injury can swap it for a safer alternate
+// (via the same ALTERNATES data the manual Alternate button uses) or show a
+// caution where no confident substitute exists.
+//
+// REWRITTEN Nov 12 2026 (reported: "Thoracic Extension (chair)" warned about
+// a flagged elbow). The old version looked for words inside the exercise
+// name, so "Extension" (meant for triceps) also caught Thoracic Extension,
+// Leg Extension and Back Extension; "Curl" caught every Leg Curl; "Run"
+// caught every cRUNch (ankle warning on an ab exercise); "Row" put Upright
+// Row on the lower back. It also missed the obvious: Bench Press, Dips and
+// Pullups were never flagged for a shoulder.
+//
+// Now every catalog exercise has a reviewed entry in EX_REGION_TAGS (a unit
+// test fails if a new exercise is added without one). Codes:
+//   S shoulder · E elbow/wrist · B lower back · H hip · K knee · A ankle/foot · N neck
+// The rule for a tag: the joint moves under load, takes impact, holds a heavy
+// load in a vulnerable position, or grip is the limiting factor (E). Gentle
+// unloaded mobility is not tagged. A stretch is tagged only when it takes
+// that joint to end range under bodyweight (hanging, kneeling, on the floor).
 const INJURY_REGIONS = {
-  shoulder:    { label: 'Shoulder',      keywords: ['Overhead Press','Shoulder Press','Pullover','Lateral Raise','Front Raise','Upright Row','Handstand','Pike Pushup','Arnold','Y-T-W','Face Pull'] },
-  elbow_wrist: { label: 'Elbow / Wrist',  keywords: ['Curl','Tricep','Extension','Close Grip','Dip','Pushup','Push-up','Plank'] },
-  lower_back:  { label: 'Lower Back',     keywords: ['Torso Rotation','Deadlift','Good Morning','Back Extension','Superman','Row','RDL','Romanian'] },
-  hip:         { label: 'Hip',            keywords: ['Squat','Lunge','Split Squat','Step-Up','Hip Thrust','Deadlift','Pistol','Goblet'] },
-  knee:        { label: 'Knee',           keywords: ['Squat','Lunge','Split Squat','Step-Up','Jump','Box Jump','Pistol','Leg Press','Leg Extension'] },
-  ankle_foot:  { label: 'Ankle / Foot',   keywords: ['Calf Raise','Calf Press','Stair Climber','Jump','Box Jump','Run','Sprint','Walking','Treadmill'] },
-  neck:        { label: 'Neck',           keywords: ['Neck','Shrug'] },
+  shoulder:    { label: 'Shoulder',     code: 'S', pattern: /overhead press|shoulder press|bench press|push-?ups?\b|pull-?ups?\b|chin-?ups?\b|pulldown|pullover|lateral raise|front raise|upright row|handstand|arnold|y-t-w|face pull|\bfly\b|\bflye\b|\bdips?\b/i },
+  elbow_wrist: { label: 'Elbow / Wrist', code: 'E', pattern: /^(?!.*(leg|hamstring|nordic)).*\bcurl|tricep|skull crusher|pushdown|close grip|\bdips?\b|push-?ups?\b|pull-?ups?\b|chin-?ups?\b|bench press|wrist|handstand|farmer|\bcarry\b/i },
+  lower_back:  { label: 'Lower Back',    code: 'B', pattern: /deadlift|good morning|back extension|superman|bent-over row|\brdl\b|romanian|torso rotation|sit-?up|crunch|russian twist|woodchop|kettlebell swing|back squat/i },
+  hip:         { label: 'Hip',           code: 'H', pattern: /squat|lunge|step-?up|hip thrust|deadlift|pistol|hip abduction|hip adduction|kickback|\bjump|\bsprint|\brun(ning)?\b/i },
+  knee:        { label: 'Knee',          code: 'K', pattern: /squat|lunge|step-?up|\bjump|pistol|leg press|leg extension|leg curl|nordic|\bsprint|\brun(ning)?\b|\bhops?\b/i },
+  ankle_foot:  { label: 'Ankle / Foot',  code: 'A', pattern: /calf raise|calf press|stair|\bjump|\brun(ning)?\b|\bsprint|\bwalk|treadmill|\bhops?\b/i },
+  neck:        { label: 'Neck',          code: 'N', pattern: /\bneck\b|shrug|upright row/i },
 };
+const EX_REGION_TAGS = {
+  "90/90 Hip Switch": 'H K',
+  "Ab Crunch (Machine)": 'B',
+  "Achilles / Calf Stretch": 'A',
+  "Ankle Circles": '',
+  "Ankle Circles + Dorsiflexion": '',
+  "Ankle Hop": 'K A',
+  "Archer Pushup": 'S E',
+  "Arm Circles (progressive)": '',
+  "Assault Bike Intervals": '',
+  "Assisted Dip (Machine)": 'S E',
+  "Assisted Pull-Up (Machine)": 'S E',
+  "Back Extension (Machine)": 'B',
+  "Back Squat": 'B H K N',
+  "Band Mobility Circuit": '',
+  "Band Pull-Apart": 'S',
+  "Banded Bent-Over Row": 'B E',
+  "Banded Bicep Curl": 'E',
+  "Banded Deadlift": 'B H',
+  "Banded Face Pull": 'S',
+  "Banded Hip Thrust": 'H',
+  "Banded Lateral Lunge": 'H K',
+  "Banded Lateral Raise": 'S',
+  "Banded Leg Curl": 'K',
+  "Banded Overhead Press": 'S E',
+  "Banded Push-Up": 'S E',
+  "Banded Single-Arm Chest Press": 'S E',
+  "Banded Single-Arm Row": 'E',
+  "Banded Squat": 'H K',
+  "Banded Thruster": 'S E H K',
+  "Banded Tricep Pushdown": 'E',
+  "Banded Upright Row": 'S E N',
+  "Banded Woodchop": 'B',
+  "Barbell Hip Thrust": 'H',
+  "Barbell Row (Pendlay)": 'B E',
+  "Barbell Shrug": 'N',
+  "Bed/Chair Jump": 'H K A',
+  "Bench Press": 'S E',
+  "Bench/Box Jump": 'H K A',
+  "Bent-Over DB Face Pull": 'S B',
+  "Biceps Curl (Machine)": 'E',
+  "Bicycle Crunch": 'B N',
+  "Bird Dog": '',
+  "Bodyweight Squat": 'H K',
+  "Box Breathing": '',
+  "Box Jump": 'H K A',
+  "Brisk Walk Ramp-Up": 'A',
+  "Broad Jump": 'H K A',
+  "Burpee": 'S E B H K A',
+  "Burpee Intervals": 'S E B H K A',
+  "Cable Bent-Over Row": 'B E',
+  "Cable Biceps Curl": 'E',
+  "Cable Chest Press": 'S E',
+  "Cable Crunch": 'B',
+  "Cable Curl": 'E',
+  "Cable Deadlift": 'B H',
+  "Cable Fly": 'S',
+  "Cable Front Raise": 'S',
+  "Cable Glute Kickback": 'H',
+  "Cable Good Morning": 'B H',
+  "Cable Hip Abduction": 'H',
+  "Cable Hip Adduction": 'H',
+  "Cable Lateral Raise": 'S',
+  "Cable Lunge": 'H K',
+  "Cable Rear Delt Fly": 'S',
+  "Cable Row": 'B E',
+  "Cable Side Bend": 'B',
+  "Cable Straight-Arm Pulldown": 'S',
+  "Cable Torso Rotation": 'B',
+  "Cable Tricep Pushdown": 'E',
+  "Cable Triceps Extension": 'E',
+  "Cable Triceps Pushdown": 'E',
+  "Cable Upright Row": 'S E N',
+  "Cable Woodchop": 'B',
+  "Calf Raise (step)": 'A',
+  "Cat-Cow": '',
+  "Chair Dips": 'S E',
+  "Chest Doorway Stretch": 'S',
+  "Chest Press (Machine)": 'S E',
+  "Child's Pose": 'K',
+  "Child's Pose + Reach": 'K',
+  "Chin-Up": 'S E',
+  "Chinups": 'S E',
+  "Close Grip Bench": 'S E',
+  "Conventional Deadlift": 'B H',
+  "Cool-Down Walk": 'A',
+  "Couch Stretch": 'H K',
+  "Cross-Body Shoulder Stretch": 'S',
+  "DB Bench Press": 'S E',
+  "DB Curl": 'E',
+  "DB Deadlift": 'B H',
+  "DB Flye": 'S',
+  "DB Front Raise": 'S',
+  "DB Hammer Curl": 'E',
+  "DB Incline Press": 'S E',
+  "DB Jump Squat": 'B H K A',
+  "DB Lateral Raise": 'S',
+  "DB Overhead Press": 'S E',
+  "DB Preacher Curl": 'E',
+  "DB Romanian Deadlift": 'B H',
+  "DB Row": 'E',
+  "DB Tricep Overhead": 'S E',
+  "Dead Bug": '',
+  "Deadlift": 'B H',
+  "Decline Chest Press (Machine)": 'S E',
+  "Decline Pushup": 'S E',
+  "Depth Drop": 'H K A',
+  "Diaphragmatic Breathing": '',
+  "Dip": 'S E',
+  "Door Frame Row": 'E',
+  "Doorframe Chest Stretch": 'S',
+  "Downward Dog Calf Pumps": 'S E A',
+  "Dumbbell Fly": 'S',
+  "Dumbbell Lateral Lunge": 'H K',
+  "Dumbbell Reverse Fly": 'S',
+  "Dumbbell Shrug": 'N',
+  "Elliptical Intervals": '',
+  "Explosive Pushup": 'S E',
+  "EZ Bar Curl": 'E',
+  "Face Pull": 'S',
+  "Farmer Carry": 'E B A',
+  "Flat Barbell Bench Press": 'S E',
+  "Flutter Kicks": 'B H',
+  "Full Body Stretch": '',
+  "Full Body Stretch Circuit": '',
+  "Full Mobility Circuit": '',
+  "Glute Bridge": '',
+  "Glute Kickback (Machine)": 'H',
+  "Goblet Squat": 'H K',
+  "Goblet Squat (Heavy)": 'H K',
+  "Good Morning": 'B H N',
+  "Hack Squat (Machine)": 'H K',
+  "Hamstring Raise (Nordic Curl)": 'K',
+  "Hip 90/90": 'H K',
+  "Hip 90/90 Rotation Drill": 'H K',
+  "Hip 90/90 Stretch": 'H K',
+  "Hip Abduction (Machine)": 'H',
+  "Hip Adduction (Machine)": 'H',
+  "Hip Flexor Lunge Stretch": 'H K',
+  "Hip Flexor Stretch": 'H',
+  "Hip Thrust (Machine)": 'H',
+  "Horizontal Calf Press (Machine)": 'A',
+  "Incline Chest Press (Machine)": 'S E',
+  "Incline DB Press": 'S E',
+  "Incline Push-Up (Bench)": 'S E',
+  "Inverted Row / Door Row": 'E',
+  "Jump Lunge": 'H K A',
+  "Jump Rope / Ankle Bouncing": 'K A',
+  "Jumping Jacks": 'K A',
+  "Kettlebell Clean & Press": 'S E B',
+  "Kettlebell Goblet Squat": 'H K',
+  "Kettlebell Goblet Squat (Heavy)": 'H K',
+  "Kettlebell Goblet Squat (Warmup)": 'H K',
+  "Kettlebell Halo": 'S',
+  "Kettlebell Swing": 'B H',
+  "Kneeling Hip Flexor Stretch": 'H K',
+  "Landmine Press": 'S E',
+  "Landmine Row": 'B E',
+  "Landmine Squat": 'H K',
+  "Landmine Squat to Press": 'S E H K',
+  "Landmine Twist": 'B',
+  "Lat Hang Stretch": 'S E',
+  "Lat Overhead Stretch": 'S',
+  "Lat Pulldown": 'S E',
+  "Lateral Band Walk": 'H',
+  "Lateral Raise": 'S',
+  "Lateral Raise (Machine)": 'S',
+  "Leg Extension (Machine)": 'K',
+  "Leg Press": 'B H K',
+  "Leg Press Calf Raise": 'A',
+  "Leg Raise": 'B H',
+  "Leg Swings (Front & Side)": 'H',
+  "Legs Up the Wall": '',
+  "Light Squat Jumps": 'H K A',
+  "Lunge (Walking)": 'H K',
+  "Lying Hamstring Stretch (Strap)": '',
+  "Lying Leg Curl (Machine)": 'K',
+  "March in Place": 'A',
+  "Med Ball Squat Jump Throw": 'S B H K A',
+  "Medicine Ball Burpee": 'S E B H K A',
+  "Medicine Ball Rotational Throw": 'S B',
+  "Medicine Ball Russian Twist": 'B',
+  "Medicine Ball Slam": 'S B',
+  "Mountain Climbers": 'S E H',
+  "Neck Mobility Protocol": 'N',
+  "Neck Rolls": 'N',
+  "Non-Sleep Deep Rest (NSDR)": '',
+  "Outdoor Run": 'H K A',
+  "Overhead Press": 'S E B',
+  "Pallof Press": '',
+  "Pec Fly (Machine)": 'S',
+  "Physiological Sigh": '',
+  "Pigeon Pose": 'H K',
+  "Pike Pushup": 'S E',
+  "Plank": 'S E',
+  "Pogo Hop": 'K A',
+  "Preacher Curl": 'E',
+  "Prone Y-T-W Raises": 'S',
+  "Pullover (Machine)": 'S',
+  "Pullups": 'S E',
+  "Pullups (bar if available)": 'S E',
+  "Pullups / Table Row": 'S E',
+  "Push Press": 'S E B',
+  "Push-Up": 'S E',
+  "Pushup Variations": 'S E',
+  "Quad Stretch": 'K',
+  "Rack Pull": 'B',
+  "Rear Delt Fly (Machine)": 'S',
+  "Recumbent Bike": '',
+  "Reverse Lunge": 'H K',
+  "Romanian Deadlift": 'B H',
+  "Rowing Machine Intervals": 'B K',
+  "Russian Twist": 'B',
+  "Scapular Pullup": 'S E',
+  "Scissor Kicks": 'B H',
+  "Seated Arm Circles": '',
+  "Seated Cable Row": 'B E',
+  "Seated Calf Raise (Machine)": 'A',
+  "Seated Calf Stretch (Strap or Towel)": '',
+  "Seated DB Face Pull": 'S',
+  "Seated Figure-4 Stretch": '',
+  "Seated Forward Fold": 'B',
+  "Seated Leg Curl (Machine)": 'K',
+  "Seated Med Ball Box Jump": 'H K A',
+  "Seated Med Ball Slam to Jump": 'S B H K A',
+  "Seated Med Ball Vertical Jump": 'H K A',
+  "Seated Row (Machine)": 'E',
+  "Seated Tricep Press (Machine)": 'E',
+  "Shoulder Press (Machine)": 'S E',
+  "Shoulder Rolls": '',
+  "Single Leg Split Squat": 'H K',
+  "Single Leg Squat (Pistol)": 'H K',
+  "Single-Arm DB Bench Press": 'S E',
+  "Single-Arm DB Front Raise": 'S',
+  "Single-Arm DB Lateral Raise": 'S',
+  "Single-Arm Kettlebell Row": 'E',
+  "Single-Leg Calf Raise": 'A',
+  "Single-Leg Glute Bridge": '',
+  "Sit-to-Stand": 'H K',
+  "Sit-Up": 'B N',
+  "Skull Crusher": 'E',
+  "Slow Bodyweight Squat": 'H K',
+  "Slow Pogo Hops (25% effort)": 'K A',
+  "Slow Pushup": 'S E',
+  "Smith Machine Bench Press": 'S E',
+  "Smith Machine Squat": 'B H K N',
+  "Split Jump": 'H K A',
+  "Split Squat": 'H K',
+  "Sprint (hall/outside)": 'H K A',
+  "Sprint 40yd": 'H K A',
+  "Squat Jump": 'H K A',
+  "Stair Climber": 'H K A',
+  "Stair Sprint Intervals": 'H K A',
+  "Standing Banded Glute Kickback": 'H',
+  "Standing Banded Oblique Twist": 'B',
+  "Standing Cable Shoulder Press": 'S E',
+  "Standing Calf Raise": 'A',
+  "Standing Calf Raise (Machine)": 'A',
+  "Standing Calf Stretch": 'A',
+  "Standing Hamstring Stretch": '',
+  "Standing Hip Flexor Stretch": '',
+  "Standing Leg Curl (Cable)": 'K',
+  "Standing Overhead Press": 'S E B',
+  "Static Stretching Circuit": '',
+  "Stationary Bike Intervals": '',
+  "Step-Up": 'H K',
+  "Step-Up (Weighted)": 'H K',
+  "Suitcase Carry": 'E B A',
+  "Sumo Deadlift": 'B H K',
+  "Superman Hold": 'B N',
+  "Supine Hamstring Stretch": '',
+  "T-Bar Row (Machine)": 'B E',
+  "Table / Inverted Row": 'E',
+  "Thoracic Extension (chair)": '',
+  "Thoracic Rotation (seated)": '',
+  "Thread the Needle": '',
+  "Toe Raise (Cable)": 'A',
+  "Torso Rotation (Machine)": 'B',
+  "Towel Curl": 'E',
+  "Trap Bar Carry": 'E B A',
+  "Trap Bar Deadlift": 'B H K',
+  "Treadmill": 'K A',
+  "Treadmill Intervals": 'H K A',
+  "Treadmill Zone 2 Run": 'H K A',
+  "Triceps Extension (Machine)": 'E',
+  "Triceps Overhead Stretch": 'S E',
+  "Turkish Get-Up": 'S E B H K',
+  "Upright Bike": '',
+  "Upright Row": 'S E N',
+  "Walking": 'A',
+  "Walking High Knees": 'H A',
+  "Wall Push-Up": 'S E',
+  "Wall Slide": '',
+  "Weighted Pullups": 'S E',
+  "World's Greatest Stretch": '',
+  "Wrist Curl": 'E',
+  "Zone 2 Walk": 'A',
+};
+const REGION_BY_CODE = Object.fromEntries(Object.keys(INJURY_REGIONS).map(r => [INJURY_REGIONS[r].code, r]));
 
+// Regions an exercise loads. Catalog exercises use the reviewed table; a name
+// the table has never seen (a custom exercise, an AI substitute) falls back
+// to whole-word patterns.
 function exerciseRegionTags(exName) {
   if (!exName) return [];
-  return Object.keys(INJURY_REGIONS).filter(r =>
-    INJURY_REGIONS[r].keywords.some(kw => exName.toLowerCase().includes(kw.toLowerCase()))
-  );
+  if (Object.prototype.hasOwnProperty.call(EX_REGION_TAGS, exName)) {
+    return EX_REGION_TAGS[exName].split(' ').filter(Boolean).map(c => REGION_BY_CODE[c]);
+  }
+  return Object.keys(INJURY_REGIONS).filter(r => INJURY_REGIONS[r].pattern.test(exName));
 }
 
 function slugify(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''); }
@@ -1170,10 +1488,29 @@ function applyInjuryFilter(exItem) {
       ...exItem,
       ...exFromAlternate('inj_' + slugify(safeAlt.name), safeAlt),
       swappedForInjury: true, originalName: exItem.name,
-      flaggedRegion: INJURY_REGIONS[flagged[0]].label,
+      flaggedRegion: flagged.map(t => INJURY_REGIONS[t].label).join(' and '),
     };
   }
-  return { ...exItem, injuryCaution: true, flaggedRegion: INJURY_REGIONS[flagged[0]].label };
+  return { ...exItem, injuryCaution: true, flaggedRegion: flagged.map(t => INJURY_REGIONS[t].label).join(' and ') };
+}
+
+// A workout saved mid-session keeps the caution lines it was built with.
+// Re-check them on reopen so a corrected flag does not linger. Cautions
+// only: an exercise already swapped stays swapped, and nothing new is
+// swapped in the middle of a session. With no injuries in state the workout
+// is left alone, since that can also mean the profile did not load (offline).
+function refreshInjuryCautions(workout) {
+  if (!workout || !ST.injuries || !ST.injuries.length) return workout;
+  ['taxi','takeoff','enroute','landing'].forEach(ph => {
+    if (!Array.isArray(workout[ph])) return;
+    workout[ph] = workout[ph].map(e => {
+      if (!e || e.swappedForInjury) return e;
+      const flagged = exerciseRegionTags(e.name).filter(t => (ST.injuries || []).includes(t));
+      const { injuryCaution, flaggedRegion, ...rest } = e;
+      return flagged.length ? { ...rest, injuryCaution: true, flaggedRegion: flagged.map(t => INJURY_REGIONS[t].label).join(' and ') } : rest;
+    });
+  });
+  return workout;
 }
 
 // ─── TIME-AWARE FILTERING ─────────────────────────────────────────────────────
@@ -6195,7 +6532,7 @@ function restoreWorkoutState() {
       localStorage.removeItem(WORKOUT_STATE_KEY);
       return false;
     }
-    ST.workout = saved.workout;
+    ST.workout = refreshInjuryCautions(saved.workout);
     ST.sets = saved.sets;
     ST.env = saved.env;
     ST.muscleGroup = saved.muscleGroup;

@@ -753,14 +753,61 @@ test('reps-only card carries the feedback slot and its input feeds it', () => {
 });
 
 console.log('\nInjury swaps (found: "4×10" label with 3 set boxes after a shoulder swap):');
-test('shoulder swap of DB Overhead Press gets the 4 sets its label promises', () => {
-  ctx.ST.injuries = ['shoulder'];
-  const out = ctx.applyInjuryFilter({ id: 'h_up_er1', name: 'DB Overhead Press', target: '3×10', sets: 3, note: '', timed: false, inputType: 'reps_weight' });
+test('lower back swap of Back Squat gets the 4 sets its label promises', () => {
+  // Was DB Overhead Press -> DB Incline Press for a shoulder. The Nov 12
+  // review tags every press as shoulder load, so that is a caution now.
+  ctx.ST.injuries = ['lower_back'];
+  const out = ctx.applyInjuryFilter({ id: 'h_lo_to1', name: 'Back Squat', target: '3×10', sets: 3, note: '', timed: false, inputType: 'reps_weight' });
   ctx.ST.injuries = [];
   assertEqual(out.swappedForInjury, true, 'swapped');
+  assertEqual(out.name, 'Goblet Squat (Heavy)', 'front-loaded squat');
   assertEqual(out.target, '4×10', 'label');
   assertEqual(out.sets, 4, 'set count follows the new label');
   assertEqual(ctx.blankSetsFor(out).length, 4, 'four boxes');
+});
+console.log('\nInjury flags (reported Nov 12: Thoracic Extension warned about a flagged elbow):');
+test('every catalog exercise has a reviewed injury entry', () => {
+  const missing = ctx.buildExerciseCatalog().map(e => e.name).filter(n => !Object.prototype.hasOwnProperty.call(vm.runInContext('EX_REGION_TAGS', ctx), n));
+  assertEqual(missing.join(', '), '', 'add each new exercise to EX_REGION_TAGS in app.js');
+  Object.entries(vm.runInContext('EX_REGION_TAGS', ctx)).forEach(([n, t]) => { if (!/^([SEBHKAN]( [SEBHKAN])*)?$/.test(t)) throw new Error('bad codes for ' + n + ': ' + t); });
+});
+test('flags follow the joint that takes the load, not words in the name', () => {
+  const t = n => ctx.exerciseRegionTags(n).join(',');
+  assertEqual(t('Thoracic Extension (chair)'), '', 'thoracic extension is not an elbow exercise');
+  assertEqual(t('Leg Extension (Machine)'), 'knee', 'leg extension is knee only');
+  assertEqual(t('Back Extension (Machine)'), 'lower_back', 'back extension is lower back only');
+  assertEqual(t('Lying Leg Curl (Machine)'), 'knee', 'leg curl is knee, not elbow');
+  assertEqual(t('Bicycle Crunch').includes('ankle_foot'), false, '"Run" inside "Crunch" is not running');
+  assertEqual(t('Upright Row').includes('lower_back'), false, 'upright row is not a lower back lift');
+  assertEqual(t('Bench Press'), 'shoulder,elbow_wrist', 'bench press loads shoulder and elbow');
+  assertEqual(t('Pullups'), 'shoulder,elbow_wrist', 'pullups load shoulder and elbow');
+  assertEqual(t('Dip'), 'shoulder,elbow_wrist', 'dips load shoulder and elbow');
+  assertEqual(t('Lateral Raise (Machine)'), 'shoulder', 'lateral raise still flags the shoulder');
+});
+test('a workout reopened mid-session drops a caution that no longer applies', () => {
+  ctx.ST.injuries = ['shoulder', 'elbow_wrist'];
+  const wk = ctx.refreshInjuryCautions({ taxi: [{ id: 'a', name: 'Thoracic Extension (chair)', injuryCaution: true, flaggedRegion: 'Elbow / Wrist' }],
+    takeoff: [{ id: 'b', name: 'Bench Press' }], enroute: [{ id: 'c', name: 'Lateral Raise (Machine)', injuryCaution: true, flaggedRegion: 'Shoulder' }], landing: [] });
+  ctx.ST.injuries = [];
+  assertEqual(!!wk.taxi[0].injuryCaution, false, 'stale elbow caution removed'); assertEqual(wk.taxi[0].flaggedRegion, undefined, 'label removed');
+  assertEqual(wk.takeoff[0].flaggedRegion, 'Shoulder and Elbow / Wrist', 'bench press picks up its caution');
+  assertEqual(wk.enroute[0].flaggedRegion, 'Shoulder', 'real caution kept');
+});
+test('names outside the catalog use whole-word patterns', () => {
+  const t = n => ctx.exerciseRegionTags(n).join(',');
+  assertEqual(t('Reverse Crunch on Bench'), 'lower_back', 'custom crunch');
+  assertEqual(t('Thoracic Extension on Roller'), '', 'custom extension');
+  assertEqual(t('Swiss Ball Leg Curl'), 'knee', 'custom leg curl');
+  assertEqual(t('Spider Curl'), 'elbow_wrist', 'custom arm curl');
+  assertEqual(t('Trail Run'), 'hip,knee,ankle_foot', 'custom run');
+});
+test('a caution names every flagged region the exercise loads', () => {
+  ctx.ST.injuries = ['shoulder', 'elbow_wrist'];
+  const out = ctx.applyInjuryFilter({ id: 'x1', name: 'Bench Press', target: '3×8', sets: 3, note: '', timed: false, inputType: 'reps_weight' });
+  const clean = ctx.applyInjuryFilter({ id: 'x2', name: 'Thoracic Extension (chair)', target: '10 reps', sets: 1, note: '', timed: false, inputType: 'reps' });
+  ctx.ST.injuries = [];
+  assertEqual(out.injuryCaution, true, 'caution'); assertEqual(out.flaggedRegion, 'Shoulder and Elbow / Wrist', 'both named');
+  assertEqual(!!clean.injuryCaution || !!clean.swappedForInjury, false, 'thoracic extension left alone');
 });
 test('a timed hold swapped for a reps exercise gets reps boxes, not a stopwatch', () => {
   ctx.ST.injuries = ['elbow_wrist'];

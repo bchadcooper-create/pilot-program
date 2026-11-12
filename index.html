@@ -11,8 +11,8 @@
 <meta name="apple-mobile-web-app-title" content="Flight Crew Fitness">
 <meta name="theme-color" content="#0a0f1a" id="metaThemeColor">
 <script>
-// Theme before first paint (Appearance in the menu): dark, light, or auto.
-(function(){try{var t=localStorage.getItem('fcf_theme')||'dark';if(t==='auto')t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';if(t==='light'){document.documentElement.setAttribute('data-theme','light');document.getElementById('metaThemeColor').setAttribute('content','#ffffff');}}catch(e){}})();
+// Theme before first paint: follows the phone's Light / Dark setting (Apple HIG). No in-app picker.
+(function(){try{var d=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;if(!d){document.documentElement.setAttribute('data-theme','light');document.getElementById('metaThemeColor').setAttribute('content','#ffffff');}}catch(e){}})();
 </script>
 <meta name="description" content="The workout, nutrition and FAA medical app for airline pilots and flight crew. Training built around your trips, hotel gyms and sleep. Free to start.">
 <link rel="canonical" href="https://flightcrew.fit/">

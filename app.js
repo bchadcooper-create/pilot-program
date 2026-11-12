@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.52.2 / 20261112_5
+ * Version/build: fcf-v5.53.0 / 20261112_6
  */
 
-const FCF_VERSION = 'fcf-v5.52.2';
-const FCF_BUILD   = '20261112_5';
+const FCF_VERSION = 'fcf-v5.53.0';
+const FCF_BUILD   = '20261112_6';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -4340,10 +4340,6 @@ function applyProfileToState(profile) {
     applyTextSize(profile.textSize);
     try { localStorage.setItem(TEXT_SIZE_LS_KEY, profile.textSize); } catch (e) { /* fine */ }
   }
-  if (typeof profile.theme === 'string' && THEMES.some(t => t.key === profile.theme) && profile.theme !== currentTheme()) {
-    applyTheme(profile.theme);
-    try { localStorage.setItem(THEME_LS_KEY, profile.theme); } catch (e) { /* fine */ }
-  }
   // Re-engagement / disengagement nudges for nutrition + hydration
   // tracking — see computeTrackingNudges().
   if (profile.nutritionTrackingDisabledAt)   ST.nutritionTrackingDisabledAt = profile.nutritionTrackingDisabledAt;
@@ -5653,64 +5649,35 @@ function renderTrackingToggles() {
     '</div>';
 }
 
-// ─── APPEARANCE (More > App settings) ───────────────────────────────────────
-// 'dark' (the original), 'light' (owner's pick A "Daylight", Oct 23 2026) or
-// 'auto' (follow the phone). index.html applies the saved choice before the
-// first paint; this is the same logic for changes made while the app runs.
-const THEMES = [
-  { key: 'dark',  label: 'Dark' },
-  { key: 'light', label: 'Light' },
-  { key: 'auto',  label: 'Auto' },
-];
-const THEME_LS_KEY = 'fcf_theme';
-function themeEntry(key) { return THEMES.find(t => t.key === key) || THEMES[0]; }
-function resolvedTheme(key) {
-  if (key !== 'auto') return key;
-  try { return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; } catch (e) { return 'dark'; }
+// ─── APPEARANCE ──────────────────────────────────────────────────────────────
+// The app follows the phone's Light / Dark setting, always (Chad, Nov 12
+// 2026: "Follow Apple's guidance as default. Remove options to change color.
+// Follow phone settings."). Apple's Human Interface Guidelines, Dark Mode:
+// "Avoid offering an app-specific appearance setting." There used to be a
+// Dark / Light / Auto picker with Dark as the default; a saved choice from
+// that picker (localStorage 'fcf_theme', profile.theme) is now ignored.
+// index.html applies the same rule before the first paint.
+function resolvedTheme() {
+  try { return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; } catch (e) { return 'light'; }
 }
-function applyTheme(key) {
-  const entry = themeEntry(key);
-  const light = resolvedTheme(entry.key) === 'light';
+function applyTheme() {
+  const light = resolvedTheme() === 'light';
   const root = document.documentElement;
   if (light) root.setAttribute('data-theme', 'light'); else root.removeAttribute('data-theme');
   const meta = document.getElementById('metaThemeColor');
   if (meta) meta.setAttribute('content', light ? '#ffffff' : '#0a0f1a');
   // The iPhone shell paints the status bar area itself; tell it which way to go.
   try { if (window.FCFBridge && typeof FCFBridge.setAppearance === 'function') FCFBridge.setAppearance(light ? 'light' : 'dark'); } catch (e) { /* older shell */ }
-  return entry.key;
+  return light ? 'light' : 'dark';
 }
-function currentTheme() {
-  try { return themeEntry(localStorage.getItem(THEME_LS_KEY)).key; } catch (e) { return 'dark'; }
-}
-// Auto follows the phone while the app is open, not only at launch.
+// Follow the phone while the app is open, not only at launch (sunset
+// switch, Control Center toggle).
 try {
-  const mq = window.matchMedia('(prefers-color-scheme: light)');
-  const onChange = () => { if (currentTheme() === 'auto') applyTheme('auto'); };
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  const onChange = () => { applyTheme(); try { if (typeof renderPage === 'function' && ST && ST.authed) renderPage(); } catch (e) { /* not ready */ } };
   if (mq.addEventListener) mq.addEventListener('change', onChange); else if (mq.addListener) mq.addListener(onChange);
+  applyTheme();
 } catch (e) { /* no matchMedia */ }
-function renderThemeControl() {
-  const cur = currentTheme();
-  const btns = THEMES.map(t => {
-    const on = t.key === cur;
-    return '<button onclick="haptic(\'selection\');setTheme(\'' + t.key + '\')" style="' +
-      'flex:1;min-width:0;padding:10px 2px;border-radius:10px;cursor:pointer;font-family:\'Inter\',sans-serif;font-weight:600;font-size:0.75rem;' +
-      'border:1px solid ' + (on ? 'var(--gold)' : 'var(--border)') + ';background:' + (on ? 'var(--gold-tint)' : 'transparent') + ';color:' + (on ? 'var(--gold)' : 'var(--text)') + '">' + t.label + '</button>';
-  }).join('');
-  return '<div class="card mb12">' +
-    '<div style="font-size:0.875rem">Appearance</div>' +
-    '<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px;margin-bottom:10px">Dark is the original. Light is easier in daylight. Auto follows your phone.</div>' +
-    '<div style="display:flex;gap:6px;align-items:stretch">' + btns + '</div></div>';
-}
-async function setTheme(key) {
-  const applied = applyTheme(key);
-  try { localStorage.setItem(THEME_LS_KEY, applied); } catch (e) { /* private mode */ }
-  renderPage();
-  try {
-    const profile = (await dbGetProfile()) || {};
-    profile.theme = applied;
-    await dbSetProfile(profile);
-  } catch (e) { console.warn('setTheme save error:', e); }
-}
 
 // Text size picker (More > Display). Four buttons, the active one in gold.
 // Each button's own label is drawn at that step's size so the choice can
@@ -8639,7 +8606,11 @@ function drawShareCard(canvas, d) {
   canvas.width = W; canvas.height = H;
   const c = canvas.getContext('2d');
   const MONO = '"Share Tech Mono", ui-monospace, Menlo, monospace', SANS = 'Inter, -apple-system, "Helvetica Neue", Arial, sans-serif';
-  const GOLD = '#c9a84c', GOLD2 = '#e8c46a', TEXT = '#e8eef6', MUTED = '#8899b4';
+  // Light card (Chad, Nov 12 2026: "I'd prefer light. I think it looks
+  // better."). Always light, whatever the phone is set to, so every shared
+  // picture looks the same in a feed. Text colors are the light theme's
+  // (each at least 4.5:1 on white).
+  const GOLD = '#856819', GOLD2 = '#856819', TEXT = '#0f172a', MUTED = '#5b6b85';
   const glow = (x, y, r, rgb, a) => { const g = c.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, 'rgba(' + rgb + ',' + a + ')'); g.addColorStop(1, 'rgba(' + rgb + ',0)'); c.fillStyle = g; c.fillRect(0, 0, W, H); };
   // Letter-spaced text, drawn a character at a time (canvas letterSpacing is not on every iPhone).
   const spaced = (text, x, y, gap, align) => {
@@ -8653,15 +8624,15 @@ function drawShareCard(canvas, d) {
   const rr = (x, y, w, h, r) => { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); };
   const star = (cx, cy, R) => { c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? R * 0.45 : R; c.lineTo(cx + r * Math.cos(a), cy + r * Math.sin(a)); } c.closePath(); c.fill(); };
 
-  c.fillStyle = '#080d17'; c.fillRect(0, 0, W, H);
-  glow(120, 60, 760, '201,168,76', 0.20);
-  glow(1040, 620, 640, '59,130,246', 0.16);
-  glow(200, 1340, 560, '45,212,191', 0.08);
+  c.fillStyle = '#ffffff'; c.fillRect(0, 0, W, H);
+  glow(120, 60, 760, '201,168,76', 0.22);
+  glow(1040, 620, 640, '0,136,255', 0.10);
+  glow(200, 1340, 560, '0,195,208', 0.08);
 
   // Brand
   c.textBaseline = 'alphabetic';
   c.fillStyle = GOLD; c.font = '40px ' + MONO; spaced(d.brand, P, 128, 9);
-  const rule = c.createLinearGradient(P, 0, W - P, 0); rule.addColorStop(0, GOLD2); rule.addColorStop(1, 'rgba(201,168,76,0)');
+  const rule = c.createLinearGradient(P, 0, W - P, 0); rule.addColorStop(0, '#c9a84c'); rule.addColorStop(1, 'rgba(201,168,76,0)');
   c.fillStyle = rule; c.fillRect(P, 158, W - 2 * P, 3);
 
   // Title
@@ -8672,15 +8643,15 @@ function drawShareCard(canvas, d) {
   c.fillStyle = MUTED; c.font = '500 36px ' + SANS; c.fillText(d.dateLabel, P, 428);
 
   // Three numbers
-  const tones = { gold: ['201,168,76', GOLD2], blue: ['59,130,246', '#60a5fa'], teal: ['45,212,191', '#2dd4bf'] };
+  const tones = { gold: ['201,168,76', GOLD], blue: ['0,136,255', '#1652b7'], teal: ['0,195,208', '#00778c'] };
   const gap = 24, tw = (W - 2 * P - 2 * gap) / 3, ty = 478, th = 196;
   d.stats.forEach((st, i) => {
     const x = P + i * (tw + gap), [rgb, accent] = tones[st.color] || tones.blue;
     c.save(); rr(x, ty, tw, th, 28); c.clip();
-    c.fillStyle = '#0f1623'; c.fillRect(x, ty, tw, th);
-    const g = c.createRadialGradient(x + tw - 20, ty + 10, 0, x + tw - 20, ty + 10, 190); g.addColorStop(0, 'rgba(' + rgb + ',0.42)'); g.addColorStop(1, 'rgba(' + rgb + ',0)');
+    c.fillStyle = '#ffffff'; c.fillRect(x, ty, tw, th);
+    const g = c.createRadialGradient(x + tw - 20, ty + 10, 0, x + tw - 20, ty + 10, 190); g.addColorStop(0, 'rgba(' + rgb + ',0.26)'); g.addColorStop(1, 'rgba(' + rgb + ',0)');
     c.fillStyle = g; c.fillRect(x, ty, tw, th); c.restore();
-    c.strokeStyle = 'rgba(255,255,255,0.09)'; c.lineWidth = 2; rr(x, ty, tw, th, 28); c.stroke();
+    c.strokeStyle = '#d6dce6'; c.lineWidth = 2; rr(x, ty, tw, th, 28); c.stroke();
     c.fillStyle = accent; c.font = '24px ' + MONO; spaced(st.label, x + 26, ty + 50, 5);
     c.fillStyle = TEXT; c.font = '700 92px ' + MONO; c.textAlign = 'left'; c.fillText(String(st.value), x + 24, ty + th - 30);
   });
@@ -8699,7 +8670,7 @@ function drawShareCard(canvas, d) {
       if (r.pr) { c.fillStyle = GOLD2; star(P + 17 * k, mid - 12 * k, 18 * k); nx = P + Math.round(46 * k); }
       c.fillStyle = TEXT; c.font = '500 ' + Math.round(35 * Math.max(k, 0.7)) + 'px ' + SANS; c.textAlign = 'left';
       c.fillText(fit(r.name, W - P - perfW - 36 - nx), nx, mid);
-      c.fillStyle = 'rgba(136,153,180,0.22)'; c.fillRect(P, y + L.rowH - 2, W - 2 * P, 2);
+      c.fillStyle = '#e3e8f0'; c.fillRect(P, y + L.rowH - 2, W - 2 * P, 2);
       y += L.rowH;
     });
     if (d.more > 0) { c.fillStyle = MUTED; c.font = '26px ' + MONO; c.textAlign = 'left'; c.fillText('+ ' + d.more + ' more', P, y + 40); }
@@ -16730,7 +16701,6 @@ function renderMore(p) {
 
   parts.push('<div class="section-label" style="margin-top:20px">APP SETTINGS</div>');
   parts.push(renderTextSizeControl());
-  parts.push(renderThemeControl());
   parts.push(renderTrackingToggles());
 
   parts.push('<div class="section-label" style="margin-top:20px">SUBSCRIPTION</div>');

@@ -2067,6 +2067,16 @@ test('every text color is at least 4.5:1 on its theme\'s surfaces, and button te
   assertEqual(light['--green-fill'].toLowerCase(), '#34c759', 'light green button is Apple system green');
 });
 
+test('appearance follows the phone, with no in-app picker', () => {
+  assertEqual(typeof ctx.renderThemeControl, 'undefined', 'picker removed'); assertEqual(typeof ctx.setTheme, 'undefined', 'no setter');
+  const real = ctx.matchMedia;
+  ctx.matchMedia = () => ({ matches: true }); assertEqual(ctx.resolvedTheme(), 'dark', 'phone in Dark Mode');
+  ctx.matchMedia = () => ({ matches: false }); assertEqual(ctx.resolvedTheme(), 'light', 'phone in Light Mode');
+  ctx.matchMedia = real;
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  assertEqual(/getItem\('fcf_theme'\)/.test(html), false, 'first paint ignores the old saved choice');
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

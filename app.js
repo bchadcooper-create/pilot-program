@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.53.1 / 20261113_1
+ * Version/build: fcf-v5.53.2 / 20261113_2
  */
 
-const FCF_VERSION = 'fcf-v5.53.1';
-const FCF_BUILD   = '20261113_1';
+const FCF_VERSION = 'fcf-v5.53.2';
+const FCF_BUILD   = '20261113_2';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';

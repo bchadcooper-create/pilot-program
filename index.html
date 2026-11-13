@@ -132,7 +132,10 @@
 </script>
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="manifest" href="manifest.json">
-<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- supabase-js 2.119.0 (MIT), served from this site. It was loaded from jsDelivr as "@2" (whatever the
+     newest 2.x was that day); app.js cannot start without it, so it now ships with the app at a fixed version.
+     To update: npm pack @supabase/supabase-js@2, copy dist/umd/supabase.js into /vendor, change the name here and in sw.js. -->
+<script defer src="vendor/supabase-2.119.0.umd.js"></script>
 <!-- Chart.js 4.4.1 (MIT), served from this site so the Trends charts do not depend on an outside server. -->
 <script defer src="vendor/chart-4.4.1.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>

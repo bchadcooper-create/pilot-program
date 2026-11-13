@@ -1,11 +1,12 @@
 // Flight Crew Fitness — Service Worker
-// Version: 5.53.0
-const CACHE = 'fcf-v5.53.0';
+// Version: 5.53.1
+const CACHE = 'fcf-v5.53.1';
 const CORE = [
   './',
   './index.html',
   './app.js',
   './manifest.json',
+  './vendor/chart-4.4.1.umd.min.js',
 ];
 // Third-party libraries index.html loads from jsDelivr. app.js calls
 // supabase.createClient on its first line, so if these can't load the
@@ -13,7 +14,6 @@ const CORE = [
 // Keep this list in sync with the <script src> tags in index.html.
 const CDN_LIBS = [
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
-  'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
   'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js',
 ];
 const isCdnLib = url => CDN_LIBS.includes(url.href);

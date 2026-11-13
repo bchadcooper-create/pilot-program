@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.53.0 / 20261112_6
+ * Version/build: fcf-v5.53.1 / 20261113_1
  */
 
-const FCF_VERSION = 'fcf-v5.53.0';
-const FCF_BUILD   = '20261112_6';
+const FCF_VERSION = 'fcf-v5.53.1';
+const FCF_BUILD   = '20261113_1';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -14055,7 +14055,37 @@ async function saveBio() {
   setTimeout(() => loadAndDrawCharts(), 100);
 }
 
+// The charting library is a separate script. If it has not arrived (slow
+// connection, a failed download), fetch it once more and wait, so the charts
+// never run without it. Reported Nov 13 2026: "Can't find variable: Chart"
+// on opening Trends. Resolves true when Chart is ready.
+const CHART_LIB_URL = 'vendor/chart-4.4.1.umd.min.js';
+let _chartLibLoading = null;
+function ensureChartLib() {
+  if (typeof Chart !== 'undefined') return Promise.resolve(true);
+  if (_chartLibLoading) return _chartLibLoading;
+  _chartLibLoading = new Promise(resolve => {
+    const done = ok => { _chartLibLoading = null; resolve(ok && typeof Chart !== 'undefined'); };
+    try {
+      const s = document.createElement('script');
+      s.src = CHART_LIB_URL; s.onload = () => done(true); s.onerror = () => done(false);
+      document.head.appendChild(s);
+      setTimeout(() => done(typeof Chart !== 'undefined'), 8000);
+    } catch (e) { done(false); }
+  });
+  return _chartLibLoading;
+}
+
 async function loadAndDrawCharts() {
+  if (!(await ensureChartLib())) {
+    // Say so on the page instead of failing: the rest of Trends still works.
+    document.querySelectorAll('canvas[id^="chart"]').forEach(cv => {
+      const card = cv.closest('.card');
+      if (card && !card.querySelector('.chart-unavailable')) cv.insertAdjacentHTML('afterend', '<div class="chart-unavailable" style="font-size:0.75rem;color:var(--muted);padding:8px 0">Chart could not load. Check your connection and reopen Trends.</div>');
+    });
+    return;
+  }
+  document.querySelectorAll('.chart-unavailable').forEach(el => el.remove());
   let data = [];
   try {
     const filter = ST.user ? SB.from('weight_log').select('*').eq('user_id', ST.user.id) : SB.from('weight_log').select('*');

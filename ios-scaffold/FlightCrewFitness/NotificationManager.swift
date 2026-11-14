@@ -67,9 +67,22 @@ class NotificationManager {
 
     // ── Schedule all enabled notifications ───────────────────────────────────
 
+    // Build 7: a workout timer alert (see scheduleTimer below) must outlive
+    // this. Checking off a medication mid-rest re-runs scheduleAll, and the
+    // old removeAllPendingNotificationRequests() here would have deleted the
+    // timer's alert. Now everything EXCEPT timer alerts is removed, and the
+    // rescheduling runs inside the same callback so removal always finishes
+    // before anything is added back.
     func scheduleAll(prefs: [String: Any]) {
-        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        let center = UNUserNotificationCenter.current()
+        center.getPendingNotificationRequests { [weak self] pending in
+            let stale = pending.map { $0.identifier }.filter { !$0.hasPrefix(NotificationManager.timerPrefix) }
+            center.removePendingNotificationRequests(withIdentifiers: stale)
+            self?.scheduleAllAfterClear(prefs: prefs)
+        }
+    }
 
+    private func scheduleAllAfterClear(prefs: [String: Any]) {
         let workoutEnabled  = prefs["workoutReminder"]  as? Bool ?? true
         let waterEnabled    = prefs["waterReminder"]    as? Bool ?? false
         let preflightEnabled = prefs["preflightCheck"]  as? Bool ?? true
@@ -96,9 +109,89 @@ class NotificationManager {
            let fireAt = iso.date(from: fireAtStr) {
             scheduleLayoverWorkoutReminder(airport: airport, fireAt: fireAt)
         }
-        if let meds = prefs["medications"] as? [[String: Any]] {
+        // Build 7: the web app sends EITHER dated one-time reminders
+        // (medicationsDated, when it sees capabilities.medRemindersDated) or
+        // the older repeating list (medications), never both.
+        if let dated = prefs["medicationsDated"] as? [[String: Any]] {
+            scheduleDatedMedicationReminders(dated)
+        } else if let meds = prefs["medications"] as? [[String: Any]] {
             scheduleMedicationReminders(meds)
         }
+    }
+
+    // ── Build 7: dated medication reminders ───────────────────────────────
+    // One one-time reminder per dose per day, for the next several days.
+    // The web app decides the whole list (which doses, which days, leaving
+    // out a dose already checked off today) and re-sends it on every app
+    // open and every check-off; scheduleAll clears the old list first. So a
+    // check-off cancels only that day's ring, with no weekday workaround.
+    // Each entry: id, name, dose, y, mo, d, h, mi (local wall-clock time, so
+    // an 08:00 dose rings at 08:00 wherever the phone is).
+    // The cap must match MED_DATED_BUDGET in app.js. iOS allows 64 pending
+    // requests in total; the other reminder types use at most 28.
+    static let datedMedBudget = 34
+    func scheduleDatedMedicationReminders(_ items: [[String: Any]]) {
+        var budget = NotificationManager.datedMedBudget
+        for item in items {
+            if budget <= 0 { break }
+            guard let id = item["id"] as? String,
+                  let name = item["name"] as? String,
+                  let y = item["y"] as? Int, let mo = item["mo"] as? Int, let d = item["d"] as? Int,
+                  let h = item["h"] as? Int, let mi = item["mi"] as? Int else { continue }
+            let dose = (item["dose"] as? String) ?? ""
+
+            var components = DateComponents()
+            components.year = y; components.month = mo; components.day = d
+            components.hour = h; components.minute = mi
+            guard let fireDate = Calendar.current.date(from: components), fireDate > Date() else { continue }
+            budget -= 1
+
+            let content = UNMutableNotificationContent()
+            content.title = "Time for \(name)"
+            content.body  = dose.isEmpty ? "Tap to check it off on Today." : "\(dose). Tap to check it off on Today."
+            content.sound = .default
+            content.userInfo = ["type": "medication_reminder", "deepLink": "today", "medId": id]
+
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+            let identifier = String(format: "fcf_medd_%@_%04d%02d%02d_%02d%02d", id, y, mo, d, h, mi)
+            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+            UNUserNotificationCenter.current().add(request) { err in
+                if let err = err { self.logNative("dated medication reminder error: \(err)") }
+            }
+        }
+    }
+
+    // ── Build 7: workout timer alerts ─────────────────────────────────────
+    // A rest timer, stretch stopwatch target or NSDR timer that ends while
+    // the phone is locked or the app is in the background. iOS pauses the
+    // web page then, so the page's own chime cannot play; this local
+    // notification rings instead. The web app cancels it when the timer is
+    // stopped or finishes on screen. While the app is on screen the
+    // notification is not shown at all (see AppDelegate willPresent), so
+    // there is one chime, never two.
+    static let timerPrefix = "fcf_timer_"
+    func scheduleTimer(id: String, seconds: Double, title: String, body: String) {
+        guard seconds >= 1 else { return }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body  = body
+        content.sound = .default
+        content.userInfo = ["type": "timer", "deepLink": "today"]
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false)
+        // Same identifier replaces a pending alert, so restarting a timer
+        // moves its alert instead of adding a second one.
+        let request = UNNotificationRequest(identifier: NotificationManager.timerPrefix + id, content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(request) { err in
+            if let err = err { self.logNative("timer alert error: \(err)") }
+        }
+    }
+
+    func cancelTimer(id: String) {
+        let identifier = NotificationManager.timerPrefix + id
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [identifier])
+        // Also clear one that already rang, so no stale banner is left
+        // sitting in Notification Center after the user is back in the app.
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [identifier])
     }
 
     // ── FREE: Medication / supplement reminders ────────────────────────────

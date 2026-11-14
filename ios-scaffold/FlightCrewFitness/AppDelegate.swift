@@ -108,6 +108,13 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        // Build 7: a workout timer alert is for when the app is NOT on
+        // screen. With the app open, the page plays its own chime and
+        // vibration, so showing this too would ring twice.
+        if (notification.request.content.userInfo["type"] as? String) == "timer" {
+            completionHandler([])
+            return
+        }
         completionHandler([.banner, .badge, .sound])
     }
 

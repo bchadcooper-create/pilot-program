@@ -112,7 +112,7 @@
 
   <!-- HealthKit -->
   <key>NSHealthShareUsageDescription</key>
-  <string>Flight Crew Fitness reads your activity, sleep, and health data from Apple Health to power your daily briefing and fitness trends.</string>
+  <string>Flight Crew Fitness reads your activity, sleep, and health data from Apple Health to power your daily briefing and fitness trends. If you ask it to, it also reads your hearing test to compare against the FAA hearing standard. That result stays on your iPhone.</string>
 
   <!-- BUG FIX (independent review finding, confirmed real): NSHealthUpdateUsageDescription
        was declared with a "does not write to Apple Health" string. HealthKitManager calls

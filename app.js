@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.54.1 / 20261113_4
+ * Version/build: fcf-v5.55.0 / 20261113_5
  */
 
-const FCF_VERSION = 'fcf-v5.54.1';
-const FCF_BUILD   = '20261113_4';
+const FCF_VERSION = 'fcf-v5.55.0';
+const FCF_BUILD   = '20261113_5';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -6401,7 +6401,62 @@ async function openMedDayFromToday() {
 // scheduleMedicationReminders. Doses past the budget are dropped here, so
 // the web side knows exactly which ones will ring and can say so.
 const MED_REMINDER_BUDGET = 30;
+
+// BUILD 7: dated reminders. An iPhone app build that says it supports them
+// (capabilities.medRemindersDated) gets one one-time reminder per dose per
+// day, for as many days ahead as fit, in place of the repeating alarms and
+// the "other six weekdays" workaround below. A dose checked off today is
+// simply left out of today, so only that day's ring is cancelled. Every app
+// open and every check-off sends a fresh list, which tops the days back up.
+// MED_DATED_BUDGET must match datedMedBudget in NotificationManager.swift.
+const MED_DATED_BUDGET = 34;
+const MED_DATED_DAYS = 14;
+function medDatedSupported() {
+  return !!(typeof FCFBridge !== 'undefined' && FCFBridge.isNative && FCFBridge.capabilities && FCFBridge.capabilities.medRemindersDated);
+}
+// Pure apart from reading ST: `now` and `taken` can be passed in for tests.
+function medDatedReminderPlan(now, taken) {
+  now = now || new Date();
+  const today = localDateStr(now);
+  if (!taken) taken = ST.medsTakenDate === today ? (ST.medsTakenToday || {}) : (cachedMedsTaken(today) || {});
+  const doses = [];
+  (ST.medications || []).forEach(m => {
+    if (!m.remind) return;
+    m.times.forEach(t => {
+      const [h, mm] = t.split(':').map(n => parseInt(n));
+      if (isNaN(h) || isNaN(mm)) return;
+      doses.push({ m, t, h, mm, key: m.id + '|' + t });
+    });
+  });
+  doses.sort((a, b) => (a.h * 60 + a.mm) - (b.h * 60 + b.mm));
+  const items = [], scheduled = new Set(), skippedToday = new Set();
+  let slots = 0;
+  // Nearest days first, so when the list is long the rings that are kept
+  // are the soonest ones. A dose checked off today still takes its slot
+  // (it is just not sent), so checking a dose off never changes which
+  // other doses ring.
+  for (let off = 0; off < MED_DATED_DAYS && slots < MED_DATED_BUDGET; off++) {
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + off);
+    for (const d of doses) {
+      if (slots >= MED_DATED_BUDGET) break;
+      if (d.m.days && !d.m.days.includes(day.getDay())) continue;
+      const fire = new Date(day.getFullYear(), day.getMonth(), day.getDate(), d.h, d.mm, 0);
+      if (fire <= now && !(off === 0 && taken[d.key])) continue;
+      slots++;
+      scheduled.add(d.key);
+      if (off === 0 && taken[d.key]) { skippedToday.add(d.key); continue; }
+      if (fire <= now) continue;
+      items.push({ id: d.m.id, name: d.m.name, dose: medDoseLabel(d.m), key: d.key,
+        y: fire.getFullYear(), mo: fire.getMonth() + 1, d: fire.getDate(), h: d.h, mi: d.mm });
+    }
+  }
+  // A dose that never got a slot (more doses than the budget) has no bell.
+  const overflow = doses.some(d => !scheduled.has(d.key));
+  return { prefs: [], dated: items, scheduled, overflow, skippedToday, day: today };
+}
+
 function medReminderPlan() {
+  if (medDatedSupported()) return medDatedReminderPlan();
   const prefs = [], scheduled = new Set();
   let used = 0, overflow = false;
   (ST.medications || []).forEach(m => {
@@ -7431,7 +7486,9 @@ async function scheduleNotifications(justTrainedNow) {
     hrvBaseline:       hrvBaselineAvg,
     hrvToday:          hrvToday,
     layoverReminder,                                   // pro — null if no window right now
-    medications:       medicationNotificationPrefs(),  // free — user-set dose times
+    // free — user-set dose times. A build 7 app gets dated one-time reminders
+    // (medicationsDated); build 6 gets the repeating list (medications).
+    ...(medDatedSupported() ? (() => { const plan = medDatedReminderPlan(); _medPlanDay = plan.day; return { medicationsDated: plan.dated }; })() : { medications: medicationNotificationPrefs() }),
   };
   window.webkit?.messageHandlers?.notifications?.postMessage(prefs);
 }
@@ -12435,6 +12492,34 @@ function unlockChimeAudio() {
   } catch(e) {/* no chime this time if unsupported/blocked — nothing else depends on this succeeding */}
 }
 
+// BUILD 7: timer alerts with the phone locked. iOS pauses this page when the
+// phone locks or the app goes to the background, so the chime below cannot
+// play then. An iPhone app build that supports it (capabilities.timerAlerts)
+// is asked to ring a local notification at the end time instead. It is
+// cancelled when the timer is stopped or finishes on screen, and the shell
+// does not show it at all while the app is open, so there is one alert,
+// never two. Build 6 has no such capability and behaves as before.
+function timerAlertsSupported() {
+  return !!(typeof FCFBridge !== 'undefined' && FCFBridge.isNative && FCFBridge.capabilities && FCFBridge.capabilities.timerAlerts
+    && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.notifications);
+}
+function scheduleTimerAlert(id, seconds, title, body) {
+  if (!timerAlertsSupported() || !(seconds >= 1)) return false;
+  try { window.webkit.messageHandlers.notifications.postMessage({ action: 'timerSchedule', id, seconds, title, body }); } catch (e) { return false; }
+  return true;
+}
+function cancelTimerAlert(id) {
+  if (!timerAlertsSupported()) return false;
+  try { window.webkit.messageHandlers.notifications.postMessage({ action: 'timerCancel', id }); } catch (e) { return false; }
+  return true;
+}
+// True when a timer's end time passed while the page was paused (more than
+// 3 seconds ago) on a build that already rang for it. The page then skips
+// its own late chime and vibration so the user is not alerted twice.
+function timerAlertAlreadyRang(dueTs) {
+  return timerAlertsSupported() && typeof dueTs === 'number' && (Date.now() - dueTs) > 3000;
+}
+
 function startRestTimer(exId, seconds) {
   if (ST.restTimer.interval) clearInterval(ST.restTimer.interval);
   unlockChimeAudio(); // must happen here, inside the tap handler — not at chime time
@@ -12443,6 +12528,7 @@ function startRestTimer(exId, seconds) {
   persistTimerState();
   renderFlight(document.getElementById('mainPage'));
   ST.restTimer.interval = setInterval(() => tickRestTimer(exId), 1000);
+  scheduleTimerAlert('rest', seconds, 'Rest complete', 'Time for your next set.');
 }
 function tickRestTimer(exId) {
   if (!ST.restTimer.active || ST.restTimer.exId !== exId) return;
@@ -12457,8 +12543,12 @@ function tickRestTimer(exId) {
     clearInterval(ST.restTimer.interval);
     ST.restTimer.active = false;
     persistTimerState();
-    playChime();
-    haptic('success'); // BUG FIX (reported): was never actually called on completion
+    const rang = timerAlertAlreadyRang(ST.restTimer.endTs);
+    cancelTimerAlert('rest'); // also clears the banner if it rang while locked
+    if (!rang) {
+      playChime();
+      haptic('success'); // BUG FIX (reported): was never actually called on completion
+    }
     showToast('⏱ Rest complete. Next set.');
     renderFlight(document.getElementById('mainPage'));
   }
@@ -12499,6 +12589,7 @@ function removeLiveSet(exId) {
 
 function stopRestTimer() {
   if (ST.restTimer.interval) clearInterval(ST.restTimer.interval);
+  cancelTimerAlert('rest');
   ST.restTimer.active = false;
   persistTimerState();
   renderFlight(document.getElementById('mainPage'));
@@ -12895,6 +12986,7 @@ function startStopwatch(exId, side, targetSec) {
   persistTimerState();
   renderFlight(document.getElementById('mainPage'));
   ST.stopwatch.interval = setInterval(() => tickStopwatch(exId, side||null), 1000);
+  if (targetSec) scheduleTimerAlert('stopwatch', targetSec, 'Target time reached', 'Stop when ready.');
 }
 function tickStopwatch(exId, side) {
   if (!ST.stopwatch.active || ST.stopwatch.exId !== exId || (ST.stopwatch.side||null) !== (side||null)) return;
@@ -12902,8 +12994,9 @@ function tickStopwatch(exId, side) {
   if (ST.stopwatch.targetSec && !ST.stopwatch.chimed && ST.stopwatch.seconds >= ST.stopwatch.targetSec) {
     ST.stopwatch.chimed = true;
     persistTimerState();
-    playChime();
-    haptic('success');
+    const rang = timerAlertAlreadyRang(ST.stopwatch.startTs + ST.stopwatch.targetSec * 1000);
+    cancelTimerAlert('stopwatch');
+    if (!rang) { playChime(); haptic('success'); }
     showToast('🔔 Target time reached. Stop when ready.');
   }
   const domId = side ? exId+'_'+side : exId;
@@ -12912,6 +13005,7 @@ function tickStopwatch(exId, side) {
 }
 function stopStopwatch(exId, side) {
   if (ST.stopwatch.interval) clearInterval(ST.stopwatch.interval);
+  cancelTimerAlert('stopwatch');
   const total = ST.stopwatch.seconds;
   const startedTs = ST.stopwatch.startTs || null;
   ST.stopwatch.active = false;
@@ -12957,6 +13051,7 @@ function startNSDR(exId) {
   persistTimerState();
   renderFlight(document.getElementById('mainPage'));
   ST.nsdrTimer.interval = setInterval(() => tickNSDR(exId), 1000);
+  scheduleTimerAlert('nsdr', 300, '5 minutes complete', 'Continue, or stop and save.');
 }
 function tickNSDR(exId) {
   if (!ST.nsdrTimer.active || ST.nsdrTimer.exId !== exId) return;
@@ -12966,13 +13061,15 @@ function tickNSDR(exId) {
   if (ST.nsdrTimer.seconds >= 300 && !ST.nsdrTimer.chimed) {
     ST.nsdrTimer.chimed = true;
     persistTimerState();
-    playChime();
-    haptic('success');
+    const rang = timerAlertAlreadyRang(ST.nsdrTimer.startTs + 300000);
+    cancelTimerAlert('nsdr');
+    if (!rang) { playChime(); haptic('success'); }
     showToast('🔔 5 minutes complete. Continue or stop and save.');
   }
 }
 function stopNSDR(exId) {
   if (ST.nsdrTimer.interval) clearInterval(ST.nsdrTimer.interval);
+  cancelTimerAlert('nsdr');
   const total = ST.nsdrTimer.seconds;
   ST.nsdrTimer.active = false;
   // Same fix as stopStopwatch: `if (ST.sets[exId])` alone isn't enough,
@@ -16684,10 +16781,82 @@ function medVisionPick(den) {
 }
 function medVisionReset() { const rec = medicalRecord(); const cal = rec.vision?.pxPerMm, ft = rec.vision?.farFt; rec.vision = {}; if (cal) rec.vision.pxPerMm = cal; if (ft) rec.vision.farFt = ft; saveMedicalRecord(); renderPage(); }
 
-function medHearingHtml() {
+// BUILD 7: the Apple Health hearing test against the FAA audiogram lines.
+// 14 CFR 67.105(c), 67.205(c), 67.305(c): worst acceptable thresholds in dB
+// at 500, 1000, 2000 and 3000 Hz. The same table applies to all three classes.
+const FAA_HEARING = { hz: [500, 1000, 2000, 3000], better: [35, 30, 30, 40], poorer: [35, 50, 50, 60] };
+function audiogramSupported() {
+  return !!(typeof FCFBridge !== 'undefined' && FCFBridge.isNative && FCFBridge.capabilities && FCFBridge.capabilities.audiogram
+    && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.healthkit);
+}
+// Pure. points: [{hz, left, right}] in dB HL (lower is better hearing).
+// At each FAA frequency the better ear is the one with the lower number.
+// Returns one row per frequency and whether every measured row is inside
+// the FAA lines. Never a verdict: the page words it as "inside the line" or
+// "would draw attention".
+function evaluateAudiogram(points) {
+  const rows = FAA_HEARING.hz.map((hz, i) => {
+    const p = (points || []).find(x => Math.abs((x.hz || 0) - hz) < 1);
+    const left = p && typeof p.left === 'number' ? Math.round(p.left) : null;
+    const right = p && typeof p.right === 'number' ? Math.round(p.right) : null;
+    const row = { hz, left, right, betterLimit: FAA_HEARING.better[i], poorerLimit: FAA_HEARING.poorer[i], measured: left !== null && right !== null };
+    if (row.measured) {
+      row.better = Math.min(left, right); row.poorer = Math.max(left, right);
+      row.inside = row.better <= row.betterLimit && row.poorer <= row.poorerLimit;
+    }
+    return row;
+  });
+  const measured = rows.filter(r => r.measured);
+  return { rows, complete: measured.length === rows.length, anyMeasured: measured.length > 0, allInside: measured.length > 0 && measured.every(r => r.inside) };
+}
+function requestAudiogram() {
+  if (!audiogramSupported()) return false;
+  ST.audiogramLoading = true;
+  try { window.webkit.messageHandlers.healthkit.postMessage({ action: 'audiogram' }); } catch (e) { ST.audiogramLoading = false; return false; }
+  // Apple Health can take a moment, and never answers if the sheet is dismissed oddly.
+  setTimeout(() => { if (ST.audiogramLoading) { ST.audiogramLoading = false; ST.audiogramNote = 'Apple Health did not answer. Try again.'; if (ST.tab === 'medical' && ST.medicalView === 'hearing') renderPage(); } }, 15000);
+  if (ST.tab === 'medical' && ST.medicalView === 'hearing') renderPage();
+  return true;
+}
+window.addEventListener('fcf:audiogram', (e) => {
+  const p = (e && e.detail) || {};
+  ST.audiogramLoading = false;
+  if (p.success && p.found && Array.isArray(p.points)) {
+    // Kept in the medical record: on this phone only, never sent anywhere.
+    medicalSave('audiogram', { date: p.date || '', source: p.source || '', points: p.points });
+    ST.audiogramNote = '';
+  } else if (p.success) {
+    ST.audiogramNote = 'No hearing test was found in Apple Health. Either none has been taken yet, or Flight Crew Fitness is not allowed to read it (iPhone Settings, Health, Data Access and Devices, Flight Crew Fitness, turn on Audiogram).';
+  } else {
+    ST.audiogramNote = 'Apple Health could not be read on this device.';
+  }
+  if (ST.tab === 'medical' && ST.medicalView === 'hearing') renderPage();
+});
+function medAudiogramCardHtml(rec) {
+  const ag = rec && rec.audiogram;
+  const btn = '<button class="btn btn-outline mt12" ' + (ST.audiogramLoading ? 'disabled' : '') + ' onclick="haptic(\'light\');requestAudiogram()">' + (ST.audiogramLoading ? 'Reading Apple Health…' : (ag ? '↻ Read my latest hearing test' : 'Read my hearing test from Apple Health')) + '</button>';
+  const note = ST.audiogramNote ? '<div style="font-size:0.75rem;color:var(--amber);line-height:1.55;margin-top:10px">' + ST.audiogramNote + '</div>' : '';
+  if (!ag) {
+    return medCard('YOUR HEARING TEST', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6">Take the AirPods Pro hearing test (below), then read the result here to see it against the FAA audiogram lines. The result stays on this phone.</div>' + btn + note);
+  }
+  const ev = evaluateAudiogram(ag.points);
+  const when = ag.date ? new Date(ag.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+  const cell = 'padding:7px 4px;border-bottom:1px solid var(--border);font-size:0.8125rem;text-align:center';
+  const head = 'padding:6px 4px;font-family:var(--mono);font-size:0.5625rem;letter-spacing:.06em;color:var(--muted);text-align:center;border-bottom:1px solid var(--border)';
+  const table = '<table style="width:100%;border-collapse:collapse;margin-top:8px"><tr><th style="' + head + ';text-align:left">HZ</th><th style="' + head + '">LEFT</th><th style="' + head + '">RIGHT</th><th style="' + head + '">FAA LINE<br>BETTER / WORSE EAR</th><th style="' + head + '"></th></tr>' +
+    ev.rows.map(r => '<tr><td style="' + cell + ';text-align:left;font-family:var(--mono)">' + r.hz + '</td><td style="' + cell + '">' + (r.left === null ? 'n/a' : r.left) + '</td><td style="' + cell + '">' + (r.right === null ? 'n/a' : r.right) + '</td><td style="' + cell + ';color:var(--muted)">' + r.betterLimit + ' / ' + r.poorerLimit + '</td><td style="' + cell + ';font-weight:600;color:' + (!r.measured ? 'var(--muted)' : r.inside ? 'var(--green)' : 'var(--amber)') + '">' + (!r.measured ? 'not measured' : r.inside ? 'inside' : 'outside') + '</td></tr>').join('') + '</table>';
+  let flag;
+  if (!ev.anyMeasured) flag = medFlagHtml({ tone: 'amber', title: 'This test did not measure the FAA frequencies', body: 'The saved hearing test has no values at 500, 1000, 2000 or 3000 Hz for both ears, so there is nothing to compare.' });
+  else if (ev.allInside) flag = medFlagHtml({ tone: 'green', title: 'Inside the FAA audiogram lines' + (ev.complete ? '' : ' where measured'), body: 'Every measured frequency is at or better than the FAA line for both the better and the worse ear. At the exam the AME normally uses the conversational voice test, not an audiogram.' });
+  else flag = medFlagHtml({ tone: 'amber', title: 'One or more frequencies are outside the FAA audiogram line', body: 'This would be worth an audiologist visit before your medical. It is not a failed exam: the FAA accepts the conversational voice test or a speech discrimination test as alternatives, and an earbud test is less exact than a clinic audiogram.' });
+  return medCard('YOUR HEARING TEST', flag + table + '<div style="font-size:0.6875rem;color:var(--muted);line-height:1.55;margin-top:8px">Decibels of hearing level; lower is better. The better ear at each frequency is the one with the lower number.</div>' + btn + note,
+    (when ? 'Tested ' + when : 'Hearing test') + (ag.source ? ', from ' + escapeUserProse(ag.source, 60) : '') + '. Stays on this phone.');
+}
+function medHearingHtml(rec) {
   return '<div class="section-label">HEARING AND COLOR VISION</div>' +
     medCard('HEARING: WHAT THE AME DOES', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6">You stand 6 feet away with your back turned and repeat words spoken in a normal conversational voice, both ears together. If that is in doubt, an audiogram: better ear no worse than 35, 30, 30 and 40 dB at 500, 1000, 2000 and 3000 Hz (worse ear 35, 50, 50, 60). Hearing aids are allowed with a limitation.</div>') +
-    medCard('THE AIRPODS PRO HEARING TEST', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6">AirPods Pro 2 and later run a clinical-style hearing test from the iPhone Settings app (Settings, your AirPods, Take a Hearing Test). It takes about 5 minutes in a quiet room and saves an audiogram to Apple Health, with the same frequencies the FAA uses. Read the result against the thresholds above. A future app build will read that audiogram from Apple Health and do the comparison here.</div>') +
+    (audiogramSupported() ? medAudiogramCardHtml(rec) : '') +
+    medCard('THE AIRPODS PRO HEARING TEST', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6">AirPods Pro 2 and later run a clinical-style hearing test from the iPhone Settings app (Settings, your AirPods, Take a Hearing Test). It takes about 5 minutes in a quiet room and saves an audiogram to Apple Health, with the same frequencies the FAA uses. ' + (audiogramSupported() ? 'Then read it with the button above.' : 'Read the result against the thresholds above. A newer version of the iPhone app reads that audiogram from Apple Health and does the comparison here.') + '</div>') +
     medCard('COLOR VISION', '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.6">Tested with color plates at the exam. It is a one-time question in practice: once you have passed, or hold a Letter of Evidence or SODA from an alternate test, it is settled. Phone screens are not color-accurate enough for a meaningful self-test, so there is none here. If you have never been tested and suspect a deficiency, ask your AME about the alternate tests before the exam rather than discovering it there.</div>');
 }
 

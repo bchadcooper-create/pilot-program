@@ -2077,6 +2077,78 @@ test('appearance follows the phone, with no in-app picker', () => {
   assertEqual(/getItem\('fcf_theme'\)/.test(html), false, 'first paint ignores the old saved choice');
 });
 
+console.log('\nBuild 7 (web side): dated medication reminders, timer alerts, hearing test:');
+test('dated reminders: one per dose per day, today\'s checked dose left out, weekdays respected', () => {
+  ctx.ST.medications = [
+    ctx.normalizeMedication({ id: 'a', name: 'Creatine', dose: 5, unit: 'g', times: ['08:00', '19:00'], remind: true }),
+    ctx.normalizeMedication({ id: 'q', name: 'Quiet', times: ['09:00'], remind: false }),
+    ctx.normalizeMedication({ id: 'w', name: 'Weekly', times: ['20:30'], days: [0], remind: true }), // Sundays
+  ];
+  const now = new Date(2026, 10, 13, 10, 0, 0); // Fri Nov 13 2026, 10:00
+  const plan = ctx.medDatedReminderPlan(now, { 'a|19:00': true });
+  const ids = plan.dated.map(i => i.id + ' ' + i.mo + '/' + i.d + ' ' + i.h + ':' + i.mi);
+  assertEqual(ids.includes('a 11/13 8:0'), false, '08:00 today already passed');
+  assertEqual(ids.includes('a 11/13 19:0'), false, '19:00 today was checked off, so no ring today');
+  assertEqual(ids.includes('a 11/14 19:0'), true, 'but it rings tomorrow');
+  assertEqual(ids.includes('a 11/14 8:0'), true, 'tomorrow morning rings');
+  assertEqual(plan.dated.filter(i => i.id === 'w').map(i => i.mo + '/' + i.d).join(','), '11/15,11/22', 'weekly dose only on Sundays');
+  assertEqual(plan.dated.some(i => i.id === 'q'), false, 'reminder-off dose never sent');
+  assertEqual(plan.dated[0].dose, '5 g', 'dose label'); assertEqual(plan.overflow, false, 'fits');
+  assertEqual(plan.skippedToday.has('a|19:00') && plan.scheduled.has('a|19:00'), true, 'checked dose keeps its bell');
+  const unchecked = ctx.medDatedReminderPlan(now, {});
+  assertEqual(unchecked.dated.some(i => i.id === 'a' && i.d === 13 && i.h === 19), true, 'unchecking puts today back');
+  assertEqual(unchecked.dated.length <= 34 && unchecked.dated.length > plan.dated.length - 1, true, 'within the 34-reminder budget');
+});
+test('dated reminders: nearest days kept when the list is long, and too many doses are flagged', () => {
+  ctx.ST.medications = [ctx.normalizeMedication({ id: 'a', name: 'A', times: ['06:00', '09:00', '12:00', '15:00', '18:00', '21:00'], remind: true })];
+  const now = new Date(2026, 10, 13, 5, 0, 0);
+  let plan = ctx.medDatedReminderPlan(now, {});
+  assertEqual(plan.dated.length, 34, 'budget filled'); assertEqual(plan.overflow, false, 'every dose has a bell');
+  assertEqual(plan.dated[0].d + '@' + plan.dated[0].h, '13@6', 'starts today'); assertEqual(plan.dated[33].d, 18, '6 a day covers about 5.7 days');
+  ctx.ST.medications = Array.from({ length: 40 }, (_, i) => ctx.normalizeMedication({ id: 'm' + i, name: 'M' + i, times: ['0' + (i % 9) + ':' + (10 + i)], remind: true }));
+  plan = ctx.medDatedReminderPlan(now, {});
+  assertEqual(plan.overflow, true, '40 doses a day cannot all ring'); assertEqual(plan.scheduled.size, 34, 'exactly the budget have bells');
+});
+test('build 6 keeps the old repeating reminders; build 7 switches to dated ones', () => {
+  ctx.ST.medications = [ctx.normalizeMedication({ id: 'a', name: 'A', times: ['07:00'], remind: true })];
+  ctx.FCFBridge = { isNative: true, capabilities: {} };
+  assertEqual(ctx.medDatedSupported(), false, 'build 6'); assertEqual(ctx.medReminderPlan().prefs.length, 1, 'repeating list');
+  ctx.FCFBridge = { isNative: true, capabilities: { medRemindersDated: true } };
+  assertEqual(ctx.medDatedSupported(), true, 'build 7'); assertEqual(ctx.medReminderPlan().prefs.length, 0, 'no repeating list');
+  assertEqual(ctx.medReminderPlan().dated.length > 0, true, 'dated list instead');
+  delete ctx.FCFBridge;
+});
+test('timer alerts: sent only to a build that supports them, and a late chime is skipped', () => {
+  const sent = [];
+  ctx.webkit = { messageHandlers: { notifications: { postMessage: m => sent.push(m) } } };
+  ctx.FCFBridge = { isNative: true, capabilities: {} };
+  assertEqual(ctx.scheduleTimerAlert('rest', 60, 'Rest complete', 'x'), false, 'build 6: nothing sent'); assertEqual(sent.length, 0, 'no message');
+  assertEqual(ctx.timerAlertAlreadyRang(Date.now() - 60000), false, 'build 6 always chimes on return');
+  ctx.FCFBridge = { isNative: true, capabilities: { timerAlerts: true } };
+  assertEqual(ctx.scheduleTimerAlert('rest', 60, 'Rest complete', 'x'), true, 'build 7 sends');
+  assertEqual(sent[0].action + ':' + sent[0].id + ':' + sent[0].seconds, 'timerSchedule:rest:60', 'schedule message');
+  assertEqual(ctx.scheduleTimerAlert('rest', 0, 'a', 'b'), false, 'zero seconds is never sent');
+  ctx.cancelTimerAlert('rest'); assertEqual(sent[1].action + ':' + sent[1].id, 'timerCancel:rest', 'cancel message');
+  assertEqual(ctx.timerAlertAlreadyRang(Date.now() - 60000), true, 'ended a minute ago while locked: the phone already rang');
+  assertEqual(ctx.timerAlertAlreadyRang(Date.now() - 500), false, 'ended just now on screen: the page chimes');
+  delete ctx.FCFBridge; delete ctx.webkit;
+});
+test('hearing test is set against the FAA audiogram lines per frequency', () => {
+  const good = [{ hz: 250, left: 10, right: 10 }, { hz: 500, left: 20, right: 30 }, { hz: 1000, left: 25, right: 45 }, { hz: 2000, left: 30, right: 50 }, { hz: 3000, left: 40, right: 60 }, { hz: 4000, left: 70, right: 70 }];
+  let ev = ctx.evaluateAudiogram(good);
+  assertEqual(ev.allInside && ev.complete, true, 'exactly on every line is inside; 250 and 4000 Hz are ignored');
+  assertEqual(ev.rows[1].better + '/' + ev.rows[1].poorer, '25/45', 'better ear is the lower number');
+  ev = ctx.evaluateAudiogram(good.map(p => p.hz === 1000 ? { hz: 1000, left: 31, right: 45 } : p));
+  assertEqual(ev.allInside, false, 'better ear 31 at 1000 Hz is over the 30 line'); assertEqual(ev.rows[1].inside, false, 'that row is outside');
+  ev = ctx.evaluateAudiogram(good.map(p => p.hz === 3000 ? { hz: 3000, left: 40, right: 61 } : p));
+  assertEqual(ev.rows[3].inside, false, 'worse ear 61 at 3000 Hz is over the 60 line');
+  ev = ctx.evaluateAudiogram(good.filter(p => p.hz !== 3000));
+  assertEqual(ev.complete, false, '3000 Hz not measured'); assertEqual(ev.allInside, true, 'inside where measured'); assertEqual(ev.rows[3].measured, false, 'row marked not measured');
+  ev = ctx.evaluateAudiogram([{ hz: 500, left: 20 }]);
+  assertEqual(ev.anyMeasured, false, 'one ear only is not a comparison');
+  assertEqual(ctx.evaluateAudiogram(null).anyMeasured, false, 'no data');
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

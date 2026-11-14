@@ -60,6 +60,65 @@ class HealthKitManager {
         return types
     }()
 
+    // ── Build 7: hearing test (audiogram) ────────────────────────────────────
+    // The AirPods Pro hearing test saves an audiogram to Apple Health. This
+    // reads the most recent one so the FAA Medical > Hearing page can set it
+    // against the FAA audiogram thresholds. Asked for on its own, only when
+    // the user taps the button on that page, so the Health sheet at login is
+    // unchanged for everyone who never uses it. Read-only. The result goes
+    // to the web page and is kept on the phone only.
+    //
+    // Apple does not tell an app whether READ access was denied (privacy),
+    // so "no audiogram" and "access not allowed" look the same here: found
+    // is false and the page explains both possibilities.
+    //
+    // leftEarSensitivity / rightEarSensitivity are marked deprecated from
+    // iOS 18.1 in favor of `tests`, but still return the values and work on
+    // every iOS version this app supports. Expect a deprecation WARNING
+    // here, not an error.
+    func latestAudiogram(completion: @escaping ([String: Any]) -> Void) {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            completion(["success": false, "code": "unavailable"])
+            return
+        }
+        let type = HKObjectType.audiogramSampleType()
+        store.requestAuthorization(toShare: nil, read: [type]) { [weak self] _, error in
+            guard let self = self else { return }
+            if let error = error {
+                completion(["success": false, "code": "auth_error", "message": error.localizedDescription])
+                return
+            }
+            let newestFirst = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+            let query = HKSampleQuery(sampleType: type, predicate: nil, limit: 1, sortDescriptors: [newestFirst]) { _, samples, error in
+                if let error = error {
+                    completion(["success": false, "code": "query_error", "message": error.localizedDescription])
+                    return
+                }
+                guard let sample = samples?.first as? HKAudiogramSample else {
+                    completion(["success": true, "found": false])
+                    return
+                }
+                let hz = HKUnit.hertz()
+                let dbHL = HKUnit.decibelHearingLevel()
+                var points: [[String: Any]] = []
+                for point in sample.sensitivityPoints {
+                    var entry: [String: Any] = ["hz": point.frequency.doubleValue(for: hz)]
+                    if let left = point.leftEarSensitivity { entry["left"] = left.doubleValue(for: dbHL) }
+                    if let right = point.rightEarSensitivity { entry["right"] = right.doubleValue(for: dbHL) }
+                    points.append(entry)
+                }
+                completion([
+                    "success": true,
+                    "found": true,
+                    "date": Self.iso8601Formatter.string(from: sample.endDate),
+                    "source": sample.sourceRevision.source.name,
+                    "points": points,
+                ])
+            }
+            self.store.execute(query)
+        }
+    }
+
     // ── Permission request + initial sync ────────────────────────────────────
 
     func requestPermissionAndSync(completion: @escaping ([String: Any]) -> Void) {

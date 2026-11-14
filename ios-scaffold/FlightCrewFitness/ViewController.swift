@@ -134,6 +134,17 @@ class ViewController: UIViewController {
               // This build answers the two Apple Health distance requests
               // (see handleHealthKitMessage: "distance", "recentDistanceWorkout").
               healthDistance:  !!(window.webkit?.messageHandlers?.healthkit),
+              // Build 7. Medication reminders can be sent as dated one-time
+              // reminders ("medicationsDated" in the schedule message).
+              medRemindersDated: !!(window.webkit?.messageHandlers?.notifications),
+              // Build 7. Workout timers can ring with the phone locked
+              // (notifications actions "timerSchedule" / "timerCancel").
+              timerAlerts:     !!(window.webkit?.messageHandlers?.notifications),
+              // Build 7. This build can read the Apple Health hearing test
+              // (healthkit action "audiogram", reply on fcf:audiogram).
+              audiogram:       !!(window.webkit?.messageHandlers?.healthkit),
+              // Build 7. Last Sleep adds up the whole night (sleepCalc 2).
+              sleepWholeNight: !!(window.webkit?.messageHandlers?.healthkit),
             },
             getProducts:      () => send('storeKit',      { action: 'getProducts' }),
             purchase:         (o) => send('storeKit',      { action: 'purchase', productId: o.productId, appAccountToken: o.appAccountToken }),
@@ -819,6 +830,13 @@ extension ViewController {
                 out["kind"] = "workout"
                 self?.postToWeb("fcf:healthDistance", data: out)
             }
+        case "audiogram":
+            // Build 7: the latest hearing test in Apple Health (AirPods Pro).
+            // Replies on fcf:audiogram, never fcf:healthkit (the web app
+            // replaces its whole health summary with whatever arrives there).
+            HealthKitManager.shared.latestAudiogram { [weak self] payload in
+                self?.postToWeb("fcf:audiogram", data: payload)
+            }
         default:
             postToWeb("fcf:healthkit", data: ["success": false, "code": "unsupported_action", "message": "Unrecognized HealthKit action: \(action)"])
         }
@@ -907,6 +925,25 @@ extension ViewController {
         case "cancelAll":
             NotificationManager.shared.cancelAll()
             postToWeb("fcf:notifications", data: ["success": true, "status": "all_cancelled"])
+        case "timerSchedule":
+            // Build 7: ring when a workout timer ends with the app off screen.
+            // seconds arrives as a JavaScript number (NSNumber).
+            guard let id = body["id"] as? String, !id.isEmpty,
+                  let seconds = (body["seconds"] as? NSNumber)?.doubleValue else {
+                postToWeb("fcf:notifications", data: ["success": false, "code": "invalid_payload", "message": "timerSchedule needs id and seconds."])
+                return
+            }
+            NotificationManager.shared.scheduleTimer(id: id, seconds: seconds,
+                                                     title: body["title"] as? String ?? "Timer done",
+                                                     body: body["body"] as? String ?? "")
+            postToWeb("fcf:notifications", data: ["success": true, "status": "timer_scheduled", "id": id])
+        case "timerCancel":
+            guard let id = body["id"] as? String, !id.isEmpty else {
+                postToWeb("fcf:notifications", data: ["success": false, "code": "invalid_payload", "message": "timerCancel needs id."])
+                return
+            }
+            NotificationManager.shared.cancelTimer(id: id)
+            postToWeb("fcf:notifications", data: ["success": true, "status": "timer_cancelled", "id": id])
         default:
             postToWeb("fcf:notifications", data: ["success": false, "code": "unsupported_action", "message": "Unrecognized notifications action: \(action)"])
         }

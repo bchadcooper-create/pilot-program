@@ -529,6 +529,11 @@ test('every exercise the Alternate button can offer is also in the catalog searc
   Object.values(ctx.ALTERNATES).forEach(list => list.forEach(a => { if (!names.has(a.name)) missing.add(a.name); }));
   assertEqual(missing.size, 0, 'alternates missing from the catalog: ' + [...missing].join(', '));
 });
+test('no exercise offers the same alternate twice (reported: Lat Pulldown listed twice under Pullups)', () => {
+  const dup = [];
+  Object.entries(ctx.ALTERNATES).forEach(([k, list]) => { const seen = {}; list.forEach(x => { if (seen[x.name]) dup.push(k + ' -> ' + x.name); seen[x.name] = 1; }); });
+  assertEqual(dup.length, 0, 'repeated alternates: ' + dup.join(', '));
+});
 test('the same movement is one entry, not two near-identical names', () => {
   const names = new Set(ctx.buildExerciseCatalog().map(e => e.name));
   ['Hack Squat', 'Seated Leg Curl', 'Hammer Curl', 'Tricep Pushdown', 'DB Rear Delt Fly', 'Seated Calf Raise', 'Inverted Row'].forEach(n =>

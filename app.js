@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.56.2 / 20261114_2
+ * Version/build: fcf-v5.56.3 / 20261114_3
  */
 
-const FCF_VERSION = 'fcf-v5.56.2';
-const FCF_BUILD   = '20261114_2';
+const FCF_VERSION = 'fcf-v5.56.3';
+const FCF_BUILD   = '20261114_3';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -11268,18 +11268,15 @@ const ALTERNATES = {
     {name:'Pushup Variations',target:'4×max',note:'Bodyweight substitute. Elevate feet for upper-chest emphasis.',inputType:'reps_only'},
   ],
   'DB Lateral Raise': [
-    {name:'Cable Lateral Raise',target:'3×15',note:'Low pulley across the body. Constant tension through the whole range.'},
-    {name:'Cable Lateral Raise',target:'3×15',note:'Constant tension through the full range. Harder than DBs.'},
+    {name:'Cable Lateral Raise',target:'3×15',note:'Low pulley across the body. Constant tension through the whole range, so it is harder than dumbbells.'},
     {name:'Upright Row',target:'3×12',note:'Hits lateral delt and upper trap together.'},
   ],
   'DB Front Raise': [
     {name:'Cable Front Raise',target:'3×15',note:'Back to the low pulley. Constant tension on the front delts.'},
-    {name:'Cable Front Raise',target:'3×15',note:'Constant tension version if a cable stack is available.'},
     {name:'DB Lateral Raise',target:'3×15',note:'Different plane, same front-delt-adjacent shoulder work.'},
   ],
   'Pullups': [
-    {name:'Lat Pulldown',target:'4×10',note:'The hotel cable column has a high pulley: sit or kneel and pull to the collarbone.'},
-    {name:'Lat Pulldown',target:'4×10',note:'Adjustable load. Good if bodyweight pullups are too hard yet.'},
+    {name:'Lat Pulldown',target:'4×10',note:'Adjustable load, good if bodyweight pullups are too hard yet. A hotel cable column works: sit or kneel under the high pulley and pull to the collarbone.'},
     {name:'DB Row',target:'4×10/side',note:'Horizontal pulling substitute, no bar needed.'},
     {name:'Chinups',target:'4×max',note:'Supinated grip: more bicep involvement.',inputType:'reps_only'},
   ],

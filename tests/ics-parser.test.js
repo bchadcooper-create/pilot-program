@@ -789,6 +789,34 @@ test('flags follow the joint that takes the load, not words in the name', () => 
   assertEqual(t('Dip'), 'shoulder,elbow_wrist', 'dips load shoulder and elbow');
   assertEqual(t('Lateral Raise (Machine)'), 'shoulder', 'lateral raise still flags the shoulder');
 });
+test('shoulder rotation is in every upper body warm-up that has a cable or a band (requested Nov 14)', () => {
+  ctx.ST.injuries = [];
+  const names = (env, mg) => ctx.getCombinedWorkout(env, mg).taxi.map(e => e.name);
+  ['Upper Push', 'Upper Pull'].forEach(mg => {
+    assertEqual(names('comm', mg).includes('Cable Shoulder External Rotation'), true, 'gym ' + mg);
+    assertEqual(names('hotel', mg).includes('Cable Shoulder External Rotation'), true, 'hotel gym ' + mg);
+    assertEqual(names('band', mg).includes('Band Shoulder External Rotation'), true, 'bands ' + mg);
+    assertEqual(names('band', mg).some(n => /^Cable/.test(n)), false, 'no cable exercise in a band warm-up');
+    assertEqual(names('room', mg).some(n => /Shoulder (External|Internal) Rotation/.test(n)), false, 'hotel room has no cable or band');
+  });
+  const cat = ctx.buildExerciseCatalog().filter(e => /Shoulder (External|Internal) Rotation/.test(e.name));
+  assertEqual(cat.length, 4, 'four catalog entries'); assertEqual(cat.every(e => e.phase === 'taxi'), true, 'all four are warm-up exercises');
+});
+test('a flagged shoulder keeps the rotation work and adds internal rotation', () => {
+  ctx.ST.injuries = ['shoulder'];
+  const taxi = (env, mg) => ctx.getCombinedWorkout(env, mg).taxi;
+  ['Upper Push', 'Upper Pull', 'Full Body'].forEach(mg => {
+    const n = taxi('comm', mg).map(e => e.name);
+    assertEqual(n.includes('Cable Shoulder External Rotation') && n.includes('Cable Shoulder Internal Rotation'), true, 'gym ' + mg + ': ' + n.join(', '));
+    assertEqual(n.filter(x => x === 'Cable Shoulder External Rotation').length, 1, 'not listed twice');
+    const b = taxi('band', mg).map(e => e.name);
+    assertEqual(b.includes('Band Shoulder External Rotation') && b.includes('Band Shoulder Internal Rotation'), true, 'bands ' + mg);
+  });
+  const er = taxi('comm', 'Upper Push').find(e => e.name === 'Cable Shoulder External Rotation');
+  assertEqual(!!er.injuryCaution || !!er.swappedForInjury, false, 'not flagged or swapped away');
+  assertEqual(ctx.getCombinedWorkout('comm', 'Lower Body').taxi.some(e => /Shoulder/.test(e.name)), false, 'leg day is left alone');
+  ctx.ST.injuries = [];
+});
 test('a workout reopened mid-session drops a caution that no longer applies', () => {
   ctx.ST.injuries = ['shoulder', 'elbow_wrist'];
   const wk = ctx.refreshInjuryCautions({ taxi: [{ id: 'a', name: 'Thoracic Extension (chair)', injuryCaution: true, flaggedRegion: 'Elbow / Wrist' }],

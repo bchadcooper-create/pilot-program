@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.56.4 / 20261114_4
+ * Version/build: fcf-v5.56.5 / 20261114_5
  */
 
-const FCF_VERSION = 'fcf-v5.56.4';
-const FCF_BUILD   = '20261114_4';
+const FCF_VERSION = 'fcf-v5.56.5';
+const FCF_BUILD   = '20261114_5';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -514,6 +514,20 @@ const REST_DEFAULTS = {
 
 // ─── WORKOUT DATA ─────────────────────────────────────────────────────────────
 const WORKOUTS = {};
+// Rotator cuff warm-up (Chad, Nov 14 2026): shoulder external rotation opens
+// every upper body warm-up where there is a cable or a band. The ids match
+// the catalog entries of the same name so history stays on one exercise.
+// With a shoulder flagged, getCombinedWorkout() adds internal rotation too.
+const WU_CABLE_ER = ex('swap_cable_shoulder_external_rotation','Cable Shoulder External Rotation','2×12/side',2,'Cable at elbow height, handle in the far hand. Elbow bent 90 degrees and pinned to your side, rotate the forearm outward, return slowly. Light and pain-free. Stop if it hurts.');
+const WU_CABLE_IR = ex('swap_cable_shoulder_internal_rotation','Cable Shoulder Internal Rotation','2×12/side',2,'Cable at elbow height, handle in the near hand. Elbow bent 90 degrees and pinned to your side, rotate the forearm inward across your belly, return slowly. Light and pain-free. Stop if it hurts.');
+const WU_BAND_ER  = ex('swap_band_shoulder_external_rotation','Band Shoulder External Rotation','2×12/side',2,'Band anchored at elbow height, held in the far hand. Elbow bent 90 degrees and pinned to your side, rotate the forearm outward, return slowly. Light and pain-free. Stop if it hurts.',false,'reps_only');
+const WU_BAND_IR  = ex('swap_band_shoulder_internal_rotation','Band Shoulder Internal Rotation','2×12/side',2,'Band anchored at elbow height, held in the near hand. Elbow bent 90 degrees and pinned to your side, rotate the forearm inward across your belly, return slowly. Light and pain-free. Stop if it hurts.',false,'reps_only');
+const UPPER_WARMUP_GROUPS = ['Upper Push', 'Upper Pull', 'Full Body'];
+function cuffWarmupFor(env) {
+  if (env === 'comm' || env === 'hotel') return [WU_CABLE_ER, WU_CABLE_IR];
+  if (env === 'band') return [WU_BAND_ER, WU_BAND_IR];
+  return null; // hotel room: no cable and no band
+}
 WORKOUTS.comm = {};
 
 WORKOUTS.comm['Lower Body'] = {
@@ -554,6 +568,7 @@ WORKOUTS.comm['Upper Push'] = {
     ex('c_up_t1','Wall Slide','2×10',2,'Forearms against wall, slide up to full overhead. Fixes forward-rounded cockpit posture.',false,'reps_only'),
     ex('c_up_t2','Band Pull-Apart','2×20',2,'Arms straight in front, pull band apart to chest.',false,'reps_only'),
     ex('c_up_t3','Thoracic Extension (chair)','10 reps',1,'Hands behind head, extend over chair back.',false,'reps_only'),
+    WU_CABLE_ER,
   ],
   takeoff: [
     ex('c_up_to1','Flat Barbell Bench Press','5×5',5,'Work up to a heavy 5. Elbows 45-70°, not flared. Control the descent, explode up.'),
@@ -588,6 +603,7 @@ WORKOUTS.comm['Upper Pull'] = {
     ex('c_ul_t1','Arm Circles (progressive)','10/direction',1,'Small to large, both directions. Warms rotator cuff before pulling loads.',false,'reps_only'),
     ex('c_ul_t2','Scapular Pullup','2×10',2,'Hang from bar. Without bending elbows, depress and retract scapulae.',false,'reps_only'),
     ex('c_ul_t3','Prone Y-T-W Raises','2×10',2,'Lying face-down on bench. Light plates. Raise in Y, T, W shapes.'),
+    WU_CABLE_ER,
   ],
   takeoff: [
     ex('c_ul_to1','Conventional Deadlift','5×3',5,'Work up to heavy triples. Full reset each rep. Keep back neutral.'),
@@ -750,7 +766,7 @@ WORKOUTS.hotel['Upper Push'] = {
   landing: WORKOUTS.comm['Upper Push'].landing,
 };
 WORKOUTS.hotel['Upper Pull'] = {
-  taxi: WORKOUTS.comm['Upper Pull'].taxi.slice(0,2),
+  taxi: WORKOUTS.comm['Upper Pull'].taxi.slice(0,2).concat([WU_CABLE_ER]),
   takeoff: [
     ex('h_ul_to1','Pullups','5×max',5,'Every set near-failure.',false,'reps_only'),
     ex('h_ul_to2','DB Row','4×10/side',4,'Chest on bench. Heavy.'),
@@ -990,7 +1006,7 @@ WORKOUTS.band['Lower Body'] = {
   landing: WORKOUTS.comm['Lower Body'].landing,
 };
 WORKOUTS.band['Upper Push'] = {
-  taxi: WORKOUTS.comm['Upper Push'].taxi,
+  taxi: WORKOUTS.comm['Upper Push'].taxi.slice(0,3).concat([WU_BAND_ER]),
   takeoff: [
     ex('b_up_to1','Banded Push-Up','4×15',4,'Loop the band across your upper back, holding one end under each hand. Adds resistance right where a bodyweight push-up gets easiest: the top of the rep.',false,'reps_only'),
     ex('b_up_to2','Banded Overhead Press','4×15',4,'Stand on the middle of the band, press both ends straight overhead to full lockout. Core braced, don\'t arch your lower back.',false,'reps_only'),
@@ -1003,7 +1019,7 @@ WORKOUTS.band['Upper Push'] = {
   landing: WORKOUTS.comm['Upper Push'].landing,
 };
 WORKOUTS.band['Upper Pull'] = {
-  taxi: WORKOUTS.comm['Upper Pull'].taxi.slice(0,2),
+  taxi: WORKOUTS.comm['Upper Pull'].taxi.slice(0,2).concat([WU_BAND_ER]),
   takeoff: [
     ex('b_ul_to1','Banded Bent-Over Row','4×15',4,'Stand on the band, feet hip-width, hinge forward about 30°. Pull the band to your chest, keeping elbows close to your sides. They should skim your ribs.',false,'reps_only'),
     ex('b_ul_to2','Banded Upright Row','4×12',4,'Stand on the band with it crossed into an X in front of you. Pull your hands up to shoulder height, elbows leading out to the sides.',false,'reps_only'),
@@ -1146,8 +1162,8 @@ const EX_REGION_TAGS = {
   "Back Squat": 'B H K N',
   "Band Mobility Circuit": '',
   "Band Pull-Apart": 'S',
-  "Band Shoulder External Rotation": 'S',
-  "Band Shoulder Internal Rotation": 'S',
+  "Band Shoulder External Rotation": '', // kept for a flagged shoulder on purpose: light cuff work (Chad, Nov 14 2026)
+  "Band Shoulder Internal Rotation": '', // kept for a flagged shoulder on purpose: light cuff work (Chad, Nov 14 2026)
   "Banded Bent-Over Row": 'B E',
   "Banded Bicep Curl": 'E',
   "Banded Deadlift": 'B H',
@@ -1198,8 +1214,8 @@ const EX_REGION_TAGS = {
   "Cable Lunge": 'H K',
   "Cable Rear Delt Fly": 'S',
   "Cable Row": 'B E',
-  "Cable Shoulder External Rotation": 'S',
-  "Cable Shoulder Internal Rotation": 'S',
+  "Cable Shoulder External Rotation": '', // kept for a flagged shoulder on purpose: light cuff work (Chad, Nov 14 2026)
+  "Cable Shoulder Internal Rotation": '', // kept for a flagged shoulder on purpose: light cuff work (Chad, Nov 14 2026)
   "Cable Side Bend": 'B',
   "Cable Straight-Arm Pulldown": 'S',
   "Cable Torso Rotation": 'B',
@@ -9424,11 +9440,11 @@ const CATALOG_ALTERNATES = [
   altEx('Smith Machine Bench Press',   '4×8',  4, 'Bench centered under the Smith bar, lower to mid chest and press. The fixed bar path suits training without a spotter.'),
   altEx('Cable Straight-Arm Pulldown', '3×15', 3, 'Face a high cable, arms nearly straight, sweep the bar down to your thighs using the lats. Works the lats without the biceps.'),
   altEx('Seated DB Face Pull',         '3×15', 3, 'Seated and leaning forward, pull light dumbbells up and back toward your ears, finishing with the knuckles rotated back. Rear delts and rotator cuff.'),
-  // Rotator cuff work (Chad, Nov 14 2026). Light on purpose: these are small muscles.
-  altEx('Cable Shoulder External Rotation', '3×15/side', 3, 'Stand side-on to a cable set at elbow height, handle in the far hand. Elbow bent 90 degrees and pinned to your side, rotate the forearm outward away from the machine, then return slowly. Light weight. A rolled towel under the elbow keeps it in place.'),
-  altEx('Cable Shoulder Internal Rotation', '3×15/side', 3, 'Stand side-on to a cable set at elbow height, handle in the near hand. Elbow bent 90 degrees and pinned to your side, rotate the forearm inward across your belly, then return slowly. Light weight, no body twist.'),
-  altEx('Band Shoulder External Rotation',  '3×15/side', 3, 'Band anchored at elbow height (a door handle works), held in the far hand. Elbow bent 90 degrees and pinned to your side, rotate the forearm outward away from the anchor, then return slowly. Step away from the anchor to make it harder.'),
-  altEx('Band Shoulder Internal Rotation',  '3×15/side', 3, 'Band anchored at elbow height, held in the near hand. Elbow bent 90 degrees and pinned to your side, rotate the forearm inward across your belly, then return slowly. Step away from the anchor to make it harder.'),
+  // Rotator cuff work (Chad, Nov 14 2026). Warm-up exercises: added from the catalog they land in the warm-up. Light on purpose.
+  altEx('Cable Shoulder External Rotation', '3×15/side', 3, 'Stand side-on to a cable set at elbow height, handle in the far hand. Elbow bent 90 degrees and pinned to your side, rotate the forearm outward away from the machine, then return slowly. Light weight. A rolled towel under the elbow keeps it in place.', false, 'reps_weight', 'taxi'),
+  altEx('Cable Shoulder Internal Rotation', '3×15/side', 3, 'Stand side-on to a cable set at elbow height, handle in the near hand. Elbow bent 90 degrees and pinned to your side, rotate the forearm inward across your belly, then return slowly. Light weight, no body twist.', false, 'reps_weight', 'taxi'),
+  altEx('Band Shoulder External Rotation',  '3×15/side', 3, 'Band anchored at elbow height (a door handle works), held in the far hand. Elbow bent 90 degrees and pinned to your side, rotate the forearm outward away from the anchor, then return slowly. Step away from the anchor to make it harder.', false, 'reps_only', 'taxi'),
+  altEx('Band Shoulder Internal Rotation',  '3×15/side', 3, 'Band anchored at elbow height, held in the near hand. Elbow bent 90 degrees and pinned to your side, rotate the forearm inward across your belly, then return slowly. Step away from the anchor to make it harder.', false, 'reps_only', 'taxi'),
   altEx('Cable Lateral Raise',         '3×15', 3, 'Stand side-on to a low cable, raise the handle out to shoulder height with a soft elbow. The cable keeps tension through the whole range.'),
   altEx('Upright Row',                 '3×12', 3, 'Bar or dumbbells in front of the thighs, pull up along the body leading with the elbows to about chest height. Side delts and upper traps.'),
   altEx('Cable Front Raise',           '3×15', 3, 'Back to a low cable, raise the handle straight in front to shoulder height. Constant tension on the front delts.'),
@@ -10747,6 +10763,13 @@ function getCombinedWorkout(env, muscleGroup) {
     enroute: mapPhase(base.enroute, 'enroute'),
     landing: mapPhase(base.landing, 'landing'),
   };
+  // Flagged shoulder: external and internal rotation both go in the warm-up
+  // of any session with upper body work, where there is a cable or a band.
+  const cuff = (ST.injuries || []).includes('shoulder') && UPPER_WARMUP_GROUPS.includes(muscleGroup) ? cuffWarmupFor(env) : null;
+  if (cuff) {
+    const have = new Set(wk.taxi.map(e => e.name));
+    cuff.forEach(c => { if (!have.has(c.name)) wk.taxi.push(withRepRange({ ...c, addedForInjury: true, note: 'Added because you flagged a shoulder. ' + c.note }, 'taxi')); });
+  }
   // Custom exercises get added to enroute by default (volume/accessory slot)
   const customForThis = ST.customExercises.filter(c => c.env === env && c.muscleGroup === muscleGroup);
   if (customForThis.length) wk.enroute = [...wk.enroute, ...customForThis.map(c => withRepRange(c.exercise, 'enroute'))];
@@ -11218,7 +11241,7 @@ const ALTERNATES = {
     {name:'Band Pull-Apart',    target:'3×20',note:'Resistance band. Great shoulder health work.',inputType:'reps_only'},
     {name:'Seated DB Face Pull',target:'3×15',note:'Seated, light DBs, external rotation finish.'},
     {name:'Cable Shoulder External Rotation',target:'3×15/side',note:'Isolates the rotator cuff. Elbow pinned to your side, rotate outward. Go light.'},
-    {name:'Band Shoulder External Rotation',target:'3×15/side',note:'Same movement with a band anchored at elbow height. Works in a hotel room.'},
+    {name:'Band Shoulder External Rotation',target:'3×15/side',note:'Same movement with a band anchored at elbow height. Works in a hotel room.',inputType:'reps_only'},
     {name:'Rear Delt Fly (Machine)',target:'3×15',note:'Rear delts on the fly machine. Strict and easy to load.'},
   ],
   'Goblet Squat': [
@@ -11854,6 +11877,8 @@ function alternatesSheetHtml(exId, exName, phaseKey) {
 // isStretchLikeExercise() for the full "Warmup / Stretching" filter.
 const WARMUP_MOBILITY_NAMES = new Set([
   'Ankle Circles + Dorsiflexion', 'Arm Circles (progressive)', 'Band Pull-Apart',
+  'Band Shoulder External Rotation', 'Band Shoulder Internal Rotation',
+  'Cable Shoulder External Rotation', 'Cable Shoulder Internal Rotation',
   'Brisk Walk Ramp-Up', 'Cat-Cow', 'Dead Bug', 'Full Mobility Circuit',
   'Hip 90/90', 'Jump Rope / Ankle Bouncing', 'Lateral Band Walk',
   'Leg Swings (Front & Side)', 'Prone Y-T-W Raises', 'Scapular Pullup',

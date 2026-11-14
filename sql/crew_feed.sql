@@ -374,3 +374,7 @@ grant execute on function founding_spots_left() to anon, authenticated;
 -- create or replace function public.is_app_admin() returns boolean ... ;
 -- revoke all on function public.is_app_admin() from public, anon;
 -- grant execute on function public.is_app_admin() to authenticated;
+
+-- Nov 13 2026: signup_sources (where each new member came from) and the
+-- admin-only signup_source_counts() totals. Applied as migration
+-- "signup_sources"; see the live definitions in the database.

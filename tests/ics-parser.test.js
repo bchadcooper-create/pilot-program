@@ -2169,6 +2169,33 @@ test('hearing test is set against the FAA audiogram lines per frequency', () => 
   assertEqual(ctx.evaluateAudiogram(null).anyMeasured, false, 'no data');
 });
 
+console.log('\nSignup sources (launch, Nov 13 2026):');
+test('a link tag is cleaned to safe characters before it is stored', () => {
+  assertEqual(ctx.cleanRef('Email'), 'email', 'lowercased'); assertEqual(ctx.cleanRef('aac'), 'aac', 'kept');
+  assertEqual(ctx.cleanRef('<script>alert(1)</script>'), 'scriptalert1script', 'markup stripped');
+  assertEqual(ctx.cleanRef('x'.repeat(90)).length, 40, 'capped at 40'); assertEqual(ctx.cleanRef(''), null, 'empty'); assertEqual(ctx.cleanRef(null), null, 'missing');
+});
+test('the "how did you hear" card shows only when owed and offers every source', () => {
+  ctx.ST.heardAsk = false; assertEqual(ctx.heardCardHtml(), '', 'hidden when not owed');
+  ctx.ST.heardAsk = true; const h = ctx.heardCardHtml();
+  ['crew', 'aac', 'crashpads', 'facebook', 'search', 'appstore', 'other'].forEach(k => assertEqual(h.includes("answerHeard('" + k + "')"), true, k + ' offered'));
+  assertEqual(h.includes('answerHeard(null)'), true, 'can be skipped'); assertEqual(h.includes('Airplanes and Coffee'), true, 'label shown');
+  ctx.ST.heardAsk = false;
+});
+test('only accounts in their first two weeks are asked', () => {
+  const saved = ctx.ST.user;
+  ctx.ST.user = { id: 'u', created_at: new Date(Date.now() - 3 * 86400000).toISOString() }; assertEqual(ctx.accountAgeDays() < 14, true, '3 days old');
+  ctx.ST.user = { id: 'u', created_at: new Date(Date.now() - 40 * 86400000).toISOString() }; assertEqual(ctx.accountAgeDays() > 14, true, '40 days old');
+  ctx.ST.user = { id: 'u' }; assertEqual(ctx.accountAgeDays(), Infinity, 'unknown age is treated as old');
+  ctx.ST.user = saved;
+});
+test('Super User totals list each source with signups and paid members', () => {
+  const h = ctx.signupSourcesHtml({ answered: 7, members: 30, by_heard: [{ k: 'aac', n: 4, paid: 1 }, { k: 'crew', n: 3, paid: 2 }], by_ref: [{ k: 'chad', n: 2, paid: 1 }] });
+  assertEqual(h.includes('Airplanes and Coffee') && h.includes('A crew member told me'), true, 'answers shown by name');
+  assertEqual(h.includes('7 of 30 members have answered'), true, 'answer rate'); assertEqual(h.includes('>chad<'), true, 'link tag shown');
+  assertEqual(ctx.signupSourcesHtml({}).includes('None yet.'), true, 'empty state');
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

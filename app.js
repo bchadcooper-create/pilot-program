@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.55.2 / 20261113_7
+ * Version/build: fcf-v5.56.0 / 20261113_8
  */
 
-const FCF_VERSION = 'fcf-v5.55.2';
-const FCF_BUILD   = '20261113_7';
+const FCF_VERSION = 'fcf-v5.56.0';
+const FCF_BUILD   = '20261113_8';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -2882,6 +2882,103 @@ const LEADERBOARD_EXERCISES = [
   { id:'c_ul_er4', name:'EZ Bar Curl' },
   { id:'h_ul_er2', name:'DB Curl' },
 ];
+// ─── WHERE SIGNUPS COME FROM ─────────────────────────────────────────────────
+// Added Nov 13 2026 for launch: Chad needs to see which effort brings
+// members (the crashpad email, the Airplanes and Coffee posts, his own link
+// in the cockpit) so he knows what to repeat. Two signals, one row per
+// member in signup_sources:
+//   ref   - the tag on the link they arrived by: flightcrew.fit/?ref=email,
+//           or a short link like flightcrew.fit/go/chad/. Kept from the
+//           first visit. Only works when they sign up on the web, because a
+//           tap through to the App Store starts the app with no memory of it.
+//   heard - their own answer to "How did you hear about us?", asked once on
+//           Today in an account's first two weeks. This one also covers
+//           people who installed from the App Store.
+// Totals show on the Super User page.
+const REF_LS_KEY = 'fcf_ref';
+function cleanRef(v) { const r = String(v || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40); return r || null; }
+(function captureRef() {
+  try {
+    const r = cleanRef(new URLSearchParams(location.search).get('ref'));
+    if (r && !localStorage.getItem(REF_LS_KEY)) localStorage.setItem(REF_LS_KEY, r); // first touch wins
+  } catch (e) { /* no storage or no URL: nothing to record */ }
+})();
+// The choices offered. The key is what is stored; keep keys stable.
+const HEARD_OPTIONS = [
+  ['crew', 'A crew member told me'],
+  ['aac', 'Airplanes and Coffee'],
+  ['crashpads', 'Email from Chad at DFW Crashpads'],
+  ['facebook', 'Facebook or Instagram'],
+  ['search', 'Google search'],
+  ['appstore', 'Found it in the App Store'],
+  ['other', 'Somewhere else'],
+];
+const SIGNUP_SOURCE_WINDOW_DAYS = 14;
+function accountAgeDays() {
+  const c = ST.user && ST.user.created_at ? new Date(ST.user.created_at).getTime() : NaN;
+  return isNaN(c) ? Infinity : (Date.now() - c) / 86400000;
+}
+// Runs once per launch after sign-in. Records the link tag for a new
+// account, and works out whether the "How did you hear" card is still owed.
+async function loadSignupSource() {
+  ST.heardAsk = false;
+  if (!ST.user || accountAgeDays() > SIGNUP_SOURCE_WINDOW_DAYS) return;
+  const doneKey = 'fcf_heard_done_' + ST.user.id;
+  try { if (localStorage.getItem(doneKey)) return; } catch (e) { return; }
+  try {
+    const { data, error } = await withTimeout(SB.from('signup_sources').select('ref,heard').eq('user_id', ST.user.id).maybeSingle(), 6000);
+    if (error) return;
+    let ref = null; try { ref = cleanRef(localStorage.getItem(REF_LS_KEY)); } catch (e) { /* ignore */ }
+    if (!data) {
+      await withTimeout(SB.from('signup_sources').insert({ user_id: ST.user.id, ref }), 6000);
+    } else if (!data.ref && ref) {
+      await withTimeout(SB.from('signup_sources').update({ ref, updated_at: new Date().toISOString() }).eq('user_id', ST.user.id), 6000);
+    }
+    if (data && data.heard) { try { localStorage.setItem(doneKey, '1'); } catch (e) { /* ignore */ } return; }
+    ST.heardAsk = true;
+  } catch (e) { /* offline: ask another day */ }
+}
+function heardCardHtml() {
+  if (!ST.heardAsk) return '';
+  return '<div class="card mb12" id="heardCard"><div class="fb" style="align-items:flex-start"><div class="section-label" style="margin-top:0">ONE QUICK QUESTION</div>' +
+    '<button class="btn-ghost" style="margin-left:auto;font-size:0.75rem;color:var(--muted);padding:0" onclick="answerHeard(null)">Skip</button></div>' +
+    '<div style="font-size:0.875rem;margin-bottom:10px">How did you hear about Flight Crew Fitness?</div>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:8px">' + HEARD_OPTIONS.map(([k, label]) =>
+      '<button class="btn-outline" style="padding:9px 12px;border-radius:999px;font-size:0.8125rem;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer" onclick="answerHeard(\'' + k + '\')">' + label + '</button>').join('') +
+    '</div></div>';
+}
+async function answerHeard(key) {
+  haptic('light');
+  ST.heardAsk = false;
+  try { localStorage.setItem('fcf_heard_done_' + ST.user.id, '1'); } catch (e) { /* ignore */ }
+  const card = document.getElementById('heardCard'); if (card) card.remove();
+  if (!key || !HEARD_OPTIONS.some(o => o[0] === key)) return; // skipped: never asked again
+  try {
+    const { error } = await withTimeout(SB.from('signup_sources').upsert({ user_id: ST.user.id, heard: key, updated_at: new Date().toISOString() }, { onConflict: 'user_id' }), 6000);
+    if (error) throw error;
+    showToast('Thanks. That helps.');
+  } catch (e) { try { localStorage.removeItem('fcf_heard_done_' + ST.user.id); } catch (e2) { /* ignore */ } }
+}
+// Super User page: totals by link tag and by answer.
+function signupSourcesHtml(d) {
+  const label = k => (HEARD_OPTIONS.find(o => o[0] === k) || [k, k])[1];
+  const table = (rows, name) => !rows.length ? '<div style="font-size:0.75rem;color:var(--muted)">None yet.</div>' :
+    '<table style="width:100%;border-collapse:collapse;font-size:0.8125rem">' + rows.map(r =>
+      '<tr><td style="padding:5px 0;border-bottom:1px solid var(--border)">' + escapeUserProse(name(r.k), 60) + '</td><td style="padding:5px 0;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono)">' + Number(r.n) + '</td><td style="padding:5px 0 5px 12px;border-bottom:1px solid var(--border);text-align:right;font-family:var(--mono);color:var(--green)">' + Number(r.paid) + ' paid</td></tr>').join('') + '</table>';
+  return '<div class="section-label" style="margin-top:0">WHERE SIGNUPS CAME FROM</div>' +
+    '<div style="font-size:0.75rem;color:var(--muted);line-height:1.5;margin-bottom:10px">' + Number(d.answered || 0) + ' of ' + Number(d.members || 0) + ' members have answered. Members who joined before Nov 13 2026 were never asked.</div>' +
+    '<div style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.08em;color:var(--muted);margin:6px 0 4px">THEIR ANSWER</div>' + table(d.by_heard || [], label) +
+    '<div style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.08em;color:var(--muted);margin:14px 0 4px">LINK THEY ARRIVED BY (WEB SIGNUPS ONLY)</div>' + table(d.by_ref || [], k => k);
+}
+async function loadSignupSourceStats() {
+  const el = document.getElementById('suSources'); if (!el) return;
+  try {
+    const { data, error } = await withTimeout(SB.rpc('signup_source_counts'), 15000);
+    if (error) throw error;
+    el.innerHTML = signupSourcesHtml(data || {});
+  } catch (e) { el.innerHTML = '<div style="font-size:0.75rem;color:var(--muted);text-align:center">Could not load signup sources.</div>'; }
+}
+
 // Who the admin is lives in the database (function is_app_admin), not in
 // this file (Nov 13 2026: the admin's email address was typed in here). The
 // answer only decides which buttons are drawn; the database enforces the
@@ -4640,7 +4737,8 @@ async function bootAppInner() {
     hydrateOuraFromRecent(),
     loadMedsTakenToday(),
     loadStepHistory(),
-    loadSuperUser()
+    loadSuperUser(),
+    loadSignupSource()
   ]);
 
   applyProfileToState(profile);
@@ -17183,8 +17281,10 @@ function renderSuperUser(p) {
   const parts = [moreBackLink()];
   parts.push('<div class="section-label" style="margin-top:0">SUPER USER</div>');
   parts.push('<div class="card mb12"><div id="suStats" style="text-align:center;color:var(--muted);font-size:0.75rem">Loading…</div></div>');
+  parts.push('<div class="card mb12"><div id="suSources" style="text-align:center;color:var(--muted);font-size:0.75rem">Loading…</div></div>');
   p.innerHTML = parts.join('');
   loadSuperUserStats();
+  loadSignupSourceStats();
 }
 
 // ─── NUTRITION LOGGING (foundation — manual entry + USDA lookup) ──────────
@@ -18807,6 +18907,7 @@ function renderToday(p) {
 
   parts.push('<div id="ouraTopSection">'+buildOuraTopSectionHTML(ctx)+'</div>');
   parts.push(buildSetupChecklistHTML());
+  parts.push(heardCardHtml());
   parts.push(buildBodyClockHTML());
 
   // AI Preflight Schedule Mapping — Pro only, shown before Fatigue

@@ -1,6 +1,6 @@
 // Flight Crew Fitness — Service Worker
-// Version: 5.55.2
-const CACHE = 'fcf-v5.55.2';
+// Version: 5.56.0
+const CACHE = 'fcf-v5.56.0';
 const CORE = [
   './',
   './index.html',
@@ -69,6 +69,7 @@ self.addEventListener('fetch', e => {
     url.pathname.startsWith('/vision') ||       // short links that forward to the free tools
     url.pathname.startsWith('/medical') ||
     url.pathname.startsWith('/meds') ||
+    url.pathname.startsWith('/go/') ||          // short links that tag where a visitor came from
     url.pathname === '/llms.txt' ||
     url.hostname.includes('supabase.co') ||
     url.hostname.includes('jsdelivr.net') ||

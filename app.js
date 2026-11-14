@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.56.3 / 20261114_3
+ * Version/build: fcf-v5.56.4 / 20261114_4
  */
 
-const FCF_VERSION = 'fcf-v5.56.3';
-const FCF_BUILD   = '20261114_3';
+const FCF_VERSION = 'fcf-v5.56.4';
+const FCF_BUILD   = '20261114_4';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -1146,6 +1146,8 @@ const EX_REGION_TAGS = {
   "Back Squat": 'B H K N',
   "Band Mobility Circuit": '',
   "Band Pull-Apart": 'S',
+  "Band Shoulder External Rotation": 'S',
+  "Band Shoulder Internal Rotation": 'S',
   "Banded Bent-Over Row": 'B E',
   "Banded Bicep Curl": 'E',
   "Banded Deadlift": 'B H',
@@ -1196,6 +1198,8 @@ const EX_REGION_TAGS = {
   "Cable Lunge": 'H K',
   "Cable Rear Delt Fly": 'S',
   "Cable Row": 'B E',
+  "Cable Shoulder External Rotation": 'S',
+  "Cable Shoulder Internal Rotation": 'S',
   "Cable Side Bend": 'B',
   "Cable Straight-Arm Pulldown": 'S',
   "Cable Torso Rotation": 'B',
@@ -9420,6 +9424,11 @@ const CATALOG_ALTERNATES = [
   altEx('Smith Machine Bench Press',   '4×8',  4, 'Bench centered under the Smith bar, lower to mid chest and press. The fixed bar path suits training without a spotter.'),
   altEx('Cable Straight-Arm Pulldown', '3×15', 3, 'Face a high cable, arms nearly straight, sweep the bar down to your thighs using the lats. Works the lats without the biceps.'),
   altEx('Seated DB Face Pull',         '3×15', 3, 'Seated and leaning forward, pull light dumbbells up and back toward your ears, finishing with the knuckles rotated back. Rear delts and rotator cuff.'),
+  // Rotator cuff work (Chad, Nov 14 2026). Light on purpose: these are small muscles.
+  altEx('Cable Shoulder External Rotation', '3×15/side', 3, 'Stand side-on to a cable set at elbow height, handle in the far hand. Elbow bent 90 degrees and pinned to your side, rotate the forearm outward away from the machine, then return slowly. Light weight. A rolled towel under the elbow keeps it in place.'),
+  altEx('Cable Shoulder Internal Rotation', '3×15/side', 3, 'Stand side-on to a cable set at elbow height, handle in the near hand. Elbow bent 90 degrees and pinned to your side, rotate the forearm inward across your belly, then return slowly. Light weight, no body twist.'),
+  altEx('Band Shoulder External Rotation',  '3×15/side', 3, 'Band anchored at elbow height (a door handle works), held in the far hand. Elbow bent 90 degrees and pinned to your side, rotate the forearm outward away from the anchor, then return slowly. Step away from the anchor to make it harder.'),
+  altEx('Band Shoulder Internal Rotation',  '3×15/side', 3, 'Band anchored at elbow height, held in the near hand. Elbow bent 90 degrees and pinned to your side, rotate the forearm inward across your belly, then return slowly. Step away from the anchor to make it harder.'),
   altEx('Cable Lateral Raise',         '3×15', 3, 'Stand side-on to a low cable, raise the handle out to shoulder height with a soft elbow. The cable keeps tension through the whole range.'),
   altEx('Upright Row',                 '3×12', 3, 'Bar or dumbbells in front of the thighs, pull up along the body leading with the elbows to about chest height. Side delts and upper traps.'),
   altEx('Cable Front Raise',           '3×15', 3, 'Back to a low cable, raise the handle straight in front to shoulder height. Constant tension on the front delts.'),
@@ -11208,6 +11217,8 @@ const ALTERNATES = {
     {name:'Dumbbell Reverse Fly',target:'3×15',note:'Prone or bent-over. Same rear delt + external rotation.'},
     {name:'Band Pull-Apart',    target:'3×20',note:'Resistance band. Great shoulder health work.',inputType:'reps_only'},
     {name:'Seated DB Face Pull',target:'3×15',note:'Seated, light DBs, external rotation finish.'},
+    {name:'Cable Shoulder External Rotation',target:'3×15/side',note:'Isolates the rotator cuff. Elbow pinned to your side, rotate outward. Go light.'},
+    {name:'Band Shoulder External Rotation',target:'3×15/side',note:'Same movement with a band anchored at elbow height. Works in a hotel room.'},
     {name:'Rear Delt Fly (Machine)',target:'3×15',note:'Rear delts on the fly machine. Strict and easy to load.'},
   ],
   'Goblet Squat': [

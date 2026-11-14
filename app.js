@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.53.2 / 20261113_2
+ * Version/build: fcf-v5.54.0 / 20261113_3
  */
 
-const FCF_VERSION = 'fcf-v5.53.2';
-const FCF_BUILD   = '20261113_2';
+const FCF_VERSION = 'fcf-v5.54.0';
+const FCF_BUILD   = '20261113_3';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -5156,7 +5156,7 @@ async function withDialogSpinner(label, fn) {
 // never as a former price ("was $99.99"): it has not been charged yet.
 // Rule of 100: both prices are under $100, so the saving reads as a
 // percent (40% off annual, 33% off monthly).
-const FOUNDING_OFFER_LIVE = false;
+const FOUNDING_OFFER_LIVE = true; // turned on Nov 13 2026, the day Apple approved version 1.0
 const FOUNDING_TOTAL = 100;
 const REGULAR_ANNUAL_PRICE = '$99.99';
 const REGULAR_MONTHLY_PRICE = '$11.99';

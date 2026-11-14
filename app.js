@@ -1,10 +1,13 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.56.0 / 20261113_8
+ * Version/build: fcf-v5.56.1 / 20261114_1
  */
 
-const FCF_VERSION = 'fcf-v5.56.0';
-const FCF_BUILD   = '20261113_8';
+const FCF_VERSION = 'fcf-v5.56.1';
+const FCF_BUILD   = '20261114_1';
+// The App Store listing, with Chad's campaign tag so App Store Connect
+// counts installs that came from this website (Nov 14 2026).
+const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -17133,7 +17136,7 @@ function renderDevices(p) {
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">APPLE HEALTH</div>');
   if (!isNative) {
-    parts.push('<div style="font-size:0.75rem;color:var(--muted);line-height:1.65">Apple Health syncs automatically when you use the Flight Crew Fitness iOS app. Download it from the App Store and health data will appear here after your first login.</div>');
+    parts.push('<div style="font-size:0.75rem;color:var(--muted);line-height:1.65">Apple Health syncs automatically when you use the Flight Crew Fitness iOS app. Download it from the <a href="' + APP_STORE_URL + '" target="_blank" rel="noopener" style="color:var(--gold)">App Store</a> and health data will appear here after your first login.</div>');
   } else if (!hk) {
     parts.push('<div style="font-size:0.75rem;color:var(--muted);line-height:1.65;margin-bottom:12px">Requesting access to Apple Health…</div>');
   } else if (!hk.granted) {

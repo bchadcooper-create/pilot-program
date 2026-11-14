@@ -1,6 +1,6 @@
 # Flight Crew Fitness
 
-> Flight Crew Fitness (flightcrew.fit) is a workout and nutrition app for airline pilots and flight crew, built by a working airline captain. It plans strength training around the crew schedule, layovers, hotel gyms and the pilot's sleep and readiness data. The web app works today at https://flightcrew.fit and the iOS app is in App Store review.
+> Flight Crew Fitness (flightcrew.fit) is a workout and nutrition app for airline pilots and flight crew, built by a working airline captain. It plans strength training around the crew schedule, layovers, hotel gyms and the pilot's sleep and readiness data. The iPhone app is on the App Store (https://apps.apple.com/us/app/flight-crew-fitness/id6807968764) and the same account works in any browser at https://flightcrew.fit.
 
 Key facts:
 - Made for: airline pilots, flight attendants and other crew who train on four-day trips, in hotel gyms and hotel rooms, on a schedule that changes every week.

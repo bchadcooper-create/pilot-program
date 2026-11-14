@@ -5,7 +5,7 @@ You are writing for the blog of Flight Crew Fitness (flightcrew.fit), a workout 
 ## Hard rules (the build script rejects violations)
 1. NO em dashes (the character —) anywhere. Use a comma, a period, or a colon. Also avoid en dashes in prose.
 2. Every article is a Markdown file in blog/src/<slug>.md with the exact front matter shown in the example file blog/src/hotel-gym-workout-for-pilots.md. Read that file first and copy its structure exactly.
-3. Never state a user count for the app. Never state a specific mandatory retirement age (say "mandatory retirement"). Never claim the iOS app is in the App Store; say "the web app works today, the iOS app is in App Store review".
+3. Never state a user count for the app. Never state a specific mandatory retirement age (say "mandatory retirement"). The iPhone app is live on the App Store (since November 13 2026); say "the iPhone app is on the App Store, and the same account works in any browser". Never state download or rating counts.
 4. Every number, statistic, study result, FAA rule or quote must have a source in the references list with a real URL from the research notes below. If you cannot source a claim, do not make it. Do not invent studies, authors, or figures.
 5. Nothing diagnoses anyone or tells a specific person to change medication. Medical articles end by pointing the reader to their AME or doctor for their own case.
 6. 1,300 to 1,900 words in the body. Four to seven H2 sections. One "Captain's note:" paragraph somewhere in the middle (a paragraph that starts with the literal text `Captain's note:`). One `{{CTA}}` line on its own after the intro paragraphs (before the first H2).

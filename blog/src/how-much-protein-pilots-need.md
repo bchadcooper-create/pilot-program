@@ -111,6 +111,6 @@ Everything above is a system you can run by hand with a notebook and a shaker. I
 
 The app reads your duty days, show times and layovers, and paces the protein target around the events of each day rather than a fixed meal schedule. A 5 a.m. show gets the before-the-van serving and the after-first-leg serving front-loaded. A noon show shifts the targets later. Food photo recognition handles the meal you did not plan, and "Your Usual" saves the jerky, the pouch and the shaker as one-tap entries so logging the fourth serving of the day takes less time than eating it.
 
-The target the app paces is the one you set in your range, 1.2 to 2.4 g per kg, and the per-meal pacing follows the 0.4 g per kg guideline. The web app works today and the iOS app is in App Store review.
+The target the app paces is the one you set in your range, 1.2 to 2.4 g per kg, and the per-meal pacing follows the 0.4 g per kg guideline. The iPhone app is [on the App Store](https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&ct=Blog&mt=8), and the same account works in any browser at flightcrew.fit.
 
 The protein is there to support training, and training on a trip does not have to be much. Stronger by Science's review of minimum effective dose found two to three weekly sets of 6 to 12 reps per lift was enough for general lifters to progress. Two [hotel gym sessions](/blog/hotel-gym-workout-for-pilots.html) a week, a serving of protein five times a day, and the bag packed the night before. That is the whole program, and it fits in a flight bag.

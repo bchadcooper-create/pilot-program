@@ -192,7 +192,7 @@ HEAD = """<!DOCTYPE html>
 
 FOOT = """
 <footer class="bottom"><div class="wrap wide">
-  <a href="/">Flight Crew Fitness</a><a href="/blog/">Blog</a><a href="/tools/faa-near-vision-test.html">FAA near vision test</a><a href="/tools/faa-medication-checker.html">FAA medication checker</a><a href="/tools/faa-medical-expiration-calculator.html">FAA medical calculator</a><a href="/tools/">All free tools</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="https://www.facebook.com/1374735345726996">Facebook</a>
+  <a href="/">Flight Crew Fitness</a><a href="/blog/">Blog</a><a href="/tools/faa-near-vision-test.html">FAA near vision test</a><a href="/tools/faa-medication-checker.html">FAA medication checker</a><a href="/tools/faa-medical-expiration-calculator.html">FAA medical calculator</a><a href="/tools/">All free tools</a><a href="https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Blog&amp;mt=8">iPhone app</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="https://www.facebook.com/1374735345726996">Facebook</a>
   <p class="disc">Flight Crew Fitness is a training tool, not medical advice. Nothing on this site diagnoses a condition or replaces your doctor or your AME. Consult a physician before beginning any new exercise program.</p>
 </div></footer>
 </body>
@@ -430,7 +430,7 @@ def make_og(meta):
     img.save(os.path.join(OUT, "og", meta["slug"] + ".png"), optimize=True)
 
 
-TOOLS = [("faa-medical-expiration-calculator.html", "2026-10-19"), ("faa-medication-checker.html", "2026-11-04")]
+TOOLS = [("faa-near-vision-test.html", "2026-11-14"), ("faa-medical-expiration-calculator.html", "2026-11-14"), ("faa-medication-checker.html", "2026-11-14")]
 
 # The /tools/ hub page. Each entry: file, card title, card text.
 TOOL_CARDS = [
@@ -439,7 +439,7 @@ TOOL_CARDS = [
     ("faa-medication-checker.html", "FAA medication checker",
      "Search more than 300 prescription and over-the-counter drugs, by brand or generic name, against the FAA Do Not Issue and Do Not Fly lists, with wait times."),
 ]
-TOOLS_INDEX_DATE = "2026-11-09"
+TOOLS_INDEX_DATE = "2026-11-14"
 
 
 def render_tools_index():
@@ -504,7 +504,9 @@ def main():
         make_og(a)
         print(f"  {a['slug']}.html  ({a['words']} words)")
     open(os.path.join(OUT, "index.html"), "w", encoding="utf-8").write(render_index(arts))
-    open(os.path.join(ROOT, "tools", "index.html"), "w", encoding="utf-8").write(render_tools_index())
+    # tools/index.html is NOT rebuilt here. It was edited by hand when the near
+    # vision test was added (Nov 12 2026) and render_tools_index() is behind it.
+    # Rebuilding would drop that tool from the page. Edit tools/index.html directly.
     write_sitemap(arts)
     print(f"built {len(arts)} articles + index + tools index + sitemap")
 

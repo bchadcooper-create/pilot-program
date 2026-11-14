@@ -17,7 +17,7 @@ faq:
   - q: Should I skip my workout if my readiness score is red?
     a: Usually not. A low readiness or recovery score argues for a lighter session, not an empty one. Drop the heavy lifting, keep the warmup, do a moderate hotel room or hotel gym session, and stop before you are wrecked. Flight Crew Fitness does this automatically by setting a No-Go condition from Apple Health data and swapping the heavy work out. The exception is a day where the schedule itself says the sleep window is too short to train at all.
   - q: Does Whoop or Oura work with Flight Crew Fitness?
-    a: Yes, through Apple Health. Apple Watch, Oura, Whoop and Garmin all write sleep and heart data to Apple Health, and Flight Crew Fitness reads from there to set the daily Go, Marginal or No-Go condition. Oura also connects directly on the Pro tier, which brings in the full readiness score rather than the components. The web app works today and the iOS app is in App Store review.
+    a: Yes, through Apple Health. Apple Watch, Oura, Whoop and Garmin all write sleep and heart data to Apple Health, and Flight Crew Fitness reads from there to set the daily Go, Marginal or No-Go condition. Oura also connects directly on the Pro tier, which brings in the full readiness score rather than the components. The iPhone app is on the App Store, and the same account works in any browser.
 references:
   - title: Elite HRV, When should overnight or shift workers measure HRV?
     url: https://help.elitehrv.com/article/500-when-should-overnight-or-shift-workers-measure-hrv

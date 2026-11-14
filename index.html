@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-itunes-app" content="app-id=6807968764">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -12,6 +13,7 @@
 <meta name="theme-color" content="#0a0f1a" id="metaThemeColor">
 <script>
 // Theme before first paint: follows the phone's Light / Dark setting (Apple HIG). No in-app picker.
+(function(){try{if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.storeKit)document.documentElement.className+=' in-ios-app';}catch(e){}})();
 (function(){try{var d=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;if(!d){document.documentElement.setAttribute('data-theme','light');document.getElementById('metaThemeColor').setAttribute('content','#ffffff');}}catch(e){}})();
 </script>
 <meta name="description" content="The workout, nutrition and FAA medical app for airline pilots and flight crew. Training built around your trips, hotel gyms and sleep. Free to start.">
@@ -273,6 +275,8 @@ a{color:inherit}
 .medal-badge.silver{background:var(--silver-grad);box-shadow:0 1px 6px rgba(145,153,166,0.45)}
 .medal-badge.bronze{background:var(--bronze-grad);box-shadow:0 1px 6px rgba(138,90,46,0.45)}
 .btn-blue{background:var(--blue-fill);color:white}
+/* The App Store link on the landing page is pointless inside the iPhone app itself. */
+.in-ios-app .app-store-link{display:none !important}
 .btn-green{background:var(--green-fill);color:var(--on-green)}
 .btn-outline{background:transparent;border:1.5px solid var(--border);color:var(--text)}
 .btn-red-outline{background:transparent;border:1.5px solid rgba(255,66,69,0.4);color:var(--red-soft)}
@@ -477,6 +481,7 @@ a{color:inherit}
     <div class="landing-cta">
       <button class="btn btn-gold" onclick="ST.showLanding=false;ST.authMode='signup';renderRoot()">Get Started Free</button>
       <button class="btn btn-outline mt8" onclick="ST.showLanding=false;ST.authMode='signin';renderRoot()">I have an account</button>
+      <a class="btn btn-outline mt8 app-store-link" href="https://apps.apple.com/us/app/flight-crew-fitness/id6807968764" style="display:block;text-decoration:none">Get the iPhone app on the App Store</a>
       <p style="font-size:0.6875rem;color:var(--muted);margin-top:12px;line-height:1.5">Free to start. No credit card. Built by a line captain who trains on the road.</p>
     </div>
   </header>

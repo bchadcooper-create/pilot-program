@@ -12,6 +12,18 @@ LOG="$HOME/Desktop/archive7.log"
 clear
 sed -i '' 's/MARKETING_VERSION = [0-9.]*;/MARKETING_VERSION = 1.1;/g' "$PBX"
 echo "1. project now: $(grep -o 'MARKETING_VERSION = [0-9.]*\|CURRENT_PROJECT_VERSION = [0-9]*' "$PBX" | sort -u | tr '\n' ' ')"
+# The project file can carry its own copies of the Info.plist permission
+# sentences (INFOPLIST_KEY_...), and those win over Info.plist. The first
+# archive showed the Health sentence was coming from there, so it is updated
+# in both places.
+echo "== permission sentences set in the project file:"
+grep -o 'INFOPLIST_KEY_NS[A-Za-z]* = [^;]*' "$PBX" | sort -u | cut -c1-150
+HEALTH='Flight Crew Fitness reads your activity, sleep, and health data from Apple Health to power your daily briefing and fitness trends. If you ask it to, it also reads your hearing test to compare against the FAA hearing standard. That result stays on your iPhone.'
+PHOTO='Flight Crew Fitness saves a workout summary picture to your photo library when you choose Save Image.'
+HEALTH="$HEALTH" perl -pi -e 's/(INFOPLIST_KEY_NSHealthShareUsageDescription = )"[^"]*";/$1"$ENV{HEALTH}";/' "$PBX"
+if grep -q 'INFOPLIST_KEY_NSHealthShareUsageDescription' "$PBX" && ! grep -q 'INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription' "$PBX"; then
+  PHOTO="$PHOTO" perl -pi -e 's/^(\s*)(INFOPLIST_KEY_NSHealthShareUsageDescription = [^\n]*\n)/$1$2$1INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "$ENV{PHOTO}";\n/' "$PBX"
+fi
 rm -rf "$ARCH"
 echo "2. archiving (several minutes)..."
 xcodebuild -project "$PROJ/FlightCrewFitness.xcodeproj" -scheme FlightCrewFitness -configuration Release \
@@ -25,6 +37,8 @@ if [ -d "$APP" ]; then
   echo "== signed by: $(codesign -dvv "$APP" 2>&1 | grep -E 'Authority=|TeamIdentifier' | head -2 | tr '\n' ' ')"
   echo "== entitlements in the signed app:"
   codesign -d --entitlements :- "$APP" 2>/dev/null | grep -o '<key>[^<]*</key>' | tr '\n' ' '; echo
-  echo "== health text: $(/usr/libexec/PlistBuddy -c 'Print :NSHealthShareUsageDescription' "$APP/Info.plist" | cut -c1-200)"
+  echo "== health text: $(/usr/libexec/PlistBuddy -c 'Print :NSHealthShareUsageDescription' "$APP/Info.plist" | cut -c100-260)"
+  echo "== photo text: $(/usr/libexec/PlistBuddy -c 'Print :NSPhotoLibraryAddUsageDescription' "$APP/Info.plist" 2>&1 | cut -c1-120)"
+  echo "== app-bound domains: $(/usr/libexec/PlistBuddy -c 'Print :WKAppBoundDomains' "$APP/Info.plist" 2>&1 | tr '\n' ' ')"
 fi
 echo "full log: Desktop/archive7.log"

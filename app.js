@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.54.0 / 20261113_3
+ * Version/build: fcf-v5.54.1 / 20261113_4
  */
 
-const FCF_VERSION = 'fcf-v5.54.0';
-const FCF_BUILD   = '20261113_3';
+const FCF_VERSION = 'fcf-v5.54.1';
+const FCF_BUILD   = '20261113_4';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -2882,8 +2882,23 @@ const LEADERBOARD_EXERCISES = [
   { id:'c_ul_er4', name:'EZ Bar Curl' },
   { id:'h_ul_er2', name:'DB Curl' },
 ];
-const LB_ADMIN_EMAIL = 'b.chad.cooper@gmail.com';
-function isSuperUser() { return !!(ST.user && (ST.user.email||'').toLowerCase() === LB_ADMIN_EMAIL); }
+// Who the admin is lives in the database (function is_app_admin), not in
+// this file (Nov 13 2026: the admin's email address was typed in here). The
+// answer only decides which buttons are drawn; the database enforces the
+// real permissions itself. It is asked once per launch and remembered per
+// account, so the admin menu still appears offline.
+function isSuperUser() { return !!(ST.user && ST.superUser === true); }
+async function loadSuperUser() {
+  if (!ST.user) { ST.superUser = false; return; }
+  const key = 'fcf_admin_' + ST.user.id;
+  try { ST.superUser = localStorage.getItem(key) === '1'; } catch (e) { ST.superUser = false; }
+  try {
+    const { data, error } = await withTimeout(SB.rpc('is_app_admin'), 6000);
+    if (error) return; // offline or a hiccup: keep the remembered answer
+    ST.superUser = data === true;
+    try { if (ST.superUser) localStorage.setItem(key, '1'); else localStorage.removeItem(key); } catch (e) { /* storage full or blocked */ }
+  } catch (e) { /* keep the remembered answer */ }
+}
 function isLbAdmin() { return isSuperUser(); } // kept as an alias — used elsewhere for leaderboard moderation
 
 function sessionMaxWeight(session, exId) {
@@ -4624,7 +4639,8 @@ async function bootAppInner() {
     loadSubscription().catch(e => { console.warn('loadSubscription failed:', e); return null; }),
     hydrateOuraFromRecent(),
     loadMedsTakenToday(),
-    loadStepHistory()
+    loadStepHistory(),
+    loadSuperUser()
   ]);
 
   applyProfileToState(profile);

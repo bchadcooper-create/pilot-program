@@ -366,3 +366,11 @@ language sql stable security definer set search_path = public as $$
   select greatest(0, 100 - count(*))::int from founding_members;
 $$;
 grant execute on function founding_spots_left() to anon, authenticated;
+
+-- Nov 13 2026: the app asks the database whether the signed-in user is the
+-- admin, so app.js no longer carries the admin's email address. The body is
+-- the same email test the delete policies and admin_stats use; see the live
+-- definition in the database (not repeated here).
+-- create or replace function public.is_app_admin() returns boolean ... ;
+-- revoke all on function public.is_app_admin() from public, anon;
+-- grant execute on function public.is_app_admin() to authenticated;

@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.56.1 / 20261114_1
+ * Version/build: fcf-v5.56.2 / 20261114_2
  */
 
-const FCF_VERSION = 'fcf-v5.56.1';
-const FCF_BUILD   = '20261114_1';
+const FCF_VERSION = 'fcf-v5.56.2';
+const FCF_BUILD   = '20261114_2';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -5132,10 +5132,13 @@ async function submitFeedback() {
 //      vector image (verified to decode to SHARE_URL). A camera reads it with no
 //      signal; the link opens once the other pilot is back on the ground.
 //   3. The address itself, big enough to read across a flight deck.
-// SHARE_URL is the site root, not window.location, so no in-app path or query
+// SHARE_URL is a fixed address, not window.location, so no in-app path or query
 // string ever leaks into a shared link. Update the QR if this ever changes.
-const SHARE_URL = 'https://flightcrew.fit';
-const SHARE_QR_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29" width="100%" height="100%" shape-rendering="crispEdges"><path fill="#fff" d="M0 0h29v29h-29z"/><path class="qrline" stroke="#000" d="M2 2.5h7m1 0h2m1 0h1m1 0h1m1 0h2m1 0h7m-25 1h1m5 0h1m2 0h2m5 0h1m1 0h1m5 0h1m-25 1h1m1 0h3m1 0h1m3 0h3m1 0h2m2 0h1m1 0h3m1 0h1m-25 1h1m1 0h3m1 0h1m1 0h1m3 0h2m1 0h2m1 0h1m1 0h3m1 0h1m-25 1h1m1 0h3m1 0h1m1 0h5m1 0h3m1 0h1m1 0h3m1 0h1m-25 1h1m5 0h1m1 0h1m1 0h2m6 0h1m5 0h1m-25 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-17 1h1m1 0h2m4 0h1m-17 1h1m3 0h1m1 0h5m1 0h1m3 0h6m2 0h1m-25 1h1m1 0h4m2 0h4m1 0h4m3 0h2m1 0h1m-24 1h1m1 0h1m1 0h1m1 0h1m1 0h4m1 0h3m2 0h1m1 0h3m-23 1h1m2 0h1m1 0h1m1 0h1m1 0h3m4 0h2m1 0h1m2 0h2m-23 1h1m1 0h8m1 0h1m4 0h3m1 0h4m-25 1h4m1 0h1m1 0h1m2 0h1m3 0h3m3 0h1m2 0h1m-18 1h4m5 0h8m-20 1h1m3 0h3m2 0h1m1 0h2m3 0h2m1 0h2m-24 1h4m1 0h2m1 0h2m1 0h1m4 0h7m-15 1h2m2 0h2m1 0h2m3 0h1m-21 1h7m1 0h5m1 0h1m1 0h1m1 0h1m1 0h1m-21 1h1m5 0h1m2 0h3m4 0h1m3 0h5m-25 1h1m1 0h3m1 0h1m1 0h3m1 0h3m1 0h9m-25 1h1m1 0h3m1 0h1m2 0h1m3 0h2m2 0h3m2 0h3m-25 1h1m1 0h3m1 0h1m3 0h1m4 0h1m1 0h2m2 0h1m1 0h1m-24 1h1m5 0h1m2 0h2m1 0h1m2 0h1m3 0h5m-24 1h7m1 0h8m1 0h1m4 0h3"/></svg>';
+// Nov 14 2026 (app live): the shared link is the /go/app/ page, which sends
+// iPhones and iPads straight to the App Store and every other device to the
+// website. The QR below was regenerated for it.
+const SHARE_URL = 'https://flightcrew.fit/go/app/';
+const SHARE_QR_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" width="100%" height="100%" shape-rendering="crispEdges"><path fill="#fff" d="M0 0h33v33h-33z"/><path class="qrline" stroke="#000" d="M2 2.5h7M13 2.5h1M15 2.5h1M18 2.5h5M24 2.5h7M2 3.5h1M8 3.5h1M10 3.5h1M13 3.5h2M16 3.5h3M20 3.5h2M24 3.5h1M30 3.5h1M2 4.5h1M4 4.5h3M8 4.5h1M11 4.5h1M13 4.5h4M18 4.5h1M24 4.5h1M26 4.5h3M30 4.5h1M2 5.5h1M4 5.5h3M8 5.5h1M11 5.5h1M15 5.5h3M20 5.5h3M24 5.5h1M26 5.5h3M30 5.5h1M2 6.5h1M4 6.5h3M8 6.5h1M10 6.5h2M16 6.5h1M20 6.5h2M24 6.5h1M26 6.5h3M30 6.5h1M2 7.5h1M8 7.5h1M12 7.5h2M15 7.5h1M20 7.5h3M24 7.5h1M30 7.5h1M2 8.5h7M10 8.5h1M12 8.5h1M14 8.5h1M16 8.5h1M18 8.5h1M20 8.5h1M22 8.5h1M24 8.5h7M11 9.5h1M13 9.5h4M18 9.5h4M2 10.5h1M4 10.5h1M6 10.5h1M8 10.5h1M12 10.5h2M16 10.5h2M19 10.5h1M21 10.5h2M26 10.5h1M29 10.5h1M4 11.5h2M7 11.5h1M10 11.5h1M12 11.5h2M16 11.5h2M22 11.5h3M27 11.5h1M30 11.5h1M2 12.5h8M11 12.5h1M13 12.5h3M19 12.5h1M22 12.5h1M25 12.5h1M28 12.5h3M3 13.5h1M10 13.5h5M17 13.5h1M19 13.5h2M22 13.5h2M29 13.5h1M6 14.5h4M12 14.5h3M18 14.5h3M22 14.5h3M27 14.5h1M29 14.5h2M3 15.5h1M6 15.5h2M10 15.5h3M14 15.5h2M17 15.5h2M22 15.5h1M24 15.5h1M27 15.5h1M30 15.5h1M3 16.5h7M11 16.5h4M16 16.5h4M22 16.5h6M29 16.5h2M3 17.5h1M5 17.5h2M11 17.5h2M15 17.5h2M18 17.5h3M22 17.5h2M25 17.5h3M29 17.5h1M2 18.5h1M4 18.5h2M8 18.5h1M12 18.5h1M16 18.5h2M19 18.5h1M21 18.5h4M27 18.5h1M29 18.5h2M4 19.5h3M9 19.5h1M11 19.5h1M16 19.5h2M19 19.5h1M23 19.5h2M27 19.5h2M30 19.5h1M2 20.5h1M4 20.5h7M14 20.5h2M20 20.5h1M24 20.5h1M26 20.5h1M29 20.5h2M3 21.5h2M7 21.5h1M9 21.5h2M13 21.5h2M17 21.5h1M19 21.5h2M22 21.5h1M24 21.5h1M26 21.5h2M29 21.5h1M2 22.5h1M6 22.5h1M8 22.5h1M11 22.5h1M18 22.5h2M22 22.5h5M10 23.5h1M12 23.5h1M14 23.5h2M17 23.5h4M22 23.5h1M26 23.5h1M28 23.5h3M2 24.5h7M13 24.5h2M16 24.5h3M20 24.5h3M24 24.5h1M26 24.5h2M29 24.5h2M2 25.5h1M8 25.5h1M13 25.5h4M18 25.5h2M22 25.5h1M26 25.5h2M29 25.5h2M2 26.5h1M4 26.5h3M8 26.5h1M10 26.5h3M14 26.5h1M16 26.5h4M22 26.5h5M29 26.5h1M2 27.5h1M4 27.5h3M8 27.5h1M11 27.5h1M14 27.5h4M19 27.5h2M25 27.5h2M28 27.5h1M2 28.5h1M4 28.5h3M8 28.5h1M10 28.5h1M14 28.5h2M20 28.5h4M25 28.5h3M30 28.5h1M2 29.5h1M8 29.5h1M12 29.5h3M16 29.5h1M18 29.5h2M21 29.5h3M25 29.5h2M29 29.5h1M2 30.5h7M10 30.5h4M17 30.5h6M25 30.5h2M29 30.5h2"/></svg>';
 
 function openNativeShare() {
   awardLiveBadge('recruiter').catch(() => {});
@@ -5166,8 +5169,8 @@ function shareApp() {
       ? '<button class="btn btn-gold" onclick="haptic(\'light\');openNativeShare()">📡 AirDrop or Share</button>'
       : '') +
     '<div style="background:#fff;border-radius:12px;padding:12px;width:220px;height:220px;margin:16px auto 10px" ' +
-      'role="img" aria-label="QR code for flightcrew.fit">' + SHARE_QR_SVG + '</div>' +
-    '<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:4px">Or point their camera here. Opens when they\'re back online.</div>' +
+      'role="img" aria-label="QR code for the Flight Crew Fitness app">' + SHARE_QR_SVG + '</div>' +
+    '<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:4px">Or point their camera here. Opens the App Store on an iPhone once they\'re back online.</div>' +
     '<div style="font-family:var(--mono);font-size:1.375rem;letter-spacing:.06em;color:var(--gold);margin:10px 0 14px">flightcrew.fit</div>' +
     '<button class="btn btn-outline" onclick="copyShareLink()">Copy link</button>' +
     '<button class="btn btn-outline mt8" onclick="closeModal()">Done</button>' +

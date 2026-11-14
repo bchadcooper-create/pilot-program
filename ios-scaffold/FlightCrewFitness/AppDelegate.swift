@@ -108,11 +108,15 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        // Build 7: a workout timer alert is for when the app is NOT on
-        // screen. With the app open, the page plays its own chime and
-        // vibration, so showing this too would ring twice.
+        // A workout timer alert with the app on screen: play the alert
+        // sound, show no banner (the page shows its own "Rest complete"
+        // message). Build 7 returned [] here and left the sound to the web
+        // page's own chime, but that chime is not audible inside the app
+        // (reported Nov 13 2026 on build 7: message shown, no sound). From
+        // build 8 the iPhone makes the sound in both cases, locked or open,
+        // and the page no longer tries to.
         if (notification.request.content.userInfo["type"] as? String) == "timer" {
-            completionHandler([])
+            completionHandler([.sound])
             return
         }
         completionHandler([.banner, .badge, .sound])

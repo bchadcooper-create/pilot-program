@@ -140,6 +140,10 @@ class ViewController: UIViewController {
               // Build 7. Workout timers can ring with the phone locked
               // (notifications actions "timerSchedule" / "timerCancel").
               timerAlerts:     !!(window.webkit?.messageHandlers?.notifications),
+              // Build 8. With the app on screen the iPhone itself plays the
+              // timer's alert sound, so the page must not cancel the alert
+              // just before it fires and need not play its own chime.
+              timerAlertsForeground: !!(window.webkit?.messageHandlers?.notifications),
               // Build 7. This build can read the Apple Health hearing test
               // (healthkit action "audiogram", reply on fcf:audiogram).
               audiogram:       !!(window.webkit?.messageHandlers?.healthkit),

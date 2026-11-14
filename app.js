@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.55.1 / 20261113_6
+ * Version/build: fcf-v5.55.2 / 20261113_7
  */
 
-const FCF_VERSION = 'fcf-v5.55.1';
-const FCF_BUILD   = '20261113_6';
+const FCF_VERSION = 'fcf-v5.55.2';
+const FCF_BUILD   = '20261113_7';
 // Signed-out landing page markup, served in index.html for SEO. Read once
 // here, before any render touches #mainPage.
 const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTML || '';
@@ -12516,6 +12516,26 @@ function cancelTimerAlert(id) {
 // True when a timer's end time passed while the page was paused (more than
 // 3 seconds ago) on a build that already rang for it. The page then skips
 // its own late chime and vibration so the user is not alerted twice.
+// BUILD 8: the iPhone also plays the alert sound when the app is on screen
+// (capabilities.timerAlertsForeground). Reported on build 7: with the app
+// open the "Rest complete" message appeared but the page's chime made no
+// sound. So on these builds the page leaves the sound to the iPhone: it does
+// not cancel the alert at the finish (the alert fires within half a second
+// of the page noticing), and it clears any leftover a few seconds later.
+function timerSoundIsNative() {
+  return timerAlertsSupported() && !!FCFBridge.capabilities.timerAlertsForeground;
+}
+// Called when a timer reaches its end on screen. dueTs is when it was due.
+function timerFinishedAlert(id, dueTs) {
+  const rang = timerAlertAlreadyRang(dueTs);
+  if (timerSoundIsNative()) {
+    setTimeout(() => cancelTimerAlert(id), 4000); // let it sound, then tidy up
+    if (!rang) haptic('success');
+    return;
+  }
+  cancelTimerAlert(id); // build 7: also clears the banner if it rang while locked
+  if (!rang) { playChime(); haptic('success'); }
+}
 function timerAlertAlreadyRang(dueTs) {
   return timerAlertsSupported() && typeof dueTs === 'number' && (Date.now() - dueTs) > 3000;
 }
@@ -12543,12 +12563,7 @@ function tickRestTimer(exId) {
     clearInterval(ST.restTimer.interval);
     ST.restTimer.active = false;
     persistTimerState();
-    const rang = timerAlertAlreadyRang(ST.restTimer.endTs);
-    cancelTimerAlert('rest'); // also clears the banner if it rang while locked
-    if (!rang) {
-      playChime();
-      haptic('success'); // BUG FIX (reported): was never actually called on completion
-    }
+    timerFinishedAlert('rest', ST.restTimer.endTs);
     showToast('⏱ Rest complete. Next set.');
     renderFlight(document.getElementById('mainPage'));
   }
@@ -12994,9 +13009,7 @@ function tickStopwatch(exId, side) {
   if (ST.stopwatch.targetSec && !ST.stopwatch.chimed && ST.stopwatch.seconds >= ST.stopwatch.targetSec) {
     ST.stopwatch.chimed = true;
     persistTimerState();
-    const rang = timerAlertAlreadyRang(ST.stopwatch.startTs + ST.stopwatch.targetSec * 1000);
-    cancelTimerAlert('stopwatch');
-    if (!rang) { playChime(); haptic('success'); }
+    timerFinishedAlert('stopwatch', ST.stopwatch.startTs + ST.stopwatch.targetSec * 1000);
     showToast('🔔 Target time reached. Stop when ready.');
   }
   const domId = side ? exId+'_'+side : exId;
@@ -13061,9 +13074,7 @@ function tickNSDR(exId) {
   if (ST.nsdrTimer.seconds >= 300 && !ST.nsdrTimer.chimed) {
     ST.nsdrTimer.chimed = true;
     persistTimerState();
-    const rang = timerAlertAlreadyRang(ST.nsdrTimer.startTs + 300000);
-    cancelTimerAlert('nsdr');
-    if (!rang) { playChime(); haptic('success'); }
+    timerFinishedAlert('nsdr', ST.nsdrTimer.startTs + 300000);
     showToast('🔔 5 minutes complete. Continue or stop and save.');
   }
 }

@@ -2133,6 +2133,26 @@ test('timer alerts: sent only to a build that supports them, and a late chime is
   assertEqual(ctx.timerAlertAlreadyRang(Date.now() - 500), false, 'ended just now on screen: the page chimes');
   delete ctx.FCFBridge; delete ctx.webkit;
 });
+test('build 8: the iPhone makes the timer sound on screen, so the page does not cancel it early or chime', () => {
+  const sent = []; let chimes = 0; const timers = [];
+  const realChime = ctx.playChime, realTimeout = ctx.setTimeout;
+  ctx.playChime = () => { chimes++; }; ctx.setTimeout = (fn, ms) => { timers.push([fn, ms]); return 1; };
+  ctx.webkit = { messageHandlers: { notifications: { postMessage: m => sent.push(m) }, haptics: { postMessage: m => sent.push({ action: 'haptic' }) } } };
+  ctx.FCFBridge = { isNative: true, capabilities: { timerAlerts: true } };
+  ctx.timerFinishedAlert('rest', Date.now());
+  assertEqual(chimes, 1, 'build 7: page chimes'); assertEqual(sent.some(m => m.action === 'timerCancel'), true, 'build 7: alert cancelled at once');
+  sent.length = 0; chimes = 0;
+  ctx.FCFBridge = { isNative: true, capabilities: { timerAlerts: true, timerAlertsForeground: true } };
+  ctx.timerFinishedAlert('rest', Date.now());
+  assertEqual(chimes, 0, 'build 8: page stays quiet'); assertEqual(sent.some(m => m.action === 'timerCancel'), false, 'build 8: alert left to fire');
+  assertEqual(sent.some(m => m.action === 'haptic'), true, 'still vibrates');
+  assertEqual(timers.length === 1 && timers[0][1] === 4000, true, 'tidy-up scheduled'); timers[0][0]();
+  assertEqual(sent.some(m => m.action === 'timerCancel' && m.id === 'rest'), true, 'tidy-up clears the leftover');
+  sent.length = 0;
+  ctx.timerFinishedAlert('rest', Date.now() - 60000);
+  assertEqual(sent.some(m => m.action === 'haptic'), false, 'rang a minute ago while locked: no second buzz');
+  ctx.playChime = realChime; ctx.setTimeout = realTimeout; delete ctx.FCFBridge; delete ctx.webkit;
+});
 test('hearing test is set against the FAA audiogram lines per frequency', () => {
   const good = [{ hz: 250, left: 10, right: 10 }, { hz: 500, left: 20, right: 30 }, { hz: 1000, left: 25, right: 45 }, { hz: 2000, left: 30, right: 50 }, { hz: 3000, left: 40, right: 60 }, { hz: 4000, left: 70, right: 70 }];
   let ev = ctx.evaluateAudiogram(good);

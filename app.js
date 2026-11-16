@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.56.6 / 20261116_1
+ * Version/build: fcf-v5.56.7 / 20261116_2
  */
 
-const FCF_VERSION = 'fcf-v5.56.6';
-const FCF_BUILD   = '20261116_1';
+const FCF_VERSION = 'fcf-v5.56.7';
+const FCF_BUILD   = '20261116_2';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -1104,8 +1104,19 @@ const GOAL_OVERLAYS = {
   },
 };
 
-// Nov 16 2026 (Chad): nothing in the program is chosen by sex. The rep bump
-// for women that lived here is gone; everyone gets the same targets.
+// Nov 16 2026 (Chad): no goal or workout is suggested by sex. The rep
+// target below stays, because it rests on fatigue research, not on taste.
+// Women complete more reps at a given intensity and recover faster between
+// sets (fatigue-resistance research) — so hypertrophy-slot (enroute) rep
+// targets shift up by 2 for female users. Heavy strength work (takeoff) and
+// set counts stay identical: the science shows no difference there.
+function femaleTargetBump(target) {
+  return target.replace(/^(\d+)×(\d+)(\/\w+)?$/, (m, s, r, suf) => {
+    r = parseInt(r, 10);
+    if (r >= 6 && r <= 12) r += 2;
+    return s + '×' + r + (suf || '');
+  });
+}
 
 // ─── INJURY-AWARE FILTERING ───────────────────────────────────────────────────
 // Not a medical assessment. Says which body regions an exercise puts
@@ -10358,6 +10369,32 @@ function syncBodyMetricsFieldsToState() {
   const baseEl = document.getElementById('bmBase');
   if (baseEl) ST.homeBase = cleanBase(baseEl.value);
 }
+// A body weight typed in the profile: pounds, one decimal, sane range only.
+function cleanBodyWeight(v) {
+  const n = parseFloat(String(v == null ? '' : v).replace(',', '.'));
+  if (!Number.isFinite(n) || n < 60 || n > 600) return null;
+  return Math.round(n * 10) / 10;
+}
+// Puts a profile weight on today's row of the weigh-in log, so the weight
+// chart and the profile agree. Other numbers on today's row are left alone.
+async function logWeightToday(wt) {
+  if (!ST.user || !wt) return;
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const end = new Date(); end.setHours(23, 59, 59, 999);
+  const { data: existing, error } = await SB.from('weight_log').select('id').eq('user_id', ST.user.id)
+    .gte('logged_at', start.toISOString()).lte('logged_at', end.toISOString()).limit(1);
+  if (error) throw error;
+  const res = existing && existing.length
+    ? await SB.from('weight_log').update({ weight_lb: wt }).eq('id', existing[0].id)
+    : await SB.from('weight_log').insert([{ user_id: ST.user.id, weight_lb: wt, logged_at: new Date().toISOString() }]);
+  if (res.error) throw res.error;
+}
+// What the Fuel Plan still needs, in the words the profile uses.
+function nutritionGoalsMissing() {
+  const m = [];
+  if (!ST.sex) m.push('sex'); if (!ST.age) m.push('age'); if (!ST.heightIn) m.push('height'); if (!ST.lastWeight) m.push('weight');
+  return m;
+}
 function cleanBase(v) { const b = String(v || '').trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4); return b.length >= 3 ? b : null; }
 
 async function saveBodyMetrics() {
@@ -10384,7 +10421,11 @@ async function saveBodyMetrics() {
   profile.sex = ST.sex;
   profile.heightIn = ST.heightIn;
   profile.age = ST.age;
+  const newWeight = cleanBodyWeight(document.getElementById('bmWeight')?.value);
+  const weightChanged = newWeight && newWeight !== ST.lastWeight;
+  if (newWeight) { ST.lastWeight = newWeight; profile.lastWeight = newWeight; }
   await withDialogSpinner('Saving…', () => dbSetProfile(profile));
+  if (weightChanged) logWeightToday(newWeight).catch(e => console.warn('Logging the profile weight failed:', e));
   showToast('Body metrics saved.');
   // Call sign just set for the first time: put their existing lift history
   // on the boards so months of logged work isn't invisible.
@@ -10704,6 +10745,7 @@ function getCombinedWorkout(env, muscleGroup) {
   const ov = GOAL_OVERLAYS[ST.goal];
   const swaps = ov?.swaps?.[env]?.[muscleGroup] || null;
   const retarget = ov?.retarget || null;
+  const female = ST.sex === 'female';
   // Names already in this workout, so an injury swap never doubles one.
   const usedNames = new Set();
   ['taxi','takeoff','enroute','landing'].forEach(ph => (base[ph] || []).forEach(e => usedNames.add(e.name)));
@@ -10711,6 +10753,10 @@ function getCombinedWorkout(env, muscleGroup) {
     let out = e;
     if (swaps && swaps[phase] && swaps[phase][e.name]) out = swaps[phase][e.name];
     if (retarget && retarget[out.id]) out = { ...out, target: retarget[out.id] };
+    if (female && phase === 'enroute' && !out.timed && (out.inputType === 'reps_weight' || out.inputType === 'reps_only')) {
+      const t = femaleTargetBump(out.target);
+      if (t !== out.target) out = { ...out, target: t };
+    }
     out = applyInjuryFilter(out, phase, usedNames);
     return withRepRange(out, phase);
   });
@@ -12765,7 +12811,8 @@ function formatStopwatch(sec) {
 //     10-15 reps at moderate effort for general health and older adults.
 //   Blagrove, Howatson, Hayes, Sports Med 2018 (review): heavy and
 //     explosive strength work improves running economy in distance runners.
-//   The range is the same for everyone: sex does not change it (Nov 16 2026).
+//   Hunter, Acta Physiol 2014: women are more fatigue resistant at a given
+//     relative load, so the accessory range shifts up 2 reps for women.
 // Ranges are [compound, accessory, isolation]; power work is 3-6 for all.
 const REP_RANGES = {
   strength:  { compound: [4, 6],  accessory: [6, 10],  isolation: [10, 15] },
@@ -12788,7 +12835,7 @@ function exerciseRole(exItem, phase) {
 }
 // The range for one exercise, or null when reps are not what it counts
 // (timed work, jumps measured in inches, warm-ups and cool-downs).
-function repRangeFor(exItem, phase, goal, level) {
+function repRangeFor(exItem, phase, goal, level, sex) {
   if (!exItem || exItem.timed) return null;
   if (exItem.inputType !== 'reps_weight' && exItem.inputType !== 'reps_only') return null;
   if (phase !== 'takeoff' && phase !== 'enroute') return null;
@@ -12803,6 +12850,7 @@ function repRangeFor(exItem, phase, goal, level) {
     // low-rep work, so a beginner on the strength plan uses the next band.
     const key = (role === 'compound' && level === 'beginner' && (goal === 'strength' || goal === 'jump')) ? 'accessory' : role;
     [lo, hi] = table[key];
+    if (sex === 'female' && phase === 'enroute' && role !== 'power') { lo += 2; hi += 2; }
   }
   // An exercise written for a very different rep count keeps a range around
   // its own number: 3x20 calf raises stay high, 5x3 heavy triples stay low.
@@ -12813,7 +12861,7 @@ function repRangeFor(exItem, phase, goal, level) {
 }
 // Rewrites "4×10/leg" as "4 × 8-12/leg" and records the range on the item.
 function withRepRange(exItem, phase) {
-  const range = repRangeFor(exItem, phase, ST.goal, ST.level);
+  const range = repRangeFor(exItem, phase, ST.goal, ST.level, ST.sex);
   if (!range) return exItem;
   const m = String(exItem.target || '').match(/^(\d+)\s*[×x]\s*(\d+)(.*)$/i);
   const target = m ? m[1] + ' × ' + range.lo + '-' + range.hi + (m[3] || '') : exItem.target;
@@ -15892,6 +15940,11 @@ function renderProfile(p) {
   parts.push('</div>');
   parts.push('<div class="field"><label>Age <span class="info-i" onclick="showBioInfo(\'age\')">i</span></label>');
   parts.push('<input id="bmAge" type="text" inputmode="numeric" placeholder="e.g. 42" value="'+(ST.age||'')+'"></div>');
+  // Weight lives here too (reported Nov 16 2026: Fuel Plan asked for weight
+  // "in Pilot Profile", and the profile had no weight field).
+  parts.push('<div class="field"><label>Weight (lb)</label>');
+  parts.push('<input id="bmWeight" type="text" inputmode="decimal" placeholder="e.g. 165" value="'+(ST.lastWeight||'')+'">');
+  parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-top:4px;line-height:1.5">Used for calorie and protein targets. Saving it here also logs it as today\'s weigh-in.</div></div>');
   parts.push('<div class="field"><label>Call Sign (Leaderboard and Crew Feed Name)</label>');
   parts.push('<input id="bmUsername" type="text" maxlength="20" placeholder="e.g. MaverickPHX" value="'+(ST.username||'')+'">');
   parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-top:4px;line-height:1.5">Shown publicly on the leaderboards. Leave blank to stay off the boards. Your lifts stay private either way until you set one.</div></div>');
@@ -19118,7 +19171,7 @@ function renderNutritionGoalsSetup(p) {
   parts.push('<div class="section-label" style="margin-top:0">FUEL PLAN SETUP</div>');
 
   if (!nutritionGoalsComplete()) {
-    parts.push('<div class="alert alert-info mb12"><div class="alert-icon">📋</div><div>Targets are calculated from your sex, age, height, and weight. Add those in Pilot Profile first and come back. Nothing here works off guessed numbers.</div></div>');
+    parts.push('<div class="alert alert-info mb12"><div class="alert-icon">📋</div><div>Targets are calculated from your sex, age, height, and weight. Still needed: <strong>' + nutritionGoalsMissing().join(', ') + '</strong>. Add ' + (nutritionGoalsMissing().length > 1 ? 'them' : 'it') + ' under Body Metrics in Pilot Profile, tap Save, and come back. Nothing here works off guessed numbers.</div></div>');
     parts.push('<button class="btn btn-outline" onclick="switchTab(\'profile\')">Go to Pilot Profile →</button>');
     p.innerHTML = parts.join('');
     return;

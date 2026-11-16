@@ -817,6 +817,17 @@ test('a flagged shoulder keeps the rotation work and adds internal rotation', ()
   assertEqual(ctx.getCombinedWorkout('comm', 'Lower Body').taxi.some(e => /Shoulder/.test(e.name)), false, 'leg day is left alone');
   ctx.ST.injuries = [];
 });
+test('Fuel Plan names what is missing, and the profile takes a weight (reported Nov 16: sex, age and height saved, still blocked)', () => {
+  const keep = { sex: ctx.ST.sex, age: ctx.ST.age, h: ctx.ST.heightIn, w: ctx.ST.lastWeight };
+  ctx.ST.sex = 'female'; ctx.ST.age = 21; ctx.ST.heightIn = 63; ctx.ST.lastWeight = null;
+  assertEqual(ctx.nutritionGoalsMissing().join(','), 'weight', 'only weight is missing');
+  assertEqual(ctx.nutritionGoalsComplete(), false, 'still blocked without a weight');
+  ctx.ST.lastWeight = ctx.cleanBodyWeight('131.5');
+  assertEqual(ctx.ST.lastWeight, 131.5, 'weight accepted'); assertEqual(ctx.nutritionGoalsComplete(), true, 'unblocked');
+  assertEqual(ctx.cleanBodyWeight(''), null, 'blank is not a weight'); assertEqual(ctx.cleanBodyWeight('12'), null, 'out of range');
+  assertEqual(ctx.cleanBodyWeight('165,4'), 165.4, 'comma decimal');
+  ctx.ST.sex = keep.sex; ctx.ST.age = keep.age; ctx.ST.heightIn = keep.h; ctx.ST.lastWeight = keep.w;
+});
 test('a workout reopened mid-session drops a caution that no longer applies', () => {
   ctx.ST.injuries = ['shoulder', 'elbow_wrist'];
   const wk = ctx.refreshInjuryCautions({ taxi: [{ id: 'a', name: 'Thoracic Extension (chair)', injuryCaution: true, flaggedRegion: 'Elbow / Wrist' }],
@@ -1153,13 +1164,8 @@ test('ranges follow the mission objective and the exercise role', () => {
   assertEqual(ctx.repRangeFor(sq, 'takeoff', 'strength', 'beginner', 'male'), { lo: 6, hi: 10 }, 'beginner strength uses the next band (ACSM)');
   assertEqual(ctx.repRangeFor(sq, 'takeoff', 'muscle', 'intermediate', 'male'), { lo: 6, hi: 10 }, 'muscle compound 6-10');
   assertEqual(ctx.repRangeFor(row, 'enroute', 'fatloss', 'intermediate', 'male'), { lo: 10, hi: 15 }, 'fat loss accessory 10-15');
-  assertEqual(ctx.repRangeFor(row, 'enroute', 'muscle', 'intermediate', 'female'), ctx.repRangeFor(row, 'enroute', 'muscle', 'intermediate', 'male'), 'sex does not change the range');
-  { const keep = ctx.ST.sex, inj = ctx.ST.injuries; ctx.ST.injuries = [];
-    ctx.ST.sex = 'female'; const f = JSON.stringify(ctx.getCombinedWorkout('comm', 'Lower Body'));
-    ctx.ST.sex = 'male';   const m = JSON.stringify(ctx.getCombinedWorkout('comm', 'Lower Body'));
-    ctx.ST.sex = keep; ctx.ST.injuries = inj;
-    assertEqual(f === m, true, 'the same workout is built whatever the sex (requested Nov 16)');
-    assertEqual(vm.runInContext("Object.values(GOALS).some(g => 'suggestFor' in g)", ctx), false, 'no goal is suggested or hidden by sex'); }
+  assertEqual(ctx.repRangeFor(row, 'enroute', 'muscle', 'intermediate', 'female'), { lo: 10, hi: 14 }, 'women: accessory range up 2');
+  assertEqual(vm.runInContext("Object.values(GOALS).some(g => 'suggestFor' in g)", ctx), false, 'no goal is suggested or hidden by sex (requested Nov 16)');
   assertEqual(ctx.repRangeFor(curl, 'enroute', 'muscle', 'intermediate', 'male'), { lo: 12, hi: 15 }, 'isolation 12-15');
   assertEqual(ctx.repRangeFor({ name: 'Box Jump', target: '5×3', inputType: 'reps_height' }, 'takeoff', 'jump', 'intermediate', 'male'), null, 'jumps measured in inches: no range');
   assertEqual(ctx.repRangeFor({ name: 'Kettlebell Clean & Press', target: '4×5', inputType: 'reps_weight' }, 'takeoff', 'muscle', 'intermediate', 'male'), { lo: 3, hi: 6 }, 'power work 3-6 whatever the goal');

@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.56.5 / 20261114_5
+ * Version/build: fcf-v5.56.6 / 20261116_1
  */
 
-const FCF_VERSION = 'fcf-v5.56.5';
-const FCF_BUILD   = '20261114_5';
+const FCF_VERSION = 'fcf-v5.56.6';
+const FCF_BUILD   = '20261116_1';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -299,8 +299,8 @@ const GOALS = {
   // order is not a rotation; runnerNext() picks the day: easy runs, one
   // long run a week, one strength day a week for durability.
   runner:   { label: 'Runner',          icon: '🏃', desc: 'Run-first plan: easy runs, one long run and one strength day a week', order: ['Run'] },
-  chest:    { label: 'Chest & Shoulders', icon: '🏋️', desc: 'Pressing emphasis: Upper Push comes around twice per rotation', suggestFor: 'male', order: ['Upper Push','Lower Body','Upper Push','Upper Pull','Full Body'] },
-  glute:    { label: 'Glute Emphasis',   icon: '🍑', desc: 'Glute-focused programming: Lower Body comes around twice per rotation', suggestFor: 'female', order: ['Lower Body','Upper Push','Lower Body','Upper Pull','Full Body'] },
+  chest:    { label: 'Chest & Shoulders', icon: '🏋️', desc: 'Pressing emphasis: Upper Push comes around twice per rotation', order: ['Upper Push','Lower Body','Upper Push','Upper Pull','Full Body'] },
+  glute:    { label: 'Glute Emphasis',   icon: '🍑', desc: 'Glute-focused programming: Lower Body comes around twice per rotation', order: ['Lower Body','Upper Push','Lower Body','Upper Pull','Full Body'] },
   strength: { label: 'Overall Strength', icon: '⚡', desc: 'Heavy low-rep compounds plus explosive power work', order: ['Lower Body','Upper Push','Upper Pull','Power / Plyo','Full Body'] },
 };
 
@@ -1104,17 +1104,8 @@ const GOAL_OVERLAYS = {
   },
 };
 
-// Women complete more reps at a given intensity and recover faster between
-// sets (fatigue-resistance research) — so hypertrophy-slot (enroute) rep
-// targets shift up by 2 for female users. Heavy strength work (takeoff) and
-// set counts stay identical: the science shows no difference there.
-function femaleTargetBump(target) {
-  return target.replace(/^(\d+)×(\d+)(\/\w+)?$/, (m, s, r, suf) => {
-    r = parseInt(r, 10);
-    if (r >= 6 && r <= 12) r += 2;
-    return s + '×' + r + (suf || '');
-  });
-}
+// Nov 16 2026 (Chad): nothing in the program is chosen by sex. The rep bump
+// for women that lived here is gone; everyone gets the same targets.
 
 // ─── INJURY-AWARE FILTERING ───────────────────────────────────────────────────
 // Not a medical assessment. Says which body regions an exercise puts
@@ -10135,7 +10126,7 @@ async function renderPreflight(p) {
   if (profileIncomplete) {
     parts.push('<div class="card mb12" style="border-color:var(--gold);cursor:pointer" onclick="haptic(\'light\');switchTab(\'profile\')">');
     parts.push('<div class="fb"><div><div style="font-size:0.8125rem;font-weight:600">👤 Complete your profile</div>');
-    parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:3px">Set sex and training objective to unlock personalized programming.</div></div>');
+    parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:3px">Add sex and bodyweight for calorie targets and leaderboard scoring.</div></div>');
     parts.push('<div style="font-size:1.125rem;color:var(--gold)">→</div></div>');
     parts.push('</div>');
   }
@@ -10399,35 +10390,6 @@ async function saveBodyMetrics() {
   // on the boards so months of logged work isn't invisible.
   if (!hadUsername && ST.username) backfillLeaderboard().catch(() => {});
   renderPage();
-  // First time sex is set: offer (once) to switch to the suggested emphasis
-  // objective. History is untouched either way.
-  if (!hadSex && ST.sex) {
-    const suggested = ST.sex === 'female' ? 'glute' : 'chest';
-    if (ST.goal !== suggested) showStyleUpdatePrompt(suggested);
-  }
-}
-
-function showStyleUpdatePrompt(suggestedGoal) {
-  const g = GOALS[suggestedGoal];
-  if (!g) return;
-  const root = document.getElementById('modalRoot');
-  root.innerHTML =
-    '<div class="modal-bg" onclick="if(event.target===this)closeModal()">' +
-    '<div class="modal-sheet">' +
-    '<div class="modal-handle"></div>' +
-    '<div class="modal-title">Update your workout style?</div>' +
-    '<div class="modal-body" style="margin-bottom:14px">Based on your profile, we suggest <strong>'+g.icon+' '+g.label+'</strong>: '+g.desc.toLowerCase()+'. Your training history stays exactly as it is either way, and you can change this anytime in Mission Objective.</div>' +
-    '<button class="btn btn-gold" onclick="applyStyleUpdate(\''+suggestedGoal+'\')">'+g.icon+' SWITCH TO '+g.label.toUpperCase()+'</button>' +
-    '<button class="btn btn-outline mt8" onclick="closeModal()">KEEP MY CURRENT OBJECTIVE</button>' +
-    '</div></div>';
-}
-async function applyStyleUpdate(goal) {
-  ST.goal = goal;
-  ST.muscleGroup = getRecommendedNext();
-  await saveGoalLevel();
-  closeModal();
-  renderPage();
-  showToast('Objective updated. Workouts now reflect your profile.');
 }
 
 function setReadiness(n) {
@@ -10742,7 +10704,6 @@ function getCombinedWorkout(env, muscleGroup) {
   const ov = GOAL_OVERLAYS[ST.goal];
   const swaps = ov?.swaps?.[env]?.[muscleGroup] || null;
   const retarget = ov?.retarget || null;
-  const female = ST.sex === 'female';
   // Names already in this workout, so an injury swap never doubles one.
   const usedNames = new Set();
   ['taxi','takeoff','enroute','landing'].forEach(ph => (base[ph] || []).forEach(e => usedNames.add(e.name)));
@@ -10750,10 +10711,6 @@ function getCombinedWorkout(env, muscleGroup) {
     let out = e;
     if (swaps && swaps[phase] && swaps[phase][e.name]) out = swaps[phase][e.name];
     if (retarget && retarget[out.id]) out = { ...out, target: retarget[out.id] };
-    if (female && phase === 'enroute' && !out.timed && (out.inputType === 'reps_weight' || out.inputType === 'reps_only')) {
-      const t = femaleTargetBump(out.target);
-      if (t !== out.target) out = { ...out, target: t };
-    }
     out = applyInjuryFilter(out, phase, usedNames);
     return withRepRange(out, phase);
   });
@@ -12808,8 +12765,7 @@ function formatStopwatch(sec) {
 //     10-15 reps at moderate effort for general health and older adults.
 //   Blagrove, Howatson, Hayes, Sports Med 2018 (review): heavy and
 //     explosive strength work improves running economy in distance runners.
-//   Hunter, Acta Physiol 2014: women are more fatigue resistant at a given
-//     relative load, so the accessory range shifts up 2 reps for women.
+//   The range is the same for everyone: sex does not change it (Nov 16 2026).
 // Ranges are [compound, accessory, isolation]; power work is 3-6 for all.
 const REP_RANGES = {
   strength:  { compound: [4, 6],  accessory: [6, 10],  isolation: [10, 15] },
@@ -12832,7 +12788,7 @@ function exerciseRole(exItem, phase) {
 }
 // The range for one exercise, or null when reps are not what it counts
 // (timed work, jumps measured in inches, warm-ups and cool-downs).
-function repRangeFor(exItem, phase, goal, level, sex) {
+function repRangeFor(exItem, phase, goal, level) {
   if (!exItem || exItem.timed) return null;
   if (exItem.inputType !== 'reps_weight' && exItem.inputType !== 'reps_only') return null;
   if (phase !== 'takeoff' && phase !== 'enroute') return null;
@@ -12847,7 +12803,6 @@ function repRangeFor(exItem, phase, goal, level, sex) {
     // low-rep work, so a beginner on the strength plan uses the next band.
     const key = (role === 'compound' && level === 'beginner' && (goal === 'strength' || goal === 'jump')) ? 'accessory' : role;
     [lo, hi] = table[key];
-    if (sex === 'female' && phase === 'enroute' && role !== 'power') { lo += 2; hi += 2; }
   }
   // An exercise written for a very different rep count keeps a range around
   // its own number: 3x20 calf raises stay high, 5x3 heavy triples stay low.
@@ -12858,7 +12813,7 @@ function repRangeFor(exItem, phase, goal, level, sex) {
 }
 // Rewrites "4×10/leg" as "4 × 8-12/leg" and records the range on the item.
 function withRepRange(exItem, phase) {
-  const range = repRangeFor(exItem, phase, ST.goal, ST.level, ST.sex);
+  const range = repRangeFor(exItem, phase, ST.goal, ST.level);
   if (!range) return exItem;
   const m = String(exItem.target || '').match(/^(\d+)\s*[×x]\s*(\d+)(.*)$/i);
   const target = m ? m[1] + ' × ' + range.lo + '-' + range.hi + (m[3] || '') : exItem.target;
@@ -15954,11 +15909,7 @@ function renderProfile(p) {
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
   Object.keys(GOALS).forEach(gid => {
     const g = GOALS[gid];
-    // Sex-tagged emphasis goals only show for the matching profile (or if already selected)
-    if (g.suggestFor && g.suggestFor !== ST.sex && ST.goal !== gid) return;
-    const suggested = g.suggestFor && g.suggestFor === ST.sex;
     parts.push('<div class="env-btn '+(ST.goal===gid?'sel':'')+'" style="position:relative" onclick="selectGoal(\''+gid+'\')">');
-    if (suggested) parts.push('<div style="position:absolute;top:4px;right:4px;font-family:var(--mono);font-size:0.4375rem;letter-spacing:0.06em;color:var(--gold);border:1px solid var(--gold);border-radius:4px;padding:1px 4px">SUGGESTED</div>');
     parts.push('<div class="ei">'+g.icon+'</div><div class="el">'+g.label+'</div>');
     parts.push('<div style="font-size:0.5625rem;color:var(--muted);margin-top:3px;line-height:1.3">'+g.desc+'</div>');
     parts.push('</div>');

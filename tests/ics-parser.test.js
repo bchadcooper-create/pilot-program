@@ -1153,7 +1153,13 @@ test('ranges follow the mission objective and the exercise role', () => {
   assertEqual(ctx.repRangeFor(sq, 'takeoff', 'strength', 'beginner', 'male'), { lo: 6, hi: 10 }, 'beginner strength uses the next band (ACSM)');
   assertEqual(ctx.repRangeFor(sq, 'takeoff', 'muscle', 'intermediate', 'male'), { lo: 6, hi: 10 }, 'muscle compound 6-10');
   assertEqual(ctx.repRangeFor(row, 'enroute', 'fatloss', 'intermediate', 'male'), { lo: 10, hi: 15 }, 'fat loss accessory 10-15');
-  assertEqual(ctx.repRangeFor(row, 'enroute', 'muscle', 'intermediate', 'female'), { lo: 10, hi: 14 }, 'women: accessory range up 2');
+  assertEqual(ctx.repRangeFor(row, 'enroute', 'muscle', 'intermediate', 'female'), ctx.repRangeFor(row, 'enroute', 'muscle', 'intermediate', 'male'), 'sex does not change the range');
+  { const keep = ctx.ST.sex, inj = ctx.ST.injuries; ctx.ST.injuries = [];
+    ctx.ST.sex = 'female'; const f = JSON.stringify(ctx.getCombinedWorkout('comm', 'Lower Body'));
+    ctx.ST.sex = 'male';   const m = JSON.stringify(ctx.getCombinedWorkout('comm', 'Lower Body'));
+    ctx.ST.sex = keep; ctx.ST.injuries = inj;
+    assertEqual(f === m, true, 'the same workout is built whatever the sex (requested Nov 16)');
+    assertEqual(vm.runInContext("Object.values(GOALS).some(g => 'suggestFor' in g)", ctx), false, 'no goal is suggested or hidden by sex'); }
   assertEqual(ctx.repRangeFor(curl, 'enroute', 'muscle', 'intermediate', 'male'), { lo: 12, hi: 15 }, 'isolation 12-15');
   assertEqual(ctx.repRangeFor({ name: 'Box Jump', target: '5×3', inputType: 'reps_height' }, 'takeoff', 'jump', 'intermediate', 'male'), null, 'jumps measured in inches: no range');
   assertEqual(ctx.repRangeFor({ name: 'Kettlebell Clean & Press', target: '4×5', inputType: 'reps_weight' }, 'takeoff', 'muscle', 'intermediate', 'male'), { lo: 3, hi: 6 }, 'power work 3-6 whatever the goal');

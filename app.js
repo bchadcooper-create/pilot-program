@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.58.1 / 20261116_8
+ * Version/build: fcf-v5.59.0 / 20261116_9
  */
 
-const FCF_VERSION = 'fcf-v5.58.1';
-const FCF_BUILD   = '20261116_8';
+const FCF_VERSION = 'fcf-v5.59.0';
+const FCF_BUILD   = '20261116_9';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -17274,31 +17274,68 @@ function moreBackLink() {
   return '<button class="btn-ghost" style="font-size:0.75rem;padding:6px 0;margin-bottom:8px" onclick="switchTab(\'more\')">← Menu</button>';
 }
 
+// Which menu sections are open. All closed on a fresh open of the app
+// (Chad, Nov 16 2026: the menu was too cluttered).
+const MORE_SECTIONS = ['mission', 'app', 'sub'];
+function moreSectionOpen(key) { return !!(ST.moreOpen && ST.moreOpen[key]); }
+function toggleMoreSection(key) {
+  if (!MORE_SECTIONS.includes(key)) return;
+  ST.moreOpen = Object.assign({}, ST.moreOpen || {}, { [key]: !moreSectionOpen(key) });
+  haptic('light'); renderPage();
+}
+function moreSectionHeader(key, title, sub) {
+  const open = moreSectionOpen(key);
+  return '<div class="card" style="cursor:pointer;margin-bottom:' + (open ? '8px' : '12px') + (open ? ';border-color:var(--gold)' : '') + '" role="button" aria-expanded="' + open + '" onclick="toggleMoreSection(\'' + key + '\')"><div class="fb">' +
+    '<div><div style="font-size:0.9375rem;font-weight:600">' + title + '</div>' +
+    (sub ? '<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">' + sub + '</div>' : '') + '</div>' +
+    '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="color:var(--muted);transition:transform .15s;transform:rotate(' + (open ? '180' : '0') + 'deg)"><path d="m6 9 6 6 6-6"/></svg></div></div>';
+}
 function renderMore(p) {
   const parts = [];
-  parts.push('<div class="section-label">MISSION SYSTEMS</div>');
   const item = (icon, title, sub, onclick) =>
     '<div class="card mb12" style="cursor:pointer" onclick="'+onclick+'"><div class="fb">' +
     '<div style="display:flex;align-items:center;gap:12px"><div style="font-size:1.375rem">'+icon+'</div>' +
     '<div><div style="font-size:0.875rem;font-weight:600">'+title+'</div>' +
     '<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">'+sub+'</div></div></div>' +
     '<div style="color:var(--muted)">→</div></div></div>';
-  // Menu order (owner, Oct 18: clean up the menu): your stuff, then app
-  // settings, subscription, share and feedback, legal, sign out, delete.
-  // Badges moved off the menu; they live on Ranks.
+  // Menu layout (Chad, Nov 16 2026): three sections that open and close,
+  // all closed to start, then Share and Feedback, legal and Sign Out.
+  //   Mission Settings: Nutrition Log, FAA Medical, Flight Deck Wisdom, tracking switches
+  //   App Settings:     Connected Devices, Data & Import/Export, text size, Delete Account, version
+  //   Subscription:     plan and prices
+  // Pilot Profile is the picture in the header. Badges live on Ranks.
   if (isSuperUser()) parts.push(item('🛡️','Super User','Sales, signups and activity',"switchTab('superuser')"));
-  // Pilot Profile left the menu on Nov 16 2026: the picture in the header opens it.
-  parts.push(item('⌚','Connected Devices','Apple Health, Apple Watch, Oura Ring',"switchTab('devices')"));
-  if (ST.trackNutrition) parts.push(item('🍽️','Nutrition Log','Log meals, search foods, track macros',"switchTab('nutrition')"));
-  if (medicalEnabled()) parts.push(item('🩺','FAA Medical','Certificate dates, medication check, vision, your numbers vs the FAA lines',"switchTab('medical')"));
-  parts.push(item('📊','Data & Import/Export','Flight schedule import, CSV export, AI prompt',"switchTab('data')"));
-  parts.push(item('📖','Flight Deck Wisdom','Daily training wisdom cards',"switchTab('wisdom')"));
 
-  parts.push('<div class="section-label" style="margin-top:20px">APP SETTINGS</div>');
-  parts.push(renderTextSizeControl());
-  parts.push(renderTrackingToggles());
+  parts.push(moreSectionHeader('mission', 'Mission Settings', 'Nutrition, FAA medical, what you track'));
+  if (moreSectionOpen('mission')) {
+    parts.push('<div style="padding-left:10px;border-left:2px solid var(--border);margin-bottom:12px">');
+    if (ST.trackNutrition) parts.push(item('🍽️','Nutrition Log','Log meals, search foods, track macros',"switchTab('nutrition')"));
+    if (medicalEnabled()) parts.push(item('🩺','FAA Medical','Certificate dates, medication check, vision, your numbers vs the FAA lines',"switchTab('medical')"));
+    parts.push(item('📖','Flight Deck Wisdom','Daily training wisdom cards',"switchTab('wisdom')"));
+    parts.push(renderTrackingToggles());
+    parts.push('</div>');
+  }
 
-  parts.push('<div class="section-label" style="margin-top:20px">SUBSCRIPTION</div>');
+  parts.push(moreSectionHeader('app', 'App Settings', 'Devices, data, text size, account'));
+  if (moreSectionOpen('app')) {
+    parts.push('<div style="padding-left:10px;border-left:2px solid var(--border);margin-bottom:12px">');
+    parts.push(item('⌚','Connected Devices','Apple Health, Apple Watch, Oura Ring',"switchTab('devices')"));
+    parts.push(item('📊','Data & Import/Export','Flight schedule import, CSV export, AI prompt',"switchTab('data')"));
+    parts.push(renderTextSizeControl());
+    // Apple has required in-app account deletion since 2022 for any app that
+    // supports account creation; its absence is an automatic rejection.
+    parts.push('<div class="card mb12">');
+    parts.push('<div style="font-size:0.875rem;font-weight:600;margin-bottom:4px">Delete account</div>');
+    parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px">Permanently deletes your account and every workout, meal, biometric and schedule stored with it. This cannot be undone.</div>');
+    parts.push('<button class="btn btn-outline" style="color:var(--red);border-color:var(--red)" onclick="confirmDeleteAccount()">Delete Account</button>');
+    parts.push('</div>');
+    parts.push('<div style="font-size:0.6875rem;color:var(--muted);text-align:center;margin:2px 0 4px;cursor:pointer" onclick="checkDB();checkForAppUpdate()">' + FCF_VERSION + ' · Build ' + FCF_BUILD + ' · <span style="text-decoration:underline">Check for update</span></div>');
+    parts.push('</div>');
+  }
+
+  parts.push(moreSectionHeader('sub', 'Subscription', isPro() ? 'Pro: all features unlocked' : 'Free plan. See what Pro adds'));
+  if (moreSectionOpen('sub')) {
+  parts.push('<div style="padding-left:10px;border-left:2px solid var(--border);margin-bottom:12px">');
   parts.push('<div class="card mb12">');
   if (isPro()) {
     const until = ST.subscription?.current_period_end
@@ -17365,9 +17402,12 @@ function renderMore(p) {
     parts.push('<button class="btn-ghost" style="display:block;width:100%;text-align:center" onclick="restoreProPurchases()">Restore purchases</button>');
   }
   parts.push('</div>');
+  parts.push('</div>');
+  } // end of the Subscription section
 
   // Promo/comp code card. Web only: empty inside the iOS app (see
-  // promoCodeCardHTML for why).
+  // promoCodeCardHTML for why). It stays outside the sections so the
+  // steps already sent with promo codes ("Have a promo code?") still work.
   parts.push(promoCodeCardHTML());
 
   parts.push('<div class="card mb12">');
@@ -17383,14 +17423,6 @@ function renderMore(p) {
   parts.push('</div>');
 
   parts.push('<button class="btn btn-red-outline mb12" onclick="doSignOut()">Sign Out</button>');
-
-  // Apple has required in-app account deletion since 2022 for any app that
-  // supports account creation — its absence is an automatic rejection.
-  parts.push('<div class="section-label" style="margin-top:20px;color:var(--red)">DANGER ZONE</div>');
-  parts.push('<div class="card mb12">');
-  parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px">Permanently deletes your account and every workout, meal, biometric and schedule stored with it. This cannot be undone.</div>');
-  parts.push('<button class="btn btn-outline" style="color:var(--red);border-color:var(--red)" onclick="confirmDeleteAccount()">Delete Account</button>');
-  parts.push('</div>');
 
   p.innerHTML = parts.join('');
 }

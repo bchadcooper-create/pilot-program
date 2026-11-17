@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.61.0 / 20261116_13
+ * Version/build: fcf-v5.61.1 / 20261116_14
  */
 
-const FCF_VERSION = 'fcf-v5.61.0';
-const FCF_BUILD   = '20261116_13';
+const FCF_VERSION = 'fcf-v5.61.1';
+const FCF_BUILD   = '20261116_14';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -19522,6 +19522,27 @@ function renderToday(p) {
     if (ST.trackHydration) parts.push(hydrationRowHTML(ctx));
     parts.push('</div>');
     } // end nutrition tracking block
+  } else if (ST.trackNutrition) {
+    // BUG FIX (reported Nov 16 2026: "if the user is tracking food and water,
+    // it needs to display on the today page"). Someone tracking meals with no
+    // calorie or macro targets got no Fuel card at all, and because water
+    // sits inside that card when both are tracked, no water either. They now
+    // get the same card with today's totals as plain numbers.
+    const c = n.consumed || {};
+    const cell = (label, value, unit) => '<div style="text-align:center"><div style="font-family:var(--mono);font-size:1rem;font-weight:600">' + Math.round(value || 0).toLocaleString() + (unit || '') + '</div><div style="font-family:var(--mono);font-size:0.5625rem;letter-spacing:.1em;color:var(--muted);margin-top:2px">' + label + '</div></div>';
+    parts.push('<div class="section-label">FUEL</div>');
+    parts.push('<div class="card mb12">');
+    parts.push('<div onclick="switchTab(\'nutrition\')" style="cursor:pointer">');
+    if (n.mealCount) {
+      parts.push('<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">' + cell('CAL', c.calories) + cell('PROTEIN', c.protein, 'g') + cell('CARBS', c.carbs, 'g') + cell('FAT', c.fat, 'g') + '</div>');
+      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:8px">' + n.mealCount + (n.mealCount === 1 ? ' meal' : ' meals') + ' logged today</div>');
+    } else {
+      parts.push('<div style="font-size:0.8125rem;color:var(--muted)">No meals logged yet today.</div>');
+    }
+    parts.push('</div>');
+    parts.push('<button class="btn-ghost" style="font-size:0.6875rem;color:var(--gold);padding:8px 0 0" onclick="switchTab(\'fuelplan\')">Set calorie and protein targets ›</button>');
+    if (ST.trackHydration) parts.push(hydrationRowHTML(ctx));
+    parts.push('</div>');
   }
 
   // Hydration on, nutrition off: it still needs somewhere to live, so it

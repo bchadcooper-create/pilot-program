@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.63.1 / 20261116_17
+ * Version/build: fcf-v5.63.2 / 20261116_18
  */
 
-const FCF_VERSION = 'fcf-v5.63.1';
-const FCF_BUILD   = '20261116_17';
+const FCF_VERSION = 'fcf-v5.63.2';
+const FCF_BUILD   = '20261116_18';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -3811,7 +3811,37 @@ async function crewFollow(userId, follow) {
     haptic('light'); showToast(follow ? (status === 'pending' ? 'Request sent. They approve followers.' : 'Following.') : 'Unfollowed.'); renderPage();
   } catch (e) { showToast('Could not update follow.'); }
 }
+// BUG FIX (reported Nov 16 2026: a follow request never appeared on the
+// other member's feed). Requests were read once, the first time the crew
+// page opened, and never again until the app was restarted, so a request
+// sent while the app was open stayed invisible. They are now re-read every
+// time the crew page or Today opens (at most once every 20 seconds), when
+// the app comes back to the front, and shortly after startup. Today also
+// shows the request card, so it is seen without visiting the feed.
+const CREW_FOLLOW_FRESH_MS = 20000;
+function crewFollowStale(now) { return !ST.crew.followLoadedAt || ((now || Date.now()) - ST.crew.followLoadedAt) > CREW_FOLLOW_FRESH_MS; }
+function crewRefreshRequests() {
+  if (!ST.user || !crewIsMember() || !crewFollowStale()) return;
+  const before = (ST.crew.requests || []).map(r => r.user_id).join(',');
+  crewLoadFollowing().then(() => {
+    const after = (ST.crew.requests || []).map(r => r.user_id).join(',');
+    if (after !== before && (ST.tab === 'today' || ST.tab === 'leaderboard')) renderPage();
+  });
+}
+async function todayCrewRequestsBoot() {
+  try { if (!ST.crew.loaded) await loadCrewProfile(); } catch (e) { return; }
+  crewRefreshRequests();
+}
+function todayCrewRequestsHtml() {
+  if (!crewIsMember()) return '';
+  crewRefreshRequests();
+  return crewRequestsHtml();
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') { try { crewRefreshRequests(); } catch (e) { /* not ready yet */ } }
+});
 async function crewLoadFollowing() {
+  ST.crew.followLoadedAt = Date.now();
   try {
     const [{ data: out }, { data: reqs }] = await Promise.all([
       withTimeout(SB.from('crew_follows').select('followee_id,status').eq('follower_id', ST.user.id)),
@@ -3833,7 +3863,7 @@ async function crewAnswerRequest(userId, approve) {
 function crewRequestsHtml() {
   const reqs = ST.crew.requests || []; if (!reqs.length) return '';
   return '<div class="card mb12" style="border-color:var(--gold)"><div class="section-label" style="margin-top:0">FOLLOW REQUESTS</div>' + reqs.map(r =>
-    '<div class="fb" style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-size:0.875rem;font-weight:600;cursor:pointer" onclick="crewGo(\'profile\',\'' + r.user_id + '\')">' + crewEsc(r.crew_profiles?.callsign || 'crew') + '</div><div style="display:flex;gap:6px"><button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid var(--gold);border-radius:8px;color:var(--gold)" onclick="crewAnswerRequest(\'' + r.user_id + '\',true)">Approve</button><button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid var(--border);border-radius:8px;color:var(--muted)" onclick="crewAnswerRequest(\'' + r.user_id + '\',false)">Decline</button></div></div>').join('') + '</div>';
+    '<div class="fb" style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-size:0.875rem;font-weight:600;cursor:pointer" onclick="crewGo(\'profile\',\'' + r.user_id + '\')">' + crewEsc(r.crew_profiles?.callsign || 'crew') + '<div style="font-size:0.75rem;font-weight:400;color:var(--muted)">wants to follow you</div></div><div style="display:flex;gap:6px"><button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid var(--gold);border-radius:8px;color:var(--gold)" onclick="crewAnswerRequest(\'' + r.user_id + '\',true)">Approve</button><button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid var(--border);border-radius:8px;color:var(--muted)" onclick="crewAnswerRequest(\'' + r.user_id + '\',false)">Decline</button></div></div>').join('') + '</div>';
 }
 async function crewBlock(userId, callsign) {
   if (!(await appConfirm('Block ' + callsign + '? You will not see each other on the feed. You can unblock from Crew settings.', 'Block'))) return;
@@ -4045,7 +4075,7 @@ function renderCrew(parts) {
   const c = ST.crew;
   if (!c.loaded) { parts.push('<div class="card mb12" style="text-align:center;color:var(--muted);font-size:0.75rem">Loading…</div>'); loadCrewProfile().then(renderPage); return; }
   if (!c.profile) { parts.push(crewJoinCardHtml()); return; }
-  if (!c.followingSet) crewLoadFollowing().then(renderPage);
+  if (!c.followingSet) crewLoadFollowing().then(renderPage); else crewRefreshRequests();
   // Full-size buttons (reported: the gear for settings was too small to tap).
   const nav = (v, label) => '<div class="env-btn" style="padding:10px 4px' + (c.view === v || (v === 'feed' && c.view === 'profile') ? ';border-color:var(--gold);background:var(--gold-tint)' : '') + '" onclick="crewGo(\'' + v + '\')"><div style="font-size:0.75rem;font-weight:700;color:var(--text)">' + label + '</div></div>';
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:12px">' + nav('feed', '📰 Feed') + nav('find', '🔎 Find') + nav('settings', '⚙️ Settings') + '</div>');
@@ -5190,6 +5220,7 @@ async function bootAppInner() {
   applyScheduleFlightHours();
   // A moment later, so the iPhone shell has reported what it can do.
   setTimeout(planScheduleUploadAlert, 4000);
+  setTimeout(todayCrewRequestsBoot, 2500);
 
   if (!ST.sex && !localStorage.getItem('fcf_profile_intro')) {
     localStorage.setItem('fcf_profile_intro', '1');
@@ -19573,6 +19604,8 @@ function renderToday(p) {
   const gaps = buildTodayGaps(ctx);
   const parts = [];
 
+  // First on the page: someone is waiting on an answer.
+  parts.push(todayCrewRequestsHtml());
   parts.push('<div id="ouraTopSection">'+buildOuraTopSectionHTML(ctx)+'</div>');
   parts.push(buildSetupChecklistHTML());
   parts.push(heardCardHtml());

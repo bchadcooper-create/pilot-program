@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.58.0 / 20261116_7
+ * Version/build: fcf-v5.58.1 / 20261116_8
  */
 
-const FCF_VERSION = 'fcf-v5.58.0';
-const FCF_BUILD   = '20261116_7';
+const FCF_VERSION = 'fcf-v5.58.1';
+const FCF_BUILD   = '20261116_8';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -3925,7 +3925,7 @@ function renderLeaderboard(p) {
   parts.push('<div class="section-label">RANKS</div>');
   if (!ST.username) {
     parts.push('<div class="card mb12" style="border-color:var(--gold)">');
-    parts.push('<div style="font-size:0.75rem;line-height:1.6;margin-bottom:10px">🏆 <strong>Want on the boards?</strong> Set a call sign in More → Pilot Profile. No call sign = you\'re not listed. Your lifts and runs stay private.</div>');
+    parts.push('<div style="font-size:0.75rem;line-height:1.6;margin-bottom:10px">🏆 <strong>Want on the boards?</strong> Set a call sign on your profile (tap your picture, top right). No call sign = you\'re not listed. Your lifts and runs stay private.</div>');
     parts.push('<button class="btn btn-outline" onclick="switchTab(\'profile\')">Set My Call Sign →</button>');
     parts.push('</div>');
   }
@@ -4512,6 +4512,7 @@ function renderPage() {
     return;
   }
 
+  renderTopbarAvatar();
   // Self-heal bars when they should be visible
   const topbar = document.getElementById('topbar');
   const tabbar = document.getElementById('tabbar');
@@ -4813,24 +4814,35 @@ function applyDailyInputsRow(row) {
   if (row.readiness != null) ST.readiness = row.readiness;
 }
 
+// Nov 16 2026 (Chad): "ONLINE" told a member nothing, so the header shows
+// the connection only when there is a problem. The profile picture sits in
+// that corner and opens Pilot Profile.
 function setDbStatus(mode) {
   // mode: 'online' | 'local' | 'error'
-  const dot = document.getElementById('dbDot');
+  const box = document.getElementById('dbStatusBox');
   const lbl = document.getElementById('dbStatus');
-  if (!dot || !lbl) return;
-  if (mode === 'online') {
-    dot.classList.remove('off');
-    lbl.textContent = 'ONLINE';
-    lbl.style.color = 'var(--green)';
-  } else if (mode === 'error') {
-    dot.classList.add('off');
-    lbl.textContent = 'ERROR';
-    lbl.style.color = 'var(--amber)';
-  } else {
-    dot.classList.add('off');
-    lbl.textContent = 'LOCAL';
-    lbl.style.color = 'var(--muted)';
-  }
+  if (!box || !lbl) return;
+  if (mode === 'online') { box.style.display = 'none'; return; }
+  box.style.display = 'flex';
+  lbl.textContent = mode === 'error' ? 'SYNC ERROR' : 'OFFLINE';
+  lbl.style.color = mode === 'error' ? 'var(--amber)' : 'var(--muted)';
+}
+// The small round picture in the header. No picture: initials; no name
+// either: a plain person outline.
+function topbarAvatarName() {
+  return ST.username || (ST.crew && ST.crew.profile && ST.crew.profile.callsign) || '';
+}
+function renderTopbarAvatar() {
+  const el = document.getElementById('topbarAvatar');
+  if (!el || !ST.user) return;
+  const name = topbarAvatarName();
+  const key = (cleanAvatarPath(ST.avatarPath) || '') + '|' + name + '|' + (ST.tab === 'profile' ? 1 : 0);
+  if (el.dataset.key === key) return;
+  el.dataset.key = key;
+  el.style.outline = ST.tab === 'profile' ? '2px solid var(--gold)' : 'none';
+  el.innerHTML = (cleanAvatarPath(ST.avatarPath) || name)
+    ? avatarHtml(ST.user.id, name, 32)
+    : '<div style="width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg3);border:1px solid var(--border);color:var(--muted);font-size:17px">' + iconSvg('user') + '</div>';
 }
 
 async function checkDB() {
@@ -7199,7 +7211,7 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-// Manual "check now" — used by the top-bar sync indicator.
+// Manual "check now": the version line on Pilot Profile, and the header's offline label.
 async function checkForAppUpdate() {
   if (!swRegistration) return; // WKWebView — SW updates automatically, no toast needed
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -16125,7 +16137,8 @@ function renderProfile(p) {
   // Account card
   parts.push('<div class="card mb12">');
   parts.push('<div class="fb"><div style="font-size:0.875rem;font-weight:600">'+(ST.user?.email||'Local user')+'</div><div class="status-dot ok"></div></div>');
-  parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:4px">'+FCF_VERSION+' · Build '+FCF_BUILD+'</div>');
+  // The manual update check moved here from the header's status label.
+  parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:4px;cursor:pointer" onclick="checkDB();checkForAppUpdate()">'+FCF_VERSION+' · Build '+FCF_BUILD+' · <span style="text-decoration:underline">Check for update</span></div>');
   parts.push('</div>');
 
   // Body metrics (sex, height, BMI)
@@ -17274,7 +17287,7 @@ function renderMore(p) {
   // settings, subscription, share and feedback, legal, sign out, delete.
   // Badges moved off the menu; they live on Ranks.
   if (isSuperUser()) parts.push(item('🛡️','Super User','Sales, signups and activity',"switchTab('superuser')"));
-  parts.push(item('👤','Pilot Profile','Identity, metrics &amp; mission objectives',"switchTab('profile')"));
+  // Pilot Profile left the menu on Nov 16 2026: the picture in the header opens it.
   parts.push(item('⌚','Connected Devices','Apple Health, Apple Watch, Oura Ring',"switchTab('devices')"));
   if (ST.trackNutrition) parts.push(item('🍽️','Nutrition Log','Log meals, search foods, track macros',"switchTab('nutrition')"));
   if (medicalEnabled()) parts.push(item('🩺','FAA Medical','Certificate dates, medication check, vision, your numbers vs the FAA lines',"switchTab('medical')"));

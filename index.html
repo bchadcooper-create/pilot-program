@@ -471,9 +471,12 @@ a{color:inherit}
           <div class="topbar-logo">✈ FLIGHT CREW FITNESS</div>
         </div>
       </div>
-      <div class="topbar-right" id="topbarRight" onclick="checkDB();checkForAppUpdate()" style="cursor:pointer">
-        <div class="status-dot off" id="dbDot"></div>
-        <span style="font-family:var(--mono);font-size:0.625rem;color:var(--muted)" id="dbStatus">LOCAL</span>
+      <div class="topbar-right" id="topbarRight">
+        <div id="dbStatusBox" onclick="checkDB();checkForAppUpdate()" style="display:none;align-items:center;gap:6px;cursor:pointer">
+          <div class="status-dot off" id="dbDot"></div>
+          <span style="font-family:var(--mono);font-size:0.625rem;color:var(--muted)" id="dbStatus">OFFLINE</span>
+        </div>
+        <button id="topbarAvatar" onclick="haptic('light');switchTab('profile')" aria-label="Your profile" style="background:none;border:none;padding:0;cursor:pointer;border-radius:50%;outline-offset:2px;display:block"></button>
       </div>
     </div>
   </div>

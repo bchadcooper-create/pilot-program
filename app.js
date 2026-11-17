@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.64.0 / 20261116_20
+ * Version/build: fcf-v5.64.1 / 20261116_21
  */
 
-const FCF_VERSION = 'fcf-v5.64.0';
-const FCF_BUILD   = '20261116_20';
+const FCF_VERSION = 'fcf-v5.64.1';
+const FCF_BUILD   = '20261116_21';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -4014,6 +4014,7 @@ async function crewLoadFollowing() {
     ST.crew.followingSet = new Set((out || []).filter(r => r.status === 'active').map(r => r.followee_id));
     ST.crew.pendingSet = new Set((out || []).filter(r => r.status === 'pending').map(r => r.followee_id));
     ST.crew.requests = await crewAttachCallsigns((reqs || []).map(r => ({ user_id: r.follower_id, created_at: r.created_at })));
+    if (ST.crew.requests.length) await crewLoadAvatars(ST.crew.requests.map(r => r.user_id));
     await crewLoadNews();
   } catch (e) { ST.crew.followingSet = ST.crew.followingSet || new Set(); ST.crew.pendingSet = ST.crew.pendingSet || new Set(); ST.crew.requests = ST.crew.requests || []; }
 }
@@ -4026,10 +4027,29 @@ async function crewAnswerRequest(userId, approve) {
     haptic('light'); showToast(approve ? 'Approved.' : 'Declined.'); renderPage();
   } catch (e) { showToast('Could not update the request.'); }
 }
+// Reported Nov 16 2026: "we want to click on their profile name and see
+// information about them before choosing to approve it". The name was a
+// link, but it did not look like one, and on Today it did nothing because
+// the profile page lives on the Crew tab. Now the picture and name open the
+// profile from either place, and the profile itself carries the Approve and
+// Decline buttons while a request from that person is waiting.
+function crewOpenProfile(userId) {
+  ST.ranksSeg = 'crew'; ST.crew.view = 'profile'; ST.crew.viewUser = userId; ST.crew.feed = []; ST.crew.loadedKey = null;
+  if (ST.tab !== 'leaderboard') switchTab('leaderboard'); else renderPage();
+  window.scrollTo(0, 0);
+}
+function crewRequestButtons(userId) {
+  return '<button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid var(--gold);border-radius:8px;color:var(--gold)" onclick="crewAnswerRequest(\'' + userId + '\',true)">Approve</button>' +
+    '<button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid var(--border);border-radius:8px;color:var(--muted)" onclick="crewAnswerRequest(\'' + userId + '\',false)">Decline</button>';
+}
+function crewHasRequestFrom(userId) { return ((ST.crew && ST.crew.requests) || []).some(r => r.user_id === userId); }
 function crewRequestsHtml() {
   const reqs = ST.crew.requests || []; if (!reqs.length) return '';
-  return '<div class="card mb12" style="border-color:var(--gold)"><div class="section-label" style="margin-top:0">FOLLOW REQUESTS</div>' + reqs.map(r =>
-    '<div class="fb" style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-size:0.875rem;font-weight:600;cursor:pointer" onclick="crewGo(\'profile\',\'' + r.user_id + '\')">' + crewEsc(r.crew_profiles?.callsign || 'crew') + '<div style="font-size:0.75rem;font-weight:400;color:var(--muted)">wants to follow you</div></div><div style="display:flex;gap:6px"><button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid var(--gold);border-radius:8px;color:var(--gold)" onclick="crewAnswerRequest(\'' + r.user_id + '\',true)">Approve</button><button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid var(--border);border-radius:8px;color:var(--muted)" onclick="crewAnswerRequest(\'' + r.user_id + '\',false)">Decline</button></div></div>').join('') + '</div>';
+  return '<div class="card mb12" style="border-color:var(--gold)"><div class="section-label" style="margin-top:0">FOLLOW REQUESTS</div>' + reqs.map(r => {
+    const name = r.crew_profiles?.callsign || 'crew';
+    return '<div class="fb" style="padding:8px 0;border-bottom:1px solid var(--border);gap:8px"><div style="display:flex;align-items:center;gap:10px;min-width:0;cursor:pointer" onclick="crewOpenProfile(\'' + r.user_id + '\')">' + avatarHtml(r.user_id, name, 40) +
+      '<div style="min-width:0"><div style="font-size:0.875rem;font-weight:600">' + crewEsc(name) + '</div><div style="font-size:0.75rem;color:var(--gold)">View profile ›</div></div></div>' +
+      '<div style="display:flex;gap:6px;flex-shrink:0">' + crewRequestButtons(r.user_id) + '</div></div>'; }).join('') + '</div>';
 }
 async function crewBlock(userId, callsign) {
   if (!(await appConfirm('Block ' + callsign + '? You will not see each other on the feed. You can unblock from Crew settings.', 'Block'))) return;
@@ -4233,7 +4253,9 @@ async function crewLoadProfileHeader(userId) {
     if (p.founding_crew) { if (!ST.crew.founders) ST.crew.founders = new Set(); ST.crew.founders.add(p.user_id); if (p.founding_number) (ST.crew.founderNo = ST.crew.founderNo || {})[p.user_id] = p.founding_number; }
     const champ = p.base ? await crewBaseLeaders(p.base) : null;
     const wonLast = champ && champ.last && champ.last.user_id === p.user_id;
-    box.innerHTML = '<div class="fb" style="align-items:flex-start"><div style="display:flex;gap:12px;align-items:flex-start;min-width:0">' + avatarHtml(p.user_id, p.callsign, 64) + '<div style="min-width:0"><div style="font-size:1.125rem;font-weight:600">' + crewEsc(p.callsign) + foundingChip(p.user_id) + '</div>' +
+    const asking = crewHasRequestFrom(userId);
+    box.innerHTML = (asking ? '<div class="fb" style="gap:8px;padding:10px 12px;margin-bottom:12px;border:1px solid var(--gold);border-radius:10px"><div style="font-size:0.875rem;font-weight:600">Wants to follow you</div><div style="display:flex;gap:6px;flex-shrink:0">' + crewRequestButtons(userId) + '</div></div>' : '') +
+      '<div class="fb" style="align-items:flex-start"><div style="display:flex;gap:12px;align-items:flex-start;min-width:0">' + avatarHtml(p.user_id, p.callsign, 64) + '<div style="min-width:0"><div style="font-size:1.125rem;font-weight:600">' + crewEsc(p.callsign) + foundingChip(p.user_id) + '</div>' +
       (wonLast ? '<div style="font-size:0.75rem;color:var(--gold);margin-top:2px">🏆 Top lifter at ' + crewEsc(p.base) + ', ' + crewLastMonthName() + '</div>' : '') + '<div style="font-size:0.75rem;color:var(--muted)">' + [p.base, p.airline].filter(Boolean).map(crewEsc).join(' · ') + '</div>' + (p.bio ? '<div data-raw style="font-size:0.8125rem;margin-top:6px;line-height:1.5">' + crewEsc(p.bio) + '</div>' : '') + '</div></div>' +
       (me ? '<button class="btn-ghost" style="font-size:0.75rem;color:var(--gold)" onclick="crewGo(\'settings\')">Settings</button>' : '<div style="display:flex;flex-direction:column;gap:6px"><button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid ' + (f ? 'var(--border)' : 'var(--gold)') + ';border-radius:8px;color:' + (f ? 'var(--muted)' : 'var(--gold)') + '" onclick="crewFollow(\'' + userId + '\',' + (f || pend ? 'false' : 'true') + ')">' + (f ? 'Following' : pend ? 'Requested' : (p.visibility === 'followers' ? 'Request to follow' : 'Follow')) + '</button><button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewReport(\'profile\',\'' + userId + '\')">Report</button><button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewBlock(\'' + userId + '\',\'' + crewEsc(p.callsign).replace(/'/g, '') + '\')">Block</button></div>') + '</div>' +
       '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:12px">' + [['FOLLOWERS', k.followers], ['FOLLOWING', k.following], ['POSTS', k.activities], [unitDist().toUpperCase() + ' THIS MO', distNum(k.month_miles || 0, 1)]].map(([l, v]) => '<div style="text-align:center"><div style="font-family:var(--mono);font-size:1rem;font-weight:600">' + (v ?? 0) + '</div><div style="font-size:0.5625rem;color:var(--muted);letter-spacing:.1em">' + l + '</div></div>').join('') + '</div>';

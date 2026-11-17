@@ -2426,6 +2426,16 @@ test('the comment like button shows the count and whether it is mine', () => {
   ctx.ST.crew.cmtLikes = saved;
 });
 
+test('a follow request opens the profile and offers Approve and Decline', () => {
+  const saved = ctx.ST.crew.requests;
+  ctx.ST.crew.requests = [{ user_id: 'u9', crew_profiles: { callsign: 'Goose' } }];
+  const h = ctx.crewRequestsHtml();
+  assertEqual(h.includes("crewOpenProfile('u9')"), true, 'name opens the profile'); assertEqual(h.includes('View profile'), true);
+  assertEqual(h.includes("crewAnswerRequest('u9',true)") && h.includes("crewAnswerRequest('u9',false)"), true);
+  assertEqual(ctx.crewHasRequestFrom('u9'), true); assertEqual(ctx.crewHasRequestFrom('u1'), false);
+  ctx.ST.crew.requests = saved;
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

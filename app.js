@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.64.1 / 20261116_21
+ * Version/build: fcf-v5.64.2 / 20261116_22
  */
 
-const FCF_VERSION = 'fcf-v5.64.1';
-const FCF_BUILD   = '20261116_21';
+const FCF_VERSION = 'fcf-v5.64.2';
+const FCF_BUILD   = '20261116_22';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -6464,7 +6464,7 @@ function hydrationRowHTML(ctx, standalone) {
   // Tappable — reading your hydration status and wanting to log water are
   // the same moment, so the number itself is the control.
   return '<div class="fb" style="'+(standalone?'':'margin-top:10px;padding-top:10px;border-top:1px solid var(--border);')+'cursor:pointer;padding-bottom:2px" onclick="haptic(\'light\');openQuickWaterLog()">' +
-    '<span style="font-family:var(--mono);font-size:0.5625rem;letter-spacing:.1em;color:var(--muted)">💧 HYDRATION</span>' +
+    '<span style="font-family:var(--mono);font-size:0.5625rem;letter-spacing:.1em;color:var(--muted)">💧 HYDRATION <span style="color:var(--gold);padding:6px 8px;margin:-6px 0" onclick="event.stopPropagation();haptic(\'light\');openWaterGoalSheet()">SET GOAL</span></span>' +
     '<span style="font-family:var(--mono);font-size:0.625rem;color:'+hs.color+'">'+waterNum(ST.waterIn)+' / '+waterStr(hydroTarget())+' · '+hs.label+' <span style="color:var(--gold)">+ LOG</span></span></div>';
 }
 
@@ -6502,25 +6502,38 @@ function renderTrackingToggles() {
 async function saveWaterPrefs(next) {
   ST.water = cleanWaterPrefs(Object.assign({}, waterPrefs(), next));
   renderPage();
+  if (document.getElementById('waterGoalSheet')) openWaterGoalSheet();
   try { const profile = (await dbGetProfile()) || {}; profile.water = ST.water; await dbSetProfile(profile); }
   catch (e) { console.warn('Saving the water goal failed; kept for this session:', e); }
 }
-function setWaterGoalFromBox() {
-  const raw = document.getElementById('waterGoalInput')?.value || '';
+// Requested Nov 16 2026: set the drink goal from Today, where the hydration
+// numbers are, "without going through the profile". The same control that
+// lives under Mission Settings, shown in a sheet. Opened from the hydration
+// row on Today and from the target line of the Log a Drink sheet.
+function openWaterGoalSheet() {
+  const root = document.getElementById('modalRoot'); if (!root) return;
+  if (!ST.trackHydration) { showToast('Turn on hydration tracking in Mission Settings first.'); return; }
+  root.innerHTML = '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet" id="waterGoalSheet">' +
+    '<div class="modal-handle"></div><div class="modal-title">Daily Drink Goal</div>' + renderWaterGoalControl(true) +
+    '<button class="btn btn-gold mt12" onclick="closeModal()">Done</button></div></div>';
+}
+function setWaterGoalFromBox(boxId) {
+  const raw = document.getElementById(boxId || 'waterGoalInput')?.value || '';
   const l = waterFromInput(raw);
   if (!raw.trim() || !isFinite(l) || l < HYDRO_GOAL_MIN_L || l > HYDRO_GOAL_MAX_L) { showBigToast('Enter a daily goal between ' + waterStr(HYDRO_GOAL_MIN_L) + ' and ' + waterStr(HYDRO_GOAL_MAX_L) + '.', 'warn'); return; }
   saveWaterPrefs({ goalL: l }); showToast('Daily drink goal set to ' + waterStr(l) + '.');
 }
-function renderWaterGoalControl() {
+function renderWaterGoalControl(inSheet) {
   if (!ST.trackHydration) return '';
+  const boxId = inSheet ? 'waterGoalInputSheet' : 'waterGoalInput';
   const w = waterPrefs(); const parts = hydroTargetParts(new Date()); const rec = hydroRecommendedBase();
   const sw = (key, on, label, sub) => '<div class="fb" style="padding:12px 0;border-top:1px solid var(--border);align-items:center"><div style="padding-right:12px"><div style="font-size:0.875rem">' + label + '</div><div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">' + sub + '</div></div>' +
     '<div role="switch" aria-checked="' + on + '" onclick="haptic(\'selection\');saveWaterPrefs({' + key + ':' + (!on) + '})" style="flex-shrink:0;width:46px;height:26px;border-radius:13px;background:' + (on ? 'var(--gold)' : 'var(--raise)') + ';position:relative;cursor:pointer;border:1px solid var(--border)"><div style="position:absolute;top:2px;left:' + (on ? '23px' : '3px') + ';width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .15s"></div></div></div>';
   const today = [waterStr(parts.base) + ' base'].concat(parts.flight ? ['+ ' + waterStr(parts.flight) + ' for ' + ST.flightHrs + ' flight hours'] : [], parts.workout ? ['+ ' + waterStr(parts.workout) + ' for today\'s workout'] : []);
-  return '<div class="section-label" style="margin-top:20px">DAILY DRINK GOAL</div><div class="card mb12">' +
+  return (inSheet ? '<div>' : '<div class="section-label" style="margin-top:20px">DAILY DRINK GOAL</div><div class="card mb12">') +
     '<div class="fb" style="align-items:baseline"><div style="font-size:0.875rem">Base goal</div><div style="font-family:var(--mono);font-size:1rem;font-weight:600">' + waterStr(parts.base) + '</div></div>' +
     '<div style="font-size:0.6875rem;color:var(--muted);margin:4px 0 10px;line-height:1.5">' + (w.goalL ? 'Your own goal. ' : 'Recommended. ') + 'Counts every drink, coffee and tea included. The same on duty days and days off.</div>' +
-    '<div style="display:flex;gap:8px;margin-bottom:6px"><input id="waterGoalInput" type="text" inputmode="decimal" placeholder="Your own, e.g. ' + (unitWater() === 'oz' ? '90' : '2.5') + '" style="flex:1;min-width:0;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:1rem"><button class="btn btn-outline" style="width:auto;padding:0 16px;flex-shrink:0" onclick="setWaterGoalFromBox()">Set</button></div>' +
+    '<div style="display:flex;gap:8px;margin-bottom:6px"><input id="' + boxId + '" type="text" inputmode="decimal" placeholder="Your own, e.g. ' + (unitWater() === 'oz' ? '90' : '2.5') + '" style="flex:1;min-width:0;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:1rem"><button class="btn btn-outline" style="width:auto;padding:0 16px;flex-shrink:0" onclick="setWaterGoalFromBox(\'' + boxId + '\')">Set</button></div>' +
     (w.goalL ? '<button class="btn-ghost" style="font-size:0.75rem;color:var(--gold);padding:6px 0 10px" onclick="saveWaterPrefs({goalL:null});showToast(\'Back to the recommended goal.\')">Use the recommended ' + waterStr(rec) + '</button>' : '<div style="height:6px"></div>') +
     sw('flightBump', w.flightBump, 'Add a little for flying', waterStr(HYDRO_FLIGHT_L_PER_HR, 1) + ' for each flight hour today') +
     sw('workoutBump', w.workoutBump, 'Add for a workout', waterStr(HYDRO_WORKOUT_L, 1) + ' on a day with a logged workout') +
@@ -20307,7 +20320,7 @@ function openQuickWaterLog(mode) {
   parts.push('<div class="card" style="margin-bottom:12px;padding:12px">');
   parts.push('<div class="fb"><span style="font-size:0.75rem;color:var(--muted)">Logged so far today</span>' +
              '<span style="font-family:var(--mono);font-size:1rem;font-weight:700">'+waterStr(current, 2).replace(/(\.\d*?)0+ L$/,'$1 L').replace(/\. L$/,' L')+'</span></div>');
-  parts.push('<div class="fb" style="margin-top:4px"><span style="font-size:0.6875rem;color:var(--muted)">Target '+waterStr(target)+'</span>' +
+  parts.push('<div class="fb" style="margin-top:4px"><span style="font-size:0.6875rem;color:var(--muted)">Target '+waterStr(target)+' <span style="color:var(--gold);cursor:pointer;padding:6px 4px" onclick="openWaterGoalSheet()">Change goal ›</span></span>' +
              '<span style="font-family:var(--mono);font-size:0.6875rem;color:'+hs.color+'">'+hs.label+'</span></div>');
   parts.push('</div>');
 

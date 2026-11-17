@@ -207,9 +207,9 @@
 html,body{height:100%;overflow:hidden;background:var(--bg)}
 /* Text size setting. Every font-size in the app is in rem, so this one
    number scales all of it (More > Display > Text size). Set from
-   localStorage before first paint in app.js; 16px is the default step.
+   localStorage before first paint in app.js; 18.4px (16 x 1.15) is the standard step.
    text-size-adjust:100% stops iOS from adding its own inflation on top. */
-html{font-size:16px;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+html{font-size:18.4px;-webkit-text-size-adjust:100%;text-size-adjust:100%}
 
 body{font-family:'Inter',sans-serif;color:var(--text);display:flex;flex-direction:column}
 input,button,select,textarea{font-family:'Inter',sans-serif}

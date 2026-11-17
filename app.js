@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.56.8 / 20261116_3
+ * Version/build: fcf-v5.56.9 / 20261116_4
  */
 
-const FCF_VERSION = 'fcf-v5.56.8';
-const FCF_BUILD   = '20261116_3';
+const FCF_VERSION = 'fcf-v5.56.9';
+const FCF_BUILD   = '20261116_4';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -19,15 +19,19 @@ const STATIC_LANDING_HTML = (document.getElementById('mainPage') || {}).innerHTM
 // Dynamic Type. The choice is kept in localStorage so it applies before
 // the first paint with no flash, and mirrored to the profile so it follows
 // the person to a new device.
+// Nov 16 2026 (Chad): the standard size is the 1.15 step. Someone who has
+// never picked a size gets it; a size picked earlier is kept. The keys are
+// unchanged so saved choices still match; only the labels moved.
+const TEXT_SIZE_STANDARD = 'large';
 const TEXT_SIZES = [
-  { key: 'default', label: 'Default', scale: 1 },
-  { key: 'large',   label: 'Large',   scale: 1.15 },
+  { key: 'default', label: 'Small',   scale: 1 },
+  { key: 'large',   label: 'Default', scale: 1.15 },
   { key: 'larger',  label: 'Larger',  scale: 1.3 },
   { key: 'largest', label: 'Largest', scale: 1.5 },
 ];
 const TEXT_SIZE_LS_KEY = 'fcf_text_size';
 function textSizeEntry(key) {
-  return TEXT_SIZES.find(t => t.key === key) || TEXT_SIZES[0];
+  return TEXT_SIZES.find(t => t.key === key) || TEXT_SIZES.find(t => t.key === TEXT_SIZE_STANDARD);
 }
 function applyTextSize(key) {
   const entry = textSizeEntry(key);
@@ -37,7 +41,7 @@ function applyTextSize(key) {
   return entry.key;
 }
 function currentTextSize() {
-  try { return textSizeEntry(localStorage.getItem(TEXT_SIZE_LS_KEY)).key; } catch (e) { return 'default'; }
+  try { return textSizeEntry(localStorage.getItem(TEXT_SIZE_LS_KEY)).key; } catch (e) { return TEXT_SIZE_STANDARD; }
 }
 // Runs at load, before anything renders. localStorage can throw in a
 // private window or with site data blocked; the app must still start.
@@ -5842,7 +5846,7 @@ function renderTextSizeControl() {
   return '<div class="section-label" style="margin-top:20px">DISPLAY</div>' +
     '<div class="card mb12">' +
       '<div style="font-size:0.875rem">Text size</div>' +
-      '<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px;margin-bottom:10px">Makes all text in the app bigger. Layout stays the same.</div>' +
+      '<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px;margin-bottom:10px">Changes the size of all text in the app. Layout stays the same.</div>' +
       '<div style="display:flex;gap:6px;align-items:stretch">'+btns+'</div>' +
     '</div>';
 }

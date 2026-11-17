@@ -460,6 +460,27 @@ a{color:inherit}
 </head>
 <body>
 <div id="bootLoader"><div class="boot-spinner"></div><div class="boot-logo">Flight Crew Fitness</div></div>
+<script>
+/* If the spinner is still up after 20 seconds, something in startup stalled
+   (reported Nov 16 2026: it spun until the app was force-closed). This runs
+   on its own, so it works even if app.js never loaded. It offers a Reload
+   button; the first time in a session it reloads once by itself. */
+setTimeout(function () {
+  var l = document.getElementById('bootLoader');
+  if (!l || l.classList.contains('hidden') || document.getElementById('bootReload')) return;
+  var tried = false;
+  try { tried = sessionStorage.getItem('fcf_boot_retry') === '1'; sessionStorage.setItem('fcf_boot_retry', '1'); } catch (e) { tried = true; }
+  if (!tried) { location.reload(); return; }
+  var b = document.createElement('button');
+  b.id = 'bootReload'; b.textContent = 'Reload';
+  b.style.cssText = 'margin-top:8px;padding:12px 28px;border-radius:10px;border:1px solid var(--gold);background:transparent;color:var(--gold);font:600 0.875rem Inter,sans-serif;cursor:pointer';
+  b.onclick = function () { location.reload(); };
+  var t = document.createElement('div');
+  t.textContent = 'This is taking longer than it should.';
+  t.style.cssText = 'font:0.8125rem Inter,sans-serif;color:var(--muted);margin-top:4px';
+  l.appendChild(t); l.appendChild(b);
+}, 20000);
+</script>
 <div id="shell">
   <div class="topbar" id="topbar">
     <div class="topbar-inner">

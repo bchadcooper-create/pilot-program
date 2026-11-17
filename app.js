@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.63.0 / 20261116_16
+ * Version/build: fcf-v5.63.1 / 20261116_17
  */
 
-const FCF_VERSION = 'fcf-v5.63.0';
-const FCF_BUILD   = '20261116_16';
+const FCF_VERSION = 'fcf-v5.63.1';
+const FCF_BUILD   = '20261116_17';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -5037,6 +5037,24 @@ async function checkDB() {
 }
 
 // ─── BOOT SEQUENCE ────────────────────────────────────────────────────────────
+// BUG FIX (reported Nov 16 2026: "during updates this just spins forever,
+// have to force close and open"). Startup waited on a group of downloads
+// and several of them had no time limit: the subscription, Oura, medication,
+// step, admin and signup-source reads, then the day's inputs and the tracking
+// nudges. If one stalled, which happens right after the app reloads itself
+// for an update while the sign-in token is being renewed, the whole group
+// never finished and the spinner never left. Each of those now gets a few
+// seconds; past that the app opens without it, and the screen is redrawn
+// when it does arrive. initApp() has a last-resort limit on top, and
+// index.html shows a Reload button if the spinner is still up after 20 s.
+const BOOT_STEP_MS = 7000;
+function bootGuard(work, name, fallback, ms) {
+  let settled = false, gaveUp = false;
+  const p = Promise.resolve(work).then(
+    v => { settled = true; if (gaveUp) { console.warn('Startup: ' + name + ' arrived late; redrawing.'); try { if (ST.authed) renderPage(); } catch (e) { /* nothing to redraw yet */ } } return v; },
+    e => { settled = true; console.warn('Startup: ' + name + ' failed:', e); return fallback; });
+  return Promise.race([p, new Promise(r => setTimeout(() => { if (!settled) { gaveUp = true; console.warn('Startup: ' + name + ' is slow; opening without it.'); r(fallback); } }, ms || BOOT_STEP_MS))]);
+}
 async function bootApp() {
   try {
     await bootAppInner();
@@ -5120,12 +5138,12 @@ async function bootAppInner() {
     dbGetProfile().catch(e => { console.warn('dbGetProfile failed:', e); return null; }),
     dbGetLastSession().catch(e => { console.warn('dbGetLastSession failed:', e); return null; }),
     loadSessionCache().catch(e => { console.warn('loadSessionCache failed:', e); return []; }),
-    loadSubscription().catch(e => { console.warn('loadSubscription failed:', e); return null; }),
-    hydrateOuraFromRecent(),
-    loadMedsTakenToday(),
-    loadStepHistory(),
-    loadSuperUser(),
-    loadSignupSource()
+    bootGuard(loadSubscription(), 'subscription', null),
+    bootGuard(hydrateOuraFromRecent(), 'Oura', null),
+    bootGuard(loadMedsTakenToday(), 'medications taken', null),
+    bootGuard(loadStepHistory(), 'step history', null),
+    bootGuard(loadSuperUser(), 'admin check', null),
+    bootGuard(loadSignupSource(), 'signup source', null)
   ]);
 
   applyProfileToState(profile);
@@ -5161,9 +5179,13 @@ async function bootAppInner() {
   // latency before the very first paint, where nothing is visible yet
   // to flicker, rather than a jarring extra rebuild after the user is
   // already looking at the page.
-  await computeTrackingNudges().catch(e => console.warn('computeTrackingNudges failed:', e));
+  // Side by side, with a shorter limit, so a stall here costs 5 seconds at
+  // most on top of the group above (12 in all, under the spinner's 20).
+  const [, dailyRow] = await Promise.all([
+    bootGuard(computeTrackingNudges(), 'tracking nudges', null, 5000),
+    bootGuard(dbGetDailyInputs(), 'today\'s inputs', null, 5000) ]);
   restoreDailyInputs();
-  applyDailyInputsRow(await dbGetDailyInputs().catch(() => null));
+  applyDailyInputsRow(dailyRow);
   applyScheduleEnvironmentSuggestion();
   applyScheduleFlightHours();
   // A moment later, so the iPhone shell has reported what it can do.
@@ -6275,7 +6297,7 @@ function renderWaterGoalControl() {
   return '<div class="section-label" style="margin-top:20px">DAILY DRINK GOAL</div><div class="card mb12">' +
     '<div class="fb" style="align-items:baseline"><div style="font-size:0.875rem">Base goal</div><div style="font-family:var(--mono);font-size:1rem;font-weight:600">' + waterStr(parts.base) + '</div></div>' +
     '<div style="font-size:0.6875rem;color:var(--muted);margin:4px 0 10px;line-height:1.5">' + (w.goalL ? 'Your own goal. ' : 'Recommended. ') + 'Counts every drink, coffee and tea included. The same on duty days and days off.</div>' +
-    '<div style="display:flex;gap:8px;margin-bottom:6px"><input id="waterGoalInput" type="text" inputmode="decimal" placeholder="Your own, e.g. ' + (unitWater() === 'oz' ? '90' : '2.5') + '" style="flex:1;min-width:0"><button class="btn btn-outline" style="width:auto;padding:0 16px;flex-shrink:0" onclick="setWaterGoalFromBox()">Set</button></div>' +
+    '<div style="display:flex;gap:8px;margin-bottom:6px"><input id="waterGoalInput" type="text" inputmode="decimal" placeholder="Your own, e.g. ' + (unitWater() === 'oz' ? '90' : '2.5') + '" style="flex:1;min-width:0;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:1rem"><button class="btn btn-outline" style="width:auto;padding:0 16px;flex-shrink:0" onclick="setWaterGoalFromBox()">Set</button></div>' +
     (w.goalL ? '<button class="btn-ghost" style="font-size:0.75rem;color:var(--gold);padding:6px 0 10px" onclick="saveWaterPrefs({goalL:null});showToast(\'Back to the recommended goal.\')">Use the recommended ' + waterStr(rec) + '</button>' : '<div style="height:6px"></div>') +
     sw('flightBump', w.flightBump, 'Add a little for flying', waterStr(HYDRO_FLIGHT_L_PER_HR, 1) + ' for each flight hour today') +
     sw('workoutBump', w.workoutBump, 'Add for a workout', waterStr(HYDRO_WORKOUT_L, 1) + ' on a day with a logged workout') +
@@ -7552,9 +7574,11 @@ async function initApp() {
   if (_appInitStarted) return;
   _appInitStarted = true;
   try {
-    await initAppInner();
+    // Last resort: nothing in startup may hold the spinner past 25 seconds.
+    await Promise.race([initAppInner(), new Promise((_, rej) => setTimeout(() => rej(new Error('startup took too long')), 25000))]);
   } catch (e) {
     console.error('initApp failed:', e);
+    if (ST.user) ST.authed = true;
     try { renderRoot(); } catch (e2) { console.error('renderRoot also failed:', e2); }
   } finally {
     // Hide the boot loader regardless of success or failure above — it
@@ -7562,6 +7586,8 @@ async function initApp() {
     // outcome, so it should never stay stuck showing.
     const loader = document.getElementById('bootLoader');
     if (loader) loader.classList.add('hidden');
+    // Startup finished, so the spinner's own one-time reload may be used again.
+    try { sessionStorage.removeItem('fcf_boot_retry'); } catch (e) { /* fine */ }
   }
 }
 

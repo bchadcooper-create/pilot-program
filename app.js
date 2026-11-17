@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.64.2 / 20261116_22
+ * Version/build: fcf-v5.64.3 / 20261116_23
  */
 
-const FCF_VERSION = 'fcf-v5.64.2';
-const FCF_BUILD   = '20261116_22';
+const FCF_VERSION = 'fcf-v5.64.3';
+const FCF_BUILD   = '20261116_23';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -3720,7 +3720,32 @@ function avatarInitials(name) {
 function avatarHtml(userId, name, px) {
   const path = avatarPathFor(userId);
   const base = 'width:' + px + 'px;height:' + px + 'px;border-radius:50%;flex-shrink:0;';
-  if (path) return '<img src="' + crewPhotoUrl(path) + '" alt="" loading="lazy" style="' + base + 'object-fit:cover;background:var(--bg3);display:block">';
+  if (path) return '<img src="' + crewPhotoUrl(path) + '" alt=""' + (px > 40 ? ' loading="lazy"' : '') + ' data-px="' + px + '" data-name="' + crewEsc(name || '') + '" onerror="avatarImgError(this)" style="' + base + 'object-fit:cover;background:var(--bg3);display:block">';
+  return avatarInitialsHtml(name, px);
+}
+// BUG FIX (reported Nov 16 2026: a member's picture "isn't displaying all
+// the time"; the header showed the phone's broken-picture mark). The file
+// was there. When a download failed once, on a weak signal for example,
+// nothing tried again, and the header keeps its picture until the app
+// restarts, so the broken mark stayed. A failed picture is now tried twice
+// more, a few seconds apart, and if it still fails the member's initials
+// are shown instead of a broken mark.
+function avatarImgError(img) {
+  const tries = Number(img.dataset.tries || 0);
+  if (tries < 2) {
+    img.dataset.tries = String(tries + 1);
+    const clean = String(img.src).split('?')[0];
+    setTimeout(() => { if (img.isConnected) img.src = clean + '?retry=' + Date.now(); }, 2000 * (tries + 1));
+    return;
+  }
+  const t = document.createElement('div');
+  t.innerHTML = avatarInitialsHtml(img.dataset.name || '', Number(img.dataset.px) || 32);
+  if (img.isConnected && t.firstChild) img.replaceWith(t.firstChild);
+  // Let the header draw the picture again the next time the page changes.
+  const tb = document.getElementById('topbarAvatar'); if (tb) tb.dataset.key = '';
+}
+function avatarInitialsHtml(name, px) {
+  const base = 'width:' + px + 'px;height:' + px + 'px;border-radius:50%;flex-shrink:0;';
   return '<div aria-hidden="true" style="' + base + 'display:flex;align-items:center;justify-content:center;background:var(--bg3);border:1px solid var(--border);color:var(--muted);font-weight:700;font-size:' + Math.round(px * 0.38) + 'px">' + crewEsc(avatarInitials(name)) + '</div>';
 }
 // Pictures for the people on screen, in one read. Decoration: a failure

@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.64.3 / 20261116_23
+ * Version/build: fcf-v5.64.4 / 20261116_24
  */
 
-const FCF_VERSION = 'fcf-v5.64.3';
-const FCF_BUILD   = '20261116_23';
+const FCF_VERSION = 'fcf-v5.64.4';
+const FCF_BUILD   = '20261116_24';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -6486,11 +6486,16 @@ function planScheduleUploadAlert() {
 // workout screen previously ended up disagreeing about the same number.
 function hydrationRowHTML(ctx, standalone) {
   const hs = hydroStatus(ctx.now);
-  // Tappable — reading your hydration status and wanting to log water are
-  // the same moment, so the number itself is the control.
-  return '<div class="fb" style="'+(standalone?'':'margin-top:10px;padding-top:10px;border-top:1px solid var(--border);')+'cursor:pointer;padding-bottom:2px" onclick="haptic(\'light\');openQuickWaterLog()">' +
-    '<span style="font-family:var(--mono);font-size:0.5625rem;letter-spacing:.1em;color:var(--muted)">💧 HYDRATION <span style="color:var(--gold);padding:6px 8px;margin:-6px 0" onclick="event.stopPropagation();haptic(\'light\');openWaterGoalSheet()">SET GOAL</span></span>' +
-    '<span style="font-family:var(--mono);font-size:0.625rem;color:'+hs.color+'">'+waterNum(ST.waterIn)+' / '+waterStr(hydroTarget())+' · '+hs.label+' <span style="color:var(--gold)">+ LOG</span></span></div>';
+  // Reported Nov 16 2026: with "SET GOAL" added, the row wrapped onto two
+  // ragged lines ("SET" / "GOAL", and "+ LOG" on its own line). Now two
+  // deliberate lines: the label and the numbers on the first, each kept
+  // whole, then the two actions as buttons on the second.
+  const act = (label, fn) => '<button class="btn-ghost" style="flex:1;font-family:var(--mono);font-size:0.6875rem;letter-spacing:.08em;white-space:nowrap;padding:8px 6px;border:1px solid var(--border);border-radius:8px;color:var(--gold)" onclick="haptic(\'light\');' + fn + '">' + label + '</button>';
+  return '<div style="'+(standalone?'':'margin-top:10px;padding-top:10px;border-top:1px solid var(--border);')+'padding-bottom:2px">' +
+    '<div class="fb" style="cursor:pointer;gap:4px 8px;flex-wrap:wrap" onclick="haptic(\'light\');openQuickWaterLog()">' +
+    '<span style="font-family:var(--mono);font-size:0.5625rem;letter-spacing:.1em;color:var(--muted);white-space:nowrap">💧 HYDRATION</span>' +
+    '<span style="font-family:var(--mono);font-size:0.625rem;white-space:nowrap;color:'+hs.color+'">'+waterNum(ST.waterIn)+' / '+waterStr(hydroTarget())+' · '+hs.label+'</span></div>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">' + act('+ LOG A DRINK', 'openQuickWaterLog()') + act('SET GOAL', 'openWaterGoalSheet()') + '</div></div>';
 }
 
 function renderTrackingToggles() {

@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.60.0 / 20261116_12
+ * Version/build: fcf-v5.61.0 / 20261116_13
  */
 
-const FCF_VERSION = 'fcf-v5.60.0';
-const FCF_BUILD   = '20261116_12';
+const FCF_VERSION = 'fcf-v5.61.0';
+const FCF_BUILD   = '20261116_13';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -56,27 +56,33 @@ try { applyTextSize(localStorage.getItem(TEXT_SIZE_LS_KEY)); } catch (e) { /* de
 // number means, follows the member's choice. Every screen goes through the
 // helpers below; none of them does its own conversion.
 //
-// Not converted yet (they stay in US units): running distance, height and
-// waist, the FAA Medical section, exports and the wisdom cards.
+// Distance (miles or kilometers) was added the same day and works the same
+// way: runs are stored in miles.
+//
+// Not converted yet (they stay in US units): height and waist, the FAA
+// Medical section, exports and the wisdom cards.
 const LB_PER_KG = 2.2046226218;
 const FLOZ_PER_L = 33.8140227;
+const KM_PER_MI = 1.609344;
 const UNITS_LS_KEY = 'fcf_units';
-const UNIT_CHOICES = { weight: ['lb', 'kg'], water: ['L', 'oz'] };
+const UNIT_CHOICES = { weight: ['lb', 'kg'], water: ['L', 'oz'], distance: ['mi', 'km'] };
 function cleanUnits(u) {
   const o = (u && typeof u === 'object') ? u : {};
-  return { weight: o.weight === 'kg' ? 'kg' : 'lb', water: o.water === 'oz' ? 'oz' : 'L' };
+  return { weight: o.weight === 'kg' ? 'kg' : 'lb', water: o.water === 'oz' ? 'oz' : 'L', distance: o.distance === 'km' ? 'km' : 'mi' };
 }
 // A first guess for someone who has never chosen: kilograms outside the US.
 function defaultUnits() {
   let region = '';
   try { region = (new Intl.Locale(navigator.language)).region || ''; } catch (e) { /* older browser: US units */ }
-  return cleanUnits({ weight: region && region !== 'US' ? 'kg' : 'lb', water: 'L' });
+  // Miles stay the default only where miles are the norm.
+  return cleanUnits({ weight: region && region !== 'US' ? 'kg' : 'lb', water: 'L', distance: region && !['US', 'GB', 'LR', 'MM'].includes(region) ? 'km' : 'mi' });
 }
 function loadUnitsAtStart() {
   try { const raw = localStorage.getItem(UNITS_LS_KEY); if (raw) return cleanUnits(JSON.parse(raw)); } catch (e) { /* fall through */ }
   return defaultUnits();
 }
 function unitWt()    { return (typeof ST !== 'undefined' && ST.units && ST.units.weight === 'kg') ? 'kg' : 'lb'; }
+function unitDist()  { return (typeof ST !== 'undefined' && ST.units && ST.units.distance === 'km') ? 'km' : 'mi'; }
 function unitWater() { return (typeof ST !== 'undefined' && ST.units && ST.units.water === 'oz') ? 'oz' : 'L'; }
 function trimNum(n, dp) { return String(parseFloat(Number(n).toFixed(dp == null ? 2 : dp))); }
 
@@ -116,6 +122,33 @@ function waterFromInput(typed) {
 // A small "drink this much now" amount: millilitres, or whole ounces.
 function waterSip(liters) { return unitWater() === 'oz' ? Math.max(1, Math.round(liters * FLOZ_PER_L)) + ' oz' : Math.round(liters * 1000) + 'ml'; }
 
+// Miles to what the member sees (two decimals unless told otherwise).
+function distNum(miles, dp) {
+  const n = parseFloat(miles);
+  if (!isFinite(n)) return null;
+  return parseFloat((unitDist() === 'km' ? n * KM_PER_MI : n).toFixed(dp == null ? 2 : dp));
+}
+function distStr(miles, dp) { const v = distNum(miles, dp); return (v === null ? '–' : v) + ' ' + unitDist(); }
+function distInputVal(stored) {
+  if (stored === '' || stored == null) return '';
+  if (unitDist() === 'mi') return String(stored);
+  const v = distNum(stored); return v === null ? '' : String(v);
+}
+function distFromInput(typed) {
+  if (unitDist() === 'mi') return typed;
+  const n = parseFloat(String(typed == null ? '' : typed).replace(',', '.'));
+  return isFinite(n) ? String(parseFloat((n / KM_PER_MI).toFixed(3))) : '';
+}
+// Seconds per mile to "m:ss" per mile or per kilometer, without the suffix.
+function paceClock(secPerMi) {
+  const sec = unitDist() === 'km' ? secPerMi / KM_PER_MI : secPerMi;
+  if (!isFinite(sec) || sec <= 0) return '';
+  let m = Math.floor(sec / 60), r = Math.round(sec % 60);
+  if (r === 60) { m += 1; r = 0; }
+  return m + ':' + String(r).padStart(2, '0');
+}
+function paceSuffix() { return '/' + unitDist(); }
+
 async function setUnit(kind, value) {
   if (!UNIT_CHOICES[kind] || !UNIT_CHOICES[kind].includes(value)) return;
   ST.units = cleanUnits(Object.assign({}, ST.units, { [kind]: value }));
@@ -133,9 +166,10 @@ function renderUnitsControl() {
   };
   const row = (title, kind, a, b) => '<div style="font-size:0.75rem;color:var(--muted);margin:10px 0 6px">' + title + '</div><div style="display:flex;gap:6px">' + seg(kind, a[0], a[1]) + seg(kind, b[0], b[1]) + '</div>';
   return '<div class="card mb12"><div style="font-size:0.875rem">Units</div>' +
-    '<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">How weights and water are shown and typed. Nothing you have logged changes.</div>' +
+    '<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">How weights, water and distance are shown and typed. Nothing you have logged changes.</div>' +
     row('Weight', 'weight', ['lb', 'Pounds (lb)'], ['kg', 'Kilograms (kg)']) +
-    row('Water', 'water', ['L', 'Liters (L)'], ['oz', 'Ounces (fl oz)']) + '</div>';
+    row('Water', 'water', ['L', 'Liters (L)'], ['oz', 'Ounces (fl oz)']) +
+    row('Distance', 'distance', ['mi', 'Miles (mi)'], ['km', 'Kilometers (km)']) + '</div>';
 }
 
 // ─── ICONS ──────────────────────────────────────────────────────────────────
@@ -415,7 +449,7 @@ const ST = {
   sets: {},
   expanded: {},
   wisdomIdx: null, // null = use today's auto-rotated card; set by Next/Prev/jump for manual browsing
-  units: loadUnitsAtStart(), // { weight: 'lb'|'kg', water: 'L'|'oz' }; see UNITS at the top
+  units: loadUnitsAtStart(), // { weight: 'lb'|'kg', water: 'L'|'oz', distance: 'mi'|'km' }; see UNITS at the top
   chartInst: {},
 
   customExercises: [], // user-created exercises, persisted
@@ -3390,9 +3424,9 @@ function crewActivityFromSession(session, sessionKey, opts) {
 }
 function crewStatLine(a) {
   const bits = [];
-  if (a.miles) bits.push(Number(a.miles) + ' mi');
+  if (a.miles) bits.push(distStr(a.miles));
   if (a.seconds) bits.push(fmtDuration(a.seconds));
-  if (a.miles && a.seconds && a.kind !== 'workout') bits.push(fmtPace(a.seconds / Number(a.miles)) + '/mi');
+  if (a.miles && a.seconds && a.kind !== 'workout') bits.push(fmtPace(a.seconds / Number(a.miles)) + paceSuffix());
   if (a.kind === 'workout' && a.sets_logged) bits.push(a.sets_logged + ' sets');
   if (a.env && CREW_ENV_WORD[a.env]) bits.push(CREW_ENV_WORD[a.env]);
   if (a.airport) bits.push(a.airport);
@@ -3918,7 +3952,7 @@ function crewPersonRow(r) {
   const f = ST.crew.followingSet && ST.crew.followingSet.has(r.user_id);
   const pend = ST.crew.pendingSet && ST.crew.pendingSet.has(r.user_id);
   const me = r.user_id === ST.user.id;
-  return '<div class="fb" style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="cursor:pointer;display:flex;align-items:center;gap:10px;min-width:0" onclick="crewGo(\'profile\',\'' + r.user_id + '\')">' + avatarHtml(r.user_id, r.callsign, 36) + '<div style="min-width:0"><div style="font-size:0.875rem;font-weight:600">' + crewEsc(r.callsign) + (me ? ' (you)' : '') + '</div><div style="font-size:0.6875rem;color:var(--muted)">' + [r.base, r.month_miles != null ? Number(r.month_miles) + ' mi' : null, r.month_sessions != null ? r.month_sessions + ' sessions' : null].filter(Boolean).join(' · ') + '</div></div></div>' +
+  return '<div class="fb" style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="cursor:pointer;display:flex;align-items:center;gap:10px;min-width:0" onclick="crewGo(\'profile\',\'' + r.user_id + '\')">' + avatarHtml(r.user_id, r.callsign, 36) + '<div style="min-width:0"><div style="font-size:0.875rem;font-weight:600">' + crewEsc(r.callsign) + (me ? ' (you)' : '') + '</div><div style="font-size:0.6875rem;color:var(--muted)">' + [r.base, r.month_miles != null ? distStr(r.month_miles, 1) : null, r.month_sessions != null ? r.month_sessions + ' sessions' : null].filter(Boolean).join(' · ') + '</div></div></div>' +
     (me ? '' : '<button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid ' + (f ? 'var(--border)' : 'var(--gold)') + ';border-radius:8px;color:' + (f ? 'var(--muted)' : 'var(--gold)') + '" onclick="crewFollow(\'' + r.user_id + '\',' + (f || pend ? 'false' : 'true') + ')">' + (f ? 'Following' : pend ? 'Requested' : 'Follow') + '</button>') + '</div>';
 }
 // Monthly base leader (most strength sessions; sets break a tie). Cached per
@@ -3967,7 +4001,7 @@ async function crewLoadProfileHeader(userId) {
     box.innerHTML = '<div class="fb" style="align-items:flex-start"><div style="display:flex;gap:12px;align-items:flex-start;min-width:0">' + avatarHtml(p.user_id, p.callsign, 64) + '<div style="min-width:0"><div style="font-size:1.125rem;font-weight:600">' + crewEsc(p.callsign) + foundingChip(p.user_id) + '</div>' +
       (wonLast ? '<div style="font-size:0.75rem;color:var(--gold);margin-top:2px">🏆 Top lifter at ' + crewEsc(p.base) + ', ' + crewLastMonthName() + '</div>' : '') + '<div style="font-size:0.75rem;color:var(--muted)">' + [p.base, p.airline].filter(Boolean).map(crewEsc).join(' · ') + '</div>' + (p.bio ? '<div data-raw style="font-size:0.8125rem;margin-top:6px;line-height:1.5">' + crewEsc(p.bio) + '</div>' : '') + '</div></div>' +
       (me ? '<button class="btn-ghost" style="font-size:0.75rem;color:var(--gold)" onclick="crewGo(\'settings\')">Settings</button>' : '<div style="display:flex;flex-direction:column;gap:6px"><button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid ' + (f ? 'var(--border)' : 'var(--gold)') + ';border-radius:8px;color:' + (f ? 'var(--muted)' : 'var(--gold)') + '" onclick="crewFollow(\'' + userId + '\',' + (f || pend ? 'false' : 'true') + ')">' + (f ? 'Following' : pend ? 'Requested' : (p.visibility === 'followers' ? 'Request to follow' : 'Follow')) + '</button><button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewReport(\'profile\',\'' + userId + '\')">Report</button><button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewBlock(\'' + userId + '\',\'' + crewEsc(p.callsign).replace(/'/g, '') + '\')">Block</button></div>') + '</div>' +
-      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:12px">' + [['FOLLOWERS', k.followers], ['FOLLOWING', k.following], ['POSTS', k.activities], ['MI THIS MO', Number(k.month_miles || 0)]].map(([l, v]) => '<div style="text-align:center"><div style="font-family:var(--mono);font-size:1rem;font-weight:600">' + (v ?? 0) + '</div><div style="font-size:0.5625rem;color:var(--muted);letter-spacing:.1em">' + l + '</div></div>').join('') + '</div>';
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:12px">' + [['FOLLOWERS', k.followers], ['FOLLOWING', k.following], ['POSTS', k.activities], [unitDist().toUpperCase() + ' THIS MO', distNum(k.month_miles || 0, 1)]].map(([l, v]) => '<div style="text-align:center"><div style="font-family:var(--mono);font-size:1rem;font-weight:600">' + (v ?? 0) + '</div><div style="font-size:0.5625rem;color:var(--muted);letter-spacing:.1em">' + l + '</div></div>').join('') + '</div>';
   } catch (e) { box.innerHTML = '<div style="font-size:0.75rem;color:var(--muted)">Could not load this profile.</div>'; }
 }
 function renderCrew(parts) {
@@ -4114,12 +4148,8 @@ async function loadLeaderboardRows() {
 }
 
 function formatMiPace(distanceMi, seconds) {
-  const parts = [Math.round(distanceMi*100)/100+' mi'];
-  if (seconds > 0) {
-    const paceSecPerMi = seconds / distanceMi;
-    const m = Math.floor(paceSecPerMi/60), s = Math.round(paceSecPerMi%60);
-    parts.push(m+':'+String(s).padStart(2,'0')+'/mi');
-  }
+  const parts = [distStr(distanceMi)];
+  if (seconds > 0) parts.push(paceClock(seconds / distanceMi) + paceSuffix());
   return parts.join(' · ');
 }
 
@@ -4154,7 +4184,7 @@ async function loadRunningRows() {
       const rows = Object.values(totals).sort((a,b) => b.miles - a.miles).slice(0, 50);
       renderRunningRows(el, rows.map(r => ({
         id: null, user_id: r.user_id, username: r.username,
-        display: (Math.round(r.miles*100)/100)+' mi', table: null,
+        display: distStr(r.miles), table: null,
       })));
     }
   } catch(e) {
@@ -4284,10 +4314,7 @@ function getRunningPaceTrend(sessionCache) {
   return { trend, first: points[0].pace, current: points[points.length-1].pace, sessionsCount: points.length };
 }
 
-function formatPace(secPerMile) {
-  const m = Math.floor(secPerMile / 60), s = Math.round(secPerMile % 60);
-  return m + ':' + String(s).padStart(2,'0') + '/mi';
-}
+function formatPace(secPerMile) { return paceClock(secPerMile) + paceSuffix(); }
 
 function sessionRunningDistance(session) {
   let miles = 0, seconds = 0;
@@ -4524,6 +4551,11 @@ const RUN_RACE = {
 };
 const RUN_DAYS_CHOICES = [3, 4, 5];
 const RUN_MILES_CHOICES = [10, 15, 20, 25, 30, 40];
+const RUN_KM_CHOICES = [15, 25, 30, 40, 50, 65];
+// [miles stored, label shown]. A kilometer choice is kept as whole miles.
+function runWeeklyChoices() {
+  return unitDist() === 'km' ? RUN_KM_CHOICES.map(km => [Math.round(km / KM_PER_MI), km]) : RUN_MILES_CHOICES.map(mi => [mi, mi]);
+}
 function cleanRunPlan(p) {
   p = p || {};
   const race = RUN_RACE[p.race] ? p.race : 'consistency';
@@ -4579,7 +4611,7 @@ function runnerNext(now) {
     return { group: 'Lower Body', kind: 'strength', note: 'Strength day. One a week keeps runners durable: legs, hips and core.' };
   }
   if (!longDone && runDaysDone >= 1 && lastRun !== null && today - lastRun >= 1 && runDaysDone < plan.daysPerWeek) {
-    return { group: 'Run', kind: 'long', miles: longTarget, note: 'Long run day. Easy pace, about ' + longTarget + ' miles. Slow enough to talk the whole way.' };
+    return { group: 'Run', kind: 'long', miles: longTarget, note: 'Long run day. Easy pace, about ' + distNum(longTarget, 0) + ' ' + (unitDist() === 'km' ? 'kilometers' : 'miles') + '. Slow enough to talk the whole way.' };
   }
   const left = Math.max(0, plan.daysPerWeek - runDaysDone);
   return { group: 'Run', kind: 'easy', note: left ? 'Easy run. Conversational pace, 20 to 40 minutes.' : 'Run days for the week are done. An easy shakeout is fine if you feel good.' };
@@ -7742,12 +7774,12 @@ function healthDistanceUpdate(set, p) {
     const out = { miles: String(miles) };
     const secs = Math.round(parseFloat(payload.seconds) || 0);
     if (secs > 0) out.seconds = String(secs);
-    return { changed: true, set: out, message: 'Filled from Apple Health: ' + (payload.activityType || 'Workout') + ', ' + miles + ' mi'
+    return { changed: true, set: out, message: 'Filled from Apple Health: ' + (payload.activityType || 'Workout') + ', ' + distStr(miles)
       + (secs > 0 ? ' in ' + Math.round(secs / 60) + ' min' : '') + (payload.source ? ' (' + payload.source + ')' : '') + '.' };
   }
   const typed = cur.miles !== undefined && cur.miles !== null && cur.miles !== '';
-  if (typed) return { changed: false, set: {}, message: 'Apple Health measured ' + miles + ' mi. Your entry was kept.' };
-  return { changed: true, set: { miles: String(miles) }, message: 'Distance from Apple Health: ' + miles + ' mi.' };
+  if (typed) return { changed: false, set: {}, message: 'Apple Health measured ' + distStr(miles) + '. Your entry was kept.' };
+  return { changed: true, set: { miles: String(miles) }, message: 'Distance from Apple Health: ' + distStr(miles) + '.' };
 }
 window.addEventListener('fcf:healthDistance', (e) => {
   const p = e.detail || {};
@@ -9794,7 +9826,7 @@ function buildExerciseCatalog() {
 // Third element marks minute-display fields: shown/entered as minutes,
 // stored as seconds so existing data and the CSV export stay consistent.
 function edFieldsFor(exDef) {
-  if (exDef.inputType === 'timed_distance') return [['seconds','Time','min'],['miles','Distance','mi']];
+  if (exDef.inputType === 'timed_distance') return [['seconds','Time','min'],['miles','Distance',unitDist()]];
   if (exDef.inputType === 'timed_bilateral') return [['seconds_left','Left','min'],['seconds_right','Right','min']];
   if (exDef.timed || exDef.inputType === 'timed' || exDef.inputType === 'nsdr') return [['seconds','Time','min']];
   if (exDef.inputType === 'reps_only') { const u = repValueUnit(exDef); return u ? [['reps', u.placeholder, u.short]] : [['reps','Reps','reps']]; }
@@ -9877,7 +9909,7 @@ function renderSessionEditor() {
         const raw = set[field];
         const shown = unit === 'min'
           ? (raw ? Math.round((parseFloat(raw)/60)*10)/10 : '')
-          : field === 'weight' ? wtInputVal(raw) : (raw || '');
+          : field === 'weight' ? wtInputVal(raw) : field === 'miles' ? distInputVal(raw) : (raw || '');
         const handler = unit === 'min' ? 'edSetValMin' : 'edSetVal';
         parts.push('<div style="flex:1;min-width:0;display:flex;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:0 8px 0 0">');
         parts.push('<input type="text" inputmode="decimal" placeholder="'+label+'" value="'+shown+'" style="flex:1;min-width:0;background:transparent;border:none;padding:8px;font-size:1rem;color:var(--text);outline:none" oninput="'+handler+'(\''+exDef.id+'\','+i+',\''+field+'\',this.value)">');
@@ -9918,7 +9950,7 @@ function isMinuteScale(exItem) {
 
 function edSetVal(exId, i, field, value) {
   const sets = ST.editSession.session.sets[exId];
-  if (sets && sets[i]) sets[i][field] = field === 'weight' ? wtFromInput(value) : value;
+  if (sets && sets[i]) sets[i][field] = field === 'weight' ? wtFromInput(value) : field === 'miles' ? distFromInput(value) : value;
 }
 // Minute-displayed fields store seconds internally.
 function edSetValMin(exId, i, field, value) {
@@ -10850,7 +10882,7 @@ function setRunPlan(field, value) {
   const p = cleanRunPlan(ST.runPlan);
   if (field === 'race') { p.race = value; p.weeklyMiles = RUN_RACE[value].miles; }
   if (field === 'daysPerWeek') p.daysPerWeek = Number(value);
-  if (field === 'weeklyMiles') { const n = Math.round(Number(value)); if (!(n >= 3 && n <= 120)) { showToast('Pick 3 to 120 miles a week.'); return; } p.weeklyMiles = n; }
+  if (field === 'weeklyMiles') { const n = Math.round(Number(value)); if (!(n >= 3 && n <= 120)) { showToast(unitDist() === 'km' ? 'Pick 5 to 190 kilometers a week.' : 'Pick 3 to 120 miles a week.'); return; } p.weeklyMiles = n; }
   ST.runPlan = cleanRunPlan(p);
   saveGoalLevel(); renderPage();
 }
@@ -10862,9 +10894,9 @@ function renderRunPlanPicker() {
   parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;line-height:1.5">Runs are the main work. The app picks each day: easy runs, one long run a week, and one strength day for durability.</div>');
   parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-bottom:6px">GOAL</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px">' + Object.keys(RUN_RACE).map(k => chip(p.race === k, RUN_RACE[k].label, "setRunPlan('race','" + k + "')")).join('') + '</div>');
   parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-bottom:6px">RUN DAYS A WEEK</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px">' + RUN_DAYS_CHOICES.map(n => chip(p.daysPerWeek === n, n + ' days', "setRunPlan('daysPerWeek'," + n + ")")).join('') + '</div>');
-  parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-bottom:6px">MILES A WEEK</div><div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px">' + RUN_MILES_CHOICES.map(n => chip(p.weeklyMiles === n, n, "setRunPlan('weeklyMiles'," + n + ")")).join('') + '</div>');
-  const custom = RUN_MILES_CHOICES.includes(p.weeklyMiles) ? '' : String(p.weeklyMiles);
-  parts.push('<div class="field" style="margin-top:8px"><label>Or type a weekly target</label><input type="text" inputmode="numeric" placeholder="miles" value="' + custom + '" onchange="setRunPlan(\'weeklyMiles\',this.value)"></div>');
+  parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-bottom:6px">' + (unitDist() === 'km' ? 'KILOMETERS' : 'MILES') + ' A WEEK</div><div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px">' + runWeeklyChoices().map(([mi, label]) => chip(p.weeklyMiles === mi, label, "setRunPlan('weeklyMiles'," + mi + ")")).join('') + '</div>');
+  const custom = runWeeklyChoices().some(([mi]) => mi === p.weeklyMiles) ? '' : String(distNum(p.weeklyMiles, 0));
+  parts.push('<div class="field" style="margin-top:8px"><label>Or type a weekly target</label><input type="text" inputmode="numeric" placeholder="' + (unitDist() === 'km' ? 'kilometers' : 'miles') + '" value="' + custom + '" onchange="setRunPlan(\'weeklyMiles\',unitDist()===\'km\'?Number(this.value)/KM_PER_MI:this.value)"></div>');
   return parts.join('');
 }
 // Today: this week's running against the plan, under the date line.
@@ -10876,7 +10908,7 @@ function runWeekProgressHtml() {
   return '<div style="margin:-6px 0 16px">' +
     '<div class="fb" style="align-items:baseline;margin-bottom:6px">' +
       '<span style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.14em;color:var(--muted)">🏃 THIS WEEK</span>' +
-      '<span style="font-family:var(--mono);font-size:0.75rem;color:' + (done ? 'var(--green)' : 'var(--text)') + '">' + (done ? '✓ ' : '') + w.miles + ' / ' + w.plan.weeklyMiles + ' mi · ' + w.days + ' of ' + w.plan.daysPerWeek + ' runs</span>' +
+      '<span style="font-family:var(--mono);font-size:0.75rem;color:' + (done ? 'var(--green)' : 'var(--text)') + '">' + (done ? '✓ ' : '') + distNum(w.miles, 1) + ' / ' + distNum(w.plan.weeklyMiles, 0) + ' ' + unitDist() + ' · ' + w.days + ' of ' + w.plan.daysPerWeek + ' runs</span>' +
     '</div>' +
     '<div style="height:6px;border-radius:3px;background:var(--raise);overflow:hidden"><div style="height:100%;width:' + pct + '%;background:' + (done ? 'var(--green)' : 'var(--gold)') + ';border-radius:3px"></div></div>' +
     '<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px;line-height:1.5">Today: ' + next.note + '</div>' +
@@ -12696,15 +12728,15 @@ function buildExCard(exItem, phaseKey) {
       // distance field shown at all — meaning Treadmill/Outdoor Run could
       // never actually feed the running leaderboard from a live workout.
       const valMin = sets[0]?.seconds ? Math.round((parseFloat(sets[0].seconds)/60)*10)/10 : '';
-      const valMi = sets[0]?.miles || '';
+      const valMi = distInputVal(sets[0]?.miles);
       parts.push('<div class="timed-box '+(valMin?'ok':'')+'" id="tb_'+exItem.id+'">');
       parts.push('<div style="display:flex;gap:8px">');
       parts.push('<div style="flex:1"><div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">TIME</div>');
       parts.push('<input class="timed-inp" type="text" inputmode="decimal" placeholder="0" value="'+valMin+'" oninput="liveSetValMin(\''+exItem.id+'\',0,\'seconds\',this.value);document.getElementById(\'tb_'+exItem.id+'\').className=\'timed-box\'+(this.value?\' ok\':\'\');">');
       parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">min</div></div>');
       parts.push('<div style="flex:1"><div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">DISTANCE</div>');
-      parts.push('<input class="timed-inp" type="text" inputmode="decimal" placeholder="0" value="'+valMi+'" oninput="ensureSetEntry(\''+exItem.id+'\',0);ST.sets[\''+exItem.id+'\'][0].miles=this.value;persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
-      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">mi</div></div>');
+      parts.push('<input class="timed-inp" type="text" inputmode="decimal" placeholder="0" value="'+valMi+'" oninput="ensureSetEntry(\''+exItem.id+'\',0);ST.sets[\''+exItem.id+'\'][0].miles=distFromInput(this.value);persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
+      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">'+unitDist()+'</div></div>');
       parts.push('</div></div>');
       // Runs and walks had no stopwatch (every other timed card does). Timing
       // one here also gives Apple Health an exact window to measure.
@@ -14379,11 +14411,7 @@ function runMonthGoal() {
   const plan = activeRunPlan();
   return plan ? Math.round(plan.weeklyMiles * 4.3) : 25;
 }
-function fmtPace(secPerMi) {
-  if (!isFinite(secPerMi) || secPerMi <= 0) return '';
-  const m = Math.floor(secPerMi / 60), sec = Math.round(secPerMi % 60);
-  return m + ':' + String(sec).padStart(2, '0');
-}
+function fmtPace(secPerMi) { return paceClock(secPerMi); }
 function fmtDuration(sec) {
   sec = Math.round(sec); const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s2 = sec % 60;
   return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s2).padStart(2, '0');
@@ -14425,19 +14453,19 @@ function runningCardHtml(stats) {
   const monthName = new Date().toLocaleDateString('en-US', { month: 'long' });
   const parts = ['<div class="card mb12"><div class="section-label" style="margin-top:0">🏃 RUNNING</div>'];
   parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">' +
-    glowTile('WEEK MI', stats.weekMiles, 'gold') + glowTile(monthName.slice(0, 3).toUpperCase() + ' MI', stats.monthMiles, 'blue') + glowTile('YEAR MI', stats.yearMiles, 'teal') + '</div>');
-  parts.push('<div class="fb" style="align-items:baseline;margin-bottom:6px"><span style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.14em;color:var(--muted)">' + monthName.toUpperCase() + ' CHALLENGE</span><span style="font-family:var(--mono);font-size:0.75rem;color:' + (stats.monthChallengeMet ? 'var(--green)' : 'var(--text)') + '">' + (stats.monthChallengeMet ? '✓ ' : '') + stats.monthMiles + ' / ' + stats.monthGoal + ' mi</span></div>');
+    glowTile('WEEK ' + unitDist().toUpperCase(), distNum(stats.weekMiles, 1), 'gold') + glowTile(monthName.slice(0, 3).toUpperCase() + ' ' + unitDist().toUpperCase(), distNum(stats.monthMiles, 1), 'blue') + glowTile('YEAR ' + unitDist().toUpperCase(), distNum(stats.yearMiles, 1), 'teal') + '</div>');
+  parts.push('<div class="fb" style="align-items:baseline;margin-bottom:6px"><span style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.14em;color:var(--muted)">' + monthName.toUpperCase() + ' CHALLENGE</span><span style="font-family:var(--mono);font-size:0.75rem;color:' + (stats.monthChallengeMet ? 'var(--green)' : 'var(--text)') + '">' + (stats.monthChallengeMet ? '✓ ' : '') + distNum(stats.monthMiles, 1) + ' / ' + distNum(stats.monthGoal, 0) + ' ' + unitDist() + '</span></div>');
   parts.push('<div style="height:6px;border-radius:3px;background:var(--raise);overflow:hidden;margin-bottom:4px"><div style="height:100%;width:' + pct + '%;background:' + (stats.monthChallengeMet ? 'var(--green)' : 'var(--gold)') + ';border-radius:3px"></div></div>');
-  parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-bottom:14px">' + (stats.monthChallengeMet ? 'Challenge done: the Monthly Miles badge is yours.' : (Math.round((stats.monthGoal - stats.monthMiles) * 10) / 10) + ' miles to go this month. ' + (isRunner() ? 'Set from your weekly target.' : 'Pick Runner as your objective to set your own target.')) + '</div>');
+  parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-bottom:14px">' + (stats.monthChallengeMet ? 'Challenge done: the Monthly Miles badge is yours.' : distNum(stats.monthGoal - stats.monthMiles, 1) + ' ' + (unitDist() === 'km' ? 'kilometers' : 'miles') + ' to go this month. ' + (isRunner() ? 'Set from your weekly target.' : 'Pick Runner as your objective to set your own target.')) + '</div>');
   parts.push('<div style="font-size:0.625rem;color:var(--muted);letter-spacing:.14em;font-family:var(--mono);margin-bottom:6px">LAST 8 WEEKS</div>');
-  parts.push('<div style="display:flex;align-items:flex-end;gap:4px;height:56px;margin-bottom:4px">' + stats.weeks.map((w, i) => '<div title="' + w.start + ': ' + w.miles + ' mi" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%"><div style="height:' + Math.max(w.miles ? 4 : 1, Math.round(w.miles / maxW * 52)) + 'px;background:' + (i === 7 ? 'var(--gold)' : 'rgba(201,168,76,0.45)') + ';border-radius:3px 3px 0 0"></div></div>').join('') + '</div>');
-  parts.push('<div style="display:flex;gap:4px;margin-bottom:14px">' + stats.weeks.map(w => '<div style="flex:1;text-align:center;font-family:var(--mono);font-size:0.5625rem;color:var(--muted)">' + (w.miles || '') + '</div>').join('') + '</div>');
+  parts.push('<div style="display:flex;align-items:flex-end;gap:4px;height:56px;margin-bottom:4px">' + stats.weeks.map((w, i) => '<div title="' + w.start + ': ' + distStr(w.miles, 1) + '" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%"><div style="height:' + Math.max(w.miles ? 4 : 1, Math.round(w.miles / maxW * 52)) + 'px;background:' + (i === 7 ? 'var(--gold)' : 'rgba(201,168,76,0.45)') + ';border-radius:3px 3px 0 0"></div></div>').join('') + '</div>');
+  parts.push('<div style="display:flex;gap:4px;margin-bottom:14px">' + stats.weeks.map(w => '<div style="flex:1;text-align:center;font-family:var(--mono);font-size:0.5625rem;color:var(--muted)">' + (w.miles ? distNum(w.miles, 1) : '') + '</div>').join('') + '</div>');
   parts.push('<div style="font-size:0.625rem;color:var(--muted);letter-spacing:.14em;font-family:var(--mono);margin-bottom:6px">BEST EFFORTS</div>');
-  parts.push('<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:6px">' + stats.efforts.map(e => '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 4px;text-align:center"><div style="font-size:0.625rem;color:var(--muted)">' + e.label + '</div><div style="font-family:var(--mono);font-size:0.875rem;font-weight:600;color:' + (e.best ? 'var(--text)' : 'var(--muted)') + '">' + (e.best ? fmtDuration(e.best.estSeconds) : '–') + '</div><div style="font-size:0.5625rem;color:var(--muted)">' + (e.best ? fmtPace(e.best.pace) + '/mi' : 'no run yet') + '</div></div>').join('') + '</div>');
-  parts.push('<div style="font-size:0.5625rem;color:var(--muted);margin-bottom:14px;line-height:1.5">Est. from your best average pace on a run at least that long. Longest run: ' + stats.longestMi + ' mi.</div>');
+  parts.push('<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:6px">' + stats.efforts.map(e => '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 4px;text-align:center"><div style="font-size:0.625rem;color:var(--muted)">' + e.label + '</div><div style="font-family:var(--mono);font-size:0.875rem;font-weight:600;color:' + (e.best ? 'var(--text)' : 'var(--muted)') + '">' + (e.best ? fmtDuration(e.best.estSeconds) : '–') + '</div><div style="font-size:0.5625rem;color:var(--muted)">' + (e.best ? fmtPace(e.best.pace) + paceSuffix() : 'no run yet') + '</div></div>').join('') + '</div>');
+  parts.push('<div style="font-size:0.5625rem;color:var(--muted);margin-bottom:14px;line-height:1.5">Est. from your best average pace on a run at least that long. Longest run: ' + distStr(stats.longestMi) + '.</div>');
   parts.push('<div style="font-size:0.625rem;color:var(--muted);letter-spacing:.14em;font-family:var(--mono);margin-bottom:6px">RECENT RUNS</div>');
   stats.runs.slice(0, 5).forEach(r => {
-    parts.push('<div class="fb" style="padding:7px 0;border-bottom:1px solid var(--border);font-size:0.75rem"><span style="color:var(--muted)">' + new Date(r.when).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) + '</span><span style="font-family:var(--mono)">' + (r.miles ? r.miles + ' mi' : 'no distance') + (r.seconds ? ' · ' + fmtDuration(r.seconds) : '') + (r.pace ? ' · ' + fmtPace(r.pace) + '/mi' : '') + '</span></div>');
+    parts.push('<div class="fb" style="padding:7px 0;border-bottom:1px solid var(--border);font-size:0.75rem"><span style="color:var(--muted)">' + new Date(r.when).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) + '</span><span style="font-family:var(--mono)">' + (r.miles ? distStr(r.miles) : 'no distance') + (r.seconds ? ' · ' + fmtDuration(r.seconds) : '') + (r.pace ? ' · ' + fmtPace(r.pace) + paceSuffix() : '') + '</span></div>');
   });
   parts.push('</div>');
   return parts.join('');
@@ -18656,7 +18684,7 @@ function buildTodayBriefing(ctx) {
     const rn = runnerNext(ctx.now); const w = runWeekSummary(ctx.now);
     if (rn.group === 'Run') {
       return { tone:'go', headline: rn.kind === 'long' ? 'Long run day' : 'Run day',
-        body: rn.note + ' This week: ' + w.miles + ' of ' + w.plan.weeklyMiles + ' miles, ' + w.days + ' of ' + w.plan.daysPerWeek + ' run days.',
+        body: rn.note + ' This week: ' + distNum(w.miles, 1) + ' of ' + distNum(w.plan.weeklyMiles, 0) + ' ' + (unitDist() === 'km' ? 'kilometers' : 'miles') + ', ' + w.days + ' of ' + w.plan.daysPerWeek + ' run days.',
         action:{ label:'Start a run', fn:"selectMissionProfile('Run');switchTab('preflight')" } };
     }
     return { tone:'go', headline:'Strength day', body: rn.note + ' Keep it moderate so tomorrow\'s run is fresh.',

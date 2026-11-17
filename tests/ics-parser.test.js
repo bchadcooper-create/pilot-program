@@ -877,7 +877,10 @@ test('every emoji the app can put on screen has a line icon (reported Nov 16: em
 });
 test('units: pounds or kilograms, liters or ounces; storage stays in pounds and liters (requested Nov 16)', () => {
   const keep = ctx.ST.units;
-  ctx.ST.units = { weight: 'lb', water: 'L' };
+  try {
+  ctx.ST.units = { weight: 'lb', water: 'L', distance: 'mi' };
+  assertEqual(ctx.distStr(3.1), '3.1 mi', 'miles shown as stored'); assertEqual(ctx.formatPace(480), '8:00/mi', 'pace per mile');
+  assertEqual(ctx.distFromInput('3.'), '3.', 'a half-typed mile value is stored as typed');
   assertEqual(ctx.wtStr(135), '135 lb', 'pounds shown as stored');
   assertEqual(ctx.wtInputVal('22.'), '22.', 'a half-typed pound value is left alone'); assertEqual(ctx.wtFromInput('22.'), '22.', 'and stored as typed');
   assertEqual(ctx.waterStr(2.4), '2.4 L', 'liters'); assertEqual(ctx.waterFromInput('1.5'), 1.5, 'liters typed');
@@ -899,9 +902,18 @@ test('units: pounds or kilograms, liters or ounces; storage stays in pounds and 
   assertEqual(Math.round(dbKg * 100) / 100, 17.5, 'kilogram dumbbells go up to the next 2.5 kg');
   assertEqual(ctx.waterStr(2.4), '81 oz', 'ounces'); assertEqual(Math.round(ctx.waterFromInput('32') * 1000) / 1000, 0.946, '32 oz kept as liters');
   assertEqual(ctx.waterSip(0.25), '8 oz', 'a sip in ounces');
-  assertEqual(JSON.stringify(ctx.cleanUnits({ weight: 'stone', water: 5 })), '{"weight":"lb","water":"L"}', 'anything unknown falls back to pounds and liters');
-  assertEqual(/Kilograms/.test(ctx.renderUnitsControl()) && /Ounces/.test(ctx.renderUnitsControl()), true, 'the picker offers both');
-  ctx.ST.units = keep;
+  assertEqual(JSON.stringify(ctx.cleanUnits({ weight: 'stone', water: 5 })), '{"weight":"lb","water":"L","distance":"mi"}', 'anything unknown falls back to pounds, liters and miles');
+  assertEqual(/Kilograms/.test(ctx.renderUnitsControl()) && /Ounces/.test(ctx.renderUnitsControl()) && /Kilometers/.test(ctx.renderUnitsControl()), true, 'the picker offers all three');
+  ctx.ST.units = { weight: 'lb', water: 'L', distance: 'km' };
+  assertEqual(ctx.distStr(3.107), '5 km', 'a 5K reads as 5 km');
+  assertEqual(ctx.distInputVal(ctx.distFromInput('10')), '10', '10 km survives the round trip');
+  assertEqual(ctx.distFromInput('10'), '6.214', '10 km is kept as 6.214 miles');
+  assertEqual(ctx.formatPace(480), '4:58/km', 'an 8:00 mile is a 4:58 kilometer');
+  assertEqual(ctx.formatMiPace(6.214, 3000), '10 km · 5:00/km', 'leaderboard line in kilometers');
+  assertEqual(ctx.paceClock(96.5), '1:00', 'seconds never read as :60');
+  assertEqual(ctx.runWeeklyChoices().map(c => c[1]).join(','), '15,25,30,40,50,65', 'weekly targets offered in kilometers');
+  assertEqual(ctx.crewStatLine({ miles: 3.107, seconds: 1500, kind: 'run' }).startsWith('5 km'), true, 'crew feed line in kilometers');
+  } finally { ctx.ST.units = keep; }
 });
 test('a workout reopened mid-session drops a caution that no longer applies', () => {
   ctx.ST.injuries = ['shoulder', 'elbow_wrist'];

@@ -120,6 +120,15 @@
     box.textContent = (box.textContent ? box.textContent + '\n\n---\n\n' : '') + line;
   });
   window.addEventListener('unhandledrejection', function(e) {
+    // A slow or dropped connection is not a crash (reported Nov 16 2026: a
+    // member saw the red bar for a save that timed out). Say so plainly and
+    // keep the red bar for real faults.
+    var netMsg = e.reason && e.reason.message;
+    if (netMsg === 'timeout' || netMsg === 'offline' || netMsg === 'network timeout' || /Failed to fetch|Load failed|NetworkError/i.test(String(netMsg))) {
+      try { console.warn('Network problem, not shown as a crash:', e.reason); } catch (x) {}
+      if (typeof showBigToast === 'function') { try { showBigToast('The connection is slow or down. Try that again in a moment.', 'warn'); } catch (x) {} }
+      return;
+    }
     var box = document.getElementById('fcfCrashBox');
     if (!box) {
       box = document.createElement('div');

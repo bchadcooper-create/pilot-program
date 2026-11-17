@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.56.7 / 20261116_2
+ * Version/build: fcf-v5.56.8 / 20261116_3
  */
 
-const FCF_VERSION = 'fcf-v5.56.7';
-const FCF_BUILD   = '20261116_2';
+const FCF_VERSION = 'fcf-v5.56.8';
+const FCF_BUILD   = '20261116_3';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -10389,6 +10389,20 @@ async function logWeightToday(wt) {
     : await SB.from('weight_log').insert([{ user_id: ST.user.id, weight_lb: wt, logged_at: new Date().toISOString() }]);
   if (res.error) throw res.error;
 }
+// Logs the profile weight as a weigh-in when it changed, or when the member
+// has never had a weigh-in at all (so an earlier failed attempt heals itself).
+async function ensureProfileWeightLogged(wt) {
+  if (!ST.user || !wt) return;
+  let due = ST._weightLogPending === wt;
+  if (!due) {
+    const { data, error } = await withTimeout(SB.from('weight_log').select('id').eq('user_id', ST.user.id).not('weight_lb', 'is', null).limit(1), 10000);
+    if (error) throw error;
+    due = !data || !data.length;
+  }
+  if (!due) return;
+  await logWeightToday(wt);
+  ST._weightLogPending = null;
+}
 // What the Fuel Plan still needs, in the words the profile uses.
 function nutritionGoalsMissing() {
   const m = [];
@@ -10422,10 +10436,25 @@ async function saveBodyMetrics() {
   profile.heightIn = ST.heightIn;
   profile.age = ST.age;
   const newWeight = cleanBodyWeight(document.getElementById('bmWeight')?.value);
-  const weightChanged = newWeight && newWeight !== ST.lastWeight;
+  // A changed weight stays "to be logged" until the weigh-in log has it, so
+  // a save that fails and is tapped again still records it.
+  if (newWeight && newWeight !== ST.lastWeight) ST._weightLogPending = newWeight;
   if (newWeight) { ST.lastWeight = newWeight; profile.lastWeight = newWeight; }
-  await withDialogSpinner('Saving…', () => dbSetProfile(profile));
-  if (weightChanged) logWeightToday(newWeight).catch(e => console.warn('Logging the profile weight failed:', e));
+  // BUG FIX (reported Nov 16 2026: red "UNHANDLED PROMISE REJECTION: timeout"
+  // bar on Save Body Metrics). A slow connection made the save time out and
+  // nothing caught it. Now: one more try, then a plain message. The values
+  // stay in the form either way.
+  try {
+    await withDialogSpinner('Saving…', async () => {
+      try { await dbSetProfile(profile); }
+      catch (e1) { console.warn('Body metrics save failed, trying once more:', e1); await dbSetProfile(profile); }
+    });
+  } catch (e) {
+    console.warn('Body metrics save failed twice:', e);
+    showBigToast('Could not save: the connection is slow or down. Your entries are still here. Tap Save again in a moment.', 'warn');
+    return;
+  }
+  if (newWeight) ensureProfileWeightLogged(newWeight).catch(e => console.warn('Logging the profile weight failed:', e));
   showToast('Body metrics saved.');
   // Call sign just set for the first time: put their existing lift history
   // on the boards so months of logged work isn't invisible.

@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.61.1 / 20261116_14
+ * Version/build: fcf-v5.62.0 / 20261116_15
  */
 
-const FCF_VERSION = 'fcf-v5.61.1';
-const FCF_BUILD   = '20261116_14';
+const FCF_VERSION = 'fcf-v5.62.0';
+const FCF_BUILD   = '20261116_15';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -5127,6 +5127,8 @@ async function bootAppInner() {
   applyDailyInputsRow(await dbGetDailyInputs().catch(() => null));
   applyScheduleEnvironmentSuggestion();
   applyScheduleFlightHours();
+  // A moment later, so the iPhone shell has reported what it can do.
+  setTimeout(planScheduleUploadAlert, 4000);
 
   if (!ST.sex && !localStorage.getItem('fcf_profile_intro')) {
     localStorage.setItem('fcf_profile_intro', '1');
@@ -6073,6 +6075,78 @@ function getActiveSchedule() {
   // behavior from before this preference existed.
   if (ST.calendarEvents?.length) return { source: 'calendar', events: ST.calendarEvents };
   return { source: 'ics', events: ST.flightSchedule || [] };
+}
+
+// ─── SCHEDULE UPLOAD PROMPT ─────────────────────────────────────────────────
+// Added Nov 16 2026 (Chad): crew schedules come out late in the month (around
+// the 20th at his airline), and the app only knows next month's trips once
+// the member uploads the new .ics file. Nothing asked them to.
+//
+// The prompt is for members who use an uploaded .ics file. Members whose
+// iPhone calendar is connected get new trips on their own and see nothing.
+//   - 'ended':      the last event in the file is in the past.
+//   - 'next_month': it is the 20th or later (or the file runs out within five
+//                   days) and the file holds nothing for next month.
+// "Not yet" hides it for three days. A reminder is also set on the iPhone
+// for 9:00 on the 20th (app build 8 and later).
+const SCHEDULE_OUT_DAY = 20;
+const SCHED_PROMPT_SNOOZE_KEY = 'fcf_sched_prompt_snooze';
+const SCHED_PROMPT_SNOOZE_MS = 3 * 864e5;
+function scheduleNextMonthStart(now) { return new Date(now.getFullYear(), now.getMonth() + 1, 1); }
+function scheduleCoversNextMonth(events, now) {
+  const from = scheduleNextMonthStart(now).getTime();
+  return (events || []).some(e => { const t = new Date(e && e.start).getTime(); return isFinite(t) && t >= from; });
+}
+function scheduleUploadPrompt(now, events, source) {
+  if (source !== 'ics' || !Array.isArray(events) || !events.length) return null;
+  let lastEnd = 0;
+  events.forEach(e => { const t = new Date((e && (e.end || e.start)) || 0).getTime(); if (isFinite(t) && t > lastEnd) lastEnd = t; });
+  if (!lastEnd) return null;
+  const fmt = d => d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+  if (lastEnd < now.getTime()) {
+    return { kind: 'ended', title: 'Your schedule has run out', body: 'The last trip in your uploaded schedule ended ' + fmt(new Date(lastEnd)) + '. Upload the new one so your workouts and meals fit the trips you are flying now.' };
+  }
+  if (scheduleCoversNextMonth(events, now)) return null;
+  const nextName = scheduleNextMonthStart(now).toLocaleDateString('en-US', { month: 'long' });
+  const runsOutSoon = lastEnd - now.getTime() < 5 * 864e5;
+  if (now.getDate() >= SCHEDULE_OUT_DAY || runsOutSoon) {
+    return { kind: 'next_month', title: 'Got your ' + nextName + ' schedule?', body: (now.getDate() >= SCHEDULE_OUT_DAY ? 'New schedules are usually out by now. ' : 'Your uploaded schedule ends ' + fmt(new Date(lastEnd)) + '. ') + 'Upload ' + nextName + ' so the app can plan around your trips.' };
+  }
+  return null;
+}
+function schedulePromptSnoozed(now) {
+  try { const t = parseInt(localStorage.getItem(SCHED_PROMPT_SNOOZE_KEY), 10); return isFinite(t) && now.getTime() - t < SCHED_PROMPT_SNOOZE_MS; } catch (e) { return false; }
+}
+function snoozeSchedulePrompt() {
+  try { localStorage.setItem(SCHED_PROMPT_SNOOZE_KEY, String(Date.now())); } catch (e) { /* fine */ }
+  renderPage();
+}
+function scheduleUploadPromptHtml(now) {
+  const a = getActiveSchedule();
+  const pr = scheduleUploadPrompt(now, a.events, a.source);
+  if (!pr || schedulePromptSnoozed(now)) return '';
+  return '<div class="card mb12" style="border-color:var(--gold)"><div style="font-size:1.0625rem;font-weight:600;letter-spacing:-.01em;margin-bottom:7px">📅 ' + pr.title + '</div>' +
+    '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.65;margin-bottom:14px">' + pr.body + '</div>' +
+    '<button class="btn btn-gold" onclick="switchTab(\'data\')">Upload Schedule</button>' +
+    '<button class="btn-ghost mt8" style="display:block;width:100%;text-align:center" onclick="snoozeSchedulePrompt()">Not yet</button></div>';
+}
+// When the iPhone reminder should fire: 9:00 on the next 20th whose following
+// month is not already in the file. Null when there is nothing to remind
+// about (no uploaded schedule, or the calendar is the source).
+function scheduleUploadAlertTime(now, events, source) {
+  if (source !== 'ics' || !Array.isArray(events) || !events.length) return null;
+  let t = new Date(now.getFullYear(), now.getMonth(), SCHEDULE_OUT_DAY, 9, 0, 0);
+  if (t.getTime() <= now.getTime() || scheduleCoversNextMonth(events, t)) t = new Date(now.getFullYear(), now.getMonth() + 1, SCHEDULE_OUT_DAY, 9, 0, 0);
+  return t;
+}
+function planScheduleUploadAlert() {
+  try {
+    const now = new Date(); const a = getActiveSchedule();
+    const when = scheduleUploadAlertTime(now, a.events, a.source);
+    if (!when) { cancelTimerAlert('schedupload'); return; }
+    const month = new Date(when.getFullYear(), when.getMonth() + 1, 1).toLocaleDateString('en-US', { month: 'long' });
+    scheduleTimerAlert('schedupload', Math.round((when.getTime() - now.getTime()) / 1000), 'Got your ' + month + ' schedule?', 'Upload it to Flight Crew Fitness so your workouts fit next month\'s trips.');
+  } catch (e) { console.warn('Schedule reminder could not be set:', e); }
 }
 
 // The hydration line on Today. Extracted so it can appear inside the Fuel
@@ -19412,6 +19486,8 @@ function renderToday(p) {
     }
   }
 
+  parts.push(scheduleUploadPromptHtml(ctx.now));
+
   // Tracking disengagement / re-engagement nudges — see
   // computeTrackingNudges() for the trigger logic. Same card style as
   // the schedule ones above; a "Not now" ghost button dismisses without
@@ -21077,6 +21153,8 @@ async function handleICSUpload(file) {
     profile.flightScheduleRaw = text;
     await dbSetProfile(profile);
     showBigToast('✓ Schedule loaded: ' + events.length + ' events.', 'ok');
+    try { localStorage.removeItem(SCHED_PROMPT_SNOOZE_KEY); } catch (e) { /* fine */ }
+    planScheduleUploadAlert();
     applyScheduleEnvironmentSuggestion();
     renderPage();
   } catch (e) {

@@ -915,6 +915,27 @@ test('units: pounds or kilograms, liters or ounces; storage stays in pounds and 
   assertEqual(ctx.crewStatLine({ miles: 3.107, seconds: 1500, kind: 'run' }).startsWith('5 km'), true, 'crew feed line in kilometers');
   } finally { ctx.ST.units = keep; }
 });
+test('members with an uploaded schedule are asked for next month once it should be out (requested Nov 16)', () => {
+  const ev = (s, e) => ({ start: new Date(s).toISOString(), end: new Date(e).toISOString(), summary: 'trip' });
+  const nov = [ev('2026-11-03T14:00:00', '2026-11-06T22:00:00'), ev('2026-11-27T14:00:00', '2026-11-30T22:00:00')];
+  const P = (d, events, src) => ctx.scheduleUploadPrompt(new Date(d), events, src === undefined ? 'ics' : src);
+  assertEqual(P('2026-11-16T10:00:00', nov), null, 'the 16th: too early to ask');
+  assertEqual(P('2026-11-20T10:00:00', nov).kind, 'next_month', 'the 20th: ask for next month');
+  assertEqual(/December/.test(P('2026-11-20T10:00:00', nov).title), true, 'and name the month');
+  assertEqual(P('2026-11-22T10:00:00', nov.concat([ev('2026-12-02T14:00:00', '2026-12-05T22:00:00')])), null, 'December already in the file: quiet');
+  assertEqual(P('2026-12-03T10:00:00', nov).kind, 'ended', 'the file has run out: say so');
+  assertEqual(P('2026-11-22T10:00:00', nov, 'calendar'), null, 'a connected calendar is never asked');
+  assertEqual(P('2026-11-22T10:00:00', []), null, 'no schedule at all is the other card\'s job');
+  const early = [ev('2026-11-03T14:00:00', '2026-11-12T22:00:00')];
+  assertEqual(P('2026-11-09T10:00:00', early).kind, 'next_month', 'a file that runs out within five days asks before the 20th');
+  assertEqual(P('2026-12-22T10:00:00', [ev('2026-12-02T14:00:00', '2026-12-28T22:00:00')]).title, 'Got your January schedule?', 'December asks for January');
+  const T = (d, events) => ctx.scheduleUploadAlertTime(new Date(d), events, 'ics');
+  const at = T('2026-11-16T10:00:00', nov);
+  assertEqual([at.getMonth(), at.getDate(), at.getHours()].join(','), '10,20,9', 'reminder at 9:00 on the 20th');
+  assertEqual(T('2026-11-21T10:00:00', nov).getMonth(), 11, 'past the 20th: next month\'s 20th');
+  assertEqual(T('2026-11-16T10:00:00', nov.concat([ev('2026-12-02T14:00:00', '2026-12-05T22:00:00')])).getMonth(), 11, 'December already uploaded: skip to the December reminder');
+  assertEqual(ctx.scheduleUploadAlertTime(new Date('2026-11-16T10:00:00'), [], 'ics'), null, 'nothing uploaded: no reminder');
+});
 test('a workout reopened mid-session drops a caution that no longer applies', () => {
   ctx.ST.injuries = ['shoulder', 'elbow_wrist'];
   const wk = ctx.refreshInjuryCautions({ taxi: [{ id: 'a', name: 'Thoracic Extension (chair)', injuryCaution: true, flaggedRegion: 'Elbow / Wrist' }],

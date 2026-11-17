@@ -160,7 +160,7 @@ document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ checkUp
 // ---------- self-update ----------
 // GitHub Pages lets phones keep the page for 10 minutes. On open and on return to the app,
 // ask for the latest copy directly; if the version differs, reload onto it.
-const APP_VERSION = '2026.10.15-1';
+const APP_VERSION = '2026.11.16-1';
 async function checkUpdate(){
   try{
     const r = await fetch(location.pathname+'?check='+Date.now(), { cache:'no-store' });
@@ -260,8 +260,8 @@ function moveinTodo(t){
   if(!t.bed_id) todo.push({label:'Pick a bed', act:'tenantedit', id:t.id, btn:'Edit'});
   if(!t.contract_signed){ const l=d.leads.find(x=>x.tenant_id===t.id); todo.push(l?{label:l.status==='Agreement sent'?'Waiting for signature':'Send the agreement', act:'agropen', id:l.id, btn:l.status==='Agreement sent'?'Open':'Send'}:{label:'Agreement not signed', act:'flagon', id:t.id+'|contract_signed', btn:'Signed'}); }
   if(!t.fee_paid_on) todo.push({label:'$150 reservation fee', act:'feepaid', id:t.id, btn:'Received'});
-  const bedTask=d.cleaning.find(c=>c.tenant_id===t.id&&!c.done&&c.task==='Make bed for move-in');
-  if(bedTask) todo.push({label:`Bed ${bedTask.bed_id} not made yet (Will)`, act:'cleandone', id:bedTask.id, btn:'Done'});
+  const bedTask=t.bed_id&&d.cleaning.find(c=>c.bed_id===t.bed_id&&!c.done);
+  if(bedTask) todo.push({label:`Bed ${bedTask.bed_id} not turned over yet (Will)`, act:'cleandone', id:bedTask.id, btn:'Done'});
   if(ttConnected()&&!activeKeys(t.id).length) todo.push(t.email?{label:'Door key', act:'keysend', id:t.id, btn:'Send'}:{label:'Door key (needs email)', act:'tenantedit', id:t.id, btn:'Edit'});
   if(gmConnected()&&!t.groupme_added) todo.push(t.phone?{label:'GroupMe', act:'gmadd', id:t.id, btn:'Add'}:{label:'GroupMe (needs phone)', act:'tenantedit', id:t.id, btn:'Edit'});
   return todo;
@@ -327,7 +327,7 @@ function vToday(){
     ${reserved.length?`<div><h3>Coming in</h3><div class="list">${reserved.sort((a,b)=>(a.move_in||'9').localeCompare(b.move_in||'9')).map(t=>{const todo=moveinTodo(t);const dd=t.move_in?Math.ceil((new Date(t.move_in+'T12:00:00')-new Date(td+'T12:00:00'))/86400000):null;return `<div class="card"><div class="row tap" data-tenant="${t.id}"><span class="grow"><b>${esc(t.name)}</b> <span class="mono muted small">${esc(t.bed_id||t.category_hold||'')}</span><div class="small muted">${t.move_in?(dd<0?'Was due '+fmtD(t.move_in):dd===0?'Arrives today':dd===1?'Arrives tomorrow':'Arrives '+fmtD(t.move_in)+' ('+dd+' days)'):'Move-in TBD'}${todo.length?'':' · all set'}</div></span>${(t.move_in&&t.move_in<=td)?`<button class="btn sm pri" data-act="movein" data-id="${t.id}">Move in</button>`:''}</div>${todo.length?`<div style="margin-top:6px">${todo.map(i=>`<div class="row" style="padding:3px 0"><span class="grow small">${i.label}</span><button class="btn sm" data-act="${i.act}" data-id="${i.id}">${i.btn}</button></div>`).join('')}</div>`:''}</div>`;}).join('')}</div></div>`:''}
     ${leaving.length?`<div><h3>Moving out</h3><div class="list">${leaving.map(t=>`<div class="card tap row" data-tenant="${t.id}"><span class="grow"><b>${esc(t.name)}</b> <span class="mono muted small">${esc(t.bed_id||'')}</span><div class="small muted">Last night ${fmtD(t.move_out)}</div></span>${t.move_out<td?`<button class="btn sm" data-act="moveout" data-id="${t.id}">Moved out</button>`:''}</div>`).join('')}</div></div>`:''}
     ${followups.length?`<div><h3>Move-out follow-ups</h3><div class="list">${followups.map(t=>`<div class="card"><div class="row tap" data-tenant="${t.id}"><span class="grow"><b>${esc(t.name)}</b> <span class="mono muted small">${esc(t.bed_id||'')}</span><div class="small muted">Left ${fmtD(t.move_out)}${daysSince(t.move_out)>0?' · '+daysSince(t.move_out)+' days ago':''}</div></span></div><div style="margin-top:6px">${moveoutTodo(t).map(i=>`<div class="row" style="padding:3px 0"><span class="grow small">${i.label}</span><button class="btn sm ${i.pri?'pri':''}" data-act="${i.act}" data-id="${i.id}">${i.btn}</button></div>`).join('')}</div></div>`).join('')}</div></div>`:''}
-    ${cleaning.length?`<div><h3>For Will (cleaning)</h3><div class="card"><div class="list">${cleaning.map(c=>`<div class="row"><span class="mono">${esc(c.bed_id||'')}</span><span class="grow small">${esc(c.task)}${c.tenant_name?' · '+esc(c.tenant_name):''} · by ${fmtD(c.needed_on)}</span><button class="btn sm" data-act="cleandone" data-id="${c.id}">Done</button></div>`).join('')}</div><div class="row" style="margin-top:8px"><button class="btn sm" data-act="cleantext" data-id="x">Copy text for Will</button></div></div></div>`:''}
+    ${cleaning.length?`<div><h3>For Will (beds to make ready)</h3><div class="card"><div class="list">${cleaning.map(c=>`<div class="row"><span class="mono">${esc(c.bed_id||'')}</span><span class="grow small">${esc(c.task)}${c.tenant_name?' · '+esc(c.tenant_name):''} · by ${fmtD(c.needed_on)}</span><button class="btn sm" data-act="cleandone" data-id="${c.id}">Done</button></div>`).join('')}</div><div class="row" style="margin-top:8px"><button class="btn sm" data-act="cleantext" data-id="x">Copy text for Will</button></div></div></div>`:''}
     ${(()=>{const fu=d.leads.filter(l=>['New','Contacted'].includes(l.status)).map(l=>{const last=d.contacts.find(c=>c.lead_id===l.id);const age=daysSince(last?last.logged_at:l.received_at);return {l,age,last};}).filter(x=>x.age>=2);return fu.length?`<div><h3>No reply yet</h3><div class="list">${fu.map(({l,age,last})=>`<div class="card row"><span class="grow tap" data-lead="${l.id}"><b>${esc(l.name)}</b> <span class="pill ${l.status==='New'?'bad':'warn'}">${esc(l.status)}</span><div class="small muted">${last?'Last contact':'Applied'} ${age} days ago${l.phone?'':' · no phone'}</div></span>${l.phone?`<a class="btn sm" href="${gvUrl(l.phone)}" target="_blank" rel="noopener" data-act="leadnudge" data-id="${l.id}">Text</a>`:''}<button class="btn sm" data-act="leadstatus" data-id="${l.id}|Not a fit">Drop</button></div>`).join('')}</div></div>`:'';})()}
     ${d.inbox.length?`<div><h3>Payments to review</h3><div class="list">${d.inbox.map(p=>{const t=p.suggested_tenant_id?tenantById(p.suggested_tenant_id):null;return `<div class="card"><div class="row"><span class="grow"><b>${money(p.amount)}</b> <span class="small muted">${esc(p.method||'')} · ${fmtD(p.received_on)} · from ${esc(p.payer||'?')}</span><div class="small">${t?`Looks like <b>${esc(t.name)}</b>${t.bed_id?' · '+t.bed_id:''} · ${esc(p.suggested_type||'Rent')}${p.suggested_month?' for '+monthLabel(new Date(p.suggested_month+'T12:00:00')):''}`:'<span style="color:var(--warn)">No tenant matched</span>'}${p.note?' · '+esc(p.note):''}</div></span></div><div class="row" style="margin-top:6px">${t?`<button class="btn sm pri" data-act="inboxaccept" data-id="${p.id}">Yes, log it</button>`:''}<button class="btn sm" data-act="inboxedit" data-id="${p.id}">${t?'Change':'Pick tenant'}</button><button class="btn sm" data-act="inboxdismiss" data-id="${p.id}">Not rent</button></div></div>`;}).join('')}</div></div>`:''}
     ${reviewAsks().length?`<div><h3>Ask for a review</h3><div class="list">${reviewAsks().map(t=>`<div class="card row"><span class="grow"><b>${esc(t.name)}</b> <span class="mono muted small">${esc(t.bed_id||'')}</span><div class="small muted">Here ${daysSince(t.move_in)} days</div></span><button class="btn sm" data-act="reviewtext" data-id="${t.id}">Text</button><button class="btn sm" data-act="flagon" data-id="${t.id}|review_asked">Asked</button></div>`).join('')}</div></div>`:''}
@@ -430,9 +430,7 @@ async function holdBed(leadId, b){
     else { const {data}=await sb.from('cp_tenants').insert({name:l.name,status:'Reserved',phone:l.phone,airline:l.airline,...hold}).select('id').single(); tid=data&&data.id; }
     if(tid){
       await sb.from('cp_leads').update({tenant_id:tid}).eq('id',leadId);
-      if(b.bed_id){ const task=S.data.cleaning.find(c=>c.tenant_id===tid&&!c.done&&c.task==='Make bed for move-in');
-        if(task) await sb.from('cp_cleaning').update({bed_id:b.bed_id,needed_on:b.move_in,notes:`${l.name} arrives ${fmtD(b.move_in)}`}).eq('id',task.id);
-        else await sb.from('cp_cleaning').insert({needed_on:b.move_in,bed_id:b.bed_id,task:'Make bed for move-in',tenant_id:tid,tenant_name:l.name,notes:`${l.name} arrives ${fmtD(b.move_in)}`}); }
+      // No make-bed task on approval: beds are turned over at move-out, so an empty bed is already ready.
     }
   }catch(e){ console.error('holdBed',e); }
 }
@@ -821,13 +819,11 @@ const ACT = {
   tenantcreate:async(leadId)=>{ const v=readTenantForm(); if(!v.name) return toast('Name is required'); if(!v.rent&&v.bed_id){v.rent=S.data.beds.find(b=>b.id===v.bed_id).list_price;} closeSheet();
     try{ const {data,error}=await sb.from('cp_tenants').insert(v).select().single(); if(error) throw error;
       if(leadId) await sb.from('cp_leads').update({status:'Approved',tenant_id:data.id}).eq('id',leadId);
-      if(v.bed_id&&v.move_in) await sb.from('cp_cleaning').insert({needed_on:v.move_in,bed_id:v.bed_id,task:'Make bed for move-in',tenant_id:data.id,tenant_name:v.name,notes:`${v.name} arrives ${fmtD(v.move_in)}`});
+      // No make-bed task: the bed was made ready when the last person moved out.
       toast('Reserved'); await load(); openTenant(data.id);
     }catch(e){ toast('Error: '+e.message); }
   },
   tenantsave:async(id)=>{ const v=readTenantForm(); const before=tenantById(id)||{}; closeSheet();
-    // Moved to another bed or date before move-in? Move their open make-bed task too, so Will preps the right bed.
-    if(v.bed_id&&(v.bed_id!==before.bed_id||v.move_in!==before.move_in)) await sb.from('cp_cleaning').update({bed_id:v.bed_id,needed_on:v.move_in||before.move_in}).eq('tenant_id',id).eq('task','Make bed for move-in').eq('done',false);
     await run(sb.from('cp_tenants').update(v).eq('id',id),'Saved'); openTenant(id); },
   tenantdelete:(id)=>confirmSheet('Delete this tenant and their payment links? Payments stay in the log under their name.',async()=>{ closeSheet(); await run(sb.from('cp_tenants').delete().eq('id',id),'Deleted'); }),
   tenantnote:async(id)=>{ const txt=$('cl-text').value.trim(); if(!txt) return; const t=tenantById(id); await run(sb.from('cp_contact_log').insert({tenant_id:id,who:t.name,channel:'Text',summary:txt}),'Logged'); openTenant(id); },
@@ -882,7 +878,7 @@ const ACT = {
   noticesave:async(id)=>{ const t=tenantById(id); const out=$('nt-date').value; const txt=$('nt-text').value.trim(); closeSheet();
     await run(sb.from('cp_tenants').update({move_out:out,notice_given_on:today()}).eq('id',id));
     const next=new Date(out+'T12:00:00'); next.setDate(next.getDate()+1);
-    await sb.from('cp_cleaning').insert({needed_on:iso(next),bed_id:t.bed_id,task:'Strip after move-out',tenant_id:id,tenant_name:t.name,notes:`${t.name} leaves ${fmtD(out)}`});
+    await sb.from('cp_cleaning').insert({needed_on:iso(next),bed_id:t.bed_id,task:'Clean and make up for the next guest',tenant_id:id,tenant_name:t.name,notes:`${t.name} leaves ${fmtD(out)} - strip, clean and make it up ready`});
     if(txt) await sb.from('cp_contact_log').insert({tenant_id:id,who:t.name,channel:'Text',summary:txt,tag:'notice',key_date:out});
     toast('Notice logged'); await load(); openTenant(id); },
   moveout:(id)=>{ const t=tenantById(id); sheet(`<h2>Move out ${esc(t.name)}</h2><div class="stack"><div class="small">Sets them Moved Out and frees <span class="mono">${esc(t.bed_id||'')}</span>.</div><div class="card small">These stay on Today under <b>Move-out follow-ups</b> until you tick them off:${t.fee_paid_on&&!t.fee_refunded_on&&!t.fee_kept?'<br>· Refund the $150 (within 30 days if they gave notice by the 15th)':''}${t.groupme_added&&!gmConnected()?'<br>· Remove from GroupMe':''}${t.ttlock_account&&!(ttConnected()&&activeKeys(t.id).length)?'<br>· Turn off their TTLock key':''}</div>${ttConnected()&&activeKeys(t.id).length?'<div class="small">Their door key is removed automatically.</div>':''}${gmConnected()&&t.groupme_added?'<div class="small">They are removed from GroupMe automatically.</div>':''}<button class="btn pri" data-act="moveoutconfirm" data-id="${id}">Mark moved out</button></div>`); wire(); },
@@ -909,8 +905,8 @@ const ACT = {
   copy:async(txt)=>{ try{ await navigator.clipboard.writeText(txt); toast('Copied '+txt); }
     catch(e){ sheet(`<h2>Copy</h2><div class="stack"><textarea id="cp-t" style="width:100%;min-height:60px" readonly>${esc(txt)}</textarea><div class="small muted">Tap and hold to copy.</div></div>`); const el=$('cp-t'); if(el){ el.focus(); el.setSelectionRange(0,el.value.length); } } },
   cleandone:async(id)=>{ await run(sb.from('cp_cleaning').update({done:true}).eq('id',id)); },
-  cleantext:async()=>{ const c=S.data.cleaning.filter(x=>!x.done); const lines=c.map(x=>`- ${x.bed_id}: ${x.task.toLowerCase()}${x.tenant_name?' ('+x.tenant_name+')':''}${x.needed_on?' by '+fmtD(x.needed_on):''}`);
-    const txt=`Hey Will, for this week:\n${lines.join('\n')}\nThanks!`; try{ await navigator.clipboard.writeText(txt); toast('Copied for Will'); }catch(e){ sheet(`<h2>Text for Will</h2><textarea style="width:100%;min-height:160px">${esc(txt)}</textarea>`); }
+  cleantext:async()=>{ const c=S.data.cleaning.filter(x=>!x.done); const td=today(); const lines=c.map(x=>`- ${x.bed_id}${x.tenant_name?' ('+x.tenant_name+(x.needed_on&&x.needed_on>td?' is moving out':' moved out')+')':''}: ${x.needed_on&&x.needed_on>td?'empty from '+fmtD(x.needed_on):'empty now'}`);
+    const txt=`Hey Will, these beds are empty or about to be. Please strip, clean and make each one up with fresh linens as soon as it is empty, so it is ready for the next guest:\n${lines.join('\n')}\nThanks!`; try{ await navigator.clipboard.writeText(txt); toast('Copied for Will'); }catch(e){ sheet(`<h2>Text for Will</h2><textarea style="width:100%;min-height:160px">${esc(txt)}</textarea>`); }
     await sb.from('cp_cleaning').update({cleaners_notified:true}).in('id',c.map(x=>x.id)); },
   settingssave:async()=>{ await run(sb.from('cp_settings').upsert([{key:'wp_api_key',value:$('st-wp').value.trim()},{key:'cleaner_phone',value:$('st-cphone').value.trim()},{key:'review_link',value:$('st-review').value.trim()}]),'Settings saved'); },
   passchange:async()=>{ const p=$('st-pass').value; if(p.length<8) return toast('Use at least 8 characters'); const {error}=await sb.auth.updateUser({password:p}); toast(error?error.message:'Password changed'); $('st-pass').value=''; },

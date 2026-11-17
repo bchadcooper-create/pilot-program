@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.59.1 / 20261116_10
+ * Version/build: fcf-v5.59.2 / 20261116_11
  */
 
-const FCF_VERSION = 'fcf-v5.59.1';
-const FCF_BUILD   = '20261116_10';
+const FCF_VERSION = 'fcf-v5.59.2';
+const FCF_BUILD   = '20261116_11';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -5189,28 +5189,32 @@ function showBigToast(msg, type) {
   if (old) old.remove();
   const bg2 = document.getElementById('fcf-big-toast-bg');
   if (bg2) bg2.remove();
-  const color = type === 'ok' ? 'var(--green)' : type === 'warn' ? 'var(--amber)' : 'var(--blue)';
-  // Icon standardization: swapped emoji (✅⚠️ℹ️, which render inconsistently
-  // across platforms) for a small inline SVG matching the app's outline
-  // icon language (same style as the tab bar). Tinted via `color` so it
-  // still reads correctly at a glance for each toast type.
+  // Reported Nov 16 2026: "these pop-ups don't match the theme". They had a
+  // thick blue outline, a blue info mark and a heavy drop shadow, none of
+  // which appear anywhere else in the app. Now: the same card as the rest of
+  // the app (panel colour, hairline border, card radius), with the mark in
+  // the app's own gold, green or amber. Still centred and large enough to
+  // read at arm's length in a gym.
+  const color = type === 'ok' ? 'var(--green)' : type === 'warn' ? 'var(--amber)' : 'var(--gold)';
   const iconPath = type === 'ok'
     ? '<polyline points="20 6 9 17 4 12"/>'
     : type === 'warn'
     ? '<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'
     : '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>';
-  const icon = '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="'+color+'" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">'+iconPath+'</svg>';
+  const icon = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="'+color+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+iconPath+'</svg>';
   const t = document.createElement('div');
   t.id = 'fcf-big-toast';
-  t.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--panel);border:2px solid '+color+';color:var(--text);padding:28px 36px;border-radius:16px;font-size:1.125rem;font-weight:700;z-index:9999;box-shadow:0 8px 48px rgba(0,0,0,0.7);text-align:center;min-width:200px;transition:opacity 0.4s';
-  t.innerHTML = '<div style="display:flex;justify-content:center;margin-bottom:12px">'+icon+'</div><div>'+msg+'</div>';
+  t.setAttribute('role', 'status');
+  t.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--panel);border:1px solid var(--border);color:var(--text);padding:20px 24px;border-radius:var(--radius-card);font-size:1rem;font-weight:600;line-height:1.45;z-index:9999;box-shadow:0 8px 28px rgba(0,0,0,0.22);text-align:center;min-width:200px;max-width:min(320px,84vw);white-space:pre-line;transition:opacity 0.4s';
+  t.innerHTML = '<div style="display:flex;justify-content:center;margin-bottom:8px">'+icon+'</div><div>'+msg+'</div>';
   document.body.appendChild(t);
   const bg = document.createElement('div');
   bg.id = 'fcf-big-toast-bg';
-  bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9998;transition:opacity 0.4s';
+  bg.style.cssText = 'position:fixed;inset:0;background:var(--overlay);opacity:0.55;z-index:9998;transition:opacity 0.4s';
   bg.onclick = () => { t.remove(); bg.remove(); };
+  t.onclick = bg.onclick;
   document.body.appendChild(bg);
-  setTimeout(() => { t.style.opacity='0'; bg.style.opacity='0'; setTimeout(() => { t.remove(); bg.remove(); }, 400); }, 2200);
+  setTimeout(() => { t.style.opacity='0'; bg.style.opacity='0'; setTimeout(() => { t.remove(); bg.remove(); }, 400); }, type === 'warn' ? 3200 : 2200);
 }
 function showToast(msg) { showBigToast(msg, 'info'); }
 
@@ -10784,11 +10788,17 @@ function runWeekProgressHtml() {
     '<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px;line-height:1.5">Today: ' + next.note + '</div>' +
   '</div>';
 }
+// Tapping the steps on Today opens the step goal (Chad, Nov 16 2026).
+function openStepGoal() {
+  haptic('light');
+  switchTab('profile');
+  setTimeout(() => { const el = document.getElementById('stepGoalPicker'); if (el) el.scrollIntoView({ block: 'start' }); }, 120);
+}
 function renderStepGoalPicker() {
   const goal = activeStepGoal();
   const parts = [];
   parts.push('<div class="divider"></div>');
-  parts.push('<div class="section-label" style="margin-top:0">DAILY STEP GOAL'+(isWalkingFirst() ? '' : ' <span style="color:var(--muted)">· OPTIONAL</span>')+'</div>');
+  parts.push('<div id="stepGoalPicker" class="section-label" style="margin-top:0">DAILY STEP GOAL'+(isWalkingFirst() ? '' : ' <span style="color:var(--muted)">· OPTIONAL</span>')+'</div>');
   parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;line-height:1.5">'+(isWalkingFirst()
     ? 'Walking is the main work. Pick a number you can hit most days and raise it when it starts to feel easy.'
     : 'Add a daily step target on top of your training.')+' Today shows your progress and your streak; 5 days in a row earns a badge.</div>');
@@ -10815,14 +10825,14 @@ function stepGoalProgressHtml(steps) {
   const goal = activeStepGoal();
   if (!goal) return '';
   if (steps === null || steps === undefined) {
-    if (healthStillLoading() || stepsStillLoading()) { scheduleHealthLoadTimeout(); return '<div style="font-size:0.6875rem;color:var(--muted);margin:-6px 0 14px;line-height:1.5">🚶 Step goal '+goal.toLocaleString()+'. Loading today\'s steps…</div>'; }
+    if (healthStillLoading() || stepsStillLoading()) { scheduleHealthLoadTimeout(); return '<div onclick="openStepGoal()" style="cursor:pointer;font-size:0.6875rem;color:var(--muted);margin:-6px 0 14px;line-height:1.5">🚶 Step goal '+goal.toLocaleString()+'. Loading today\'s steps…</div>'; }
     const hasSource = ST.ouraConnected || (typeof FCFBridge !== 'undefined' && FCFBridge.isNative);
-    return '<div style="font-size:0.6875rem;color:var(--muted);margin:-6px 0 14px;line-height:1.5">🚶 Step goal '+goal.toLocaleString()+'. ' + (hasSource ? 'No steps yet today from Apple Health or Oura.' : 'Steps show here from Apple Health in the iOS app, or from an Oura ring.') + '</div>';
+    return '<div onclick="openStepGoal()" style="cursor:pointer;font-size:0.6875rem;color:var(--muted);margin:-6px 0 14px;line-height:1.5">🚶 Step goal '+goal.toLocaleString()+'. ' + (hasSource ? 'No steps yet today from Apple Health or Oura.' : 'Steps show here from Apple Health in the iOS app, or from an Oura ring.') + '</div>';
   }
   const pct = Math.min(100, Math.round(steps / goal * 100));
   const done = steps >= goal;
   const color = done ? 'var(--green)' : 'var(--gold)';
-  return '<div style="margin:-6px 0 16px">' +
+  return '<div onclick="openStepGoal()" style="cursor:pointer;margin:-6px 0 16px">' +
     '<div class="fb" style="align-items:baseline;margin-bottom:6px">' +
       '<span style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.14em;color:var(--muted)">🚶 STEP GOAL</span>' +
       '<span style="font-family:var(--mono);font-size:0.75rem;color:'+(done?'var(--green)':'var(--text)')+'">'+(done?'✓ ':'')+steps.toLocaleString()+' / '+goal.toLocaleString()+'</span>' +
@@ -18866,7 +18876,7 @@ function buildOuraTopSectionHTML(ctx) {
   parts.push('<div class="fb" style="align-items:baseline;margin-bottom:14px">');
   parts.push('<span style="font-family:var(--mono);font-size:0.625rem;letter-spacing:.14em;color:var(--muted)">'+ctx.now.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'}).toUpperCase()+'</span>');
   // With a step goal the progress bar below carries the count instead.
-  if (ctx.oura.steps !== null && !activeStepGoal()) parts.push('<span style="font-family:var(--mono);font-size:0.75rem;color:var(--text)">'+ctx.oura.steps.toLocaleString()+' <span style="font-size:0.5625rem;color:var(--muted);letter-spacing:.1em">STEPS</span></span>');
+  if (ctx.oura.steps !== null && !activeStepGoal()) parts.push('<span onclick="openStepGoal()" style="cursor:pointer;font-family:var(--mono);font-size:0.75rem;color:var(--text)">'+ctx.oura.steps.toLocaleString()+' <span style="font-size:0.5625rem;color:var(--muted);letter-spacing:.1em">STEPS</span></span>');
   parts.push('</div>');
   noteStepsToday(ctx.oura.steps);
   parts.push(runWeekProgressHtml());

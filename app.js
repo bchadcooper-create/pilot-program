@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.64.4 / 20261116_24
+ * Version/build: fcf-v5.65.0 / 20261116_25
  */
 
-const FCF_VERSION = 'fcf-v5.64.4';
-const FCF_BUILD   = '20261116_24';
+const FCF_VERSION = 'fcf-v5.65.0';
+const FCF_BUILD   = '20261116_25';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -14927,8 +14927,56 @@ function runningCardHtml(stats) {
   return parts.join('');
 }
 
+// Trends in sections (Nov 16 2026). Reported: "It's too crowded. We need
+// menus." Everything on the page used to be open at once: calendar, running,
+// the logging form, trend cards, four body charts, Oura charts and photos,
+// one long scroll. Each group is now a row that opens and closes, the same
+// pattern as the menu page. A closed row still shows its headline number,
+// so the page reads as a summary. The calendar starts open; the choice is
+// remembered on the device. Closed sections stay in the page (hidden) so
+// the charts and photos that are filled in after drawing still find their
+// places.
+const TRENDS_SECTIONS = ['cal', 'run', 'log', 'perf', 'body', 'oura', 'photos'];
+const TRENDS_OPEN_DEFAULT = { cal: true };
+const TRENDS_OPEN_KEY = 'fcf_trends_open';
+function trendsOpenState() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(TRENDS_OPEN_KEY) || 'null'); } catch (e) { saved = null; }
+  const out = {};
+  TRENDS_SECTIONS.forEach(k => { out[k] = saved && typeof saved[k] === 'boolean' ? saved[k] : !!TRENDS_OPEN_DEFAULT[k]; });
+  return out;
+}
+function trendsHeaderHtml(key, title, sub, open) {
+  return '<div class="card" id="trendsHead_' + key + '" data-title="' + crewEsc(title) + '" data-sub="' + crewEsc(sub || '') + '" style="cursor:pointer;margin-bottom:' + (open ? '8px' : '12px') + (open ? ';border-color:var(--gold)' : '') + '" role="button" aria-expanded="' + open + '" onclick="toggleTrendsSection(\'' + key + '\')"><div class="fb">' +
+    '<div style="min-width:0"><div style="font-size:0.9375rem;font-weight:600">' + crewEsc(title) + '</div>' +
+    (sub ? '<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">' + crewEsc(sub) + '</div>' : '') + '</div>' +
+    '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="flex-shrink:0;color:var(--muted);transition:transform .15s;transform:rotate(' + (open ? '180' : '0') + 'deg)"><path d="m6 9 6 6 6-6"/></svg></div></div>';
+}
+function trendsSectionHtml(key, title, sub, body, state) {
+  if (!body) return '';
+  const open = !!(state || trendsOpenState())[key];
+  return trendsHeaderHtml(key, title, sub, open) + '<div id="trendsBody_' + key + '" style="display:' + (open ? 'block' : 'none') + '">' + body + '</div>';
+}
+function toggleTrendsSection(key) {
+  if (!TRENDS_SECTIONS.includes(key)) return;
+  const state = trendsOpenState(); state[key] = !state[key];
+  try { localStorage.setItem(TRENDS_OPEN_KEY, JSON.stringify(state)); } catch (e) { /* private mode */ }
+  haptic('light');
+  const head = document.getElementById('trendsHead_' + key), body = document.getElementById('trendsBody_' + key);
+  if (!head || !body) return;
+  body.style.display = state[key] ? 'block' : 'none';
+  const t = document.createElement('div'); t.innerHTML = trendsHeaderHtml(key, head.dataset.title, head.dataset.sub, state[key]);
+  head.replaceWith(t.firstChild);
+  if (!state[key]) return;
+  // Things that are sized or positioned when drawn need a nudge once visible.
+  if (key === 'cal') { scrollCalendarToToday(); scrollMedStripToToday(); }
+  if (key === 'body' || key === 'oura') setTimeout(() => loadAndDrawCharts(), 30);
+}
 async function renderTrends(p) {
   const parts = [];
+  const tOpen = trendsOpenState();
+  const sec = (key, title, sub, body) => parts.push(trendsSectionHtml(key, title, sub, body, tOpen));
+  let buf = [];
 
   // AI Progression Analytics — Pro only. The headline insight for the whole
   // Trends screen, so it goes first. Cached server-side for 24h.
@@ -14942,8 +14990,6 @@ async function renderTrends(p) {
       'You\'ve been consistent with your upper body work this week, and your recovery scores are trending in the right direction, but there\'s a pattern in your training around long duty days worth knowing about.'));
   }
 
-  parts.push('<div class="section-label">BIOMETRICS LOG &amp; TRENDS</div>');
-
   // Shown only when free-tier trimming actually hid data (set in loadAndDrawCharts)
   parts.push('<div id="trendsProNote" class="card mb12" style="display:none;border-left:3px solid var(--gold);padding:12px 14px">' +
     '<div style="font-size:0.75rem;color:var(--muted);line-height:1.6">Showing the last 30 days. ' +
@@ -14954,13 +15000,14 @@ async function renderTrends(p) {
   // back, so the calendar belongs here and always visible, not behind a
   // collapse toggle.
   const rangeData = await loadCalendarRange();
-  parts.push('<div class="section-label" style="margin-top:0">📅 TRAINING CALENDAR</div>');
-  parts.push(buildCalendarHTML(rangeData));
-  if ((ST.medications || []).length) { await loadMedLogRange(); parts.push(medHistoryStripHtml()); }
-  parts.push(runningCardHtml(runStats(ST.sessionCache || [])));
+  buf = [buildCalendarHTML(rangeData)];
+  if ((ST.medications || []).length) { await loadMedLogRange(); buf.push(medHistoryStripHtml()); }
+  sec('cal', 'Training calendar', 'Your sessions day by day', buf.join(''));
+  const rs = runStats(ST.sessionCache || []);
+  sec('run', 'Running', rs.totalRuns ? distStr(rs.weekMiles) + ' this week · ' + distStr(rs.yearMiles) + ' this year' : '', runningCardHtml(rs));
 
+  const partsMain = parts.slice(); parts.length = 0;
   parts.push('<div class="card mb12">');
-  parts.push('<div class="section-label" style="margin-top:0">LOG TODAY\'S DATA</div>');
 
   parts.push('<div class="field-row" style="margin-bottom:10px">');
   parts.push('<div class="field" style="margin-bottom:0"><label>Weight ('+unitWt()+') <span class="info-i" onclick="showBioInfo(\'weight\')">i</span></label><input type="number" inputmode="decimal" id="inp_wt" placeholder="'+(unitWt()==='kg'?'e.g. 105':'e.g. 232')+'"></div>');
@@ -14975,8 +15022,9 @@ async function renderTrends(p) {
   parts.push('<div class="field" style="margin-bottom:12px"><label>Fasting Glucose (mg/dL) <span class="info-i" onclick="showBioInfo(\'glucose\')">i</span></label><input type="number" inputmode="numeric" id="inp_gluc" placeholder="e.g. 95"></div>');
   parts.push('<button class="btn btn-gold" onclick="saveBio()">LOG METRICS</button>');
   parts.push('</div>');
-
-  parts.push('<div class="section-label">TRENDS</div>');
+  buf = parts.slice(); parts.length = 0; partsMain.forEach(x => parts.push(x));
+  sec('log', 'Log today\'s numbers', 'Weight, waist, blood pressure, glucose', buf.join(''));
+  const perfStart = parts.length;
 
   // Fuel trends — protein adherence and average calories over the logging
   // history, only shown once real targets exist to trend against.
@@ -15023,23 +15071,29 @@ async function renderTrends(p) {
     parts.push('<div class="alert alert-info mb12"><div class="alert-icon">📈</div><div>Strength and pace trends will show up here once you\'ve logged the same primary lift or a few runs across several sessions.</div></div>');
   }
 
+  buf = parts.splice(perfStart);
+  sec('perf', 'Strength, pace and fuel', 'Whether your lifts, runs and protein are trending up', buf.join(''));
+  const bodyStart = parts.length;
   [['chartWt','BODY WEIGHT ('+unitWt()+')'],['chartWaist','WAIST (in)'],['chartBP','BLOOD PRESSURE (mmHg)'],['chartGluc','FASTING GLUCOSE (mg/dL)']].forEach(([id,label]) => {
     parts.push('<div class="card mb8"><div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);margin-bottom:6px">'+label+'</div><div class="chart-wrap"><canvas id="'+id+'"></canvas></div></div>');
   });
 
+  buf = parts.splice(bodyStart);
+  sec('body', 'Body charts', 'Weight, waist, blood pressure, glucose over time', buf.join(''));
+  const ouraStart = parts.length;
   // Oura Ring trend charts
   if (ST.ouraConnected) {
-    parts.push('<div id="ouraTrendsSection"><div class="section-label">OURA RING TRENDS</div>');
+    parts.push('<div id="ouraTrendsSection">');
     [['chartOuraReadiness','READINESS SCORE (0-100)',null],['chartOuraSleep','SLEEP SCORE + HRV BALANCE (0-100)','hrv']].forEach(([id,label,infoKey]) => {
       parts.push('<div class="card mb8"><div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);margin-bottom:6px">'+label+(infoKey?' <span class="info-i" onclick="showBioInfo(\''+infoKey+'\')">i</span>':'')+'</div><div class="chart-wrap"><canvas id="'+id+'"></canvas></div></div>');
     });
     parts.push('</div>');
   }
 
+  buf = parts.splice(ouraStart);
+  sec('oura', 'Oura ring', 'Readiness, sleep and HRV over time', buf.join(''));
   // Photo progress at bottom of Trends — wrapped in id div for DOM patching
-  parts.push('<div id="photo-timeline-section">');
-  parts.push(buildPhotoTimelineHTML());
-  parts.push('</div>');
+  sec('photos', 'Progress photos', (ST.photoTimeline || []).length ? (ST.photoTimeline || []).length + ' saved' : 'Add a photo to track changes', '<div id="photo-timeline-section">' + buildPhotoTimelineHTML() + '</div>');
 
   p.innerHTML = parts.join('');
   scrollCalendarToToday();
@@ -15183,7 +15237,16 @@ async function loadAndDrawCharts() {
   } catch(e) {
     data = JSON.parse(localStorage.getItem('fcf_bio')||'[]');
   }
-  if (!data.length) return;
+  const bodyBox = document.getElementById('trendsBody_body');
+  const oldNote = document.getElementById('trendsBodyEmpty'); if (oldNote) oldNote.remove();
+  if (!data.length) {
+    // Nothing logged: say so instead of showing four empty boxes.
+    if (bodyBox) {
+      ['chartWt', 'chartWaist', 'chartBP', 'chartGluc'].forEach(id => { const c = document.getElementById(id); const card = c && c.closest('.card'); if (card) card.style.display = 'none'; });
+      bodyBox.insertAdjacentHTML('afterbegin', '<div id="trendsBodyEmpty" class="card mb12" style="font-size:0.8125rem;color:var(--muted);line-height:1.5">Nothing logged yet. Open "Log today\'s numbers" above and save a weight to start your first chart.</div>');
+    }
+    return;
+  }
 
   // Free tier: trends limited to the last 30 days. Pro sees full history.
   // This matches what the subscription comparison table advertises.

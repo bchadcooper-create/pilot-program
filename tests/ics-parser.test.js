@@ -2436,6 +2436,17 @@ test('a follow request opens the profile and offers Approve and Decline', () => 
   ctx.ST.crew.requests = saved;
 });
 
+test('Trends sections: the calendar starts open, the rest closed, and an empty section is left out', () => {
+  const st = ctx.trendsOpenState();
+  assertEqual(st.cal, true); assertEqual(st.run, false); assertEqual(st.body, false); assertEqual(st.photos, false);
+  const open = ctx.trendsSectionHtml('cal', 'Training calendar', 'sub', '<i>x</i>', st);
+  assertEqual(open.includes('id="trendsBody_cal" style="display:block"'), true); assertEqual(open.includes('aria-expanded="true"'), true);
+  const shut = ctx.trendsSectionHtml('run', 'Running', '2 mi this week', '<i>x</i>', st);
+  assertEqual(shut.includes('id="trendsBody_run" style="display:none"'), true); assertEqual(shut.includes('2 mi this week'), true, 'summary shows while closed');
+  assertEqual(shut.includes("toggleTrendsSection('run')"), true);
+  assertEqual(ctx.trendsSectionHtml('oura', 'Oura ring', '', '', st), '', 'nothing to show, no row');
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

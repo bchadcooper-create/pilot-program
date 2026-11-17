@@ -2383,6 +2383,49 @@ test('Super User totals list each source with signups and paid members', () => {
   assertEqual(ctx.signupSourcesHtml({}).includes('None yet.'), true, 'empty state');
 });
 
+// ── Sharing badges and goals, comment likes (Nov 16 2026) ──
+test('a badge or goal becomes a crew post with the right shape', () => {
+  const b = { id: 'first_flight', icon: '🛫', title: 'First Flight', desc: 'Complete your first workout' };
+  const it = ctx.crewBadgeShareItem(b);
+  const row = ctx.crewShareRow(it, '  made it  ', 'followers', 'u1', '2026-11-16T12:00:00Z');
+  assertEqual(row.kind, 'badge'); assertEqual(row.session_key, 'badge:first_flight'); assertEqual(row.title, 'First Flight');
+  assertEqual(row.note, 'made it'); assertEqual(row.visibility, 'followers'); assertEqual(row.user_id, 'u1');
+  assertEqual(ctx.crewShareRow(it, '', 'everyone', 'u1', 'x').note, null, 'empty note is stored as nothing');
+  assertEqual(ctx.crewShareRow(it, 'x'.repeat(300), 'everyone', 'u1', 'x').note.length, 140, 'note is capped');
+  const g = ctx.crewGoalShareItem('steps', '2026-11-16', 10000);
+  assertEqual(g.key, 'goal:steps:2026-11-16'); assertEqual(g.title, 'Hit the step goal: 10,000 steps');
+  assertEqual(ctx.crewGoalShareItem('water', '2026-11-16').key, 'goal:water:2026-11-16');
+});
+test('a reached goal is offered once a day, and only when it is tracked', () => {
+  const base = { day: '2026-11-16', stepGoal: 8000, steps: 8200, trackWater: true, waterTarget: 3, water: 3.1 };
+  assertEqual(ctx.crewGoalsToOffer(base, {}).map(x => x.group).join(','), 'steps,water');
+  assertEqual(ctx.crewGoalsToOffer(base, { 'steps:2026-11-16': 1 }).map(x => x.group).join(','), 'water', 'steps already asked today');
+  assertEqual(ctx.crewGoalsToOffer(base, { 'steps:2026-11-15': 1, 'water:2026-11-15': 1 }).length, 2, 'yesterday does not count');
+  assertEqual(ctx.crewGoalsToOffer(Object.assign({}, base, { steps: 7999, water: 2.9 }), {}).length, 0, 'not reached');
+  assertEqual(ctx.crewGoalsToOffer(Object.assign({}, base, { stepGoal: null, trackWater: false }), {}).length, 0, 'no step goal, water not tracked');
+  assertEqual(ctx.crewGoalsToOffer(Object.assign({}, base, { steps: null }), {}).map(x => x.group).join(','), 'water', 'no step reading yet');
+});
+test('badge and goal posts read correctly on a card and in the Today news', () => {
+  const badge = { kind: 'badge', session_key: 'badge:first_flight', title: 'First Flight', crew_profiles: { callsign: 'Maverick' } };
+  const f = ctx.crewPostFace(badge);
+  assertEqual(f.title, 'Earned the First Flight badge'); assertEqual(f.detail, 'Complete your first workout'); assertEqual(f.icon, '🛫');
+  assertEqual(ctx.crewPostFace({ kind: 'badge', session_key: 'badge:gone', title: 'Old One' }).icon, '🏅', 'unknown badge still draws');
+  assertEqual(ctx.crewPostFace({ kind: 'goal', muscle_group: 'water', title: 'Hit the daily drink goal' }).icon, '💧');
+  assertEqual(ctx.crewPostFace({ kind: 'workout', title: 'Upper Pull' }).title, 'Upper Pull', 'workouts unchanged');
+  assertEqual(ctx.crewNewsLine(badge), 'Maverick earned the First Flight badge');
+  assertEqual(ctx.crewNewsLine({ kind: 'goal', title: 'Hit the step goal: 10,000 steps', crew_profiles: { callsign: 'Goose' } }), 'Goose hit the step goal: 10,000 steps');
+  assertEqual(ctx.crewNewsLine({ kind: 'workout', title: 'Upper Pull', crew_profiles: { callsign: 'Goose' } }), 'Goose logged Upper Pull');
+});
+test('the comment like button shows the count and whether it is mine', () => {
+  const saved = ctx.ST.crew.cmtLikes;
+  ctx.ST.crew.cmtLikes = { c1: { count: 3, mine: true } };
+  const h = ctx.crewCommentLikeHtml('a1', { id: 'c1' });
+  assertEqual(h.includes("crewLikeComment('a1','c1')"), true); assertEqual(h.includes(' 3'), true); assertEqual(h.includes('var(--gold)'), true, 'mine is gold');
+  const h2 = ctx.crewCommentLikeHtml('a1', { id: 'c2' });
+  assertEqual(h2.includes('var(--muted)'), true, 'not liked'); assertEqual(/\d/.test(h2.replace(/a1|c2|0\.75rem|2px 6px/g, '')), false, 'no count shown at zero');
+  ctx.ST.crew.cmtLikes = saved;
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

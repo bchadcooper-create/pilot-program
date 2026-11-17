@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.63.3 / 20261116_19
+ * Version/build: fcf-v5.64.0 / 20261116_20
  */
 
-const FCF_VERSION = 'fcf-v5.63.3';
-const FCF_BUILD   = '20261116_19';
+const FCF_VERSION = 'fcf-v5.64.0';
+const FCF_BUILD   = '20261116_20';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -3059,7 +3059,7 @@ async function awardLiveBadge(id) {
     profile.badges = ST.badges;
     await dbSetProfile(profile);
   } catch(e) { console.warn('Saving badge award failed:', e); }
-  showBigToast(b.icon + ' Badge earned: ' + b.title + '!', 'ok');
+  if (!crewOfferShare(crewBadgeShareItem(b))) showBigToast(b.icon + ' Badge earned: ' + b.title + '!', 'ok');
 }
 
 // Checks whether the user currently holds rank #1 on ANY leaderboard
@@ -3087,7 +3087,7 @@ async function awardBadges() {
       const profile = (await dbGetProfile()) || {};
       profile.badges = ST.badges;
       await dbSetProfile(profile);
-      fresh.forEach(b => showBigToast(b.icon + ' Badge earned: ' + b.title + '!', 'ok'));
+      fresh.forEach(b => { if (!crewOfferShare(crewBadgeShareItem(b))) showBigToast(b.icon + ' Badge earned: ' + b.title + '!', 'ok'); });
     }
   } catch(e) { console.warn('awardBadges failed:', e); }
   checkTopGunBadge().catch(() => {});
@@ -3499,6 +3499,170 @@ async function crewShareRecent(days) {
   for (const s of list) await crewPostSession(s, s._key, { force: true });
   return list.length;
 }
+// ── Sharing badges and goals (Nov 16 2026) ─────────────────────────────────
+// Requested: "if a person gets a badge, they are prompted to share it...
+// when they complete a goal like their water goal or step goal, it prompts
+// them to share it". The app always asks and never posts these by itself.
+// A badge is asked once; a goal once per day. Followers see the post in
+// their feed and in "New from your crew" on Today. There is no push
+// notification yet: that needs an Apple push key, which is set up later.
+const CREW_SHARE_OFF_KEY = 'fcf_crew_share_prompts';
+function crewSharePromptsOn() { try { return localStorage.getItem(CREW_SHARE_OFF_KEY) !== '0'; } catch (e) { return true; } }
+function crewSetSharePrompts(on) { try { localStorage.setItem(CREW_SHARE_OFF_KEY, on ? '1' : '0'); } catch (e) { /* private mode */ } }
+function crewDayKey(d) { d = d || new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function crewBadgeShareItem(b) {
+  return { key: 'badge:' + b.id, kind: 'badge', title: b.title, group: null, icon: b.icon, heading: 'Badge earned: ' + b.title, detail: b.desc || '' };
+}
+function crewGoalShareItem(type, day, goal) {
+  if (type === 'water') return { key: 'goal:water:' + day, kind: 'goal', title: 'Hit the daily drink goal', group: 'water', icon: '💧', heading: 'Drink goal reached', detail: 'You hit your drink goal for today.' };
+  return { key: 'goal:steps:' + day, kind: 'goal', title: 'Hit the step goal: ' + Number(goal).toLocaleString('en-US') + ' steps', group: 'steps', icon: '👟', heading: 'Step goal reached', detail: 'You hit ' + Number(goal).toLocaleString('en-US') + ' steps today.' };
+}
+function crewShareRow(item, note, visibility, userId, nowIso) {
+  return { user_id: userId, session_key: item.key, kind: item.kind, title: item.title, muscle_group: item.group || null,
+    note: (note || '').trim().slice(0, 140) || null, performed_at: nowIso, visibility: visibility === 'followers' ? 'followers' : 'everyone' };
+}
+// Which goals reached today have not been offered yet. Pure, so it is tested.
+function crewGoalsToOffer(state, asked) {
+  const out = [];
+  if (state.stepGoal && state.steps != null && state.steps >= state.stepGoal && !asked['steps:' + state.day]) out.push(crewGoalShareItem('steps', state.day, state.stepGoal));
+  if (state.trackWater && state.waterTarget > 0 && state.water >= state.waterTarget && !asked['water:' + state.day]) out.push(crewGoalShareItem('water', state.day));
+  return out;
+}
+function crewGoalAsked() { try { return JSON.parse(localStorage.getItem('fcf_crew_goal_asked') || '{}') || {}; } catch (e) { return {}; } }
+function crewMarkGoalAsked(k) {
+  const a = crewGoalAsked(); a[k] = 1;
+  const keep = {}; Object.keys(a).slice(-20).forEach(x => { keep[x] = 1; });
+  try { localStorage.setItem('fcf_crew_goal_asked', JSON.stringify(keep)); } catch (e) { /* private mode */ }
+}
+function crewCheckGoalShares() {
+  if (!ST.user || !crewIsMember() || !crewSharePromptsOn() || ST.workout) return;
+  const day = crewDayKey();
+  const items = crewGoalsToOffer({ day, stepGoal: activeStepGoal(), steps: todayStepCount(), trackWater: !!ST.trackHydration, waterTarget: hydroTarget(), water: ST.waterIn || 0 }, crewGoalAsked());
+  items.forEach(it => { crewMarkGoalAsked(it.group + ':' + day); crewOfferShare(it); });
+}
+const _crewShareQueue = [];
+let _crewShareTries = 0;
+function crewOfferShare(item) {
+  if (!ST.user || !crewIsMember() || !crewSharePromptsOn()) return false;
+  if (_crewShareQueue.some(x => x.key === item.key)) return true;
+  _crewShareQueue.push(item); _crewShareTries = 0;
+  setTimeout(crewShareNext, 400);
+  return true;
+}
+function crewShareNext() {
+  if (!_crewShareQueue.length) return;
+  const root = document.getElementById('modalRoot'); if (!root) return;
+  // Wait for whatever is on screen (a sheet, a workout) to finish first.
+  if (root.innerHTML.trim() || ST.workout) { if (++_crewShareTries < 40) setTimeout(crewShareNext, 3000); else _crewShareQueue.length = 0; return; }
+  const it = _crewShareQueue[0];
+  root.innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)crewShareAnswer(false)"><div class="modal-sheet">' +
+    '<div class="modal-handle"></div>' +
+    '<div class="modal-title">' + it.icon + ' ' + crewEsc(it.heading) + '</div>' +
+    '<div class="modal-body" style="margin-bottom:12px">' + (it.detail ? crewEsc(it.detail) + '<br>' : '') + 'Share it with the crew? Your followers will see it in their feed.</div>' +
+    '<input id="crewShareNote" type="text" maxlength="140" placeholder="Add a note (optional)" style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:1rem;margin-bottom:12px">' +
+    '<button class="btn btn-gold" onclick="crewShareAnswer(true)">Share with the crew</button>' +
+    '<button class="btn btn-outline mt8" onclick="crewShareAnswer(false)">Not now</button>' +
+    '<div style="text-align:center;margin-top:12px"><button class="btn-ghost" style="font-size:0.75rem;color:var(--muted)" onclick="crewSetSharePrompts(false);_crewShareQueue.length=0;closeModal();showToast(\'Okay. Turn it back on in Crew settings.\')">Do not ask me again</button></div>' +
+    '</div></div>';
+}
+async function crewShareAnswer(yes) {
+  const it = _crewShareQueue.shift();
+  const note = (document.getElementById('crewShareNote') || {}).value || '';
+  closeModal();
+  if (yes && it) {
+    const row = await crewShareAchievement(it, note);
+    showToast(row ? 'Shared with the crew.' : 'Could not share that. Check your connection.');
+  }
+  if (_crewShareQueue.length) setTimeout(crewShareNext, 500);
+}
+async function crewShareAchievement(item, note) {
+  if (!ST.user || !crewIsMember()) return null;
+  const row = crewShareRow(item, note, ST.crew.profile.visibility, ST.user.id, new Date().toISOString());
+  try {
+    const { error } = await withTimeout(SB.from('crew_activities').upsert(row, { onConflict: 'user_id,session_key' }), 15000);
+    if (error) throw error;
+    ST.crew.feed = []; ST.crew.loadedKey = null;
+    haptic('light');
+    return row;
+  } catch (e) { console.warn('crew share failed', e); return null; }
+}
+// How a post reads: its icon, its headline and one line of detail.
+function crewPostFace(a) {
+  if (a.kind === 'badge') {
+    const b = BADGES.find(x => 'badge:' + x.id === a.session_key) || BADGES.find(x => x.title === a.title);
+    return { icon: (b && b.icon) || '🏅', title: 'Earned the ' + a.title + ' badge', detail: (b && b.desc) || '' };
+  }
+  if (a.kind === 'goal') return { icon: a.muscle_group === 'water' ? '💧' : '👟', title: a.title, detail: '' };
+  return { icon: a.kind === 'run' ? '🏃' : a.kind === 'walk' ? '🚶' : '🏋️', title: a.title, detail: '' };
+}
+// One line for "New from your crew" on Today.
+function crewNewsLine(a) {
+  const who = (a.crew_profiles && a.crew_profiles.callsign) || 'A crew member';
+  if (a.kind === 'badge') return who + ' earned the ' + a.title + ' badge';
+  if (a.kind === 'goal') return who + ' ' + String(a.title || '').replace(/^H/, 'h');
+  return who + ' logged ' + (a.kind === 'run' ? 'a run' : a.kind === 'walk' ? 'a walk' : a.title);
+}
+const CREW_SEEN_KEY = 'fcf_crew_seen_at';
+function crewSeenAt() {
+  let v = null; try { v = localStorage.getItem(CREW_SEEN_KEY); } catch (e) { /* private mode */ }
+  return v && !isNaN(new Date(v)) ? v : new Date(Date.now() - 48 * 3600e3).toISOString();
+}
+function crewMarkSeen() {
+  try { localStorage.setItem(CREW_SEEN_KEY, new Date().toISOString()); } catch (e) { /* private mode */ }
+  ST.crew.news = []; updateCrewTabDot();
+}
+async function crewLoadNews() {
+  const ids = [...(ST.crew.followingSet || [])].slice(0, 200);
+  if (!ids.length) { ST.crew.news = []; return; }
+  try {
+    const { data } = await withTimeout(SB.from('crew_activities').select('id,user_id,kind,title,created_at').in('user_id', ids).gt('created_at', crewSeenAt()).order('created_at', { ascending: false }).limit(5));
+    ST.crew.news = await crewAttachCallsigns(data || []);
+  } catch (e) { ST.crew.news = ST.crew.news || []; }
+}
+function updateCrewTabDot() {
+  const btn = document.querySelector('.tab[data-tab="leaderboard"]'); if (!btn) return;
+  const n = ((ST.crew && ST.crew.requests) || []).length + ((ST.crew && ST.crew.news) || []).length;
+  let dot = document.getElementById('crewTabDot');
+  if (!n) { if (dot) dot.remove(); return; }
+  if (!dot) { dot = document.createElement('span'); dot.id = 'crewTabDot'; dot.style.cssText = 'position:absolute;top:6px;left:50%;margin-left:10px;width:9px;height:9px;border-radius:50%;background:var(--gold);border:2px solid var(--panel)'; btn.style.position = 'relative'; btn.appendChild(dot); }
+}
+function crewOpenFeed() {
+  ST.ranksSeg = 'crew'; ST.crew.view = 'feed'; ST.crew.viewUser = null; ST.crew.scope = 'following'; ST.crew.feed = []; ST.crew.loadedKey = null;
+  switchTab('leaderboard');
+}
+function todayCrewNewsHtml() {
+  const news = (crewIsMember() && ST.crew.news) || []; if (!news.length) return '';
+  return '<div class="card mb12" style="cursor:pointer" onclick="crewOpenFeed()"><div class="section-label" style="margin-top:0">NEW FROM YOUR CREW</div>' +
+    news.slice(0, 3).map(a => '<div style="font-size:0.875rem;line-height:1.5;padding:3px 0">' + crewEsc(crewNewsLine(a)) + ' <span style="color:var(--muted);font-size:0.75rem">' + crewAgo(a.created_at) + '</span></div>').join('') +
+    '<div style="font-size:0.8125rem;color:var(--gold);margin-top:6px">Open the feed ›</div></div>';
+}
+// Likes on comments (requested with the sharing work).
+async function crewLoadCommentLikes(cmtIds) {
+  ST.crew.cmtLikes = ST.crew.cmtLikes || {};
+  if (!cmtIds.length) return;
+  try {
+    const { data } = await withTimeout(SB.from('crew_comment_likes').select('comment_id,user_id').in('comment_id', cmtIds));
+    cmtIds.forEach(id => { ST.crew.cmtLikes[id] = { count: 0, mine: false }; });
+    (data || []).forEach(r => { const L = ST.crew.cmtLikes[r.comment_id]; if (L) { L.count++; if (r.user_id === ST.user.id) L.mine = true; } });
+  } catch (e) { /* likes are optional: the comments still show */ }
+}
+async function crewLikeComment(actId, cmtId) {
+  const all = ST.crew.cmtLikes = ST.crew.cmtLikes || {};
+  const L = all[cmtId] = all[cmtId] || { count: 0, mine: false };
+  const was = L.mine;
+  L.mine = !was; L.count = Math.max(0, L.count + (was ? -1 : 1));
+  haptic('light'); crewRedrawCard(actId);
+  try {
+    const q = was ? SB.from('crew_comment_likes').delete().eq('comment_id', cmtId).eq('user_id', ST.user.id)
+                  : SB.from('crew_comment_likes').insert({ comment_id: cmtId, user_id: ST.user.id });
+    const { error } = await withTimeout(q); if (error) throw error;
+  } catch (e) { L.mine = was; L.count = Math.max(0, L.count + (was ? 1 : -1)); crewRedrawCard(actId); }
+}
+function crewCommentLikeHtml(actId, c) {
+  const L = (ST.crew.cmtLikes || {})[c.id] || { count: 0, mine: false };
+  return '<button class="btn-ghost" style="font-size:0.75rem;padding:2px 6px;color:' + (L.mine ? 'var(--gold)' : 'var(--muted)') + '" onclick="crewLikeComment(\'' + actId + '\',\'' + c.id + '\')">👍' + (L.count ? ' ' + L.count : '') + '</button>';
+}
 async function crewLoadFeed(more) {
   const c = ST.crew;
   const before = more && c.feed.length ? c.feed[c.feed.length - 1].performed_at : null;
@@ -3767,7 +3931,7 @@ async function crewToggleComments(id) {
     try {
       const { data } = await withTimeout(SB.from('crew_comments').select('id,user_id,body,created_at').eq('activity_id', id).order('created_at'));
       c.comments[id] = await crewAttachCallsigns(data || []);
-      await crewLoadAvatars((data || []).map(r => r.user_id));
+      await Promise.all([crewLoadAvatars((data || []).map(r => r.user_id)), crewLoadCommentLikes((data || []).map(r => r.id))]);
     } catch (e) { c.comments[id] = []; }
     crewRedrawCard(id);
   }
@@ -3822,9 +3986,10 @@ const CREW_FOLLOW_FRESH_MS = 20000;
 function crewFollowStale(now) { return !ST.crew.followLoadedAt || ((now || Date.now()) - ST.crew.followLoadedAt) > CREW_FOLLOW_FRESH_MS; }
 function crewRefreshRequests() {
   if (!ST.user || !crewIsMember() || !crewFollowStale()) return;
-  const before = (ST.crew.requests || []).map(r => r.user_id).join(',');
+  const sig = () => (ST.crew.requests || []).map(r => r.user_id).join(',') + '|' + (ST.crew.news || []).map(r => r.id).join(',');
+  const before = sig();
   crewLoadFollowing().then(() => {
-    const after = (ST.crew.requests || []).map(r => r.user_id).join(',');
+    const after = sig(); updateCrewTabDot();
     if (after !== before && (ST.tab === 'today' || ST.tab === 'leaderboard')) renderPage();
   });
 }
@@ -3849,6 +4014,7 @@ async function crewLoadFollowing() {
     ST.crew.followingSet = new Set((out || []).filter(r => r.status === 'active').map(r => r.followee_id));
     ST.crew.pendingSet = new Set((out || []).filter(r => r.status === 'pending').map(r => r.followee_id));
     ST.crew.requests = await crewAttachCallsigns((reqs || []).map(r => ({ user_id: r.follower_id, created_at: r.created_at })));
+    await crewLoadNews();
   } catch (e) { ST.crew.followingSet = ST.crew.followingSet || new Set(); ST.crew.pendingSet = ST.crew.pendingSet || new Set(); ST.crew.requests = ST.crew.requests || []; }
 }
 async function crewAnswerRequest(userId, approve) {
@@ -3934,12 +4100,13 @@ function crewJoinCardHtml() {
 }
 function crewCardHtml(a) {
   const mine = a.user_id === ST.user.id;
-  const icon = a.kind === 'run' ? '🏃' : a.kind === 'walk' ? '🚶' : '🏋️';
+  const face = crewPostFace(a); const icon = face.icon;
   const open = ST.crew.open[a.id]; const cmts = ST.crew.comments[a.id];
   let h = '<div class="card mb12" id="crewCard_' + a.id + '">';
   h += '<div class="fb" style="align-items:flex-start;margin-bottom:8px"><div style="cursor:pointer;display:flex;align-items:center;gap:10px;min-width:0" onclick="crewGo(\'profile\',\'' + a.user_id + '\')">' + avatarHtml(a.user_id, a.callsign, 36) + '<div style="min-width:0"><div style="font-size:0.875rem;font-weight:600">' + crewEsc(a.callsign) + foundingChip(a.user_id) + (a.base ? ' <span style="font-weight:400;color:var(--muted);font-size:0.75rem">· ' + crewEsc(a.base) + '</span>' : '') + '</div><div style="font-size:0.625rem;color:var(--muted)">' + crewAgo(a.performed_at) + (a.visibility === 'private' ? ' · hidden' : a.visibility === 'followers' ? ' · followers' : '') + '</div></div></div>' +
     '<button class="btn-ghost" style="padding:4px 8px;font-size:1rem;line-height:1" onclick="crewMenu(\'' + a.id + '\')">···</button></div>';
-  h += '<div style="font-size:1rem;font-weight:600;margin-bottom:2px">' + icon + ' ' + crewEsc(a.title) + '</div>';
+  h += '<div style="font-size:1rem;font-weight:600;margin-bottom:2px">' + icon + ' ' + crewEsc(face.title) + '</div>';
+  if (face.detail) h += '<div style="font-size:0.8125rem;color:var(--muted);margin-bottom:6px">' + crewEsc(face.detail) + '</div>';
   const stat = crewStatLine(a); if (stat) h += '<div style="font-family:var(--mono);font-size:0.75rem;color:var(--gold);margin-bottom:6px">' + crewEsc(stat) + '</div>';
   if (a.note) h += '<div data-raw style="font-size:0.8125rem;line-height:1.5;margin-bottom:6px">' + crewEsc(a.note) + '</div>';
   h += crewPhotosHtml(a);
@@ -3951,7 +4118,7 @@ function crewCardHtml(a) {
     h += '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">';
     if (!cmts) h += '<div style="font-size:0.75rem;color:var(--muted)">Loading…</div>';
     else {
-      cmts.forEach(c => { h += '<div class="fb" style="align-items:flex-start;padding:4px 0;font-size:0.8125rem"><div style="display:flex;gap:8px;align-items:flex-start;min-width:0">' + avatarHtml(c.user_id, c.crew_profiles?.callsign || 'crew', 24) + '<div style="min-width:0"><b style="cursor:pointer" onclick="crewGo(\'profile\',\'' + c.user_id + '\')">' + crewEsc(c.crew_profiles?.callsign || 'crew') + '</b> <span style="color:var(--muted);font-size:0.625rem">' + crewAgo(c.created_at) + '</span><div data-raw style="line-height:1.5">' + crewEsc(c.body) + '</div></div></div>' + (c.user_id === ST.user.id || mine ? '<button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewDeleteComment(\'' + a.id + '\',\'' + c.id + '\')">delete</button>' : '<button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewReport(\'comment\',\'' + c.id + '\')">report</button>') + '</div>'; });
+      cmts.forEach(c => { h += '<div class="fb" style="align-items:flex-start;padding:4px 0;font-size:0.8125rem"><div style="display:flex;gap:8px;align-items:flex-start;min-width:0">' + avatarHtml(c.user_id, c.crew_profiles?.callsign || 'crew', 24) + '<div style="min-width:0"><b style="cursor:pointer" onclick="crewGo(\'profile\',\'' + c.user_id + '\')">' + crewEsc(c.crew_profiles?.callsign || 'crew') + '</b> <span style="color:var(--muted);font-size:0.625rem">' + crewAgo(c.created_at) + '</span><div data-raw style="line-height:1.5">' + crewEsc(c.body) + '</div></div></div><div style="display:flex;align-items:center;gap:2px;flex-shrink:0">' + crewCommentLikeHtml(a.id, c) + (c.user_id === ST.user.id || mine ? '<button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewDeleteComment(\'' + a.id + '\',\'' + c.id + '\')">delete</button>' : '<button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewReport(\'comment\',\'' + c.id + '\')">report</button>') + '</div></div>'; });
       if (!cmts.length) h += '<div style="font-size:0.75rem;color:var(--muted)">No comments yet.</div>';
     }
     h += '<div style="display:flex;gap:6px;margin-top:8px"><input id="crewCmt_' + a.id + '" type="text" maxlength="500" placeholder="Say something" style="flex:1" onkeydown="if(event.key===\'Enter\')crewComment(\'' + a.id + '\')"><button class="btn btn-outline" style="width:auto;padding:0 14px" onclick="crewComment(\'' + a.id + '\')">Post</button></div></div>';
@@ -3971,6 +4138,7 @@ function crewSettingsHtml() {
     '<div class="field"><label>About me (140 characters)</label><input id="crewBio" type="text" maxlength="140" value="' + crewEsc(p.bio || '') + '"></div>' +
     '<div class="field"><label>Who sees my posts</label><select id="crewVis"><option value="everyone"' + (p.visibility === 'everyone' ? ' selected' : '') + '>Everyone on the feed</option><option value="followers"' + (p.visibility === 'followers' ? ' selected' : '') + '>Only followers I approve</option></select><div style="font-size:0.625rem;color:var(--muted);margin-top:4px;line-height:1.5">With "followers I approve", new followers send a request you accept or decline. Your call sign and base still show in Find crew.</div></div>' +
     '<div class="fb" style="padding:6px 0 12px"><label for="crewAuto" style="font-size:0.875rem">Post my workouts automatically</label><input id="crewAuto" type="checkbox" style="width:22px;height:22px"' + (p.auto_post !== false ? ' checked' : '') + '></div>' +
+    '<div class="fb" style="padding:6px 0 12px"><label for="crewAsk" style="font-size:0.875rem">Ask me to share badges and goals</label><input id="crewAsk" type="checkbox" style="width:22px;height:22px"' + (crewSharePromptsOn() ? ' checked' : '') + ' onchange="crewSetSharePrompts(this.checked)"></div>' +
     '<button class="btn btn-gold" onclick="crewSaveSettings()">Save</button>' +
     '<button class="btn btn-outline mt8" onclick="crewShareRecent(14).then(n=>{showToast(n+\' workouts shared.\');crewGo(\'feed\')})">Share my last 14 days</button>' +
     '<div id="crewBlocks" style="margin-top:14px"></div>' +
@@ -4076,6 +4244,8 @@ function renderCrew(parts) {
   if (!c.loaded) { parts.push('<div class="card mb12" style="text-align:center;color:var(--muted);font-size:0.75rem">Loading…</div>'); loadCrewProfile().then(renderPage); return; }
   if (!c.profile) { parts.push(crewJoinCardHtml()); return; }
   if (!c.followingSet) crewLoadFollowing().then(renderPage); else crewRefreshRequests();
+  if (c.view === 'feed' && (c.news || []).length) crewMarkSeen();
+  setTimeout(updateCrewTabDot, 0);
   // Full-size buttons (reported: the gear for settings was too small to tap).
   const nav = (v, label) => '<div class="env-btn" style="padding:10px 4px' + (c.view === v || (v === 'feed' && c.view === 'profile') ? ';border-color:var(--gold);background:var(--gold-tint)' : '') + '" onclick="crewGo(\'' + v + '\')"><div style="font-size:0.75rem;font-weight:700;color:var(--text)">' + label + '</div></div>';
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:12px">' + nav('feed', '📰 Feed') + nav('find', '🔎 Find') + nav('settings', '⚙️ Settings') + '</div>');
@@ -19606,6 +19776,8 @@ function renderToday(p) {
 
   // First on the page: someone is waiting on an answer.
   parts.push(todayCrewRequestsHtml());
+  parts.push(todayCrewNewsHtml());
+  setTimeout(crewCheckGoalShares, 1500);
   parts.push('<div id="ouraTopSection">'+buildOuraTopSectionHTML(ctx)+'</div>');
   parts.push(buildSetupChecklistHTML());
   parts.push(heardCardHtml());
@@ -20181,6 +20353,7 @@ function applyWaterChange(newTotal) {
   ST.waterIn = clamped;
   ST.waterInRaw = String(clamped);
   persistDailyInputs();
+  setTimeout(crewCheckGoalShares, 800);
 }
 
 const MEAL_TYPES = ['breakfast','lunch','dinner','snack'];

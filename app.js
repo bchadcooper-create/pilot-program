@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.63.2 / 20261116_18
+ * Version/build: fcf-v5.63.3 / 20261116_19
  */
 
-const FCF_VERSION = 'fcf-v5.63.2';
-const FCF_BUILD   = '20261116_18';
+const FCF_VERSION = 'fcf-v5.63.3';
+const FCF_BUILD   = '20261116_19';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -4113,9 +4113,9 @@ function renderLeaderboard(p) {
   // Crew feed or the boards. Default to the feed once a member has joined.
   if (!ST.ranksSeg) ST.ranksSeg = crewIsMember() ? 'crew' : 'boards';
   const segTop = (v, label) => '<div class="env-btn" style="padding:10px 4px' + (ST.ranksSeg === v ? ';border-color:var(--gold);background:var(--gold-tint)' : '') + '" onclick="ST.ranksSeg=\'' + v + '\';renderPage()"><div style="font-size:0.75rem;font-weight:700">' + label + '</div></div>';
-  parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:4px 0 12px">' + segTop('crew', '👥 CREW') + segTop('boards', '🏆 BOARDS') + '</div>');
+  parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:4px 0 12px">' + segTop('crew', '👥 ACTIVITY') + segTop('boards', '🏆 BOARDS') + '</div>');
   if (ST.ranksSeg === 'crew') { renderCrew(parts); p.innerHTML = parts.join(''); return; }
-  parts.push('<div class="section-label">RANKS</div>');
+  parts.push('<div class="section-label">LEADERBOARDS</div>');
   if (!ST.username) {
     parts.push('<div class="card mb12" style="border-color:var(--gold)">');
     parts.push('<div style="font-size:0.75rem;line-height:1.6;margin-bottom:10px">🏆 <strong>Want on the boards?</strong> Set a call sign on your profile (tap your picture, top right). No call sign = you\'re not listed. Your lifts and runs stay private.</div>');

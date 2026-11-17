@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.56.10 / 20261116_5
+ * Version/build: fcf-v5.57.0 / 20261116_6
  */
 
-const FCF_VERSION = 'fcf-v5.56.10';
-const FCF_BUILD   = '20261116_5';
+const FCF_VERSION = 'fcf-v5.57.0';
+const FCF_BUILD   = '20261116_6';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -3239,6 +3239,9 @@ async function loadCrewProfile() {
   try {
     const { data } = await withTimeout(SB.from('crew_profiles').select('*').eq('user_id', ST.user.id).maybeSingle());
     ST.crew.profile = data || null;
+    // A picture added before joining the feed is copied across once.
+    const mine = cleanAvatarPath(ST.avatarPath);
+    if (data && mine && data.avatar_path !== mine) { data.avatar_path = mine; SB.from('crew_profiles').update({ avatar_path: mine }).eq('user_id', ST.user.id).then(() => {}, () => {}); }
   } catch (e) { /* offline: keep what we had */ }
   ST.crew.loaded = true;
 }
@@ -3267,7 +3270,7 @@ async function crewLoadFeed(more) {
   if (error) throw error;
   c.feed = more ? c.feed.concat(data || []) : (data || []);
   c.feedEnd = (data || []).length < 30;
-  await Promise.all([crewLoadPhotos((data || []).map(a => a.id)), crewLoadFounders((data || []).map(a => a.user_id))]);
+  await Promise.all([crewLoadPhotos((data || []).map(a => a.id)), crewLoadFounders((data || []).map(a => a.user_id)), crewLoadAvatars((data || []).map(a => a.user_id))]);
 }
 // Photos come in a second read so crew_feed's return shape stays put.
 // Founding Crew flags for the authors on screen (set server-side only).
@@ -3293,6 +3296,103 @@ async function crewLoadPhotos(ids) {
     ids.forEach(id => { ST.crew.photos[id] = []; });
     (data || []).forEach(ph => { (ST.crew.photos[ph.activity_id] = ST.crew.photos[ph.activity_id] || []).push(ph); });
   } catch (e) { /* keep what we had */ }
+}
+// ── Profile pictures (Nov 16 2026) ─────────────────────────────────────────
+// One square JPEG per member, in the crew-photos bucket under
+// <user id>/avatar/. The path is kept in the member's own profile (so it
+// shows on Pilot Profile with or without the crew feed) and copied to
+// crew_profiles.avatar_path for members of the feed, which is what other
+// people read. A picture is public to anyone on the feed and is covered by
+// Report and Block on the member's crew profile.
+const AVATAR_PX = 400;
+const AVATAR_PATH_RE = /^[0-9a-f-]{36}\/avatar\/[a-z0-9]{6,40}\.jpg$/;
+function cleanAvatarPath(v) { return (typeof v === 'string' && AVATAR_PATH_RE.test(v)) ? v : null; }
+function avatarPathFor(userId) {
+  if (ST.user && userId === ST.user.id) return cleanAvatarPath(ST.avatarPath);
+  return cleanAvatarPath(ST.crew && ST.crew.avatars && ST.crew.avatars[userId]);
+}
+function avatarInitials(name) {
+  const t = String(name || '').replace(/[^A-Za-z0-9 ]/g, ' ').trim().split(/\s+/).filter(Boolean);
+  if (!t.length) return '✈';
+  return (t.length > 1 ? t[0][0] + t[1][0] : t[0].slice(0, 2)).toUpperCase();
+}
+function avatarHtml(userId, name, px) {
+  const path = avatarPathFor(userId);
+  const base = 'width:' + px + 'px;height:' + px + 'px;border-radius:50%;flex-shrink:0;';
+  if (path) return '<img src="' + crewPhotoUrl(path) + '" alt="" loading="lazy" style="' + base + 'object-fit:cover;background:var(--bg3);display:block">';
+  return '<div aria-hidden="true" style="' + base + 'display:flex;align-items:center;justify-content:center;background:var(--bg3);border:1px solid var(--border);color:var(--muted);font-weight:700;font-size:' + Math.round(px * 0.38) + 'px">' + crewEsc(avatarInitials(name)) + '</div>';
+}
+// Pictures for the people on screen, in one read. Decoration: a failure
+// leaves initials showing.
+async function crewLoadAvatars(userIds) {
+  if (!ST.crew.avatars) ST.crew.avatars = {};
+  const ids = [...new Set(userIds || [])].filter(id => id && !(id in ST.crew.avatars));
+  if (!ids.length) return;
+  try {
+    const { data } = await withTimeout(SB.from('crew_profiles').select('user_id,avatar_path').in('user_id', ids), 10000);
+    ids.forEach(id => { ST.crew.avatars[id] = null; });
+    (data || []).forEach(r => { ST.crew.avatars[r.user_id] = cleanAvatarPath(r.avatar_path); });
+  } catch (e) { /* initials stay */ }
+}
+// Centre square, 400 px, JPEG.
+async function avatarShrink(file) {
+  const bmp = await createImageBitmap(file);
+  const side = Math.min(bmp.width, bmp.height);
+  const cv = document.createElement('canvas'); cv.width = AVATAR_PX; cv.height = AVATAR_PX;
+  cv.getContext('2d').drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, AVATAR_PX, AVATAR_PX);
+  return new Promise(res => cv.toBlob(b => res(b), 'image/jpeg', 0.85));
+}
+// Saves the path in both places and removes the file it replaces.
+async function saveAvatarPath(path) {
+  const old = cleanAvatarPath(ST.avatarPath);
+  const profile = (await dbGetProfile()) || {};
+  profile.avatarPath = path;
+  await dbSetProfile(profile);
+  ST.avatarPath = path;
+  if (crewIsMember()) {
+    const { error } = await withTimeout(SB.from('crew_profiles').update({ avatar_path: path }).eq('user_id', ST.user.id), 15000);
+    if (error) throw error;
+    ST.crew.profile.avatar_path = path;
+  }
+  if (old && old !== path) SB.storage.from('crew-photos').remove([old]).then(() => {}, () => {});
+}
+function pickAvatar() {
+  if (!ST.user) { showToast('Sign in to add a profile picture.'); return; }
+  const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*';
+  input.onchange = async () => {
+    const file = input.files[0]; if (!file) return;
+    showToast('Uploading picture…');
+    let path = null;
+    try {
+      const blob = await avatarShrink(file);
+      path = ST.user.id + '/avatar/' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8) + '.jpg';
+      const up = await SB.storage.from('crew-photos').upload(path, blob, { upsert: false, contentType: 'image/jpeg' });
+      if (up.error) throw up.error;
+      await saveAvatarPath(path);
+      haptic('light'); showToast('Profile picture saved.'); renderPage();
+    } catch (e) {
+      console.warn('profile picture', e);
+      if (path && ST.avatarPath !== path) SB.storage.from('crew-photos').remove([path]).then(() => {}, () => {});
+      showBigToast('Could not save the picture. Check your connection and try again.', 'warn');
+    }
+  };
+  document.body.appendChild(input); input.click(); setTimeout(() => input.remove(), 5000);
+}
+async function removeAvatar() {
+  if (!cleanAvatarPath(ST.avatarPath)) return;
+  if (!(await appConfirm('Remove your profile picture?', 'Remove'))) return;
+  try { await saveAvatarPath(null); showToast('Profile picture removed.'); renderPage(); }
+  catch (e) { showBigToast('Could not remove the picture. Try again in a moment.', 'warn'); }
+}
+// The picture with its two buttons: used on Pilot Profile and Crew Settings.
+function avatarEditorHtml(name) {
+  const has = !!cleanAvatarPath(ST.avatarPath);
+  return '<div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">' +
+    '<div style="cursor:pointer" onclick="pickAvatar()">' + avatarHtml(ST.user ? ST.user.id : null, name, 72) + '</div>' +
+    '<div style="flex:1;min-width:0"><div style="font-size:0.875rem;font-weight:600">Profile picture</div>' +
+    '<div style="font-size:0.6875rem;color:var(--muted);line-height:1.5;margin:2px 0 6px">Shown on your crew feed posts and profile. Anyone on the feed can see it.</div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid var(--gold);border-radius:8px;color:var(--gold)" onclick="pickAvatar()">' + (has ? 'Change' : 'Add a picture') + '</button>' +
+    (has ? '<button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid var(--border);border-radius:8px;color:var(--muted)" onclick="removeAvatar()">Remove</button>' : '') + '</div></div></div>';
 }
 const CREW_PHOTO_MAX = 4;
 function crewPhotoUrl(path) { return SB.storage.from('crew-photos').getPublicUrl(path).data.publicUrl; }
@@ -3361,7 +3461,7 @@ async function crewJoin() {
   const visibility = g('crewVis')?.value || 'everyone';
   if (!callsign) { showToast('Pick a call sign.'); return; }
   if (!g('crewRules')?.checked) { showToast('Please agree to the crew rules.'); return; }
-  const row = { user_id: ST.user.id, callsign, base: base || null, visibility, auto_post: true, rules_accepted_at: new Date().toISOString() };
+  const row = { user_id: ST.user.id, callsign, base: base || null, visibility, auto_post: true, rules_accepted_at: new Date().toISOString(), avatar_path: cleanAvatarPath(ST.avatarPath) };
   try {
     // 20 s: the first write after an app update can wait on a token refresh
     // (reported: "Could not join: timeout" while the row had been created).
@@ -3430,6 +3530,7 @@ async function crewToggleComments(id) {
     try {
       const { data } = await withTimeout(SB.from('crew_comments').select('id,user_id,body,created_at').eq('activity_id', id).order('created_at'));
       c.comments[id] = await crewAttachCallsigns(data || []);
+      await crewLoadAvatars((data || []).map(r => r.user_id));
     } catch (e) { c.comments[id] = []; }
     crewRedrawCard(id);
   }
@@ -3569,7 +3670,7 @@ function crewCardHtml(a) {
   const icon = a.kind === 'run' ? '🏃' : a.kind === 'walk' ? '🚶' : '🏋️';
   const open = ST.crew.open[a.id]; const cmts = ST.crew.comments[a.id];
   let h = '<div class="card mb12" id="crewCard_' + a.id + '">';
-  h += '<div class="fb" style="align-items:flex-start;margin-bottom:8px"><div style="cursor:pointer" onclick="crewGo(\'profile\',\'' + a.user_id + '\')"><div style="font-size:0.875rem;font-weight:600">' + crewEsc(a.callsign) + foundingChip(a.user_id) + (a.base ? ' <span style="font-weight:400;color:var(--muted);font-size:0.75rem">· ' + crewEsc(a.base) + '</span>' : '') + '</div><div style="font-size:0.625rem;color:var(--muted)">' + crewAgo(a.performed_at) + (a.visibility === 'private' ? ' · hidden' : a.visibility === 'followers' ? ' · followers' : '') + '</div></div>' +
+  h += '<div class="fb" style="align-items:flex-start;margin-bottom:8px"><div style="cursor:pointer;display:flex;align-items:center;gap:10px;min-width:0" onclick="crewGo(\'profile\',\'' + a.user_id + '\')">' + avatarHtml(a.user_id, a.callsign, 36) + '<div style="min-width:0"><div style="font-size:0.875rem;font-weight:600">' + crewEsc(a.callsign) + foundingChip(a.user_id) + (a.base ? ' <span style="font-weight:400;color:var(--muted);font-size:0.75rem">· ' + crewEsc(a.base) + '</span>' : '') + '</div><div style="font-size:0.625rem;color:var(--muted)">' + crewAgo(a.performed_at) + (a.visibility === 'private' ? ' · hidden' : a.visibility === 'followers' ? ' · followers' : '') + '</div></div></div>' +
     '<button class="btn-ghost" style="padding:4px 8px;font-size:1rem;line-height:1" onclick="crewMenu(\'' + a.id + '\')">···</button></div>';
   h += '<div style="font-size:1rem;font-weight:600;margin-bottom:2px">' + icon + ' ' + crewEsc(a.title) + '</div>';
   const stat = crewStatLine(a); if (stat) h += '<div style="font-family:var(--mono);font-size:0.75rem;color:var(--gold);margin-bottom:6px">' + crewEsc(stat) + '</div>';
@@ -3583,7 +3684,7 @@ function crewCardHtml(a) {
     h += '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">';
     if (!cmts) h += '<div style="font-size:0.75rem;color:var(--muted)">Loading…</div>';
     else {
-      cmts.forEach(c => { h += '<div class="fb" style="align-items:flex-start;padding:4px 0;font-size:0.8125rem"><div><b style="cursor:pointer" onclick="crewGo(\'profile\',\'' + c.user_id + '\')">' + crewEsc(c.crew_profiles?.callsign || 'crew') + '</b> <span style="color:var(--muted);font-size:0.625rem">' + crewAgo(c.created_at) + '</span><div style="line-height:1.5">' + crewEsc(c.body) + '</div></div>' + (c.user_id === ST.user.id || mine ? '<button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewDeleteComment(\'' + a.id + '\',\'' + c.id + '\')">delete</button>' : '<button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewReport(\'comment\',\'' + c.id + '\')">report</button>') + '</div>'; });
+      cmts.forEach(c => { h += '<div class="fb" style="align-items:flex-start;padding:4px 0;font-size:0.8125rem"><div style="display:flex;gap:8px;align-items:flex-start;min-width:0">' + avatarHtml(c.user_id, c.crew_profiles?.callsign || 'crew', 24) + '<div style="min-width:0"><b style="cursor:pointer" onclick="crewGo(\'profile\',\'' + c.user_id + '\')">' + crewEsc(c.crew_profiles?.callsign || 'crew') + '</b> <span style="color:var(--muted);font-size:0.625rem">' + crewAgo(c.created_at) + '</span><div style="line-height:1.5">' + crewEsc(c.body) + '</div></div></div>' + (c.user_id === ST.user.id || mine ? '<button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewDeleteComment(\'' + a.id + '\',\'' + c.id + '\')">delete</button>' : '<button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewReport(\'comment\',\'' + c.id + '\')">report</button>') + '</div>'; });
       if (!cmts.length) h += '<div style="font-size:0.75rem;color:var(--muted)">No comments yet.</div>';
     }
     h += '<div style="display:flex;gap:6px;margin-top:8px"><input id="crewCmt_' + a.id + '" type="text" maxlength="500" placeholder="Say something" style="flex:1" onkeydown="if(event.key===\'Enter\')crewComment(\'' + a.id + '\')"><button class="btn btn-outline" style="width:auto;padding:0 14px" onclick="crewComment(\'' + a.id + '\')">Post</button></div></div>';
@@ -3597,6 +3698,7 @@ function crewRedrawCard(id) {
 function crewSettingsHtml() {
   const p = ST.crew.profile;
   return '<div class="card mb12"><div class="section-label" style="margin-top:0">CREW SETTINGS</div>' +
+    avatarEditorHtml(p.callsign) +
     '<div class="field"><label>Call sign</label><input type="text" value="' + crewEsc(p.callsign) + '" disabled></div>' +
     '<div class="field-row"><div class="field"><label>Home base</label><input id="crewBase" type="text" maxlength="4" list="bmBaseList" autocapitalize="characters" value="' + crewEsc(p.base || '') + '" style="text-transform:uppercase"><datalist id="bmBaseList">' + HOME_BASES.map(b => '<option value="' + b + '">').join('') + '</datalist></div><div class="field"><label>Airline (optional)</label><input id="crewAirline" type="text" maxlength="40" value="' + crewEsc(p.airline || '') + '"></div></div>' +
     '<div class="field"><label>About me (140 characters)</label><input id="crewBio" type="text" maxlength="140" value="' + crewEsc(p.bio || '') + '"></div>' +
@@ -3640,7 +3742,9 @@ async function crewFindRun() {
   const box = document.getElementById('crewFindResults'); if (!box) return;
   const q = (ST.crew.find || '').trim(); if (q.length < 2) { box.innerHTML = ''; return; }
   try {
-    const { data } = await withTimeout(SB.from('crew_profiles').select('user_id,callsign,base').ilike('callsign', '%' + q.replace(/[%_]/g, '') + '%').neq('user_id', ST.user.id).limit(20));
+    const { data } = await withTimeout(SB.from('crew_profiles').select('user_id,callsign,base,avatar_path').ilike('callsign', '%' + q.replace(/[%_]/g, '') + '%').neq('user_id', ST.user.id).limit(20));
+    if (!ST.crew.avatars) ST.crew.avatars = {};
+    (data || []).forEach(r => { ST.crew.avatars[r.user_id] = cleanAvatarPath(r.avatar_path); });
     box.innerHTML = (data || []).map(crewPersonRow).join('') || '<div style="font-size:0.75rem;color:var(--muted)">No one by that call sign.</div>';
   } catch (e) { box.innerHTML = '<div style="font-size:0.75rem;color:var(--muted)">Search failed.</div>'; }
 }
@@ -3648,7 +3752,7 @@ function crewPersonRow(r) {
   const f = ST.crew.followingSet && ST.crew.followingSet.has(r.user_id);
   const pend = ST.crew.pendingSet && ST.crew.pendingSet.has(r.user_id);
   const me = r.user_id === ST.user.id;
-  return '<div class="fb" style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="cursor:pointer" onclick="crewGo(\'profile\',\'' + r.user_id + '\')"><div style="font-size:0.875rem;font-weight:600">' + crewEsc(r.callsign) + (me ? ' (you)' : '') + '</div><div style="font-size:0.6875rem;color:var(--muted)">' + [r.base, r.month_miles != null ? Number(r.month_miles) + ' mi' : null, r.month_sessions != null ? r.month_sessions + ' sessions' : null].filter(Boolean).join(' · ') + '</div></div>' +
+  return '<div class="fb" style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="cursor:pointer;display:flex;align-items:center;gap:10px;min-width:0" onclick="crewGo(\'profile\',\'' + r.user_id + '\')">' + avatarHtml(r.user_id, r.callsign, 36) + '<div style="min-width:0"><div style="font-size:0.875rem;font-weight:600">' + crewEsc(r.callsign) + (me ? ' (you)' : '') + '</div><div style="font-size:0.6875rem;color:var(--muted)">' + [r.base, r.month_miles != null ? Number(r.month_miles) + ' mi' : null, r.month_sessions != null ? r.month_sessions + ' sessions' : null].filter(Boolean).join(' · ') + '</div></div></div>' +
     (me ? '' : '<button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid ' + (f ? 'var(--border)' : 'var(--gold)') + ';border-radius:8px;color:' + (f ? 'var(--muted)' : 'var(--gold)') + '" onclick="crewFollow(\'' + r.user_id + '\',' + (f || pend ? 'false' : 'true') + ')">' + (f ? 'Following' : pend ? 'Requested' : 'Follow') + '</button>') + '</div>';
 }
 // Monthly base leader (most strength sessions; sets break a tie). Cached per
@@ -3678,6 +3782,7 @@ async function crewLoadBaseBoard() {
   if (lead) crewBaseLeaders(ST.crew.profile.base).then(L => { lead.innerHTML = crewBaseLeadersHtml(ST.crew.profile.base, L); });
   try {
     const { data, error } = await withTimeout(SB.rpc('crew_base_board', { p_base: ST.crew.profile.base })); if (error) throw error;
+    await crewLoadAvatars((data || []).map(r => r.user_id));
     box.innerHTML = (data || []).map(crewPersonRow).join('') || '<div style="font-size:0.75rem;color:var(--muted)">You are the first at ' + crewEsc(ST.crew.profile.base) + '. Tell your crew.</div>';
   } catch (e) { box.innerHTML = '<div style="font-size:0.75rem;color:var(--muted)">Could not load.</div>'; }
 }
@@ -3685,15 +3790,16 @@ async function crewLoadProfileHeader(userId) {
   const box = document.getElementById('crewProfileHead'); if (!box) return;
   try {
     const [{ data: p }, { data: c }] = await Promise.all([
-      withTimeout(SB.from('crew_profiles').select('user_id,callsign,base,airline,bio,visibility,founding_crew,founding_number').eq('user_id', userId).maybeSingle()),
+      withTimeout(SB.from('crew_profiles').select('user_id,callsign,base,airline,bio,visibility,founding_crew,founding_number,avatar_path').eq('user_id', userId).maybeSingle()),
       withTimeout(SB.rpc('crew_profile_counts', { p_user: userId })) ]);
     if (!p) { box.innerHTML = '<div style="font-size:0.75rem;color:var(--muted)">This member has left the crew feed.</div>'; return; }
     const k = (c && c[0]) || {}; const me = userId === ST.user.id; const f = ST.crew.followingSet && ST.crew.followingSet.has(userId); const pend = ST.crew.pendingSet && ST.crew.pendingSet.has(userId);
+    (ST.crew.avatars = ST.crew.avatars || {})[p.user_id] = cleanAvatarPath(p.avatar_path);
     if (p.founding_crew) { if (!ST.crew.founders) ST.crew.founders = new Set(); ST.crew.founders.add(p.user_id); if (p.founding_number) (ST.crew.founderNo = ST.crew.founderNo || {})[p.user_id] = p.founding_number; }
     const champ = p.base ? await crewBaseLeaders(p.base) : null;
     const wonLast = champ && champ.last && champ.last.user_id === p.user_id;
-    box.innerHTML = '<div class="fb" style="align-items:flex-start"><div><div style="font-size:1.125rem;font-weight:600">' + crewEsc(p.callsign) + foundingChip(p.user_id) + '</div>' +
-      (wonLast ? '<div style="font-size:0.75rem;color:var(--gold);margin-top:2px">🏆 Top lifter at ' + crewEsc(p.base) + ', ' + crewLastMonthName() + '</div>' : '') + '<div style="font-size:0.75rem;color:var(--muted)">' + [p.base, p.airline].filter(Boolean).map(crewEsc).join(' · ') + '</div>' + (p.bio ? '<div style="font-size:0.8125rem;margin-top:6px;line-height:1.5">' + crewEsc(p.bio) + '</div>' : '') + '</div>' +
+    box.innerHTML = '<div class="fb" style="align-items:flex-start"><div style="display:flex;gap:12px;align-items:flex-start;min-width:0">' + avatarHtml(p.user_id, p.callsign, 64) + '<div style="min-width:0"><div style="font-size:1.125rem;font-weight:600">' + crewEsc(p.callsign) + foundingChip(p.user_id) + '</div>' +
+      (wonLast ? '<div style="font-size:0.75rem;color:var(--gold);margin-top:2px">🏆 Top lifter at ' + crewEsc(p.base) + ', ' + crewLastMonthName() + '</div>' : '') + '<div style="font-size:0.75rem;color:var(--muted)">' + [p.base, p.airline].filter(Boolean).map(crewEsc).join(' · ') + '</div>' + (p.bio ? '<div style="font-size:0.8125rem;margin-top:6px;line-height:1.5">' + crewEsc(p.bio) + '</div>' : '') + '</div></div>' +
       (me ? '<button class="btn-ghost" style="font-size:0.75rem;color:var(--gold)" onclick="crewGo(\'settings\')">Settings</button>' : '<div style="display:flex;flex-direction:column;gap:6px"><button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid ' + (f ? 'var(--border)' : 'var(--gold)') + ';border-radius:8px;color:' + (f ? 'var(--muted)' : 'var(--gold)') + '" onclick="crewFollow(\'' + userId + '\',' + (f || pend ? 'false' : 'true') + ')">' + (f ? 'Following' : pend ? 'Requested' : (p.visibility === 'followers' ? 'Request to follow' : 'Follow')) + '</button><button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewReport(\'profile\',\'' + userId + '\')">Report</button><button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewBlock(\'' + userId + '\',\'' + crewEsc(p.callsign).replace(/'/g, '') + '\')">Block</button></div>') + '</div>' +
       '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:12px">' + [['FOLLOWERS', k.followers], ['FOLLOWING', k.following], ['POSTS', k.activities], ['MI THIS MO', Number(k.month_miles || 0)]].map(([l, v]) => '<div style="text-align:center"><div style="font-family:var(--mono);font-size:1rem;font-weight:600">' + (v ?? 0) + '</div><div style="font-size:0.5625rem;color:var(--muted);letter-spacing:.1em">' + l + '</div></div>').join('') + '</div>';
   } catch (e) { box.innerHTML = '<div style="font-size:0.75rem;color:var(--muted)">Could not load this profile.</div>'; }
@@ -4467,6 +4573,7 @@ function applyProfileToState(profile) {
   if (profile.age)                          ST.age = profile.age;
   if (profile.username)                     ST.username = profile.username;
   if (profile.homeBase)                     ST.homeBase = cleanBase(profile.homeBase);
+  ST.avatarPath = cleanAvatarPath(profile.avatarPath);
   // BUG FIX (reported: fuel plan / tracking toggles reset after a
   // refresh, the same way badges used to before that fix was added).
   // Same root cause, same fix — these were never hydrated here either.
@@ -15950,6 +16057,7 @@ function renderProfile(p) {
   // Body metrics (sex, height, BMI)
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">BODY METRICS</div>');
+  if (ST.user) parts.push(avatarEditorHtml(ST.username || (ST.crew && ST.crew.profile && ST.crew.profile.callsign) || ''));
   parts.push('<div class="field-row" style="margin-bottom:10px">');
   parts.push('<div class="field" style="margin-bottom:0"><label>Sex</label><select id="bmSex">');
   parts.push('<option value=""'+(!ST.sex?' selected':'')+'>–</option>');

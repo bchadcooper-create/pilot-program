@@ -843,6 +843,19 @@ test('food search: servings match the label, whole-phrase matches first (reporte
   assertEqual(ctx.usdaHasAllWords('Turkey sandwich on wheat', 'turkey sandwich'), true, 'both words');
   assertEqual(ctx.usdaHasAllWords('Bologna, turkey', 'turkey sandwich'), false, 'one word only');
 });
+test('profile pictures: only a member\'s own avatar path is ever drawn (requested Nov 16)', () => {
+  const uid = '11111111-2222-3333-4444-555555555555';
+  assertEqual(ctx.cleanAvatarPath(uid + '/avatar/abc123xyz.jpg'), uid + '/avatar/abc123xyz.jpg', 'a real path passes');
+  assertEqual(ctx.cleanAvatarPath(uid + '/avatar/x" onerror="alert(1).jpg'), null, 'markup in a path is refused');
+  assertEqual(ctx.cleanAvatarPath('https://evil.example/a.jpg'), null, 'an outside address is refused');
+  assertEqual(ctx.cleanAvatarPath(null), null, 'nothing stays nothing');
+  assertEqual(ctx.avatarInitials('Maverick PHX'), 'MP', 'two words'); assertEqual(ctx.avatarInitials('maverick'), 'MA', 'one word'); assertEqual(ctx.avatarInitials(''), '✈', 'no name');
+  const keep = ctx.ST.crew.avatars; ctx.ST.crew.avatars = { [uid]: uid + '/avatar/abc123xyz.jpg' };
+  assertEqual(ctx.avatarPathFor(uid), uid + '/avatar/abc123xyz.jpg', 'picture found for that member');
+  assertEqual(/<img /.test(ctx.avatarHtml('someone-else', 'Goose', 36)), false, 'no picture: initials');
+  assertEqual(ctx.avatarHtml('someone-else', '<b>x', 36).includes('<b>'), false, 'name is escaped');
+  ctx.ST.crew.avatars = keep;
+});
 test('a workout reopened mid-session drops a caution that no longer applies', () => {
   ctx.ST.injuries = ['shoulder', 'elbow_wrist'];
   const wk = ctx.refreshInjuryCautions({ taxi: [{ id: 'a', name: 'Thoracic Extension (chair)', injuryCaution: true, flaggedRegion: 'Elbow / Wrist' }],

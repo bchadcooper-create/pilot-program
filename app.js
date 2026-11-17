@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.62.0 / 20261116_15
+ * Version/build: fcf-v5.63.0 / 20261116_16
  */
 
-const FCF_VERSION = 'fcf-v5.62.0';
-const FCF_BUILD   = '20261116_15';
+const FCF_VERSION = 'fcf-v5.63.0';
+const FCF_BUILD   = '20261116_16';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -516,8 +516,48 @@ const FREQUENCY_GUIDE = {
 };
 
 // ─── HYDRATION ────────────────────────────────────────────────────────────────
-const HYDRO_RATE = 0.3;
-const HYDRO_FLOOR = 1.0; // minimum daily water target even on no-fly days
+// Rewritten Nov 16 2026 (Chad: "Should we have water goals? What's the
+// science? What about days off? Extra flying?").
+//
+// Before: 0.3 L for each flight hour with a 1.0 L minimum. A day off got the
+// lowest target of all, workouts did not count, and no source could be found
+// for the 0.3 L figure.
+//
+// Now the day's goal is three parts:
+//   1. A base that does not depend on flying. Default: the National
+//      Academies' adequate intake from drinks, about 3.0 L for men and 2.2 L
+//      for women (3.7 and 2.7 L total water, about 80% of it from drinks,
+//      coffee and tea included); 2.6 L when sex is not set. A member can
+//      type their own.
+//   2. A small flying addition, 0.1 L per flight hour. The evidence for any
+//      addition is thin (the UK CAA puts the extra loss at about 150 ml over
+//      an eight hour flight), so it is small on purpose and can be turned off.
+//   3. 0.5 L on a day with a logged workout. A working rule, not a cited
+//      figure (ACSM gives no single number), and it can be turned off.
+// The goal counts every drink, not only plain water.
+const HYDRO_BASE_L = { male: 3.0, female: 2.2, unknown: 2.6 };
+const HYDRO_FLIGHT_L_PER_HR = 0.1;
+const HYDRO_WORKOUT_L = 0.5;
+const HYDRO_GOAL_MIN_L = 1.0, HYDRO_GOAL_MAX_L = 6.0;
+function cleanWaterPrefs(w) {
+  const o = (w && typeof w === 'object') ? w : {};
+  const g = parseFloat(o.goalL);
+  return { goalL: (isFinite(g) && g >= HYDRO_GOAL_MIN_L && g <= HYDRO_GOAL_MAX_L) ? Math.round(g * 100) / 100 : null,
+           flightBump: o.flightBump !== false, workoutBump: o.workoutBump !== false };
+}
+function waterPrefs() { return cleanWaterPrefs(typeof ST !== 'undefined' ? ST.water : null); }
+function hydroRecommendedBase() { return ST.sex === 'male' ? HYDRO_BASE_L.male : ST.sex === 'female' ? HYDRO_BASE_L.female : HYDRO_BASE_L.unknown; }
+function hydroWorkoutToday(now) {
+  try { return (ST.sessionCache || []).some(s => isSessionOnLocalDay(s, now || new Date())); } catch (e) { return false; }
+}
+// The parts of today's goal, in liters.
+function hydroTargetParts(now) {
+  const w = waterPrefs();
+  const base = w.goalL || hydroRecommendedBase();
+  const flight = w.flightBump && ST.flightHrs > 0 ? Math.round(ST.flightHrs * HYDRO_FLIGHT_L_PER_HR * 100) / 100 : 0;
+  const workout = w.workoutBump && hydroWorkoutToday(now) ? HYDRO_WORKOUT_L : 0;
+  return { base, flight, workout, total: Math.round((base + flight + workout) * 100) / 100, custom: !!w.goalL };
+}
 
 // What fraction of a normal waking day has elapsed right now — 6am-10pm is
 // a reasonable default active-day window. Used to judge hydration pace
@@ -550,10 +590,7 @@ function proteinPaceTier(ratio) {
 // What you'd reasonably be expected to have had by THIS point in the day —
 // never used to lower the actual end-of-day target (hydroTarget), only to
 // judge whether right now is a fair moment to sound an alarm about it.
-function hydroTarget()  {
-  if (ST.flightHrs > 0) return Math.max(ST.flightHrs * HYDRO_RATE, HYDRO_FLOOR);
-  return HYDRO_FLOOR; // no-fly day: still need baseline hydration
-}
+function hydroTarget()  { return hydroTargetParts().total; }
 function hydroDeficit() { return Math.max(hydroTarget() - ST.waterIn, 0); }
 function hydroPct()     { return Math.min(ST.waterIn / Math.max(hydroTarget(), 0.5), 1); }
 function hydroPacedTarget(now)  { return hydroTarget() * dayElapsedPct(now || new Date()); }
@@ -659,7 +696,7 @@ function updateHydrationUI() {
 
   const noFlyBox = document.getElementById('noFlyBox');
   if (noFlyBox) noFlyBox.innerHTML = (ST.flightHrsTouched && ST.flightHrs === 0)
-    ? '<div class="alert alert-info" style="margin-bottom:8px"><div class="alert-icon">ℹ️</div><div>No-fly day: the minimum hydration target ('+waterStr(1)+') still applies. Your body needs baseline water regardless of duty status.</div></div>'
+    ? '<div class="alert alert-info" style="margin-bottom:8px"><div class="alert-icon">ℹ️</div><div>No-fly day: your daily goal still applies. Flying only adds a little on top of it.</div></div>'
     : '';
 
   const targetEl = document.getElementById('hydroTargetVal');
@@ -2050,7 +2087,7 @@ function getExGuide(exId, exName) {
 // because individual study citations require per-paper verification we cannot
 // guarantee at this scale. Every link below was checked to match its card's topic.
 const WISDOM = [
-  { title:'Hydration SOP', text:'Aviation medicine guidance sets roughly 0.3L of water per flight hour as a baseline hydration target. Cabin humidity at altitude drops below 20% (drier than most deserts), so fluid loss outpaces thirst. By the time you feel thirsty, you may already be mildly dehydrated, which is enough to measurably affect reaction time and decision-making. On no-fly days, a 1L minimum keeps you on track.', link:'https://www.cdc.gov/healthy-weight-growth/water-healthy-drinks/index.html' },
+  { title:'Hydration SOP', text:'The National Academies put adequate daily water at about 3.7 liters for men and 2.7 for women, with roughly 80 percent of it coming from drinks (coffee and tea count) and the rest from food. That is the base this app uses, on duty days and days off alike. Cabin air is dry, usually 10 to 20 percent humidity, but the extra water you lose to it is small, so the app adds only a little for flight hours. The bigger risk on a trip is simply not drinking: spread it across the day rather than catching up at the hotel.', link:'https://www.nationalacademies.org/news/report-sets-dietary-intake-levels-for-water-salt-and-potassium-to-maintain-health-and-reduce-chronic-disease-risk' },
   { title:'Seated Correction', text:'Sustained sitting compresses the spinal discs, deactivates the glutes, and tightens the hip flexors. Set a reminder every 60 minutes: 10 glute squeezes, a few standing hip hinges, and a brief thoracic extension over a chair back. Small, frequent breaks matter more than one long stretch session.', link:'https://www.mayoclinic.org/healthy-lifestyle/adult-health/in-depth/sitting/art-20270991' },
   { title:'Landing Prep Breathing', text:'Slow, extended-exhale breathing (such as 4 seconds in, 7 hold, 8 out) activates the parasympathetic nervous system, lowering heart rate and reducing the mental "noise" of a high-workload environment within a few cycles. Useful immediately after landing or before a stressful task.', link:'https://www.health.harvard.edu/mind-and-mood/relaxation-techniques-breath-control-helps-quell-errant-stress-response' },
   { title:'BP Accuracy Protocol', text:'Blood pressure readings are sensitive to method. Rest quietly for 5 full minutes first. Sit with your back supported, feet flat, and arm at heart level. No talking. Take three readings a minute or two apart and average the last two. Caffeine or exercise in the prior 30 minutes can inflate the number.', link:'https://www.heart.org/en/health-topics/high-blood-pressure/understanding-blood-pressure-readings' },
@@ -4773,6 +4810,8 @@ function applyProfileToState(profile) {
   if (profile.username)                     ST.username = profile.username;
   if (profile.homeBase)                     ST.homeBase = cleanBase(profile.homeBase);
   ST.avatarPath = cleanAvatarPath(profile.avatarPath);
+  ST.scheduleOutDay = cleanScheduleOutDay(profile.scheduleOutDay);
+  ST.water = cleanWaterPrefs(profile.water);
   // Units follow the account once chosen there; until then the phone's own choice stands.
   if (profile.units) { ST.units = cleanUnits(profile.units); try { localStorage.setItem(UNITS_LS_KEY, JSON.stringify(ST.units)); } catch (e) { /* fine */ } }
   // BUG FIX (reported: fuel plan / tracking toggles reset after a
@@ -6090,6 +6129,26 @@ function getActiveSchedule() {
 // "Not yet" hides it for three days. A reminder is also set on the iPhone
 // for 9:00 on the 20th (app build 8 and later).
 const SCHEDULE_OUT_DAY = 20;
+// The member's own day (1 to 28), set under Data & Import/Export: airlines
+// publish on different dates. Kept on the account as profile.scheduleOutDay.
+function cleanScheduleOutDay(v) { const n = Math.round(Number(v)); return n >= 1 && n <= 28 ? n : SCHEDULE_OUT_DAY; }
+function scheduleOutDay() { return cleanScheduleOutDay(typeof ST !== 'undefined' ? ST.scheduleOutDay : null); }
+function ordinalDay(n) { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+async function setScheduleOutDay(v) {
+  ST.scheduleOutDay = cleanScheduleOutDay(v);
+  try { localStorage.removeItem(SCHED_PROMPT_SNOOZE_KEY); } catch (e) { /* fine */ }
+  planScheduleUploadAlert(); renderPage();
+  showToast('We will ask for your next schedule from the ' + ordinalDay(ST.scheduleOutDay) + '.');
+  try { const profile = (await dbGetProfile()) || {}; profile.scheduleOutDay = ST.scheduleOutDay; await dbSetProfile(profile); }
+  catch (e) { console.warn('Saving the schedule day failed; kept for this session:', e); }
+}
+function scheduleOutDayControlHtml() {
+  const day = scheduleOutDay();
+  let opts = ''; for (let d = 1; d <= 28; d++) opts += '<option value="' + d + '"' + (d === day ? ' selected' : '') + '>' + ordinalDay(d) + '</option>';
+  return '<div class="field" style="margin-top:14px;margin-bottom:0"><label>My schedule comes out around the</label>' +
+    '<select id="schedOutDay" onchange="setScheduleOutDay(this.value)">' + opts + '</select>' +
+    '<div style="font-size:0.625rem;color:var(--muted);margin-top:4px;line-height:1.5">From that day each month the app asks for next month\'s schedule, on Today and with a reminder on your iPhone.</div></div>';
+}
 const SCHED_PROMPT_SNOOZE_KEY = 'fcf_sched_prompt_snooze';
 const SCHED_PROMPT_SNOOZE_MS = 3 * 864e5;
 function scheduleNextMonthStart(now) { return new Date(now.getFullYear(), now.getMonth() + 1, 1); }
@@ -6097,7 +6156,8 @@ function scheduleCoversNextMonth(events, now) {
   const from = scheduleNextMonthStart(now).getTime();
   return (events || []).some(e => { const t = new Date(e && e.start).getTime(); return isFinite(t) && t >= from; });
 }
-function scheduleUploadPrompt(now, events, source) {
+function scheduleUploadPrompt(now, events, source, outDay) {
+  const dayOut = cleanScheduleOutDay(outDay);
   if (source !== 'ics' || !Array.isArray(events) || !events.length) return null;
   let lastEnd = 0;
   events.forEach(e => { const t = new Date((e && (e.end || e.start)) || 0).getTime(); if (isFinite(t) && t > lastEnd) lastEnd = t; });
@@ -6109,8 +6169,8 @@ function scheduleUploadPrompt(now, events, source) {
   if (scheduleCoversNextMonth(events, now)) return null;
   const nextName = scheduleNextMonthStart(now).toLocaleDateString('en-US', { month: 'long' });
   const runsOutSoon = lastEnd - now.getTime() < 5 * 864e5;
-  if (now.getDate() >= SCHEDULE_OUT_DAY || runsOutSoon) {
-    return { kind: 'next_month', title: 'Got your ' + nextName + ' schedule?', body: (now.getDate() >= SCHEDULE_OUT_DAY ? 'New schedules are usually out by now. ' : 'Your uploaded schedule ends ' + fmt(new Date(lastEnd)) + '. ') + 'Upload ' + nextName + ' so the app can plan around your trips.' };
+  if (now.getDate() >= dayOut || runsOutSoon) {
+    return { kind: 'next_month', title: 'Got your ' + nextName + ' schedule?', body: (now.getDate() >= dayOut ? 'New schedules are usually out by now. ' : 'Your uploaded schedule ends ' + fmt(new Date(lastEnd)) + '. ') + 'Upload ' + nextName + ' so the app can plan around your trips.' };
   }
   return null;
 }
@@ -6123,7 +6183,7 @@ function snoozeSchedulePrompt() {
 }
 function scheduleUploadPromptHtml(now) {
   const a = getActiveSchedule();
-  const pr = scheduleUploadPrompt(now, a.events, a.source);
+  const pr = scheduleUploadPrompt(now, a.events, a.source, scheduleOutDay());
   if (!pr || schedulePromptSnoozed(now)) return '';
   return '<div class="card mb12" style="border-color:var(--gold)"><div style="font-size:1.0625rem;font-weight:600;letter-spacing:-.01em;margin-bottom:7px">📅 ' + pr.title + '</div>' +
     '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.65;margin-bottom:14px">' + pr.body + '</div>' +
@@ -6133,16 +6193,17 @@ function scheduleUploadPromptHtml(now) {
 // When the iPhone reminder should fire: 9:00 on the next 20th whose following
 // month is not already in the file. Null when there is nothing to remind
 // about (no uploaded schedule, or the calendar is the source).
-function scheduleUploadAlertTime(now, events, source) {
+function scheduleUploadAlertTime(now, events, source, outDay) {
+  const dayOut = cleanScheduleOutDay(outDay);
   if (source !== 'ics' || !Array.isArray(events) || !events.length) return null;
-  let t = new Date(now.getFullYear(), now.getMonth(), SCHEDULE_OUT_DAY, 9, 0, 0);
-  if (t.getTime() <= now.getTime() || scheduleCoversNextMonth(events, t)) t = new Date(now.getFullYear(), now.getMonth() + 1, SCHEDULE_OUT_DAY, 9, 0, 0);
+  let t = new Date(now.getFullYear(), now.getMonth(), dayOut, 9, 0, 0);
+  if (t.getTime() <= now.getTime() || scheduleCoversNextMonth(events, t)) t = new Date(now.getFullYear(), now.getMonth() + 1, dayOut, 9, 0, 0);
   return t;
 }
 function planScheduleUploadAlert() {
   try {
     const now = new Date(); const a = getActiveSchedule();
-    const when = scheduleUploadAlertTime(now, a.events, a.source);
+    const when = scheduleUploadAlertTime(now, a.events, a.source, scheduleOutDay());
     if (!when) { cancelTimerAlert('schedupload'); return; }
     const month = new Date(when.getFullYear(), when.getMonth() + 1, 1).toLocaleDateString('en-US', { month: 'long' });
     scheduleTimerAlert('schedupload', Math.round((when.getTime() - now.getTime()) / 1000), 'Got your ' + month + ' schedule?', 'Upload it to Flight Crew Fitness so your workouts fit next month\'s trips.');
@@ -6190,6 +6251,35 @@ function renderTrackingToggles() {
       row('trackHydration','Hydration','Water logging and hydration status') +
       '<div style="font-size:0.6875rem;color:var(--muted);margin-top:10px">Turning these off hides the screens and stops the reminders. Nothing you have already logged is deleted.</div>' +
     '</div>';
+}
+
+// Water goal (Mission Settings, shown while hydration tracking is on).
+async function saveWaterPrefs(next) {
+  ST.water = cleanWaterPrefs(Object.assign({}, waterPrefs(), next));
+  renderPage();
+  try { const profile = (await dbGetProfile()) || {}; profile.water = ST.water; await dbSetProfile(profile); }
+  catch (e) { console.warn('Saving the water goal failed; kept for this session:', e); }
+}
+function setWaterGoalFromBox() {
+  const raw = document.getElementById('waterGoalInput')?.value || '';
+  const l = waterFromInput(raw);
+  if (!raw.trim() || !isFinite(l) || l < HYDRO_GOAL_MIN_L || l > HYDRO_GOAL_MAX_L) { showBigToast('Enter a daily goal between ' + waterStr(HYDRO_GOAL_MIN_L) + ' and ' + waterStr(HYDRO_GOAL_MAX_L) + '.', 'warn'); return; }
+  saveWaterPrefs({ goalL: l }); showToast('Daily drink goal set to ' + waterStr(l) + '.');
+}
+function renderWaterGoalControl() {
+  if (!ST.trackHydration) return '';
+  const w = waterPrefs(); const parts = hydroTargetParts(new Date()); const rec = hydroRecommendedBase();
+  const sw = (key, on, label, sub) => '<div class="fb" style="padding:12px 0;border-top:1px solid var(--border);align-items:center"><div style="padding-right:12px"><div style="font-size:0.875rem">' + label + '</div><div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">' + sub + '</div></div>' +
+    '<div role="switch" aria-checked="' + on + '" onclick="haptic(\'selection\');saveWaterPrefs({' + key + ':' + (!on) + '})" style="flex-shrink:0;width:46px;height:26px;border-radius:13px;background:' + (on ? 'var(--gold)' : 'var(--raise)') + ';position:relative;cursor:pointer;border:1px solid var(--border)"><div style="position:absolute;top:2px;left:' + (on ? '23px' : '3px') + ';width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .15s"></div></div></div>';
+  const today = [waterStr(parts.base) + ' base'].concat(parts.flight ? ['+ ' + waterStr(parts.flight) + ' for ' + ST.flightHrs + ' flight hours'] : [], parts.workout ? ['+ ' + waterStr(parts.workout) + ' for today\'s workout'] : []);
+  return '<div class="section-label" style="margin-top:20px">DAILY DRINK GOAL</div><div class="card mb12">' +
+    '<div class="fb" style="align-items:baseline"><div style="font-size:0.875rem">Base goal</div><div style="font-family:var(--mono);font-size:1rem;font-weight:600">' + waterStr(parts.base) + '</div></div>' +
+    '<div style="font-size:0.6875rem;color:var(--muted);margin:4px 0 10px;line-height:1.5">' + (w.goalL ? 'Your own goal. ' : 'Recommended. ') + 'Counts every drink, coffee and tea included. The same on duty days and days off.</div>' +
+    '<div style="display:flex;gap:8px;margin-bottom:6px"><input id="waterGoalInput" type="text" inputmode="decimal" placeholder="Your own, e.g. ' + (unitWater() === 'oz' ? '90' : '2.5') + '" style="flex:1;min-width:0"><button class="btn btn-outline" style="width:auto;padding:0 16px;flex-shrink:0" onclick="setWaterGoalFromBox()">Set</button></div>' +
+    (w.goalL ? '<button class="btn-ghost" style="font-size:0.75rem;color:var(--gold);padding:6px 0 10px" onclick="saveWaterPrefs({goalL:null});showToast(\'Back to the recommended goal.\')">Use the recommended ' + waterStr(rec) + '</button>' : '<div style="height:6px"></div>') +
+    sw('flightBump', w.flightBump, 'Add a little for flying', waterStr(HYDRO_FLIGHT_L_PER_HR, 1) + ' for each flight hour today') +
+    sw('workoutBump', w.workoutBump, 'Add for a workout', waterStr(HYDRO_WORKOUT_L, 1) + ' on a day with a logged workout') +
+    '<div style="font-size:0.6875rem;color:var(--muted);padding-top:10px;border-top:1px solid var(--border);line-height:1.5">Today: <strong style="color:var(--text)">' + waterStr(parts.total) + '</strong> (' + today.join(' ') + ').</div></div>';
 }
 
 // ─── APPEARANCE ──────────────────────────────────────────────────────────────
@@ -10724,7 +10814,7 @@ async function renderPreflight(p) {
   parts.push('<div class="field" style="margin-bottom:0"><label>Water Consumed ('+(unitWater()==='oz'?'oz':'L')+')</label>');
   parts.push('<input type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="'+waterBoxValue()+'" placeholder="'+(unitWater()==='oz'?'e.g. 40':'e.g. 1.2 or .5')+'" oninput="setWaterFromBox(this.value);updateHydrationUI()"></div>');
   parts.push('</div>');
-  parts.push('<div id="noFlyBox">'+(ST.flightHrsTouched && ST.flightHrs === 0 ? '<div class="alert alert-info" style="margin-bottom:8px"><div class="alert-icon">ℹ️</div><div>No-fly day: the minimum hydration target ('+waterStr(1)+') still applies. Your body needs baseline water regardless of duty status.</div></div>' : '')+'</div>');
+  parts.push('<div id="noFlyBox">'+(ST.flightHrsTouched && ST.flightHrs === 0 ? '<div class="alert alert-info" style="margin-bottom:8px"><div class="alert-icon">ℹ️</div><div>No-fly day: your daily goal still applies. Flying only adds a little on top of it.</div></div>' : '')+'</div>');
   parts.push('<div class="fb" style="margin-bottom:6px"><span style="font-family:var(--mono);font-size:0.6875rem;color:var(--muted)">TARGET: <span id="hydroTargetVal" style="color:var(--text)">'+waterStr(hydroTarget())+'</span></span><span id="hydroStatusLbl" style="font-family:var(--mono);font-size:0.6875rem;color:'+hs.color+'">'+hs.label+'</span></div>');
   parts.push('<div class="hydro-bar-wrap"><div id="hydroBar" class="hydro-bar '+(pct>=1?'hydro-ok':'hydro-warn')+'" style="width:'+Math.round(pct*100)+'%"></div></div>');
   parts.push('<div id="hydroPctText" style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);margin-top:4px;text-align:right">'+Math.round(pct*100)+'% of target</div>');
@@ -15150,7 +15240,7 @@ function exportProfileRows(st) {
   } else {
     add('Nutrition targets', 'not set');
   }
-  if (st.trackHydration) add('Hydration target', HYDRO_RATE + ' L per flight hour, at least ' + HYDRO_FLOOR + ' L a day');
+  if (st.trackHydration) { const w = cleanWaterPrefs(st.water); add('Hydration goal', (w.goalL ? w.goalL + ' L a day (set by member)' : hydroRecommendedBase() + ' L a day (recommended)') + (w.flightBump ? ', plus ' + HYDRO_FLIGHT_L_PER_HR + ' L per flight hour' : '') + (w.workoutBump ? ', plus ' + HYDRO_WORKOUT_L + ' L on a workout day' : '') + '. Counts all drinks.'); }
   return rows;
 }
 // One row per body measurement entry, whatever day it was taken.
@@ -17543,6 +17633,7 @@ function renderMore(p) {
     if (medicalEnabled()) parts.push(item('🩺','FAA Medical','Certificate dates, medication check, vision, your numbers vs the FAA lines',"switchTab('medical')"));
     parts.push(item('📖','Flight Deck Wisdom','Daily training wisdom cards',"switchTab('wisdom')"));
     parts.push(renderTrackingToggles());
+    parts.push(renderWaterGoalControl());
     parts.push('</div>');
   }
 
@@ -19955,7 +20046,8 @@ function openQuickWaterLog(mode) {
   const parts = [];
   parts.push('<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet">');
   parts.push('<div class="modal-handle"></div>');
-  parts.push('<div class="modal-title">'+(setMode ? 'Correct Water Total' : 'Log Water')+'</div>');
+  parts.push('<div class="modal-title">'+(setMode ? 'Correct Today\'s Total' : 'Log a Drink')+'</div>');
+  parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin:-6px 0 10px">Count every drink: water, coffee, tea and the rest.</div>');
 
   // Always show where today actually stands, so it's never ambiguous what
   // a number typed below is going to do to it.
@@ -21124,6 +21216,7 @@ function renderData(p) {
   }
   parts.push('<input type="file" id="icsFileInput" accept=".ics" style="display:none" onchange="handleICSUpload(this.files[0])">');
   parts.push('<button class="btn btn-outline mt8" onclick="document.getElementById(\'icsFileInput\').click()">'+(ST.flightSchedule?.length ? '🔄 Replace Schedule' : '📤 Upload .ics Schedule')+'</button>');
+  parts.push(scheduleOutDayControlHtml());
   parts.push('</div>');
 
   // ── Export ────────────────────────────────────────────────────────────────

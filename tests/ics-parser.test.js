@@ -935,6 +935,34 @@ test('members with an uploaded schedule are asked for next month once it should 
   assertEqual(T('2026-11-21T10:00:00', nov).getMonth(), 11, 'past the 20th: next month\'s 20th');
   assertEqual(T('2026-11-16T10:00:00', nov.concat([ev('2026-12-02T14:00:00', '2026-12-05T22:00:00')])).getMonth(), 11, 'December already uploaded: skip to the December reminder');
   assertEqual(ctx.scheduleUploadAlertTime(new Date('2026-11-16T10:00:00'), [], 'ics'), null, 'nothing uploaded: no reminder');
+  assertEqual(ctx.scheduleUploadPrompt(new Date('2026-11-16T10:00:00'), nov, 'ics', 15).kind, 'next_month', 'a member whose schedule comes out on the 15th is asked on the 16th');
+  assertEqual(ctx.scheduleUploadPrompt(new Date('2026-11-21T10:00:00'), nov, 'ics', 25), null, 'and one set to the 25th is not asked on the 21st');
+  assertEqual(ctx.scheduleUploadAlertTime(new Date('2026-11-16T10:00:00'), nov, 'ics', 25).getDate(), 25, 'the reminder moves with the chosen day');
+  assertEqual([ctx.cleanScheduleOutDay(31), ctx.cleanScheduleOutDay('x'), ctx.cleanScheduleOutDay(7)].join(','), '20,20,7', 'only days 1 to 28; anything else is the 20th');
+  assertEqual([1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 28].map(ctx.ordinalDay).join(' '), '1st 2nd 3rd 4th 11th 12th 13th 21st 22nd 23rd 28th', 'day names read correctly');
+});
+test('daily drink goal: a base for every day, a little for flying, some for a workout (decided Nov 16)', () => {
+  const k = { sex: ctx.ST.sex, hrs: ctx.ST.flightHrs, water: ctx.ST.water, cache: ctx.ST.sessionCache, units: ctx.ST.units };
+  try {
+    ctx.ST.units = { weight: 'lb', water: 'L', distance: 'mi' }; ctx.ST.sessionCache = []; ctx.ST.water = null; ctx.ST.flightHrs = 0;
+    ctx.ST.sex = 'male';   assertEqual(ctx.hydroTarget(), 3.0, 'day off, man: 3.0 L (it used to be 1.0)');
+    ctx.ST.sex = 'female'; assertEqual(ctx.hydroTarget(), 2.2, 'day off, woman: 2.2 L');
+    ctx.ST.sex = null;     assertEqual(ctx.hydroTarget(), 2.6, 'sex not set: 2.6 L');
+    ctx.ST.sex = 'male'; ctx.ST.flightHrs = 8;
+    assertEqual(ctx.hydroTarget(), 3.8, '8 flight hours add 0.8 L');
+    ctx.ST.sessionCache = [{ date: new Date().toISOString() }];
+    assertEqual(ctx.hydroTarget(), 4.3, 'a workout today adds 0.5 L');
+    assertEqual(JSON.stringify(ctx.hydroTargetParts()), '{"base":3,"flight":0.8,"workout":0.5,"total":4.3,"custom":false}', 'the parts add up');
+    ctx.ST.water = { goalL: 2.5, flightBump: false, workoutBump: true };
+    assertEqual(ctx.hydroTarget(), 3.0, 'own goal 2.5 L, flying addition off, workout on');
+    ctx.ST.water = { goalL: 2.5, flightBump: false, workoutBump: false };
+    assertEqual(ctx.hydroTarget(), 2.5, 'both additions off: just the goal');
+    assertEqual(JSON.stringify(ctx.cleanWaterPrefs({ goalL: 40 })), '{"goalL":null,"flightBump":true,"workoutBump":true}', 'an absurd goal is dropped; additions default on');
+    assertEqual(JSON.stringify(ctx.cleanWaterPrefs(null)), '{"goalL":null,"flightBump":true,"workoutBump":true}', 'nothing saved: recommended goal, additions on');
+    ctx.ST.trackHydration = true; ctx.ST.water = null;
+    assertEqual(/DAILY DRINK GOAL/.test(ctx.renderWaterGoalControl()) && /coffee and tea/.test(ctx.renderWaterGoalControl()), true, 'the settings card says every drink counts');
+    assertEqual(vm.runInContext("WISDOM.some(w => /0\\.3 ?L/.test(w.text))", ctx), false, 'no wisdom card still cites 0.3 L per flight hour');
+  } finally { ctx.ST.sex = k.sex; ctx.ST.flightHrs = k.hrs; ctx.ST.water = k.water; ctx.ST.sessionCache = k.cache; ctx.ST.units = k.units; }
 });
 test('a workout reopened mid-session drops a caution that no longer applies', () => {
   ctx.ST.injuries = ['shoulder', 'elbow_wrist'];

@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.59.0 / 20261116_9
+ * Version/build: fcf-v5.59.1 / 20261116_10
  */
 
-const FCF_VERSION = 'fcf-v5.59.0';
-const FCF_BUILD   = '20261116_9';
+const FCF_VERSION = 'fcf-v5.59.1';
+const FCF_BUILD   = '20261116_10';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -14785,6 +14785,18 @@ function todaysWisdomIdx() {
   return dayOfYear() % WISDOM.length;
 }
 
+// Today's card on the Today page (back on Nov 16 2026). A new one each day;
+// the text is cut to a few lines and a tap opens the full card.
+function todayWisdomCardHtml() {
+  const card = WISDOM[todaysWisdomIdx()];
+  if (!card) return '';
+  return '<div class="section-label" style="margin-top:20px">FLIGHT DECK WISDOM</div>' +
+    '<div class="card mb12" style="cursor:pointer" onclick="ST.wisdomIdx=null;switchTab(\'wisdom\')">' +
+    '<div style="font-size:0.9375rem;font-weight:700;margin-bottom:6px">' + card.title + '</div>' +
+    '<div style="font-size:0.8125rem;line-height:1.6;color:var(--muted);display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden">' + card.text + '</div>' +
+    '<div style="font-size:0.75rem;color:var(--gold);margin-top:8px">Read the full card ›</div></div>';
+}
+
 function renderWisdom(p) {
   const isAutoRotated = ST.wisdomIdx === null;
   const activeIdx = isAutoRotated ? todaysWisdomIdx() : ST.wisdomIdx;
@@ -18820,11 +18832,8 @@ function buildTodayGaps(ctx) {
   else if (ST.trackNutrition && nutrition.goals && nutrition.proteinPct !== null && nutrition.proteinPct < 70 && hour >= 15) {
     gaps.push({ icon:'🥩', text:'Protein at '+nutrition.proteinPct+'% of target', fn:"switchTab('nutrition')" });
   }
-  const stepGoal = activeStepGoal();
-  const steps = ctx.oura ? ctx.oura.steps : null;
-  if (stepGoal && steps !== null && steps < stepGoal && hour >= 15) {
-    gaps.push({ icon:'🚶', text:(stepGoal - steps).toLocaleString()+' steps to your goal', fn:"selectMissionProfile('Walk');switchTab('preflight')" });
-  }
+  // Steps are not listed here (Chad, Nov 16 2026): the count is already at
+  // the top of the page, so a second line about it was noise.
   // Walking First: a walk day isn't a missed session.
   if (!training.workoutToday && hour >= 18 && !(isWalkingFirst() && walkingFirstNext(ctx.now) === 'Walk')) gaps.push({ icon:'💪', text:'No session logged today', fn:"switchTab('preflight')" });
   // Uses the same hydroStatus() the workout hydration gate reads from —
@@ -18835,8 +18844,8 @@ function buildTodayGaps(ctx) {
   // two screens disagreeing about the same number. Both now read from
   // hydroTarget()/ST.waterIn, so they can't diverge again.
   const hydro = ST.trackHydration ? hydroStatus(ctx.now) : { label: 'NOMINAL' };
-  if (hydro.label === 'DEFICIT') gaps.push({ icon:'💧', text:'Water is well behind pace today', fn:"switchTab('preflight')" });
-  else if (hydro.label === 'CAUTION') gaps.push({ icon:'💧', text:'Water is light so far', fn:"switchTab('preflight')" });
+  if (hydro.label === 'DEFICIT') gaps.push({ icon:'💧', text:'Water is well behind pace today', fn:"openQuickWaterLog()" });
+  else if (hydro.label === 'CAUTION') gaps.push({ icon:'💧', text:'Water is light so far', fn:"openQuickWaterLog()" });
   return gaps;
 }
 
@@ -19389,6 +19398,7 @@ function renderToday(p) {
   }
 
   parts.push('<button class="btn btn-outline" onclick="switchTab(\'nutrition\')">🍽️ Log a meal</button>');
+  parts.push(todayWisdomCardHtml());
   const html = parts.join('');
   // A repaint that produces the same markup (HealthKit arriving with no
   // visible change, say) is skipped entirely: nothing to redraw, and the

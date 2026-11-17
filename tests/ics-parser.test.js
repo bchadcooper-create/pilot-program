@@ -1820,7 +1820,13 @@ test('Today shows steps against the goal, and what is left late in the day', () 
   assertEqual(/✓/.test(ctx.stepGoalProgressHtml(7300)), true, 'check mark once reached');
   assertEqual(/Apple Health/.test(ctx.stepGoalProgressHtml(null)), true, 'says where steps come from when there are none');
   const gaps = ctx.buildTodayGaps({ nutrition: {}, training: { workoutToday: false }, hour: 16, now: new Date(), oura: { steps: 4210 } });
-  assertEqual(gaps.some(g => g.text === '2,790 steps to your goal'), true, 'steps left in the still-open list');
+  assertEqual(gaps.some(g => /steps/.test(g.text)), false, 'steps are not repeated in the still-open list (the count is at the top)');
+  { const keepW = ctx.ST.waterIn, keepH = ctx.ST.trackHydration; ctx.ST.trackHydration = true; ctx.ST.waterIn = 0;
+    const late = new Date(); late.setHours(20, 0, 0, 0);
+    const g2 = ctx.buildTodayGaps({ nutrition: {}, training: { workoutToday: true }, hour: 20, now: late, oura: { steps: null } }).filter(g => /Water/.test(g.text));
+    assertEqual(g2.length === 0 || g2.every(g => g.fn === 'openQuickWaterLog()'), true, 'a water line opens the water log, not the workout screen (reported Nov 16)');
+    ctx.ST.waterIn = keepW; ctx.ST.trackHydration = keepH; }
+  assertEqual(/FLIGHT DECK WISDOM/.test(ctx.todayWisdomCardHtml()) && ctx.todayWisdomCardHtml().includes(vm.runInContext('WISDOM[todaysWisdomIdx()].title', ctx)), true, 'today\'s wisdom card is on the Today page');
   ctx.ST.goal = 'longevity'; ctx.ST.stepGoal = null;
   assertEqual(ctx.stepGoalProgressHtml(4210), '', 'nothing for other objectives');
 });

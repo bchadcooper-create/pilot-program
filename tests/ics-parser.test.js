@@ -856,6 +856,25 @@ test('profile pictures: only a member\'s own avatar path is ever drawn (requeste
   assertEqual(ctx.avatarHtml('someone-else', '<b>x', 36).includes('<b>'), false, 'name is escaped');
   ctx.ST.crew.avatars = keep;
 });
+test('every emoji the app can put on screen has a line icon (reported Nov 16: emoji read as machine-made)', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'app.js'), 'utf8');
+  const i = src.indexOf('// ICONS:BEGIN'), j = src.indexOf('// ICONS:END');
+  const code = (src.slice(0, i) + src.slice(j)).split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
+  const map = vm.runInContext('EMOJI_ICONS', ctx), keep = vm.runInContext('EMOJI_KEEP', ctx), shapes = vm.runInContext('ICON_PATHS', ctx);
+  const left = new Set();
+  for (const m of code.matchAll(/[\u{1F000}-\u{1FAFF}\u2600-\u27BF\u2B00-\u2BFF\u2190-\u21FF\u2300-\u23FF]\uFE0F?/gu)) {
+    const e = m[0], bare = e.replace('\uFE0F', '');
+    if (!(e in map) && !(bare in map) && !keep.includes(bare)) left.add(e);
+  }
+  assertEqual([...left].join(' '), '', 'add each to the table in scripts/build_icons.py and run it');
+  const missing = Object.values(map).map(v => v.split(':')[0]).filter(n => !shapes[n]);
+  assertEqual(missing.join(' '), '', 'every icon named in the table has a shape');
+  const parts = ctx.emojiSplit('📷 Photo ⚠️ go light ✓');
+  assertEqual(parts.map(p => p.icon || p.text).join('|'), 'camera| Photo |triangle-alert| go light ✓', 'emoji become icons, text and plain marks stay');
+  assertEqual(parts[2].tone, 'warn', 'a warning keeps its colour');
+  assertEqual(ctx.emojiSplit('✈ FLIGHT CREW FITNESS → ✓'), null, 'the logo plane, arrows and ticks are left as type');
+  assertEqual(ctx.foodEmoji('Turkey sandwich'), '', 'food rows carry no picture');
+});
 test('a workout reopened mid-session drops a caution that no longer applies', () => {
   ctx.ST.injuries = ['shoulder', 'elbow_wrist'];
   const wk = ctx.refreshInjuryCautions({ taxi: [{ id: 'a', name: 'Thoracic Extension (chair)', injuryCaution: true, flaggedRegion: 'Elbow / Wrist' }],

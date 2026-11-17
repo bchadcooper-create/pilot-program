@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.57.0 / 20261116_6
+ * Version/build: fcf-v5.58.0 / 20261116_7
  */
 
-const FCF_VERSION = 'fcf-v5.57.0';
-const FCF_BUILD   = '20261116_6';
+const FCF_VERSION = 'fcf-v5.58.0';
+const FCF_BUILD   = '20261116_7';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -46,6 +46,80 @@ function currentTextSize() {
 // Runs at load, before anything renders. localStorage can throw in a
 // private window or with site data blocked; the app must still start.
 try { applyTextSize(localStorage.getItem(TEXT_SIZE_LS_KEY)); } catch (e) { /* default size */ }
+
+// ─── ICONS ──────────────────────────────────────────────────────────────────
+// Reported Nov 16 2026: members said the app "feels like it was made by AI",
+// and the emoji were one of the tells. Every emoji the app puts on screen is
+// now drawn as a plain single-colour line icon (the MyFitnessPal look).
+//
+// How: the screens are still written with emoji in the text. A watcher on
+// the page swaps each one for its icon the moment it appears, before the
+// screen is painted, so no screen has to be rewritten and a new screen gets
+// icons for free. The table of which emoji becomes which icon is in
+// scripts/build_icons.py. tests/ics-parser.test.js fails if the app's code
+// holds an emoji that is not in that table.
+//
+// Left alone on purpose: text a member typed (crew notes, comments, bios are
+// marked data-raw), form fields, and text that never reaches the page
+// (notifications, exports, the share picture).
+// ICONS:BEGIN  (written by scripts/build_icons.py; edit the table there, not here)
+// Lucide icons, ISC licence: vendor/lucide-LICENSE.txt
+const ICON_PATHS = {"arrow-down-to-line":"<path d=\"M12 17V3\"/><path d=\"m6 11 6 6 6-6\"/><path d=\"M19 21H5\"/>","award":"<path d=\"m15.477 12.89 1.515 8.526a.5.5 0 0 1-.81.47l-3.58-2.687a1 1 0 0 0-1.197 0l-3.586 2.686a.5.5 0 0 1-.81-.469l1.514-8.526\"/><circle cx=\"12\" cy=\"8\" r=\"6\"/>","badge-check":"<path d=\"M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z\"/><path d=\"m9 12 2 2 4-4\"/>","bandage":"<path d=\"M10 10.01h.01\"/><path d=\"M10 14.01h.01\"/><path d=\"M14 10.01h.01\"/><path d=\"M14 14.01h.01\"/><path d=\"M18 6v11.5\"/><path d=\"M6 6v12\"/><rect x=\"2\" y=\"6\" width=\"20\" height=\"12\" rx=\"2\"/>","bed":"<path d=\"M2 4v16\"/><path d=\"M2 8h18a2 2 0 0 1 2 2v10\"/><path d=\"M2 17h20\"/><path d=\"M6 8v9\"/>","beef":"<circle cx=\"12.5\" cy=\"8.5\" r=\"2.5\"/><path d=\"M12.5 2a6.5 6.5 0 0 0-6.22 4.6c-1.1 3.13-.78 3.9-3.18 6.08A3 3 0 0 0 5 18c4 0 8.4-1.8 11.4-4.3A6.5 6.5 0 0 0 12.5 2Z\"/><path d=\"m18.5 6 2.19 4.5a6.48 6.48 0 0 1 .31 2 6.49 6.49 0 0 1-2.6 5.2C15.4 20.2 11 22 7 22a3 3 0 0 1-2.68-1.66L2.4 16.5\"/>","bell":"<path d=\"M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9\"/><path d=\"M10.3 21a1.94 1.94 0 0 0 3.4 0\"/>","biceps-flexed":"<path d=\"M12.409 13.017A5 5 0 0 1 22 15c0 3.866-4 7-9 7-4.077 0-8.153-.82-10.371-2.462-.426-.316-.631-.832-.62-1.362C2.118 12.723 2.627 2 10 2a3 3 0 0 1 3 3 2 2 0 0 1-2 2c-1.105 0-1.64-.444-2-1\"/><path d=\"M15 14a5 5 0 0 0-7.584 2\"/><path d=\"M9.964 6.825C8.019 7.977 9.5 13 8 15\"/>","book-open":"<path d=\"M12 7v14\"/><path d=\"M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z\"/>","calendar":"<path d=\"M8 2v4\"/><path d=\"M16 2v4\"/><rect width=\"18\" height=\"18\" x=\"3\" y=\"4\" rx=\"2\"/><path d=\"M3 10h18\"/>","camera":"<path d=\"M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z\"/><circle cx=\"12\" cy=\"13\" r=\"3\"/>","car-taxi-front":"<path d=\"M10 2h4\"/><path d=\"m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8\"/><path d=\"M7 14h.01\"/><path d=\"M17 14h.01\"/><rect width=\"18\" height=\"8\" x=\"3\" y=\"10\" rx=\"2\"/><path d=\"M5 18v2\"/><path d=\"M19 18v2\"/>","chart-column":"<path d=\"M3 3v16a2 2 0 0 0 2 2h16\"/><path d=\"M18 17V9\"/><path d=\"M13 17V5\"/><path d=\"M8 17v-3\"/>","chevrons-up":"<path d=\"m17 11-5-5-5 5\"/><path d=\"m17 18-5-5-5 5\"/>","circle":"<circle cx=\"12\" cy=\"12\" r=\"10\"/>","circle-alert":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><line x1=\"12\" x2=\"12\" y1=\"8\" y2=\"12\"/><line x1=\"12\" x2=\"12.01\" y1=\"16\" y2=\"16\"/>","circle-check":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"m9 12 2 2 4-4\"/>","clipboard-list":"<rect width=\"8\" height=\"4\" x=\"8\" y=\"2\" rx=\"1\" ry=\"1\"/><path d=\"M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2\"/><path d=\"M12 11h4\"/><path d=\"M12 16h4\"/><path d=\"M8 11h.01\"/><path d=\"M8 16h.01\"/>","clock":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><polyline points=\"12 6 12 12 16 14\"/>","coffee":"<path d=\"M10 2v2\"/><path d=\"M14 2v2\"/><path d=\"M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1\"/><path d=\"M6 2v2\"/>","cup-soda":"<path d=\"m6 8 1.75 12.28a2 2 0 0 0 2 1.72h4.54a2 2 0 0 0 2-1.72L18 8\"/><path d=\"M5 8h14\"/><path d=\"M7 15a6.47 6.47 0 0 1 5 0 6.47 6.47 0 0 0 5 0\"/><path d=\"m12 8 1-6h2\"/>","download":"<path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/><polyline points=\"7 10 12 15 17 10\"/><line x1=\"12\" x2=\"12\" y1=\"15\" y2=\"3\"/>","droplet":"<path d=\"M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z\"/>","dumbbell":"<path d=\"M14.4 14.4 9.6 9.6\"/><path d=\"M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l-1.768 1.767a2 2 0 1 1 2.828 2.829z\"/><path d=\"m21.5 21.5-1.4-1.4\"/><path d=\"M3.9 3.9 2.5 2.5\"/><path d=\"M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z\"/>","ear":"<path d=\"M6 8.5a6.5 6.5 0 1 1 13 0c0 6-6 6-6 10a3.5 3.5 0 1 1-7 0\"/><path d=\"M15 8.5a2.5 2.5 0 0 0-5 0v1a2 2 0 1 1 0 4\"/>","eye":"<path d=\"M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>","flame":"<path d=\"M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z\"/>","footprints":"<path d=\"M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z\"/><path d=\"M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z\"/><path d=\"M16 17h4\"/><path d=\"M4 13h4\"/>","gauge":"<path d=\"m12 14 4-4\"/><path d=\"M3.34 19a10 10 0 1 1 17.32 0\"/>","globe":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20\"/><path d=\"M2 12h20\"/>","graduation-cap":"<path d=\"M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z\"/><path d=\"M22 10v6\"/><path d=\"M6 12.5V16a6 3 0 0 0 12 0v-3.5\"/>","heart-pulse":"<path d=\"M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z\"/><path d=\"M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27\"/>","hotel":"<path d=\"M10 22v-6.57\"/><path d=\"M12 11h.01\"/><path d=\"M12 7h.01\"/><path d=\"M14 15.43V22\"/><path d=\"M15 16a5 5 0 0 0-6 0\"/><path d=\"M16 11h.01\"/><path d=\"M16 7h.01\"/><path d=\"M8 11h.01\"/><path d=\"M8 7h.01\"/><rect x=\"4\" y=\"2\" width=\"16\" height=\"20\" rx=\"2\"/>","hourglass":"<path d=\"M5 22h14\"/><path d=\"M5 2h14\"/><path d=\"M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22\"/><path d=\"M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2\"/>","id-card":"<path d=\"M16 10h2\"/><path d=\"M16 14h2\"/><path d=\"M6.17 15a3 3 0 0 1 5.66 0\"/><circle cx=\"9\" cy=\"11\" r=\"2\"/><rect x=\"2\" y=\"5\" width=\"20\" height=\"14\" rx=\"2\"/>","image":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\" ry=\"2\"/><circle cx=\"9\" cy=\"9\" r=\"2\"/><path d=\"m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21\"/>","leaf":"<path d=\"M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z\"/><path d=\"M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12\"/>","lightbulb":"<path d=\"M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5\"/><path d=\"M9 18h6\"/><path d=\"M10 22h4\"/>","lock":"<rect width=\"18\" height=\"11\" x=\"3\" y=\"11\" rx=\"2\" ry=\"2\"/><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"/>","medal":"<path d=\"M7.21 15 2.66 7.14a2 2 0 0 1 .13-2.2L4.4 2.8A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.14a2 2 0 0 1 .14 2.2L16.79 15\"/><path d=\"M11 12 5.12 2.2\"/><path d=\"m13 12 5.88-9.8\"/><path d=\"M8 7h8\"/><circle cx=\"12\" cy=\"17\" r=\"5\"/><path d=\"M12 18v-2h-.5\"/>","message-circle":"<path d=\"M7.9 20A9 9 0 1 0 4 16.1L2 22Z\"/>","moon":"<path d=\"M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z\"/>","newspaper":"<path d=\"M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2\"/><path d=\"M18 14h-8\"/><path d=\"M15 18h-5\"/><path d=\"M10 6h8v4h-8V6Z\"/>","notebook-pen":"<path d=\"M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4\"/><path d=\"M2 6h4\"/><path d=\"M2 10h4\"/><path d=\"M2 14h4\"/><path d=\"M2 18h4\"/><path d=\"M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z\"/>","pencil":"<path d=\"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z\"/><path d=\"m15 5 4 4\"/>","person-standing":"<circle cx=\"12\" cy=\"5\" r=\"1\"/><path d=\"m9 20 3-6 3 6\"/><path d=\"m6 8 6 2 6-2\"/><path d=\"M12 10v4\"/>","pill":"<path d=\"m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z\"/><path d=\"m8.5 8.5 7 7\"/>","plane":"<path d=\"M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z\"/>","plane-landing":"<path d=\"M2 22h20\"/><path d=\"M3.77 10.77 2 9l2-4.5 1.1.55c.55.28.9.84.9 1.45s.35 1.17.9 1.45L8 8.5l3-6 1.05.53a2 2 0 0 1 1.09 1.52l.72 5.4a2 2 0 0 0 1.09 1.52l4.4 2.2c.42.22.78.55 1.01.96l.6 1.03c.49.88-.06 1.98-1.06 2.1l-1.18.15c-.47.06-.95-.02-1.37-.24L4.29 11.15a2 2 0 0 1-.52-.38Z\"/>","plane-takeoff":"<path d=\"M2 22h20\"/><path d=\"M6.36 17.4 4 17l-2-4 1.1-.55a2 2 0 0 1 1.8 0l.17.1a2 2 0 0 0 1.8 0L8 12 5 6l.9-.45a2 2 0 0 1 2.09.2l4.02 3a2 2 0 0 0 2.1.2l4.19-2.06a2.41 2.41 0 0 1 1.73-.17L21 7a1.4 1.4 0 0 1 .87 1.99l-.38.76c-.23.46-.6.84-1.07 1.08L7.58 17.2a2 2 0 0 1-1.22.18Z\"/>","radio":"<path d=\"M4.9 19.1C1 15.2 1 8.8 4.9 4.9\"/><path d=\"M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5\"/><circle cx=\"12\" cy=\"12\" r=\"2\"/><path d=\"M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5\"/><path d=\"M19.1 4.9C23 8.8 23 15.1 19.1 19\"/>","refresh-cw":"<path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"/><path d=\"M8 16H3v5\"/>","repeat":"<path d=\"m17 2 4 4-4 4\"/><path d=\"M3 11v-1a4 4 0 0 1 4-4h14\"/><path d=\"m7 22-4-4 4-4\"/><path d=\"M21 13v1a4 4 0 0 1-4 4H3\"/>","route":"<circle cx=\"6\" cy=\"19\" r=\"3\"/><path d=\"M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15\"/><circle cx=\"18\" cy=\"5\" r=\"3\"/>","save":"<path d=\"M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z\"/><path d=\"M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7\"/><path d=\"M7 3v4a1 1 0 0 0 1 1h7\"/>","scale":"<path d=\"m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z\"/><path d=\"m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z\"/><path d=\"M7 21h10\"/><path d=\"M12 3v18\"/><path d=\"M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2\"/>","scan-barcode":"<path d=\"M3 7V5a2 2 0 0 1 2-2h2\"/><path d=\"M17 3h2a2 2 0 0 1 2 2v2\"/><path d=\"M21 17v2a2 2 0 0 1-2 2h-2\"/><path d=\"M7 21H5a2 2 0 0 1-2-2v-2\"/><path d=\"M8 7v10\"/><path d=\"M12 7v10\"/><path d=\"M17 7v10\"/>","search":"<circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.3-4.3\"/>","settings":"<path d=\"M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>","share":"<path d=\"M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8\"/><polyline points=\"16 6 12 2 8 6\"/><line x1=\"12\" x2=\"12\" y1=\"2\" y2=\"15\"/>","share-2":"<circle cx=\"18\" cy=\"5\" r=\"3\"/><circle cx=\"6\" cy=\"12\" r=\"3\"/><circle cx=\"18\" cy=\"19\" r=\"3\"/><line x1=\"8.59\" x2=\"15.42\" y1=\"13.51\" y2=\"17.49\"/><line x1=\"15.41\" x2=\"8.59\" y1=\"6.51\" y2=\"10.49\"/>","shield":"<path d=\"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z\"/>","siren":"<path d=\"M7 18v-6a5 5 0 1 1 10 0v6\"/><path d=\"M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2z\"/><path d=\"M21 12h1\"/><path d=\"M18.5 4.5 18 5\"/><path d=\"M2 12h1\"/><path d=\"M12 2v1\"/><path d=\"m4.929 4.929.707.707\"/><path d=\"M12 12v6\"/>","smartphone":"<rect width=\"14\" height=\"20\" x=\"5\" y=\"2\" rx=\"2\" ry=\"2\"/><path d=\"M12 18h.01\"/>","sprout":"<path d=\"M7 20h10\"/><path d=\"M10 20c5.5-2.5.8-6.4 3-10\"/><path d=\"M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z\"/><path d=\"M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z\"/>","star":"<path d=\"M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z\"/>","stethoscope":"<path d=\"M11 2v2\"/><path d=\"M5 2v2\"/><path d=\"M5 3H4a2 2 0 0 0-2 2v4a6 6 0 0 0 12 0V5a2 2 0 0 0-2-2h-1\"/><path d=\"M8 15a6 6 0 0 0 12 0v-3\"/><circle cx=\"20\" cy=\"10\" r=\"2\"/>","sun":"<circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2\"/><path d=\"M12 20v2\"/><path d=\"m4.93 4.93 1.41 1.41\"/><path d=\"m17.66 17.66 1.41 1.41\"/><path d=\"M2 12h2\"/><path d=\"M20 12h2\"/><path d=\"m6.34 17.66-1.41 1.41\"/><path d=\"m19.07 4.93-1.41 1.41\"/>","sunrise":"<path d=\"M12 2v8\"/><path d=\"m4.93 10.93 1.41 1.41\"/><path d=\"M2 18h2\"/><path d=\"M20 18h2\"/><path d=\"m19.07 10.93-1.41 1.41\"/><path d=\"M22 22H2\"/><path d=\"m8 6 4-4 4 4\"/><path d=\"M16 18a4 4 0 0 0-8 0\"/>","target":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><circle cx=\"12\" cy=\"12\" r=\"6\"/><circle cx=\"12\" cy=\"12\" r=\"2\"/>","thumbs-up":"<path d=\"M7 10v12\"/><path d=\"M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z\"/>","timer":"<line x1=\"10\" x2=\"14\" y1=\"2\" y2=\"2\"/><line x1=\"12\" x2=\"15\" y1=\"14\" y2=\"11\"/><circle cx=\"12\" cy=\"14\" r=\"8\"/>","trash-2":"<path d=\"M3 6h18\"/><path d=\"M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6\"/><path d=\"M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2\"/><line x1=\"10\" x2=\"10\" y1=\"11\" y2=\"17\"/><line x1=\"14\" x2=\"14\" y1=\"11\" y2=\"17\"/>","trending-down":"<polyline points=\"22 17 13.5 8.5 8.5 13.5 2 7\"/><polyline points=\"16 17 22 17 22 11\"/>","trending-up":"<polyline points=\"22 7 13.5 15.5 8.5 10.5 2 17\"/><polyline points=\"16 7 22 7 22 13\"/>","triangle-alert":"<path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\"/><path d=\"M12 9v4\"/><path d=\"M12 17h.01\"/>","trophy":"<path d=\"M6 9H4.5a2.5 2.5 0 0 1 0-5H6\"/><path d=\"M18 9h1.5a2.5 2.5 0 0 0 0-5H18\"/><path d=\"M4 22h16\"/><path d=\"M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22\"/><path d=\"M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22\"/><path d=\"M18 2H6v7a6 6 0 0 0 12 0V2Z\"/>","user":"<path d=\"M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2\"/><circle cx=\"12\" cy=\"7\" r=\"4\"/>","users":"<path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\"/><circle cx=\"9\" cy=\"7\" r=\"4\"/><path d=\"M22 21v-2a4 4 0 0 0-3-3.87\"/><path d=\"M16 3.13a4 4 0 0 1 0 7.75\"/>","utensils":"<path d=\"M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2\"/><path d=\"M7 2v20\"/><path d=\"M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7\"/>","video":"<path d=\"m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5\"/><rect x=\"2\" y=\"6\" width=\"14\" height=\"12\" rx=\"2\"/>","watch":"<circle cx=\"12\" cy=\"12\" r=\"6\"/><polyline points=\"12 10 12 12 13 13\"/><path d=\"m16.13 7.66-.81-4.05a2 2 0 0 0-2-1.61h-2.68a2 2 0 0 0-2 1.61l-.78 4.05\"/><path d=\"m7.88 16.36.8 4a2 2 0 0 0 2 1.61h2.72a2 2 0 0 0 2-1.61l.81-4.05\"/>","wifi":"<path d=\"M12 20h.01\"/><path d=\"M2 8.82a15 15 0 0 1 20 0\"/><path d=\"M5 12.859a10 10 0 0 1 14 0\"/><path d=\"M8.5 16.429a5 5 0 0 1 7 0\"/>","wrench":"<path d=\"M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z\"/>","zap":"<path d=\"M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z\"/>"};
+const EMOJI_ICONS = {"🏀":"chevrons-up","💪":"biceps-flexed","🌿":"leaf","🔥":"flame","🚶":"footprints","🏃":"route","🏋":"dumbbell","🍑":"target","⚡":"zap","🦵":"arrow-down-to-line","🎯":"target","🧘":"person-standing","❤":"heart-pulse","🌱":"sprout","✅":"circle-check:ok","⚠":"triangle-alert:warn","🚨":"siren:err","🔴":"circle-alert:err","🟢":"circle-check:ok","🟡":"circle-alert:warn","💡":"lightbulb","🔒":"lock","🚕":"car-taxi-front","🛫":"plane-takeoff","🛬":"plane-landing","✈️":"plane","📅":"calendar","🏨":"hotel","🛏":"bed","📟":"radio","🎓":"graduation-cap","😴":"moon","🕐":"clock","☀":"sun","🌅":"sunrise","🌍":"globe","⭐":"star","🏅":"medal","🏆":"trophy","🎖":"award","💯":"badge-check","🦾":"shield","🥇":"medal:gold","🥈":"medal","🥉":"medal","👟":"footprints","💧":"droplet","💊":"pill","🩹":"bandage","🩺":"stethoscope","👁":"eye","👂":"ear","⚖":"scale","🥩":"beef","🍽":"utensils","☕":"coffee","🥣":"utensils","🥤":"cup-soda","📉":"trending-down","📈":"trending-up","📊":"chart-column","📋":"clipboard-list","📝":"notebook-pen","🪪":"id-card","📖":"book-open","📰":"newspaper","👤":"user","👥":"users","💬":"message-circle","👏":"thumbs-up","👍":"thumbs-up","📡":"share-2","📤":"share","📥":"download","⬆":"share","🛡":"shield","⌚":"watch","💍":"circle","📱":"smartphone","📲":"smartphone","🔔":"bell","📷":"camera","🖼":"image","📹":"video","🔎":"search","⚙":"settings","🗑":"trash-2","✏":"pencil","💾":"save","⏱":"timer","⏳":"hourglass","🛠":"wrench","🔁":"repeat","🔄":"refresh-cw","🔢":"scan-barcode","🚦":"gauge","📶":"wifi"};
+const EMOJI_KEEP = "·•←↑→↓↩↻⇄⌄▲▶▼◀★✈✎✓✕✦❖➰";
+// ICONS:END
+function iconSvg(name, tone) {
+  return '<svg class="ic' + (tone ? ' ic-' + tone : '') + '" viewBox="0 0 24 24" aria-hidden="true"><use href="#ic-' + name + '"/></svg>';
+}
+const EMOJI_SWAP_RE = new RegExp('(' + Object.keys(EMOJI_ICONS).sort((a, b) => b.length - a.length).map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')\\uFE0F?', 'g');
+// The same swap on a string of plain text: [text, icon name, text, ...].
+// Kept apart from the page code so it can be tested without a page.
+function emojiSplit(text) {
+  const out = []; let last = 0, m; EMOJI_SWAP_RE.lastIndex = 0;
+  while ((m = EMOJI_SWAP_RE.exec(text))) {
+    if (m.index > last) out.push({ text: text.slice(last, m.index) });
+    const [name, tone] = EMOJI_ICONS[m[1]].split(':'); out.push({ icon: name, tone: tone || '' });
+    last = m.index + m[0].length;
+  }
+  if (!out.length) return null;
+  if (last < text.length) out.push({ text: text.slice(last) });
+  return out;
+}
+const EMOJI_SKIP_SEL = 'script,style,textarea,select,option,title,svg,[data-raw],[contenteditable]';
+function swapEmojiIn(root) {
+  const hits = [];
+  const take = n => { if (n.nodeValue && n.nodeValue.length && n.parentElement && !n.parentElement.closest(EMOJI_SKIP_SEL)) { const parts = emojiSplit(n.nodeValue); if (parts) hits.push([n, parts]); } };
+  if (root.nodeType === 3) take(root);
+  else if (root.nodeType === 1 || root.nodeType === 11) { const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); while (w.nextNode()) take(w.currentNode); }
+  hits.forEach(([n, parts]) => {
+    if (!n.parentNode) return;
+    const frag = document.createDocumentFragment();
+    parts.forEach(pt => {
+      if (pt.text != null) { frag.appendChild(document.createTextNode(pt.text)); return; }
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', 'ic' + (pt.tone ? ' ic-' + pt.tone : '')); svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
+      const use = document.createElementNS('http://www.w3.org/2000/svg', 'use'); use.setAttribute('href', '#ic-' + pt.icon);
+      svg.appendChild(use); frag.appendChild(svg);
+    });
+    n.parentNode.replaceChild(frag, n);
+  });
+}
+function startIconSwap() {
+  if (typeof document === 'undefined' || typeof MutationObserver === 'undefined' || !document.body || document.getElementById('fcfIconSprite')) return;
+  const sprite = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  sprite.setAttribute('id', 'fcfIconSprite'); sprite.setAttribute('width', '0'); sprite.setAttribute('height', '0'); sprite.setAttribute('aria-hidden', 'true');
+  sprite.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden';
+  sprite.innerHTML = Object.keys(ICON_PATHS).map(n => '<symbol id="ic-' + n + '" viewBox="0 0 24 24">' + ICON_PATHS[n] + '</symbol>').join('');
+  document.body.insertBefore(sprite, document.body.firstChild);
+  swapEmojiIn(document.body);
+  new MutationObserver(list => {
+    for (const mu of list) {
+      if (mu.type === 'characterData') swapEmojiIn(mu.target);
+      else mu.addedNodes.forEach(nd => { if (nd.nodeType === 1 || nd.nodeType === 3) swapEmojiIn(nd); });
+    }
+  }).observe(document.body, { childList: true, subtree: true, characterData: true });
+}
+try { startIconSwap(); } catch (e) { console.warn('Icon swap could not start; emoji will show:', e); }
 
 
 // ─── OURA RING OAUTH2 CONFIG ─────────────────────────────────────────────────
@@ -2626,8 +2700,8 @@ function renderRoot() {
   if (tabbar) tabbar.style.display = 'flex';
   page.style.padding = '16px 16px calc(60px + var(--safe-bot))';
   
-  const subEl = document.getElementById('topbarSub');
-  if (subEl) subEl.textContent = FCF_VERSION + ' · FLIGHT RELEASE';
+  // Nov 16 2026 (Chad): the version line is gone from the header; it is no
+  // use to a member. The version still shows on Pilot Profile for support.
   
   renderPage();
 }
@@ -3674,7 +3748,7 @@ function crewCardHtml(a) {
     '<button class="btn-ghost" style="padding:4px 8px;font-size:1rem;line-height:1" onclick="crewMenu(\'' + a.id + '\')">···</button></div>';
   h += '<div style="font-size:1rem;font-weight:600;margin-bottom:2px">' + icon + ' ' + crewEsc(a.title) + '</div>';
   const stat = crewStatLine(a); if (stat) h += '<div style="font-family:var(--mono);font-size:0.75rem;color:var(--gold);margin-bottom:6px">' + crewEsc(stat) + '</div>';
-  if (a.note) h += '<div style="font-size:0.8125rem;line-height:1.5;margin-bottom:6px">' + crewEsc(a.note) + '</div>';
+  if (a.note) h += '<div data-raw style="font-size:0.8125rem;line-height:1.5;margin-bottom:6px">' + crewEsc(a.note) + '</div>';
   h += crewPhotosHtml(a);
   h += '<div style="display:flex;gap:8px;margin-top:8px">' +
     '<button class="btn-ghost" style="padding:6px 10px;font-size:0.8125rem;border:1px solid ' + (a.my_kudos ? 'var(--gold)' : 'var(--border)') + ';border-radius:8px;color:' + (a.my_kudos ? 'var(--gold)' : 'var(--text)') + '" onclick="crewKudos(\'' + a.id + '\')">👏 ' + (a.kudos_count || 0) + '</button>' +
@@ -3684,7 +3758,7 @@ function crewCardHtml(a) {
     h += '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">';
     if (!cmts) h += '<div style="font-size:0.75rem;color:var(--muted)">Loading…</div>';
     else {
-      cmts.forEach(c => { h += '<div class="fb" style="align-items:flex-start;padding:4px 0;font-size:0.8125rem"><div style="display:flex;gap:8px;align-items:flex-start;min-width:0">' + avatarHtml(c.user_id, c.crew_profiles?.callsign || 'crew', 24) + '<div style="min-width:0"><b style="cursor:pointer" onclick="crewGo(\'profile\',\'' + c.user_id + '\')">' + crewEsc(c.crew_profiles?.callsign || 'crew') + '</b> <span style="color:var(--muted);font-size:0.625rem">' + crewAgo(c.created_at) + '</span><div style="line-height:1.5">' + crewEsc(c.body) + '</div></div></div>' + (c.user_id === ST.user.id || mine ? '<button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewDeleteComment(\'' + a.id + '\',\'' + c.id + '\')">delete</button>' : '<button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewReport(\'comment\',\'' + c.id + '\')">report</button>') + '</div>'; });
+      cmts.forEach(c => { h += '<div class="fb" style="align-items:flex-start;padding:4px 0;font-size:0.8125rem"><div style="display:flex;gap:8px;align-items:flex-start;min-width:0">' + avatarHtml(c.user_id, c.crew_profiles?.callsign || 'crew', 24) + '<div style="min-width:0"><b style="cursor:pointer" onclick="crewGo(\'profile\',\'' + c.user_id + '\')">' + crewEsc(c.crew_profiles?.callsign || 'crew') + '</b> <span style="color:var(--muted);font-size:0.625rem">' + crewAgo(c.created_at) + '</span><div data-raw style="line-height:1.5">' + crewEsc(c.body) + '</div></div></div>' + (c.user_id === ST.user.id || mine ? '<button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewDeleteComment(\'' + a.id + '\',\'' + c.id + '\')">delete</button>' : '<button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewReport(\'comment\',\'' + c.id + '\')">report</button>') + '</div>'; });
       if (!cmts.length) h += '<div style="font-size:0.75rem;color:var(--muted)">No comments yet.</div>';
     }
     h += '<div style="display:flex;gap:6px;margin-top:8px"><input id="crewCmt_' + a.id + '" type="text" maxlength="500" placeholder="Say something" style="flex:1" onkeydown="if(event.key===\'Enter\')crewComment(\'' + a.id + '\')"><button class="btn btn-outline" style="width:auto;padding:0 14px" onclick="crewComment(\'' + a.id + '\')">Post</button></div></div>';
@@ -3799,7 +3873,7 @@ async function crewLoadProfileHeader(userId) {
     const champ = p.base ? await crewBaseLeaders(p.base) : null;
     const wonLast = champ && champ.last && champ.last.user_id === p.user_id;
     box.innerHTML = '<div class="fb" style="align-items:flex-start"><div style="display:flex;gap:12px;align-items:flex-start;min-width:0">' + avatarHtml(p.user_id, p.callsign, 64) + '<div style="min-width:0"><div style="font-size:1.125rem;font-weight:600">' + crewEsc(p.callsign) + foundingChip(p.user_id) + '</div>' +
-      (wonLast ? '<div style="font-size:0.75rem;color:var(--gold);margin-top:2px">🏆 Top lifter at ' + crewEsc(p.base) + ', ' + crewLastMonthName() + '</div>' : '') + '<div style="font-size:0.75rem;color:var(--muted)">' + [p.base, p.airline].filter(Boolean).map(crewEsc).join(' · ') + '</div>' + (p.bio ? '<div style="font-size:0.8125rem;margin-top:6px;line-height:1.5">' + crewEsc(p.bio) + '</div>' : '') + '</div></div>' +
+      (wonLast ? '<div style="font-size:0.75rem;color:var(--gold);margin-top:2px">🏆 Top lifter at ' + crewEsc(p.base) + ', ' + crewLastMonthName() + '</div>' : '') + '<div style="font-size:0.75rem;color:var(--muted)">' + [p.base, p.airline].filter(Boolean).map(crewEsc).join(' · ') + '</div>' + (p.bio ? '<div data-raw style="font-size:0.8125rem;margin-top:6px;line-height:1.5">' + crewEsc(p.bio) + '</div>' : '') + '</div></div>' +
       (me ? '<button class="btn-ghost" style="font-size:0.75rem;color:var(--gold)" onclick="crewGo(\'settings\')">Settings</button>' : '<div style="display:flex;flex-direction:column;gap:6px"><button class="btn-ghost" style="font-size:0.75rem;padding:6px 10px;border:1px solid ' + (f ? 'var(--border)' : 'var(--gold)') + ';border-radius:8px;color:' + (f ? 'var(--muted)' : 'var(--gold)') + '" onclick="crewFollow(\'' + userId + '\',' + (f || pend ? 'false' : 'true') + ')">' + (f ? 'Following' : pend ? 'Requested' : (p.visibility === 'followers' ? 'Request to follow' : 'Follow')) + '</button><button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewReport(\'profile\',\'' + userId + '\')">Report</button><button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewBlock(\'' + userId + '\',\'' + crewEsc(p.callsign).replace(/'/g, '') + '\')">Block</button></div>') + '</div>' +
       '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:12px">' + [['FOLLOWERS', k.followers], ['FOLLOWING', k.following], ['POSTS', k.activities], ['MI THIS MO', Number(k.month_miles || 0)]].map(([l, v]) => '<div style="text-align:center"><div style="font-family:var(--mono);font-size:1rem;font-weight:600">' + (v ?? 0) + '</div><div style="font-size:0.5625rem;color:var(--muted);letter-spacing:.1em">' + l + '</div></div>').join('') + '</div>';
   } catch (e) { box.innerHTML = '<div style="font-size:0.75rem;color:var(--muted)">Could not load this profile.</div>'; }
@@ -17631,45 +17705,6 @@ const STAPLE_FOOD_BOOSTS = {
 // "protein shake" matches before a more generic pattern could grab it.
 // Not exhaustive by design — an unmatched food just gets the plate
 // fallback rather than a guessed-wrong icon.
-const FOOD_EMOJI_PATTERNS = [
-  [/protein\s*shake|protein\s*powder|whey/i, '🥤'],
-  [/banana/i, '🍌'],
-  [/pizza/i, '🍕'],
-  [/burger/i, '🍔'],
-  [/sandwich|\bsub\b/i, '🥪'],
-  [/taco/i, '🌮'],
-  [/burrito/i, '🌯'],
-  [/salad/i, '🥗'],
-  [/\begg/i, '🥚'],
-  [/bacon/i, '🥓'],
-  [/chicken|turkey/i, '🍗'],
-  [/steak|\bbeef\b/i, '🥩'],
-  [/salmon|\bfish\b|tuna/i, '🐟'],
-  [/shrimp/i, '🍤'],
-  [/\brice\b/i, '🍚'],
-  [/pasta|spaghetti|noodle/i, '🍝'],
-  [/toast|\bbread\b|bagel/i, '🍞'],
-  [/oatmeal|\boats\b/i, '🥣'],
-  [/yogurt/i, '🥣'],
-  [/cheese/i, '🧀'],
-  [/pancake|waffle/i, '🥞'],
-  [/donut|doughnut/i, '🍩'],
-  [/cookie/i, '🍪'],
-  [/ice cream/i, '🍦'],
-  [/coffee/i, '☕'],
-  [/\bmilk\b/i, '🥛'],
-  [/broccoli|vegetable|veggie/i, '🥦'],
-  [/avocado/i, '🥑'],
-  [/apple/i, '🍎'],
-  [/orange/i, '🍊'],
-  [/grape/i, '🍇'],
-  [/strawberr|\bberry\b|berries/i, '🍓'],
-  [/watermelon/i, '🍉'],
-  [/potato|fries/i, '🍟'],
-  [/soup/i, '🍲'],
-  [/protein\s*bar|granola\s*bar|\bbar\b/i, '🍫'],
-  [/pie\b/i, '🥧'],
-];
 
 // Shared "working on it" state for anything that calls out to the vision
 // API or a barcode lookup — both can take several real seconds, and a
@@ -17695,13 +17730,8 @@ function autoGrowTextarea(el) {
   el.style.height = (el.scrollHeight + 2) + 'px';
 }
 
-function foodEmoji(description) {
-  const d = description || '';
-  for (const [pattern, emoji] of FOOD_EMOJI_PATTERNS) {
-    if (pattern.test(d)) return emoji;
-  }
-  return '🍽️'; // generic fallback so every food row still has an icon slot
-}
+// Nov 16 2026: food rows no longer carry a little picture of the food.
+function foodEmoji(description) { return ''; }
 
 // Finds the best staple boost for a query. Exact key match wins outright;
 // otherwise falls back to the LONGEST key that appears as a substring of

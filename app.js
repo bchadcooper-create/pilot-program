@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.59.2 / 20261116_11
+ * Version/build: fcf-v5.60.0 / 20261116_12
  */
 
-const FCF_VERSION = 'fcf-v5.59.2';
-const FCF_BUILD   = '20261116_11';
+const FCF_VERSION = 'fcf-v5.60.0';
+const FCF_BUILD   = '20261116_12';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -46,6 +46,97 @@ function currentTextSize() {
 // Runs at load, before anything renders. localStorage can throw in a
 // private window or with site data blocked; the app must still start.
 try { applyTextSize(localStorage.getItem(TEXT_SIZE_LS_KEY)); } catch (e) { /* default size */ }
+
+// ─── UNITS ──────────────────────────────────────────────────────────────────
+// Added Nov 16 2026 (Chad): pounds or kilograms, liters or fluid ounces.
+//
+// Everything is still STORED the way it always was: weights in pounds,
+// water in liters. Saved workouts, records, leaderboards, exports and the
+// AI coach all keep reading those. Only what is shown, and what a typed
+// number means, follows the member's choice. Every screen goes through the
+// helpers below; none of them does its own conversion.
+//
+// Not converted yet (they stay in US units): running distance, height and
+// waist, the FAA Medical section, exports and the wisdom cards.
+const LB_PER_KG = 2.2046226218;
+const FLOZ_PER_L = 33.8140227;
+const UNITS_LS_KEY = 'fcf_units';
+const UNIT_CHOICES = { weight: ['lb', 'kg'], water: ['L', 'oz'] };
+function cleanUnits(u) {
+  const o = (u && typeof u === 'object') ? u : {};
+  return { weight: o.weight === 'kg' ? 'kg' : 'lb', water: o.water === 'oz' ? 'oz' : 'L' };
+}
+// A first guess for someone who has never chosen: kilograms outside the US.
+function defaultUnits() {
+  let region = '';
+  try { region = (new Intl.Locale(navigator.language)).region || ''; } catch (e) { /* older browser: US units */ }
+  return cleanUnits({ weight: region && region !== 'US' ? 'kg' : 'lb', water: 'L' });
+}
+function loadUnitsAtStart() {
+  try { const raw = localStorage.getItem(UNITS_LS_KEY); if (raw) return cleanUnits(JSON.parse(raw)); } catch (e) { /* fall through */ }
+  return defaultUnits();
+}
+function unitWt()    { return (typeof ST !== 'undefined' && ST.units && ST.units.weight === 'kg') ? 'kg' : 'lb'; }
+function unitWater() { return (typeof ST !== 'undefined' && ST.units && ST.units.water === 'oz') ? 'oz' : 'L'; }
+function trimNum(n, dp) { return String(parseFloat(Number(n).toFixed(dp == null ? 2 : dp))); }
+
+// Pounds to the number the member sees. mode:
+//   'exact' (default): what was lifted. Pounds as stored; kilograms to 0.01.
+//   'round': a whole pound, or the nearest half kilogram (leaderboards).
+function wtNum(lb, mode) {
+  const n = parseFloat(lb);
+  if (!isFinite(n)) return null;
+  if (unitWt() === 'kg') { const kg = n / LB_PER_KG; return mode === 'round' ? Math.round(kg * 2) / 2 : parseFloat(kg.toFixed(2)); }
+  return mode === 'round' ? Math.round(n) : n;
+}
+function wtStr(lb, mode) { const v = wtNum(lb, mode); return (v === null ? '–' : v) + ' ' + unitWt(); }
+// What a weight box shows for a stored value, and what a typed value is
+// stored as. In pounds both are the raw text, exactly as before.
+function wtInputVal(stored) {
+  if (stored === '' || stored == null) return '';
+  if (unitWt() === 'lb') return String(stored);
+  const v = wtNum(stored); return v === null ? '' : String(v);
+}
+function wtFromInput(typed) {
+  if (unitWt() === 'lb') return typed;
+  const n = parseFloat(String(typed == null ? '' : typed).replace(',', '.'));
+  return isFinite(n) ? String(parseFloat((n * LB_PER_KG).toFixed(2))) : '';
+}
+// Liters to what the member sees.
+function waterNum(liters, dp) {
+  const n = parseFloat(liters) || 0;
+  return unitWater() === 'oz' ? Math.round(n * FLOZ_PER_L) : parseFloat(n.toFixed(dp == null ? 1 : dp));
+}
+function waterStr(liters, dp) { return (unitWater() === 'oz' ? waterNum(liters) : (parseFloat(liters) || 0).toFixed(dp == null ? 1 : dp)) + (unitWater() === 'oz' ? ' oz' : ' L'); }
+function waterFromInput(typed) {
+  const n = parseFloat(String(typed == null ? '' : typed).replace(',', '.'));
+  if (!isFinite(n)) return NaN;
+  return unitWater() === 'oz' ? Math.round(n / FLOZ_PER_L * 1000) / 1000 : n;
+}
+// A small "drink this much now" amount: millilitres, or whole ounces.
+function waterSip(liters) { return unitWater() === 'oz' ? Math.max(1, Math.round(liters * FLOZ_PER_L)) + ' oz' : Math.round(liters * 1000) + 'ml'; }
+
+async function setUnit(kind, value) {
+  if (!UNIT_CHOICES[kind] || !UNIT_CHOICES[kind].includes(value)) return;
+  ST.units = cleanUnits(Object.assign({}, ST.units, { [kind]: value }));
+  try { localStorage.setItem(UNITS_LS_KEY, JSON.stringify(ST.units)); } catch (e) { /* fine */ }
+  haptic('selection'); renderPage();
+  try {
+    if (ST.user) { const profile = (await dbGetProfile()) || {}; profile.units = ST.units; await dbSetProfile(profile); }
+  } catch (e) { console.warn('Saving units failed; kept on this phone:', e); }
+}
+// The picker: App Settings, and Pilot Profile (where a new member lands).
+function renderUnitsControl() {
+  const seg = (kind, value, label) => {
+    const on = ST.units[kind] === value;
+    return '<button onclick="setUnit(\'' + kind + '\',\'' + value + '\')" style="flex:1;min-width:0;padding:10px 4px;border-radius:10px;cursor:pointer;font-family:\'Inter\',sans-serif;font-weight:600;font-size:0.8125rem;border:1px solid ' + (on ? 'var(--gold)' : 'var(--border)') + ';background:' + (on ? 'var(--gold-tint)' : 'transparent') + ';color:' + (on ? 'var(--gold)' : 'var(--text)') + '">' + label + '</button>';
+  };
+  const row = (title, kind, a, b) => '<div style="font-size:0.75rem;color:var(--muted);margin:10px 0 6px">' + title + '</div><div style="display:flex;gap:6px">' + seg(kind, a[0], a[1]) + seg(kind, b[0], b[1]) + '</div>';
+  return '<div class="card mb12"><div style="font-size:0.875rem">Units</div>' +
+    '<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">How weights and water are shown and typed. Nothing you have logged changes.</div>' +
+    row('Weight', 'weight', ['lb', 'Pounds (lb)'], ['kg', 'Kilograms (kg)']) +
+    row('Water', 'water', ['L', 'Liters (L)'], ['oz', 'Ounces (fl oz)']) + '</div>';
+}
 
 // ─── ICONS ──────────────────────────────────────────────────────────────────
 // Reported Nov 16 2026: members said the app "feels like it was made by AI",
@@ -324,6 +415,7 @@ const ST = {
   sets: {},
   expanded: {},
   wisdomIdx: null, // null = use today's auto-rotated card; set by Next/Prev/jump for manual browsing
+  units: loadUnitsAtStart(), // { weight: 'lb'|'kg', water: 'L'|'oz' }; see UNITS at the top
   chartInst: {},
 
   customExercises: [], // user-created exercises, persisted
@@ -450,9 +542,9 @@ function hydroAdvice(now) {
   if (paced <= hydroTarget() * 0.15) return null; // too early to advise anything yet
   const def = hydroPacedDeficit(now);
   if (def <= 0) return null;
-  if (def < 0.25) return `Sip ${Math.round(def*1000)}ml now; you're on pace, just top up a little.`;
-  if (def < 0.5)  return `Drink ${Math.round(def*1000)}ml soon to stay on pace for the day. Even 2% dehydration measurably cuts strength, endurance, and focus.`;
-  return `You're ${def.toFixed(1)}L behind pace for this point in the day. Drink 500ml now, then sip regularly. Total target is still ${hydroTarget().toFixed(1)}L.`;
+  if (def < 0.25) return `Sip ${waterSip(def)} now; you're on pace, just top up a little.`;
+  if (def < 0.5)  return `Drink ${waterSip(def)} soon to stay on pace for the day. Even 2% dehydration measurably cuts strength, endurance, and focus.`;
+  return `You're ${waterStr(def)} behind pace for this point in the day. Drink ${waterSip(0.5)} now, then sip regularly. Total target is still ${waterStr(hydroTarget())}.`;
 }
 
 // Patches just the hydration display elements on every keystroke instead of
@@ -533,11 +625,11 @@ function updateHydrationUI() {
 
   const noFlyBox = document.getElementById('noFlyBox');
   if (noFlyBox) noFlyBox.innerHTML = (ST.flightHrsTouched && ST.flightHrs === 0)
-    ? '<div class="alert alert-info" style="margin-bottom:8px"><div class="alert-icon">ℹ️</div><div>No-fly day: minimum 1.0L hydration target still applies. Your body needs baseline water regardless of duty status.</div></div>'
+    ? '<div class="alert alert-info" style="margin-bottom:8px"><div class="alert-icon">ℹ️</div><div>No-fly day: the minimum hydration target ('+waterStr(1)+') still applies. Your body needs baseline water regardless of duty status.</div></div>'
     : '';
 
   const targetEl = document.getElementById('hydroTargetVal');
-  if (targetEl) targetEl.textContent = hydroTarget().toFixed(1)+'L';
+  if (targetEl) targetEl.textContent = waterStr(hydroTarget());
 
   const statusEl = document.getElementById('hydroStatusLbl');
   if (statusEl) { statusEl.textContent = hs.label; statusEl.style.color = hs.color; }
@@ -3230,7 +3322,7 @@ async function loadLeaderboardGlance() {
       } else {
         rows.forEach((r, i) => {
           const medal = medalBadge(i);
-          const val = isRunning ? formatMiPace(r.distance_mi, r.duration_sec) : Math.round(r.weight_lb)+' lb';
+          const val = isRunning ? formatMiPace(r.distance_mi, r.duration_sec) : wtStr(r.weight_lb, 'round');
           parts.push('<div class="fb" style="padding:2px 0;gap:6px"><span style="font-size:0.625rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+medal+' '+sanitizeUserText(r.username)+'</span><span style="font-family:var(--mono);font-size:0.625rem;color:var(--gold);flex-shrink:0">'+val+'</span></div>');
         });
       }
@@ -3998,10 +4090,10 @@ async function loadLeaderboardRows() {
     const parts = ['<div class="card mb12" style="padding:8px 0">'];
     data.forEach((r, i) => {
       const mine = ST.user && r.user_id === ST.user.id;
-      const val = ST.lbMode === 'dots' ? (r.dots||0).toFixed(1) : Math.round(r.weight_lb) + ' lb';
+      const val = ST.lbMode === 'dots' ? (r.dots||0).toFixed(1) : wtStr(r.weight_lb, 'round');
       const sub = [];
       if (r.reps) sub.push('×'+r.reps);
-      if (r.bodyweight_lb) sub.push('@ '+Math.round(r.bodyweight_lb)+' lb bw');
+      if (r.bodyweight_lb) sub.push('@ '+wtStr(r.bodyweight_lb, 'round')+' bw');
       const medal = medalBadge(i);
       parts.push('<div class="fb" style="padding:9px 14px'+(mine?';background:rgba(212,175,55,0.07)':'')+(i<data.length-1?';border-bottom:1px solid var(--border)':'')+'">');
       parts.push('<div style="display:flex;align-items:center;gap:10px;min-width:0"><div style="width:24px;text-align:center;flex-shrink:0">'+medal+'</div>');
@@ -4649,6 +4741,8 @@ function applyProfileToState(profile) {
   if (profile.username)                     ST.username = profile.username;
   if (profile.homeBase)                     ST.homeBase = cleanBase(profile.homeBase);
   ST.avatarPath = cleanAvatarPath(profile.avatarPath);
+  // Units follow the account once chosen there; until then the phone's own choice stands.
+  if (profile.units) { ST.units = cleanUnits(profile.units); try { localStorage.setItem(UNITS_LS_KEY, JSON.stringify(ST.units)); } catch (e) { /* fine */ } }
   // BUG FIX (reported: fuel plan / tracking toggles reset after a
   // refresh, the same way badges used to before that fix was added).
   // Same root cause, same fix — these were never hydrated here either.
@@ -5959,7 +6053,7 @@ function hydrationRowHTML(ctx, standalone) {
   // the same moment, so the number itself is the control.
   return '<div class="fb" style="'+(standalone?'':'margin-top:10px;padding-top:10px;border-top:1px solid var(--border);')+'cursor:pointer;padding-bottom:2px" onclick="haptic(\'light\');openQuickWaterLog()">' +
     '<span style="font-family:var(--mono);font-size:0.5625rem;letter-spacing:.1em;color:var(--muted)">💧 HYDRATION</span>' +
-    '<span style="font-family:var(--mono);font-size:0.625rem;color:'+hs.color+'">'+ST.waterIn.toFixed(1)+'/'+hydroTarget().toFixed(1)+'L · '+hs.label+' <span style="color:var(--gold)">+ LOG</span></span></div>';
+    '<span style="font-family:var(--mono);font-size:0.625rem;color:'+hs.color+'">'+waterNum(ST.waterIn)+' / '+waterStr(hydroTarget())+' · '+hs.label+' <span style="color:var(--gold)">+ LOG</span></span></div>';
 }
 
 function renderTrackingToggles() {
@@ -8805,7 +8899,7 @@ function formatSetPerformance(exItem, sets) {
   // reps_weight (default)
   const weights = loggedSets.map(s=>parseFloat(s.weight)||0).filter(v=>v>0);
   const topSet = loggedSets.reduce((best,s) => (parseFloat(s.weight)||0) > (parseFloat(best.weight)||0) ? s : best, loggedSets[0]);
-  return loggedSets.length+'×'+(topSet.reps||'–')+' @ '+(weights.length?Math.max(...weights):'–')+' lb';
+  return loggedSets.length+'×'+(topSet.reps||'–')+' @ '+(weights.length?wtStr(Math.max(...weights)):'– '+unitWt());
 }
 
 // Was this exercise's best value on this day higher than every prior session? (PR at the time)
@@ -9706,7 +9800,7 @@ function edFieldsFor(exDef) {
   if (exDef.inputType === 'reps_only') { const u = repValueUnit(exDef); return u ? [['reps', u.placeholder, u.short]] : [['reps','Reps','reps']]; }
   if (exDef.inputType === 'reps_height') return [['reps','Reps','reps'],['height','Height','in']];
   if (exDef.inputType === 'reps_distance') return [['reps','Reps','reps'],['distance','Distance','in']];
-  return [['reps','Reps','reps'],['weight','Weight','lb']];
+  return [['reps','Reps','reps'],['weight','Weight',unitWt()]];
 }
 
 function emptySnapshot() { return { taxi:[], takeoff:[], enroute:[], landing:[] }; }
@@ -9783,7 +9877,7 @@ function renderSessionEditor() {
         const raw = set[field];
         const shown = unit === 'min'
           ? (raw ? Math.round((parseFloat(raw)/60)*10)/10 : '')
-          : (raw || '');
+          : field === 'weight' ? wtInputVal(raw) : (raw || '');
         const handler = unit === 'min' ? 'edSetValMin' : 'edSetVal';
         parts.push('<div style="flex:1;min-width:0;display:flex;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:0 8px 0 0">');
         parts.push('<input type="text" inputmode="decimal" placeholder="'+label+'" value="'+shown+'" style="flex:1;min-width:0;background:transparent;border:none;padding:8px;font-size:1rem;color:var(--text);outline:none" oninput="'+handler+'(\''+exDef.id+'\','+i+',\''+field+'\',this.value)">');
@@ -9824,7 +9918,7 @@ function isMinuteScale(exItem) {
 
 function edSetVal(exId, i, field, value) {
   const sets = ST.editSession.session.sets[exId];
-  if (sets && sets[i]) sets[i][field] = value;
+  if (sets && sets[i]) sets[i][field] = field === 'weight' ? wtFromInput(value) : value;
 }
 // Minute-displayed fields store seconds internally.
 function edSetValMin(exId, i, field, value) {
@@ -10521,11 +10615,11 @@ async function renderPreflight(p) {
   parts.push('<div class="field-row" style="margin-bottom:10px">');
   parts.push('<div class="field" style="margin-bottom:0"><label>Flight Hours Today</label>');
   parts.push('<input type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="'+ST.flightHrsRaw+'" placeholder="0 = no-fly day" oninput="ST.flightHrsRaw=this.value;ST.flightHrs=parseFloat(this.value)||0;ST.flightHrsTouched=true;updateHydrationUI()"></div>');
-  parts.push('<div class="field" style="margin-bottom:0"><label>Water Consumed (L)</label>');
-  parts.push('<input type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="'+ST.waterInRaw+'" placeholder="e.g. 1.2 or .5" oninput="ST.waterInRaw=this.value;ST.waterIn=parseFloat(this.value)||0;updateHydrationUI()"></div>');
+  parts.push('<div class="field" style="margin-bottom:0"><label>Water Consumed ('+(unitWater()==='oz'?'oz':'L')+')</label>');
+  parts.push('<input type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" value="'+waterBoxValue()+'" placeholder="'+(unitWater()==='oz'?'e.g. 40':'e.g. 1.2 or .5')+'" oninput="setWaterFromBox(this.value);updateHydrationUI()"></div>');
   parts.push('</div>');
-  parts.push('<div id="noFlyBox">'+(ST.flightHrsTouched && ST.flightHrs === 0 ? '<div class="alert alert-info" style="margin-bottom:8px"><div class="alert-icon">ℹ️</div><div>No-fly day: minimum 1.0L hydration target still applies. Your body needs baseline water regardless of duty status.</div></div>' : '')+'</div>');
-  parts.push('<div class="fb" style="margin-bottom:6px"><span style="font-family:var(--mono);font-size:0.6875rem;color:var(--muted)">TARGET: <span id="hydroTargetVal" style="color:var(--text)">'+hydroTarget().toFixed(1)+'L</span></span><span id="hydroStatusLbl" style="font-family:var(--mono);font-size:0.6875rem;color:'+hs.color+'">'+hs.label+'</span></div>');
+  parts.push('<div id="noFlyBox">'+(ST.flightHrsTouched && ST.flightHrs === 0 ? '<div class="alert alert-info" style="margin-bottom:8px"><div class="alert-icon">ℹ️</div><div>No-fly day: the minimum hydration target ('+waterStr(1)+') still applies. Your body needs baseline water regardless of duty status.</div></div>' : '')+'</div>');
+  parts.push('<div class="fb" style="margin-bottom:6px"><span style="font-family:var(--mono);font-size:0.6875rem;color:var(--muted)">TARGET: <span id="hydroTargetVal" style="color:var(--text)">'+waterStr(hydroTarget())+'</span></span><span id="hydroStatusLbl" style="font-family:var(--mono);font-size:0.6875rem;color:'+hs.color+'">'+hs.label+'</span></div>');
   parts.push('<div class="hydro-bar-wrap"><div id="hydroBar" class="hydro-bar '+(pct>=1?'hydro-ok':'hydro-warn')+'" style="width:'+Math.round(pct*100)+'%"></div></div>');
   parts.push('<div id="hydroPctText" style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);margin-top:4px;text-align:right">'+Math.round(pct*100)+'% of target</div>');
   parts.push('<div id="hydroAdviceBox">'+(adv ? '<div class="alert alert-warn mt8"><div class="alert-icon">💧</div><div>'+adv+'</div></div>' : '<div class="alert alert-ok mt8"><div class="alert-icon">✅</div><div>Hydration nominal. Cleared for workout operations.</div></div>')+'</div>');
@@ -10636,7 +10730,7 @@ async function saveBodyMetrics() {
   profile.sex = ST.sex;
   profile.heightIn = ST.heightIn;
   profile.age = ST.age;
-  const newWeight = cleanBodyWeight(document.getElementById('bmWeight')?.value);
+  const newWeight = cleanBodyWeight(wtFromInput(document.getElementById('bmWeight')?.value));
   // A changed weight stays "to be logged" until the weigh-in log has it, so
   // a save that fails and is tapped again still records it.
   if (newWeight && newWeight !== ST.lastWeight) ST._weightLogPending = newWeight;
@@ -11298,7 +11392,7 @@ function overloadTarget(exItem, o) {
   if (atHotelDumbbellCap(exItem.name, o.env, last)) {
     const base = Math.max(o.lastReps || 0, parseTargetReps(exItem.target) || 0);
     const reps = base + 2;
-    return { kind: 'reps', lb: last, reps, label: last + ' lb × ' + reps + ' reps' };
+    return { kind: 'reps', lb: last, reps, label: wtStr(last) + ' × ' + reps + ' reps' };
   }
   // Double progression (ACSM 2009): the weight goes up once every set
   // reaches the top of the range; until then the target is the same
@@ -11307,10 +11401,10 @@ function overloadTarget(exItem, o) {
   if (range && range.hi > range.lo) {
     const lastSets = Array.isArray(o.lastSets) ? o.lastSets.map(x => parseInt(x.reps)).filter(n => !isNaN(n) && n > 0) : null;
     const allAtTop = lastSets && lastSets.length ? lastSets.every(n => n >= range.hi) : (o.lastReps || 0) >= range.hi;
-    if (!allAtTop) return { kind: 'reps', lb: last, reps: range.hi, label: last + ' lb, ' + range.hi + ' on every set' };
+    if (!allAtTop) return { kind: 'reps', lb: last, reps: range.hi, label: wtStr(last) + ', ' + range.hi + ' on every set' };
   }
   const lb = nextWeightFrom(last, exItem.name, o.phaseKey);
-  return { kind: 'weight', lb, label: lb + ' lb' };
+  return { kind: 'weight', lb, label: wtStr(lb) };
 }
 function suggestNextWeight(exId, exName, phaseKey) {
   const last = lastLoggedMax(exId, exName);
@@ -11318,6 +11412,13 @@ function suggestNextWeight(exId, exName, phaseKey) {
   return nextWeightFrom(last, exName, phaseKey);
 }
 function nextWeightFrom(last, exName, phaseKey) {
+  // In kilograms the same rules run on kilogram steps (2.5 kg dumbbells and
+  // lower-body plates, 1.25 kg upper-body plates), so a target is a weight
+  // that exists on a metric rack. The answer is still returned in pounds.
+  if (unitWt() === 'kg') return parseFloat((nextWeightFromIn(last / LB_PER_KG, exName, 2.5, 2.5, 1.25, true) * LB_PER_KG).toFixed(2));
+  return nextWeightFromIn(last, exName, 5, 5, 2.5);
+}
+function nextWeightFromIn(last, exName, dbStep, lowerStep, upperStep, snap) {
   const name = (exName||'').toLowerCase();
   const isLower = name.includes('squat')||name.includes('deadlift')||name.includes('lunge')||name.includes('rdl');
   // BUG FIX (reported: "Target -> 37.5 lb" on DB Bench Press, but dumbbells
@@ -11327,14 +11428,17 @@ function nextWeightFrom(last, exName, phaseKey) {
   // nearest real 5 lb increment instead of just adding a flat amount.
   const isDumbbell = name.includes('db ') || name.includes('dumbbell') || name.startsWith('db');
   if (isDumbbell) {
-    return Math.ceil((last + 0.01) / 5) * 5;
+    return Math.ceil((last + 0.01) / dbStep) * dbStep;
   }
   // About 2.5% of the load (ACSM 2009 says 2 to 10%), rounded to real
   // plates: 5 lb steps on lower-body work and machines, 2.5 lb on
   // upper-body barbell and cable work, never less than one step.
   const lowerLike = isLower || name.includes('leg press') || name.includes('hip thrust') || name.includes('leg curl') || name.includes('leg extension') || name.includes('calf') || name.includes('hack');
-  const step = lowerLike ? 5 : 2.5;
+  const step = lowerLike ? lowerStep : upperStep;
   const increment = Math.max(step, Math.round(last * 0.025 / step) * step);
+  // A weight first logged in pounds is not on the kilogram plate grid
+  // (12.5 lb is 5.67 kg), so in kilograms the target is moved onto it.
+  if (snap) { let r = Math.round((last + increment) / step) * step; if (r <= last + 1e-9) r += step; return r; }
   return last + increment;
 }
 // Workout history for everything that looks back (trends, coach, badges,
@@ -12527,18 +12631,18 @@ function buildExCard(exItem, phaseKey) {
         parts.push('<div class="stat-banner">');
         parts.push('<div class="stat-banner-label">PROGRESSIVE OVERLOAD</div>');
         parts.push('<div style="display:flex;justify-content:space-between;align-items:center">');
-        parts.push('<span style="font-size:0.75rem">Last: <strong style="color:var(--text)">'+lastW+' lb'+(lastR?' × '+lastR+' reps':'')+'</strong></span>');
+        parts.push('<span style="font-size:0.75rem">Last: <strong style="color:var(--text)">'+wtStr(lastW)+(lastR?' × '+lastR+' reps':'')+'</strong></span>');
         parts.push('<span style="color:var(--gold);font-weight:700;font-size:0.75rem">Target → '+suggested+'</span>');
         parts.push('</div>');
         const rr = repRangeOf(exItem);
-        if (next && next.kind === 'reps' && atHotelDumbbellCap(exItem.name, ST.env, lastW)) parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:4px">Hotel racks usually stop at '+HOTEL_DB_MAX_LB+' lb, so progress here is reps: add a rep or two per set, slow the lowering, or shorten the rest.</div>');
+        if (next && next.kind === 'reps' && atHotelDumbbellCap(exItem.name, ST.env, lastW)) parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:4px">Hotel racks usually stop at '+wtStr(HOTEL_DB_MAX_LB, 'round')+', so progress here is reps: add a rep or two per set, slow the lowering, or shorten the rest.</div>');
         else if (next && next.kind === 'reps' && rr) parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:4px">Range '+repRangeLabel(rr)+'. The weight goes up once every set reaches '+rr.hi+'.</div>');
         else if (next && next.kind === 'weight' && rr && rr.hi > rr.lo) parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:4px">Every set reached '+rr.hi+' last time, so the weight goes up. Range '+repRangeLabel(rr)+'.</div>');
         parts.push('</div>');
       } else {
         const variant = lastLoggedFamilyVariant(exItem.id, exItem.name);
         if (variant) {
-          parts.push('<div class="stat-banner-empty">You\'ve done this as '+sanitizeUserText(variant.name)+' ('+variant.weight+' lb). First time with this version, so no target yet.</div>');
+          parts.push('<div class="stat-banner-empty">You\'ve done this as '+sanitizeUserText(variant.name)+' ('+wtStr(variant.weight)+'). First time with this version, so no target yet.</div>');
         } else {
           parts.push('<div class="stat-banner-empty">First time logging this one. Log your sets to start tracking progress.</div>');
         }
@@ -12672,8 +12776,8 @@ function buildExCard(exItem, phaseKey) {
       sets.forEach((s,i) => {
         parts.push('<div class="set-tile '+(s.reps||s.weight?'ok':'')+'" id="st_'+exItem.id+'_'+i+'"><div class="set-lbl">SET '+(i+1)+'</div>');
         parts.push('<input class="set-inp" type="number" inputmode="numeric" placeholder="Reps" value="'+(s.reps||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].reps=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(this.value||ST.sets[\''+exItem.id+'\']['+i+'].weight?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\');queueSetFeedback(\''+exItem.id+'\','+i+',false)" onchange="queueSetFeedback(\''+exItem.id+'\','+i+',true)">');
-        parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="lb" value="'+(s.weight||'')+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].weight=this.value;document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\');queueSetFeedback(\''+exItem.id+'\','+i+',false)" onchange="queueSetFeedback(\''+exItem.id+'\','+i+',true)">');
-        parts.push('<div class="set-hint">reps / lb</div></div>');
+        parts.push('<input class="set-inp" type="number" inputmode="decimal" placeholder="'+unitWt()+'" value="'+wtInputVal(s.weight)+'" oninput="ensureSetEntry(\''+exItem.id+'\','+i+');ST.sets[\''+exItem.id+'\']['+i+'].weight=wtFromInput(this.value);document.getElementById(\'st_'+exItem.id+'_'+i+'\').className=\'set-tile\'+(ST.sets[\''+exItem.id+'\']['+i+'].reps||this.value?\' ok\':\'\');persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\');queueSetFeedback(\''+exItem.id+'\','+i+',false)" onchange="queueSetFeedback(\''+exItem.id+'\','+i+',true)">');
+        parts.push('<div class="set-hint">reps / '+unitWt()+'</div></div>');
       });
       parts.push('</div></div>'+(sets.length>2?'<div class="swipe-hint">← swipe for all sets</div>':'')+'<div class="fb" style="margin-top:6px;justify-content:space-between"><button class="btn-ghost" style="font-size:0.6875rem" onclick="removeLiveSet(\''+exItem.id+'\')">− Remove Set</button><button class="btn-ghost" style="font-size:0.6875rem" onclick="addLiveSet(\''+exItem.id+'\')">+ Add Set</button></div>');
       // Always present, even when empty, so refreshSetFeedback() has a
@@ -13261,7 +13365,7 @@ function autoregSuggestion(exItem, sets, env) {
   if (isNaN(actual)) return null;
   if (looksSwapped(exItem, last)) {
     return { tone: 'minor', action: 'swap', setIdx: lastIdx,
-      text: actual + ' reps at ' + parseFloat(last.weight) + ' lb looks like reps and weight got swapped. Tap Swap to put ' + parseFloat(last.weight) + ' in reps and ' + actual + ' in weight.' };
+      text: actual + ' reps at ' + wtStr(last.weight) + ' looks like reps and weight got swapped. Tap Swap to put ' + wtNum(last.weight) + ' in reps and ' + actual + ' in weight.' };
   }
   const where = env === undefined ? (ST.env || null) : env;
   const missedBy = target - actual;
@@ -13274,10 +13378,10 @@ function autoregSuggestion(exItem, sets, env) {
     if (!ranged || !isFinalSet) return null;
     const done = sets.map(x => parseInt(x.reps)).filter(n => !isNaN(n) && n > 0);
     const capped = loaded && atHotelDumbbellCap(exItem.name, where, lastWeight);
-    const wtNote = loaded && !isNaN(lastWeight) && lastWeight > 0 ? ' at ' + lastWeight + ' lb' : '';
+    const wtNote = loaded && !isNaN(lastWeight) && lastWeight > 0 ? ' at ' + wtStr(lastWeight) : '';
     if (done.length && done.every(n => n >= top)) {
-      if (capped) return { tone: 'positive', text: 'Every set reached ' + top + wtNote + '. Hotel racks stop at ' + HOTEL_DB_MAX_LB + ' lb, so next session slow the lowering or shorten the rest to keep it hard.' };
-      if (loaded) return { tone: 'positive', text: 'Every set reached ' + top + wtNote + ', the top of the range. Next session the weight goes up, to about ' + nextWeightFrom(lastWeight, exItem.name, null) + ' lb.' };
+      if (capped) return { tone: 'positive', text: 'Every set reached ' + top + wtNote + '. Hotel racks stop at ' + wtStr(HOTEL_DB_MAX_LB, 'round') + ', so next session slow the lowering or shorten the rest to keep it hard.' };
+      if (loaded) return { tone: 'positive', text: 'Every set reached ' + top + wtNote + ', the top of the range. Next session the weight goes up, to about ' + wtStr(nextWeightFrom(lastWeight, exItem.name, null)) + '.' };
       return { tone: 'positive', text: 'Every set reached ' + top + ', the top of the range. Next session, make it harder: a tougher variation or added weight.' };
     }
     return { tone: 'positive', text: 'All sets inside the ' + rangeText + ' range' + wtNote + '. ' + (loaded ? 'Keep this weight' : 'Keep this version') + ' next session and work toward ' + top + ' on every set; then it goes up.' };
@@ -13309,7 +13413,7 @@ function autoregSuggestion(exItem, sets, env) {
   // without a weight. "Drop the weight 5%" means nothing for a pullup, so
   // those get rest and easier-variation advice instead.
   const repsLabel = ranged ? actual + ', under the ' + rangeText + ' range' : actual + ' of ' + target;
-  const wt = !isNaN(lastWeight) && lastWeight > 0 ? ' at ' + lastWeight + ' lb' : '';
+  const wt = !isNaN(lastWeight) && lastWeight > 0 ? ' at ' + wtStr(lastWeight) : '';
   const missedPct = missedBy / target;
 
   if (wentUpInWeight && missedPct <= 0.25) {
@@ -13333,7 +13437,7 @@ function autoregSuggestion(exItem, sets, env) {
     // the target is beaten on every set, not after one strong set.
     const capped = loaded && atHotelDumbbellCap(exItem.name, where, lastWeight);
     const nextTime = capped
-      ? ' Hotel racks stop at ' + HOTEL_DB_MAX_LB + ' lb, so next session keep ' + lastWeight + ' lb and work toward ' + (ranged ? top : target + 2) + ' reps on every set, or slow the lowering.'
+      ? ' Hotel racks stop at ' + wtStr(HOTEL_DB_MAX_LB, 'round') + ', so next session keep ' + wtStr(lastWeight) + ' and work toward ' + (ranged ? top : target + 2) + ' reps on every set, or slow the lowering.'
       : loaded
       ? ' Keep this weight next session and add more once every set reaches ' + top + '.'
       : ' Next session, aim for ' + top + ' on every set before making it harder.';
@@ -13933,7 +14037,7 @@ function buildDebriefMessages(summary) {
 
   if (summary.prHits.length) {
     summary.prHits.forEach(pr => {
-      msgs.push({ type:'ok', icon:'🏆', text:'New PR: '+pr.name+' at '+pr.weight+' '+(pr.unit||'lb')+'. Nice work.' });
+      msgs.push({ type:'ok', icon:'🏆', text:'New PR: '+pr.name+' at '+((pr.unit||'lb') === 'lb' ? wtStr(pr.weight) : pr.weight+' '+pr.unit)+'. Nice work.' });
     });
   }
 
@@ -14375,7 +14479,7 @@ async function renderTrends(p) {
   parts.push('<div class="section-label" style="margin-top:0">LOG TODAY\'S DATA</div>');
 
   parts.push('<div class="field-row" style="margin-bottom:10px">');
-  parts.push('<div class="field" style="margin-bottom:0"><label>Weight (lb) <span class="info-i" onclick="showBioInfo(\'weight\')">i</span></label><input type="number" inputmode="decimal" id="inp_wt" placeholder="e.g. 232"></div>');
+  parts.push('<div class="field" style="margin-bottom:0"><label>Weight ('+unitWt()+') <span class="info-i" onclick="showBioInfo(\'weight\')">i</span></label><input type="number" inputmode="decimal" id="inp_wt" placeholder="'+(unitWt()==='kg'?'e.g. 105':'e.g. 232')+'"></div>');
   parts.push('<div class="field" style="margin-bottom:0"><label>Waist (in) <span class="info-i" onclick="showBioInfo(\'waist\')">i</span></label><input type="number" inputmode="decimal" id="inp_waist" placeholder="e.g. 38.5"></div>');
   parts.push('</div>');
 
@@ -14424,7 +14528,7 @@ async function renderTrends(p) {
     const statusMeta = { improving: ['↑','var(--green)'], flat: ['→','var(--muted)'], declining: ['↓','var(--amber)'] };
     liftTrends.forEach(lt => {
       const [arrow, color] = statusMeta[lt.trend.status];
-      parts.push('<div class="fb mb8"><div style="font-size:0.8125rem">🏋️ '+lt.name+'</div><div style="font-size:0.75rem;text-align:right"><span style="color:'+color+'">'+arrow+' '+lt.current+' lb</span><div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted)">'+lt.sessionsCount+' sessions'+(lt.trend.status!=='flat'?' · '+(lt.trend.changePct>0?'+':'')+lt.trend.changePct+'%':'')+'</div></div></div>');
+      parts.push('<div class="fb mb8"><div style="font-size:0.8125rem">🏋️ '+lt.name+'</div><div style="font-size:0.75rem;text-align:right"><span style="color:'+color+'">'+arrow+' '+wtStr(lt.current)+'</span><div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted)">'+lt.sessionsCount+' sessions'+(lt.trend.status!=='flat'?' · '+(lt.trend.changePct>0?'+':'')+lt.trend.changePct+'%':'')+'</div></div></div>');
     });
     if (runTrend) {
       const [arrow, color] = statusMeta[runTrend.trend.status];
@@ -14435,7 +14539,7 @@ async function renderTrends(p) {
     parts.push('<div class="alert alert-info mb12"><div class="alert-icon">📈</div><div>Strength and pace trends will show up here once you\'ve logged the same primary lift or a few runs across several sessions.</div></div>');
   }
 
-  [['chartWt','BODY WEIGHT (lb)'],['chartWaist','WAIST (in)'],['chartBP','BLOOD PRESSURE (mmHg)'],['chartGluc','FASTING GLUCOSE (mg/dL)']].forEach(([id,label]) => {
+  [['chartWt','BODY WEIGHT ('+unitWt()+')'],['chartWaist','WAIST (in)'],['chartBP','BLOOD PRESSURE (mmHg)'],['chartGluc','FASTING GLUCOSE (mg/dL)']].forEach(([id,label]) => {
     parts.push('<div class="card mb8"><div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);margin-bottom:6px">'+label+'</div><div class="chart-wrap"><canvas id="'+id+'"></canvas></div></div>');
   });
 
@@ -14464,7 +14568,7 @@ async function renderTrends(p) {
 }
 
 async function saveBio() {
-  const wt    = parseFloat(document.getElementById('inp_wt')?.value)||null;
+  const wt    = parseFloat(wtFromInput(document.getElementById('inp_wt')?.value))||null; // typed in the member's unit, kept in pounds
   const waist = parseFloat(document.getElementById('inp_waist')?.value)||null;
   const sys   = parseInt(document.getElementById('inp_sys')?.value)||null;
   const dia   = parseInt(document.getElementById('inp_dia')?.value)||null;
@@ -14719,7 +14823,7 @@ async function loadAndDrawCharts() {
   const refLine = (n,val,color) => ({ data:Array.from({length:n},()=>val), borderColor:color, borderDash:[4,3], pointRadius:0, fill:false });
 
   const wt = metricSeries('weight_lb');
-  mkChart('chartWt', wt.labels, [{ data:wt.values, borderColor:C.blue, backgroundColor:C.blue+'22', tension:0.35, fill:true, pointRadius:4, pointBackgroundColor:C.blue, label:'Weight' }]);
+  mkChart('chartWt', wt.labels, [{ data:wt.values.map(v => v == null ? v : wtNum(v)), borderColor:C.blue, backgroundColor:C.blue+'22', tension:0.35, fill:true, pointRadius:4, pointBackgroundColor:C.blue, label:'Weight' }]);
 
   const waist = metricSeries('waist_in');
   mkChart('chartWaist', waist.labels, [
@@ -16167,6 +16271,8 @@ function renderProfile(p) {
   parts.push('<div class="card mb12">');
   parts.push('<div class="section-label" style="margin-top:0">BODY METRICS</div>');
   if (ST.user) parts.push(avatarEditorHtml(ST.username || (ST.crew && ST.crew.profile && ST.crew.profile.callsign) || ''));
+  // First-time setup lands on this card, so the units choice is here too.
+  parts.push(renderUnitsControl().replace('<div class="card mb12">', '<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border)">'));
   parts.push('<div class="field-row" style="margin-bottom:10px">');
   parts.push('<div class="field" style="margin-bottom:0"><label>Sex</label><select id="bmSex">');
   parts.push('<option value=""'+(!ST.sex?' selected':'')+'>–</option>');
@@ -16192,8 +16298,8 @@ function renderProfile(p) {
   parts.push('<input id="bmAge" type="text" inputmode="numeric" placeholder="e.g. 42" value="'+(ST.age||'')+'"></div>');
   // Weight lives here too (reported Nov 16 2026: Fuel Plan asked for weight
   // "in Pilot Profile", and the profile had no weight field).
-  parts.push('<div class="field"><label>Weight (lb)</label>');
-  parts.push('<input id="bmWeight" type="text" inputmode="decimal" placeholder="e.g. 165" value="'+(ST.lastWeight||'')+'">');
+  parts.push('<div class="field"><label>Weight ('+unitWt()+')</label>');
+  parts.push('<input id="bmWeight" type="text" inputmode="decimal" placeholder="'+(unitWt()==='kg'?'e.g. 75':'e.g. 165')+'" value="'+wtInputVal(ST.lastWeight)+'">');
   parts.push('<div style="font-size:0.625rem;color:var(--muted);margin-top:4px;line-height:1.5">Used for calorie and protein targets. Saving it here also logs it as today\'s weigh-in.</div></div>');
   parts.push('<div class="field"><label>Call Sign (Leaderboard and Crew Feed Name)</label>');
   parts.push('<input id="bmUsername" type="text" maxlength="20" placeholder="e.g. MaverickPHX" value="'+(ST.username||'')+'">');
@@ -17344,6 +17450,7 @@ function renderMore(p) {
     parts.push(item('⌚','Connected Devices','Apple Health, Apple Watch, Oura Ring',"switchTab('devices')"));
     parts.push(item('📊','Data & Import/Export','Flight schedule import, CSV export, AI prompt',"switchTab('data')"));
     parts.push(renderTextSizeControl());
+    parts.push(renderUnitsControl());
     // Apple has required in-app account deletion since 2022 for any app that
     // supports account creation; its absence is an automatic rejection.
     parts.push('<div class="card mb12">');
@@ -19700,6 +19807,18 @@ function quickLogMeal() {
 // running total is still possible, just as a deliberate second choice
 // rather than the thing that happens by accident.
 const WATER_QUICK_ADDS = [0.25, 0.5, 1];
+const WATER_QUICK_ADDS_OZ = [8, 16, 32];
+// The water box: liters keep the member's own typing (".5"); ounces show the
+// stored total as whole ounces.
+function waterBoxValue() {
+  if (unitWater() === 'L') return ST.waterInRaw || '';
+  return ST.waterIn ? String(waterNum(ST.waterIn)) : '';
+}
+function setWaterFromBox(typed) {
+  if (unitWater() === 'L') { ST.waterInRaw = typed; ST.waterIn = parseFloat(typed) || 0; return; }
+  const l = waterFromInput(typed);
+  ST.waterIn = isFinite(l) ? l : 0; ST.waterInRaw = String(ST.waterIn);
+}
 
 function openQuickWaterLog(mode) {
   const root = document.getElementById('modalRoot');
@@ -19717,22 +19836,22 @@ function openQuickWaterLog(mode) {
   // a number typed below is going to do to it.
   parts.push('<div class="card" style="margin-bottom:12px;padding:12px">');
   parts.push('<div class="fb"><span style="font-size:0.75rem;color:var(--muted)">Logged so far today</span>' +
-             '<span style="font-family:var(--mono);font-size:1rem;font-weight:700">'+current.toFixed(2).replace(/\.?0+$/,'')+' L</span></div>');
-  parts.push('<div class="fb" style="margin-top:4px"><span style="font-size:0.6875rem;color:var(--muted)">Target '+target.toFixed(1)+' L</span>' +
+             '<span style="font-family:var(--mono);font-size:1rem;font-weight:700">'+waterStr(current, 2).replace(/(\.\d*?)0+ L$/,'$1 L').replace(/\. L$/,' L')+'</span></div>');
+  parts.push('<div class="fb" style="margin-top:4px"><span style="font-size:0.6875rem;color:var(--muted)">Target '+waterStr(target)+'</span>' +
              '<span style="font-family:var(--mono);font-size:0.6875rem;color:'+hs.color+'">'+hs.label+'</span></div>');
   parts.push('</div>');
 
   if (setMode) {
-    parts.push('<div class="field"><label>Set today\'s total to (liters)</label><input type="text" inputmode="decimal" id="quickWaterInput" value="'+(ST.waterInRaw||'')+'" placeholder="e.g. 1.2"></div>');
+    parts.push('<div class="field"><label>Set today\'s total to ('+(unitWater()==='oz'?'ounces':'liters')+')</label><input type="text" inputmode="decimal" id="quickWaterInput" value="'+waterBoxValue()+'" placeholder="'+(unitWater()==='oz'?'e.g. 40':'e.g. 1.2')+'"></div>');
     parts.push('<button class="btn btn-gold mt8" onclick="saveQuickWater(true)">Save Total</button>');
     parts.push('<button class="btn-ghost" style="display:block;width:100%;text-align:center;margin-top:12px" onclick="haptic(\'light\');openQuickWaterLog()">← Add water instead</button>');
   } else {
     parts.push('<div style="display:flex;gap:8px;margin-bottom:10px">');
-    WATER_QUICK_ADDS.forEach(a => {
-      parts.push('<button class="btn btn-outline" style="flex:1;padding:12px 4px" onclick="addQuickWater('+a+')">+'+a+'L</button>');
+    (unitWater() === 'oz' ? WATER_QUICK_ADDS_OZ.map(o => [Math.round(o / FLOZ_PER_L * 1000) / 1000, '+' + o + ' oz']) : WATER_QUICK_ADDS.map(a => [a, '+' + a + 'L'])).forEach(([a, label]) => {
+      parts.push('<button class="btn btn-outline" style="flex:1;padding:12px 4px" onclick="addQuickWater('+a+')">'+label+'</button>');
     });
     parts.push('</div>');
-    parts.push('<div class="field"><label>Or add a specific amount (liters)</label><input type="text" inputmode="decimal" id="quickWaterInput" value="" placeholder="e.g. 0.2"></div>');
+    parts.push('<div class="field"><label>Or add a specific amount ('+(unitWater()==='oz'?'ounces':'liters')+')</label><input type="text" inputmode="decimal" id="quickWaterInput" value="" placeholder="'+(unitWater()==='oz'?'e.g. 20':'e.g. 0.2')+'"></div>');
     parts.push('<button class="btn btn-gold mt8" onclick="saveQuickWater(false)">Add Water</button>');
     parts.push('<button class="btn-ghost" style="display:block;width:100%;text-align:center;margin-top:12px" onclick="openQuickWaterLog(\'set\')">Correct today\'s total instead</button>');
   }
@@ -19742,6 +19861,7 @@ function openQuickWaterLog(mode) {
 }
 
 // Trims trailing zeros so totals read as "0.7 L" rather than "0.70 L".
+function fmtWaterAmt(liters) { return unitWater() === 'oz' ? waterNum(liters) + ' oz' : fmtLiters(liters) + ' L'; }
 function fmtLiters(n) {
   return (Math.round((n||0) * 100) / 100).toFixed(2).replace(/\.?0+$/, '');
 }
@@ -19754,9 +19874,9 @@ function confirmWaterChange(added, newTotal) {
   const target = hydroTarget();
   const pct = target > 0 ? Math.round((newTotal / target) * 100) : 0;
   const lead = added != null
-    ? '💧 Added ' + fmtLiters(added) + ' L'
-    : '💧 Total set to ' + fmtLiters(newTotal) + ' L';
-  showBigToast(lead + '\n' + fmtLiters(newTotal) + ' of ' + fmtLiters(target) + ' L today (' + pct + '%)', 'ok');
+    ? '💧 Added ' + fmtWaterAmt(added)
+    : '💧 Total set to ' + fmtWaterAmt(newTotal);
+  showBigToast(lead + '\n' + fmtWaterAmt(newTotal).replace(/ (L|oz)$/, '') + ' of ' + fmtWaterAmt(target) + ' today (' + pct + '%)', 'ok');
 }
 
 // One-tap increments — the common case is "I just drank a bottle", not
@@ -19771,7 +19891,7 @@ function addQuickWater(amount) {
 
 function saveQuickWater(setMode) {
   const raw = document.getElementById('quickWaterInput')?.value || '';
-  const entered = parseFloat(raw);
+  const entered = waterFromInput(raw);
   if (!raw.trim() || isNaN(entered)) { showBigToast('Enter an amount first.', 'warn'); return; }
   applyWaterChange(setMode ? entered : (ST.waterIn || 0) + entered);
   closeModal();
@@ -19780,7 +19900,8 @@ function saveQuickWater(setMode) {
 }
 
 function applyWaterChange(newTotal) {
-  const clamped = Math.max(0, Math.round(newTotal * 100) / 100);
+  // Three decimals of a liter, so a total built from ounces stays exact (16 oz is 0.473 L).
+  const clamped = Math.max(0, Math.round(newTotal * 1000) / 1000);
   ST.waterIn = clamped;
   ST.waterInRaw = String(clamped);
   persistDailyInputs();

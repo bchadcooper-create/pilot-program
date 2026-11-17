@@ -875,6 +875,34 @@ test('every emoji the app can put on screen has a line icon (reported Nov 16: em
   assertEqual(ctx.emojiSplit('✈ FLIGHT CREW FITNESS → ✓'), null, 'the logo plane, arrows and ticks are left as type');
   assertEqual(ctx.foodEmoji('Turkey sandwich'), '', 'food rows carry no picture');
 });
+test('units: pounds or kilograms, liters or ounces; storage stays in pounds and liters (requested Nov 16)', () => {
+  const keep = ctx.ST.units;
+  ctx.ST.units = { weight: 'lb', water: 'L' };
+  assertEqual(ctx.wtStr(135), '135 lb', 'pounds shown as stored');
+  assertEqual(ctx.wtInputVal('22.'), '22.', 'a half-typed pound value is left alone'); assertEqual(ctx.wtFromInput('22.'), '22.', 'and stored as typed');
+  assertEqual(ctx.waterStr(2.4), '2.4 L', 'liters'); assertEqual(ctx.waterFromInput('1.5'), 1.5, 'liters typed');
+  assertEqual(ctx.nextWeightFrom(135, 'Bench Press', null), 137.5, 'pound steps unchanged');
+  assertEqual(ctx.nextWeightFrom(37.5, 'DB Bench Press', null), 40, 'dumbbells still go up to the next 5 lb');
+  ctx.ST.units = { weight: 'kg', water: 'oz' };
+  assertEqual(ctx.wtFromInput('100'), '220.46', '100 kg is kept as 220.46 lb');
+  assertEqual(ctx.wtInputVal('220.46'), '100', 'and reads back as 100');
+  assertEqual(ctx.wtInputVal(ctx.wtFromInput('62.5')), '62.5', 'half kilograms survive the round trip');
+  assertEqual(ctx.wtInputVal(ctx.wtFromInput('61.25')), '61.25', 'so do 1.25 kg plates');
+  assertEqual(ctx.wtStr(135), '61.23 kg', 'an old pound entry shown in kilograms');
+  assertEqual(ctx.wtStr(225, 'round'), '102 kg', 'leaderboards round to the half kilogram');
+  assertEqual(ctx.wtFromInput(''), '', 'an empty box stays empty');
+  const nextKg = ctx.nextWeightFrom(100 * 2.2046226218, 'Bench Press', null) / 2.2046226218;
+  assertEqual(Math.round(nextKg * 100) / 100, 102.5, 'a kilogram target lands on a real plate (100 kg to 102.5 kg)');
+  const offGrid = ctx.nextWeightFrom(135, 'Bench Press', null) / 2.2046226218;
+  assertEqual(Math.round(offGrid * 100) / 100, 62.5, 'a 135 lb lift (61.23 kg) gets a 62.5 kg target, not 62.48');
+  const dbKg = ctx.nextWeightFrom(16 * 2.2046226218, 'DB Bench Press', null) / 2.2046226218;
+  assertEqual(Math.round(dbKg * 100) / 100, 17.5, 'kilogram dumbbells go up to the next 2.5 kg');
+  assertEqual(ctx.waterStr(2.4), '81 oz', 'ounces'); assertEqual(Math.round(ctx.waterFromInput('32') * 1000) / 1000, 0.946, '32 oz kept as liters');
+  assertEqual(ctx.waterSip(0.25), '8 oz', 'a sip in ounces');
+  assertEqual(JSON.stringify(ctx.cleanUnits({ weight: 'stone', water: 5 })), '{"weight":"lb","water":"L"}', 'anything unknown falls back to pounds and liters');
+  assertEqual(/Kilograms/.test(ctx.renderUnitsControl()) && /Ounces/.test(ctx.renderUnitsControl()), true, 'the picker offers both');
+  ctx.ST.units = keep;
+});
 test('a workout reopened mid-session drops a caution that no longer applies', () => {
   ctx.ST.injuries = ['shoulder', 'elbow_wrist'];
   const wk = ctx.refreshInjuryCautions({ taxi: [{ id: 'a', name: 'Thoracic Extension (chair)', injuryCaution: true, flaggedRegion: 'Elbow / Wrist' }],

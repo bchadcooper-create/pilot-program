@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.56.9 / 20261116_4
+ * Version/build: fcf-v5.56.10 / 20261116_5
  */
 
-const FCF_VERSION = 'fcf-v5.56.9';
-const FCF_BUILD   = '20261116_4';
+const FCF_VERSION = 'fcf-v5.56.10';
+const FCF_BUILD   = '20261116_5';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -17397,8 +17397,13 @@ function extractUSDANutrients(foodDetail) {
     const name = (n.nutrient?.name || n.nutrientName || n.name || '').toLowerCase();
     const value = n.amount ?? n.value;
     if (!name || value == null) return;
+    // BUG FIX (found Nov 16 2026): USDA lists Energy twice, in kcal and in
+    // kJ. Whichever came first was used, so some foods showed kilojoules as
+    // calories (615 where the food has 147). Kilojoules are skipped.
+    const unit = String(n.nutrient?.unitName || n.unitName || '').toLowerCase();
     Object.keys(USDA_NUTRIENT_ALIASES).forEach(key => {
       if (found.has(key)) return;
+      if (key === 'calories' && unit === 'kj') return;
       if (USDA_NUTRIENT_ALIASES[key].some(alias => name.includes(alias))) {
         result[key] = Math.round((parseFloat(value) || 0) * 10) / 10;
         found.add(key);
@@ -17409,8 +17414,52 @@ function extractUSDANutrients(foodDetail) {
 }
 
 function usdaReferenceLabel(food) {
+  if (food.servingLabel) return food.servingLabel;
   if (food.servingSize && food.servingSizeUnit) return food.servingSize + ' ' + food.servingSizeUnit;
   return '100 g';
+}
+
+// USDA gives every nutrient per 100 g. What "1 serving" means for a food:
+//   - a packaged food: the serving on its label (151 g, "1 package");
+//   - a Survey (FNDDS) food such as "Turkey sandwich on wheat": USDA's
+//     default portion for it;
+//   - anything else: 100 g, as before.
+// BUG FIX (found Nov 16 2026 while fixing the turkey sandwich search): the
+// card said "1 = 151 g" for a packaged food but logged the 100 g numbers
+// (205 cal where the label says 310). Nutrients are now scaled to the
+// serving the card names.
+function usdaServingBasis(raw) {
+  if (!raw) return null;
+  const size = parseFloat(raw.servingSize);
+  if (size > 0 && /^(g|grm|gm|ml|mlt)$/i.test(String(raw.servingSizeUnit || '').trim())) {
+    const unit = /^ml/i.test(raw.servingSizeUnit) ? 'ml' : 'g';
+    const house = String(raw.householdServingFullText || '').trim().toLowerCase();
+    return { grams: size, label: (house ? house + ', ' : '') + size + ' ' + unit };
+  }
+  if (raw.dataType === 'Survey (FNDDS)') {
+    const text = m => String(m.disseminationText || m.portionDescription || '').trim();
+    const list = (raw.foodMeasures || raw.foodPortions || []).filter(m => parseFloat(m.gramWeight) > 0);
+    if (!list.length) return null;
+    const dflt = list.find(m => /quantity not specified/i.test(text(m))) || list[0];
+    const grams = parseFloat(dflt.gramWeight);
+    const named = list.find(m => !/quantity not specified/i.test(text(m)) && parseFloat(m.gramWeight) === grams && text(m));
+    return { grams, label: (named ? text(named) + ', ' : '') + grams + ' g' };
+  }
+  return null;
+}
+function usdaServingFields(raw) {
+  const per100 = extractUSDANutrients(raw);
+  const basis = usdaServingBasis(raw);
+  return basis
+    ? { nutrients: scaleNutrients(per100, basis.grams / 100), servingLabel: basis.label }
+    : { nutrients: per100, servingLabel: null };
+}
+// Every word of the search appears in the food's name.
+function usdaHasAllWords(description, q) {
+  const d = String(description || '').toLowerCase();
+  const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+  // "eggs" also matches a name that says "egg".
+  return words.length > 0 && words.every(w => d.includes(w) || (w.length > 3 && w.endsWith('s') && d.includes(w.slice(0, -1))));
 }
 
 // USDA's search has no concept of "the plain, default version of this
@@ -17564,21 +17613,35 @@ function findStapleBoost(q) {
 async function searchUSDAFoods(query) {
   if (!query || query.trim().length < 2) return [];
   const q = query.trim().toLowerCase();
-  const res = await usdaFetch('search', { query: query.trim() });
-  const foods = res?.foods || [];
+  // BUG FIX (reported Nov 16 2026: "no match for turkey sandwich"). USDA's
+  // server now and then answers with an error page; that was shown as "No
+  // matches". One more try, and a failure is reported as a failure (null).
+  let res = await usdaFetch('search', { query: query.trim() });
+  if (!res || !Array.isArray(res.foods)) res = await usdaFetch('search', { query: query.trim() });
+  if (!res || !Array.isArray(res.foods)) return null;
+  const foods = res.foods;
   const staplePattern = findStapleBoost(q);
-  // Three sort tiers: (1) a curated staple match, if the query is one of
-  // the common cases above, always wins outright; (2) generic before
-  // branded; (3) within each tier, results starting with the search term
-  // rank first. Stable sort preserves USDA's own ordering beyond that.
+  const stapleExact = !!STAPLE_FOOD_BOOSTS[q];
+  // Sort tiers: (1) a curated staple match, if the query is one of the
+  // common cases above, always wins outright; (2) names holding every word
+  // typed ("turkey sandwich" before "bologna, turkey"); (3) generic before
+  // branded; (4) names starting with the search term. Stable sort keeps
+  // USDA's own ordering beyond that.
   const sorted = [...foods].sort((a, b) => {
     if (staplePattern) {
-      const aStaple = staplePattern.test(a.description || '');
-      const bStaple = staplePattern.test(b.description || '');
+      // A staple found inside a longer search ("turkey" in "turkey
+      // sandwich") only wins for a food that holds every word typed, so
+      // plain turkey breast no longer outranks the sandwiches.
+      const isStaple = d => staplePattern.test(d || '') && (stapleExact || usdaHasAllWords(d, q));
+      const aStaple = isStaple(a.description);
+      const bStaple = isStaple(b.description);
       if (aStaple !== bStaple) return aStaple ? -1 : 1;
     }
-    const aGeneric = a.dataType === 'Foundation' || a.dataType === 'SR Legacy';
-    const bGeneric = b.dataType === 'Foundation' || b.dataType === 'SR Legacy';
+    const aAll = usdaHasAllWords(a.description, q), bAll = usdaHasAllWords(b.description, q);
+    if (aAll !== bAll) return aAll ? -1 : 1;
+    const isGeneric = t => t === 'Foundation' || t === 'SR Legacy' || t === 'Survey (FNDDS)';
+    const aGeneric = isGeneric(a.dataType);
+    const bGeneric = isGeneric(b.dataType);
     if (aGeneric !== bGeneric) return aGeneric ? -1 : 1;
     const aStarts = (a.description || '').toLowerCase().startsWith(q);
     const bStarts = (b.description || '').toLowerCase().startsWith(q);
@@ -17592,7 +17655,7 @@ async function searchUSDAFoods(query) {
     servingSize: f.servingSize || null,
     servingSizeUnit: f.servingSizeUnit || null,
     dataType: f.dataType || null,
-    nutrients: extractUSDANutrients(f),
+    ...usdaServingFields(f),
   }));
 }
 
@@ -17604,7 +17667,8 @@ async function getUSDAFoodDetail(fdcId) {
     description: res.description,
     servingSize: res.servingSize || null,
     servingSizeUnit: res.servingSizeUnit || null,
-    nutrients: extractUSDANutrients(res),
+    dataType: res.dataType || null,
+    ...usdaServingFields(res),
   };
 }
 
@@ -19721,9 +19785,12 @@ function filterUSDASearch(query) {
   if (!box) return;
   if (!query || query.trim().length < 2) { box.innerHTML = ''; return; }
   box.innerHTML = '<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">Searching…</div>';
+  const seq = (window._usdaSearchSeq = (window._usdaSearchSeq || 0) + 1);
   usdaSearchDebounce = setTimeout(async () => {
     const results = await searchUSDAFoods(query);
     if (!document.getElementById('usdaSearchResults')) return; // builder closed mid-search
+    if (seq !== window._usdaSearchSeq) return; // a newer search has started; drop this answer
+    if (results === null) { box.innerHTML = '<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">The food database did not answer. <a onclick="filterUSDASearch(document.getElementById(\'foodSearchInput\').value)" style="color:var(--gold);text-decoration:underline;cursor:pointer">Try again</a>, or use manual entry below.</div>'; return; }
     if (!results.length) { box.innerHTML = '<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">No matches. Try manual entry below.</div>'; return; }
     box.innerHTML = results.map((f,i) =>
       '<div class="card" style="padding:8px;margin-top:6px;cursor:pointer" onclick="selectUSDAFood('+i+')"><div style="font-size:0.8125rem">'+foodEmoji(f.description)+' '+f.description+(f.brandName?' <span style="color:var(--muted);font-size:0.6875rem">('+f.brandName+')</span>':'')+'</div><div style="font-size:0.6875rem;color:var(--muted)">'+f.nutrients.calories+' cal per '+usdaReferenceLabel(f)+'</div></div>'
@@ -19738,6 +19805,9 @@ async function selectUSDAFood(idx) {
   const box = document.getElementById('usdaSearchResults');
   if (box) box.innerHTML = '<div style="font-size:0.6875rem;color:var(--muted)">Loading full details…</div>';
   const detail = await getUSDAFoodDetail(picked.fdcId) || picked;
+  // The card that was tapped named a serving and its calories; keep both so
+  // the next screen cannot disagree with it.
+  if (picked.servingLabel) { detail.servingLabel = picked.servingLabel; detail.nutrients = picked.nutrients; }
   window._usdaPendingFood = detail;
   if (box) box.innerHTML =
     '<div class="card mt8"><div style="font-size:0.8125rem;margin-bottom:6px">'+detail.description+'</div>' +

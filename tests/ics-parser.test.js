@@ -828,6 +828,21 @@ test('Fuel Plan names what is missing, and the profile takes a weight (reported 
   assertEqual(ctx.cleanBodyWeight('165,4'), 165.4, 'comma decimal');
   ctx.ST.sex = keep.sex; ctx.ST.age = keep.age; ctx.ST.heightIn = keep.h; ctx.ST.lastWeight = keep.w;
 });
+test('food search: servings match the label, whole-phrase matches first (reported Nov 16: turkey sandwich)', () => {
+  const kcal = v => [{ nutrientName: 'Energy', value: v, unitName: 'KCAL' }, { nutrientName: 'Protein', value: 13.2, unitName: 'G' }];
+  const branded = ctx.usdaServingFields({ dataType: 'Branded', servingSize: 151, servingSizeUnit: 'g', householdServingFullText: '1 PACKAGE', foodNutrients: kcal(205) });
+  assertEqual(branded.nutrients.calories, 309.6, 'a 151 g package logs 151 g of calories, not 100 g');
+  assertEqual(branded.servingLabel, '1 package, 151 g', 'label names the serving');
+  const survey = ctx.usdaServingFields({ dataType: 'Survey (FNDDS)', foodNutrients: kcal(187),
+    foodMeasures: [{ disseminationText: '1 large', gramWeight: 175 }, { disseminationText: 'Quantity not specified', gramWeight: 115 }, { disseminationText: '1 regular', gramWeight: 115 }] });
+  assertEqual(survey.servingLabel, '1 regular, 115 g', 'USDA default portion, named');
+  assertEqual(survey.nutrients.calories, 215.1, 'scaled to that portion');
+  const plain = ctx.usdaServingFields({ dataType: 'SR Legacy', foodNutrients: kcal(165) });
+  assertEqual(plain.servingLabel, null, 'staples stay per 100 g'); assertEqual(plain.nutrients.calories, 165, 'unchanged');
+  assertEqual(ctx.extractUSDANutrients({ foodNutrients: [{ nutrientName: 'Energy', value: 615, unitName: 'kJ' }, { nutrientName: 'Energy', value: 147, unitName: 'KCAL' }] }).calories, 147, 'kilojoules are not calories');
+  assertEqual(ctx.usdaHasAllWords('Turkey sandwich on wheat', 'turkey sandwich'), true, 'both words');
+  assertEqual(ctx.usdaHasAllWords('Bologna, turkey', 'turkey sandwich'), false, 'one word only');
+});
 test('a workout reopened mid-session drops a caution that no longer applies', () => {
   ctx.ST.injuries = ['shoulder', 'elbow_wrist'];
   const wk = ctx.refreshInjuryCautions({ taxi: [{ id: 'a', name: 'Thoracic Extension (chair)', injuryCaution: true, flaggedRegion: 'Elbow / Wrist' }],

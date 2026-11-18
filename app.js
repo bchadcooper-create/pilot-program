@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.66.0 / 20261117_01
+ * Version/build: fcf-v5.66.1 / 20261117_02
  */
 
-const FCF_VERSION = 'fcf-v5.66.0';
-const FCF_BUILD   = '20261117_01';
+const FCF_VERSION = 'fcf-v5.66.1';
+const FCF_BUILD   = '20261117_02';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -10644,6 +10644,17 @@ const PLAN_CARDIO_GROUP = ['Cardio', 'Run', 'Walk', 'Stretch', 'Longevity'];
 function planProfileGroups(all) {
   return { strength: all.filter(m => !PLAN_CARDIO_GROUP.includes(m)), cardio: all.filter(m => PLAN_CARDIO_GROUP.includes(m)) };
 }
+// Starter Strength is the gentle, seated or supported session. Requested
+// Nov 17 2026: "Display it to people who chose beginner". It also stays for
+// members on the Walking First objective, whose plan is built on it, and
+// for anyone who has it picked right now, so it never vanishes from under
+// someone. Everyone else no longer sees it in the picker.
+function planShowsStarter(level, goal, current) {
+  return level === 'beginner' || goal === 'walking' || current === 'Starter Strength';
+}
+function planPickerWorkouts(all, level, goal, current) {
+  return planShowsStarter(level, goal, current) ? all.slice() : all.filter(m => m !== 'Starter Strength');
+}
 function selectMissionProfile(mg) {
   ST.activeCustomProfileId = null;
   ST.muscleGroup = mg;
@@ -10988,7 +10999,7 @@ async function renderPreflight(p) {
     const groupLabel = t => parts.push('<div style="font-family:var(--mono);font-size:0.5625rem;letter-spacing:0.1em;color:var(--muted);margin:2px 0 6px">' + t + '</div>');
 
     if (planRow('profile', 'Mission profile', planName)) {
-      const groups = planProfileGroups(MUSCLE_GROUPS);
+      const groups = planProfileGroups(planPickerWorkouts(MUSCLE_GROUPS, ST.level, ST.goal, ST.activeCustomProfileId ? null : ST.muscleGroup));
       [['STRENGTH', groups.strength], ['CARDIO AND RECOVERY', groups.cardio]].forEach(([label, list]) => {
         if (!list.length) return;
         groupLabel(label);

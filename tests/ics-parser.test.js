@@ -2488,6 +2488,17 @@ test('the plan picker groups workouts and loses none', () => {
   assertEqual(ctx.planProfileGroups(['Brand New']).strength.join(), 'Brand New', 'an unknown workout still shows');
 });
 
+test('Starter Strength shows for beginners, Walking First members, or when it is the current pick', () => {
+  const all = vm.runInContext('MUSCLE_GROUPS', ctx);
+  const has = (lvl, goal, cur) => ctx.planPickerWorkouts(all, lvl, goal, cur).includes('Starter Strength');
+  assertEqual(has('beginner', 'muscle', 'Upper Push'), true);
+  assertEqual(has('intermediate', 'strength', 'Upper Push'), false);
+  assertEqual(has('advanced', 'muscle', 'Lower Body'), false);
+  assertEqual(has('intermediate', 'walking', 'Walk'), true, 'the Walking First plan is built on it');
+  assertEqual(has('advanced', 'muscle', 'Starter Strength'), true, 'never hide the one that is selected');
+  assertEqual(ctx.planPickerWorkouts(all, 'advanced', 'muscle', 'Upper Push').length, all.length - 1, 'nothing else is removed');
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

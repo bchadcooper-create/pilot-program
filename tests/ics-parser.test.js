@@ -2499,6 +2499,16 @@ test('Starter Strength shows for beginners, Walking First members, or when it is
   assertEqual(ctx.planPickerWorkouts(all, 'advanced', 'muscle', 'Upper Push').length, all.length - 1, 'nothing else is removed');
 });
 
+test('arriving on the Start a workout page closes every expanded section', () => {
+  const S = ctx.ST;
+  const saved = { a: S.showChangePlan, b: S.planOpen, c: S.showConditionDetail, d: S.showCondOverride, e: S.showInjuryDetail };
+  S.showChangePlan = true; S.planOpen = 'env'; S.showConditionDetail = true; S.showCondOverride = true; S.showInjuryDetail = true;
+  ctx.collapsePreflight();
+  assertEqual(S.showChangePlan, false); assertEqual(S.planOpen, undefined);
+  assertEqual(S.showConditionDetail, false); assertEqual(S.showCondOverride, false); assertEqual(S.showInjuryDetail, false);
+  S.showChangePlan = saved.a; S.planOpen = saved.b; S.showConditionDetail = saved.c; S.showCondOverride = saved.d; S.showInjuryDetail = saved.e;
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

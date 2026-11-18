@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.66.1 / 20261117_02
+ * Version/build: fcf-v5.66.2 / 20261117_03
  */
 
-const FCF_VERSION = 'fcf-v5.66.1';
-const FCF_BUILD   = '20261117_02';
+const FCF_VERSION = 'fcf-v5.66.2';
+const FCF_BUILD   = '20261117_03';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -2892,9 +2892,28 @@ function playPageTransition(el, className) {
 // attribute — so the highlight silently never updated at all. Restored
 // the original, fuller logic wholesale rather than patching the
 // rewrite, since the rewrite didn't preserve any of this on purpose.
+// Requested Nov 17 2026: the Start a workout page should always open in its
+// clean, collapsed state. Before, if a member opened Change Plan (or the
+// condition or injury sections), left the page and came back, it was still
+// expanded. Arriving from another page now closes them all, and so does
+// coming back to the app on a new day with this page already showing.
+// A brand-new member, or one with no workout picked, still gets the picker
+// opened for them, because there is nothing to summarize yet.
+function collapsePreflight() {
+  ST.showChangePlan = false; ST.planOpen = undefined;
+  ST.showConditionDetail = false; ST.showCondOverride = false; ST.showInjuryDetail = false;
+  ST._preflightDay = new Date().toDateString();
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  try {
+    if (ST.tab === 'preflight' && ST._preflightDay && ST._preflightDay !== new Date().toDateString()) { collapsePreflight(); renderPage(); }
+  } catch (e) { /* not ready yet */ }
+});
 function switchTab(tab) {
   haptic('light');
   const prevTab = ST.tab;
+  if (tab === 'preflight' && prevTab !== 'preflight') collapsePreflight();
   if (ST.tab === 'fuelplan' && tab !== 'fuelplan') { ST.fuelPlanDraftSynced = false; ST.manualTargetsOpen = false; ST.manualTargetsWarning = null; }
   ST.tab = tab;
   const MORE_SUBVIEWS = ['profile','wisdom','devices','data','badges','superuser','medical'];

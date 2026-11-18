@@ -2447,6 +2447,47 @@ test('Trends sections: the calendar starts open, the rest closed, and an empty s
   assertEqual(ctx.trendsSectionHtml('oura', 'Oura ring', '', '', st), '', 'nothing to show, no row');
 });
 
+// ── Custom exercise form: recommended sets and reps (Nov 17 2026) ──
+test('the custom exercise form recommends a range from the objective and the kind of lift', () => {
+  assertEqual(ctx.customExRecommended('compound', 'strength', 'intermediate', 'male'), '3 × 4-6');
+  assertEqual(ctx.customExRecommended('accessory', 'strength', 'intermediate', 'male'), '3 × 6-10');
+  assertEqual(ctx.customExRecommended('isolation', 'muscle', 'intermediate', 'male'), '3 × 12-15');
+  assertEqual(ctx.customExRecommended('compound', 'strength', 'beginner', 'male'), '3 × 6-10', 'beginners start in the next band');
+  assertEqual(ctx.customExRecommended('accessory', 'muscle', 'intermediate', 'female'), '3 × 10-14', 'accessory range shifts up 2 for women');
+  assertEqual(ctx.customExRecommended('compound', 'muscle', 'intermediate', 'female'), '3 × 6-10', 'a main lift does not shift');
+  assertEqual(ctx.customExRecommended('nonsense', 'unset', 'intermediate', 'male'), '3 × 8-12', 'no objective: a sensible default');
+  assertEqual(ctx.customExRecLabel('accessory', 'strength', 'intermediate', 'male').startsWith('Recommended for your '), true);
+  assertEqual(ctx.customExRecLabel('accessory', 'unset', 'intermediate', 'male'), 'Recommended: 3 × 8-12');
+});
+test('keeping the recommendation follows the objective; typing your own is used as written', () => {
+  const kept = ctx.customExTargetFields('3 × 6-10', 'accessory', 'strength', 'intermediate', 'male', 'reps_weight');
+  assertEqual(kept.ownTarget, false); assertEqual(kept.role, 'accessory'); assertEqual(kept.target, '3×10');
+  assertEqual(ctx.customExTargetFields('3x6-10', 'accessory', 'strength', 'intermediate', 'male', 'reps_weight').ownTarget, false, 'same thing typed loosely');
+  assertEqual(ctx.customExTargetFields('', 'compound', 'strength', 'intermediate', 'male', 'reps_weight').ownTarget, false, 'blank means recommended');
+  const own = ctx.customExTargetFields('5×5', 'compound', 'muscle', 'intermediate', 'male', 'reps_weight');
+  assertEqual(own.ownTarget, true); assertEqual(own.target, '5×5'); assertEqual(own.role, 'compound');
+  assertEqual(ctx.customExTargetFields('3×30 sec', 'accessory', 'muscle', 'intermediate', 'male', 'timed').target, '3×30 sec');
+  // In a workout: the kept one takes the objective's range, the typed one stays.
+  const base = { name: 'Cable Woodchopper', inputType: 'reps_weight', timed: false };
+  const keptEx = Object.assign({}, base, { target: kept.target, role: kept.role });
+  assertEqual(JSON.stringify(ctx.repRangeFor(keptEx, 'enroute', 'strength', 'intermediate', 'male')), JSON.stringify({ lo: 6, hi: 10 }));
+  assertEqual(JSON.stringify(ctx.repRangeFor(keptEx, 'enroute', 'fatloss', 'intermediate', 'male')), JSON.stringify({ lo: 10, hi: 15 }), 'objective changed, range follows');
+  const ownEx = Object.assign({}, base, { target: '5×5', role: 'compound', ownTarget: true });
+  assertEqual(ctx.repRangeFor(ownEx, 'enroute', 'fatloss', 'intermediate', 'male'), null, 'typed target is not rewritten');
+  assertEqual(ctx.withRepRange(ownEx, 'enroute').target, '5×5');
+  // The member's answer beats a guess from the name.
+  assertEqual(ctx.exerciseRole({ name: 'Heavy Curl Thing', role: 'compound' }, 'enroute'), 'compound');
+  assertEqual(ctx.exerciseRole({ name: 'Heavy Curl Thing' }, 'enroute'), 'isolation', 'no answer: still guessed from the name');
+});
+test('the plan picker groups workouts and loses none', () => {
+  const all = vm.runInContext('MUSCLE_GROUPS', ctx);
+  const g = ctx.planProfileGroups(all);
+  assertEqual(g.strength.length + g.cardio.length, all.length);
+  assertEqual(g.cardio.includes('Run') && g.cardio.includes('Stretch'), true);
+  assertEqual(g.strength.includes('Lower Body') && g.strength.includes('Starter Strength'), true);
+  assertEqual(ctx.planProfileGroups(['Brand New']).strength.join(), 'Brand New', 'an unknown workout still shows');
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.65.0 / 20261116_25
+ * Version/build: fcf-v5.66.0 / 20261117_01
  */
 
-const FCF_VERSION = 'fcf-v5.65.0';
-const FCF_BUILD   = '20261116_25';
+const FCF_VERSION = 'fcf-v5.66.0';
+const FCF_BUILD   = '20261117_01';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -4951,7 +4951,7 @@ function renderPage() {
   p.innerHTML = '';
   if (ST.tab === 'preflight') {
     renderPreflight(p).catch(e => {
-      p.innerHTML = '<div class="section-label">PREFLIGHT BRIEFING · '+FCF_VERSION+'</div>' +
+      p.innerHTML = '<div class="section-label">PREFLIGHT BRIEFING</div>' +
         '<div class="card mb12"><div style="font-size:0.8125rem;color:var(--muted);margin-bottom:10px">Couldn\'t load your calendar. This can happen with no signal.</div>' +
         '<button class="btn btn-outline" onclick="renderPage()">↻ Retry</button></div>';
     });
@@ -10638,6 +10638,12 @@ async function deleteSessionConfirmed(key) {
 // Saved custom routines: fixed exercise lists the user assembles by hand.
 // Used exactly as saved — deliberately outside the adaptive pipeline.
 
+// Built-in workouts in two groups for the plan picker. Anything not named
+// as cardio or recovery counts as strength, so a new workout is never lost.
+const PLAN_CARDIO_GROUP = ['Cardio', 'Run', 'Walk', 'Stretch', 'Longevity'];
+function planProfileGroups(all) {
+  return { strength: all.filter(m => !PLAN_CARDIO_GROUP.includes(m)), cardio: all.filter(m => PLAN_CARDIO_GROUP.includes(m)) };
+}
 function selectMissionProfile(mg) {
   ST.activeCustomProfileId = null;
   ST.muscleGroup = mg;
@@ -10766,10 +10772,7 @@ function bpShowCreateForm(section, q) {
     '<div style="border:1px solid var(--gold);border-radius:8px;padding:10px;margin-top:4px">' +
     '<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:8px">New exercise</div>' +
     '<div class="field" style="margin-bottom:6px"><input type="text" id="bpNewName_'+section+'" value="'+name+'" placeholder="Exercise name"></div>' +
-    '<div class="field-row" style="margin-bottom:8px">' +
-    '<div class="field"><input type="text" id="bpNewTarget_'+section+'" placeholder="Target (e.g. 3\u00d712)"></div>' +
-    '<div class="field"><select id="bpNewType_'+section+'"><option value="reps_weight">Reps + Weight</option><option value="reps_only">Reps Only</option><option value="timed">Timed (min)</option></select></div>' +
-    '</div>' +
+    customExFormRows({ kind: 'bpNewKind_'+section, target: 'bpNewTarget_'+section, type: 'bpNewType_'+section, rec: 'bpNewRec_'+section }) +
     '<button class="btn btn-gold" style="font-size:0.75rem" onclick="bpSaveCustomExercise(\''+section+'\')">Add to Routine</button>' +
     '<button class="btn-ghost mt8" style="display:block;width:100%;text-align:center;font-size:0.75rem" onclick="document.getElementById(\'bpResults_'+section+'\').innerHTML=\'\'">Cancel</button>' +
     '</div>';
@@ -10778,14 +10781,16 @@ function bpShowCreateForm(section, q) {
 async function bpSaveCustomExercise(section) {
   const name = sanitizeUserText(document.getElementById('bpNewName_'+section)?.value?.trim());
   if (!name) { showToast('Enter an exercise name.'); return; }
-  const target = sanitizeUserText(document.getElementById('bpNewTarget_'+section)?.value?.trim()) || '\u2014';
   const inputType = document.getElementById('bpNewType_'+section)?.value || 'reps_weight';
+  const tf = customExTargetFields(sanitizeUserText(document.getElementById('bpNewTarget_'+section)?.value?.trim()), document.getElementById('bpNewKind_'+section)?.value, ST.goal, ST.level, ST.sex, inputType);
+  const target = tf.target;
   const setsMatch = target.match(/^(\d+)\s*[x\u00d7]/i);
   const setsCount = setsMatch ? Math.max(1, parseInt(setsMatch[1], 10)) : 3;
 
   const id = 'custom_' + Date.now();
   const newEx = ex(id, name, target, setsCount, 'User-created exercise.', inputType==='timed', inputType);
-  newEx.custom = true;
+  newEx.custom = true; newEx.role = tf.role;
+  if (tf.ownTarget) newEx.ownTarget = true;
 
   ST.customExercises.push({ env: ST.env, muscleGroup: ST.muscleGroup, exercise: newEx });
   try {
@@ -10794,7 +10799,11 @@ async function bpSaveCustomExercise(section) {
     await dbSetProfile(profile);
   } catch(e) { console.warn('Saving custom exercise failed:', e); showToast('⚠️ Saved locally, but could not sync to your account.'); }
 
-  ST.buildProfile[section].push(JSON.parse(JSON.stringify(newEx)));
+  // A saved routine is used exactly as written, with no range worked out
+  // later, so its copy carries the recommended range in the target itself.
+  const forRoutine = JSON.parse(JSON.stringify(newEx));
+  if (!tf.ownTarget && inputType !== 'timed') forRoutine.target = customExRecommended(tf.role, ST.goal, ST.level, ST.sex);
+  ST.buildProfile[section].push(forRoutine);
   showToast('\u2705 "'+name+'" created and added.');
   renderProfileBuilder();
 }
@@ -10915,7 +10924,7 @@ async function renderPreflight(p) {
 
   const parts = [];
   parts.push('<button class="btn-ghost" style="font-size:0.75rem;margin-bottom:10px" onclick="switchTab(\'today\')">← Back to Today</button>');
-  parts.push('<div class="section-label">PREFLIGHT BRIEFING · '+FCF_VERSION+'</div>');
+  parts.push('<div class="section-label">PREFLIGHT BRIEFING</div>');
   parts.push(installPromptHtml);
   if (profileIncomplete) {
     parts.push('<div class="card mb12" style="border-color:var(--gold);cursor:pointer" onclick="haptic(\'light\');switchTab(\'profile\')">');
@@ -10959,44 +10968,74 @@ async function renderPreflight(p) {
   parts.push('</div>');
 
   if (showPlan) {
-    parts.push('<div class="section-label">MISSION PROFILE</div>');
-    parts.push('<div class="mg-wrap">');
-    MUSCLE_GROUPS.forEach(mg => {
-      const builtinSel = !ST.activeCustomProfileId && ST.muscleGroup===mg;
-      const cls = 'mg-pill' + (builtinSel?' sel':'') + (mg===recommended && !builtinSel?' recommended':'');
-      parts.push('<div class="'+cls+'" onclick="selectMissionProfile(\''+mg+'\')">'+mg+(mg===recommended?' ★':'')+'</div>');
-    });
-    ST.customProfiles.forEach(cp => {
-      const cls = 'mg-pill' + (ST.activeCustomProfileId===cp.id?' sel':'');
-      parts.push('<div class="'+cls+'" style="border-style:dashed" onclick="selectCustomProfile(\''+cp.id+'\')">🛠 '+cp.name+'</div>');
-    });
-    parts.push('<div class="mg-pill" style="border-style:dashed;color:var(--gold)" onclick="openProfileBuilder()">＋ Build Your Own</div>');
-    parts.push('</div>');
-    if (ST.customProfiles.length) {
-      parts.push('<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);margin:-6px 0 10px;cursor:pointer" onclick="haptic(\'light\');openProfileManager()">✎ MANAGE SAVED ROUTINES</div>');
+    // Reported Nov 17 2026: this section "is already getting cluttered,
+    // especially if a person makes a bunch of Build Your Own workouts".
+    // Opening Change Plan used to show everything at once: eleven workout
+    // pills plus every saved routine, the time grid, the environment grid
+    // and the preview. Now it shows four rows, each with the current choice
+    // on it, and one opens at a time (the same pattern as the menu and the
+    // Trends page). Picking something closes the row. The workouts are
+    // grouped, and saved routines get their own group. A new member, or one
+    // with nothing picked, starts with the workout row open.
+    const openRow = ST.planOpen !== undefined ? ST.planOpen : ((isNewUser || !wk) ? 'profile' : null);
+    const planRow = (key, title, sub) => {
+      const open = openRow === key;
+      parts.push('<div class="card" style="cursor:pointer;margin-bottom:' + (open ? '8px' : '10px') + (open ? ';border-color:var(--gold)' : '') + '" role="button" aria-expanded="' + open + '" onclick="haptic(\'light\');ST.planOpen=' + (open ? 'null' : "'" + key + "'") + ';renderPage()"><div class="fb">' +
+        '<div style="min-width:0"><div style="font-size:0.6875rem;color:var(--muted)">' + title + '</div><div style="font-size:0.9375rem;font-weight:600;margin-top:2px">' + sub + '</div></div>' +
+        '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="flex-shrink:0;color:var(--muted);transform:rotate(' + (open ? '180' : '0') + 'deg)"><path d="m6 9 6 6 6-6"/></svg></div></div>');
+      return open;
+    };
+    const groupLabel = t => parts.push('<div style="font-family:var(--mono);font-size:0.5625rem;letter-spacing:0.1em;color:var(--muted);margin:2px 0 6px">' + t + '</div>');
+
+    if (planRow('profile', 'Mission profile', planName)) {
+      const groups = planProfileGroups(MUSCLE_GROUPS);
+      [['STRENGTH', groups.strength], ['CARDIO AND RECOVERY', groups.cardio]].forEach(([label, list]) => {
+        if (!list.length) return;
+        groupLabel(label);
+        parts.push('<div class="mg-wrap">');
+        list.forEach(mg => {
+          const builtinSel = !ST.activeCustomProfileId && ST.muscleGroup===mg;
+          const cls = 'mg-pill' + (builtinSel?' sel':'') + (mg===recommended && !builtinSel?' recommended':'');
+          parts.push('<div class="'+cls+'" onclick="ST.planOpen=null;selectMissionProfile(\''+mg+'\')">'+mg+(mg===recommended?' ★':'')+'</div>');
+        });
+        parts.push('</div>');
+      });
+      groupLabel('MY ROUTINES');
+      parts.push('<div class="mg-wrap">');
+      ST.customProfiles.forEach(cp => {
+        const cls = 'mg-pill' + (ST.activeCustomProfileId===cp.id?' sel':'');
+        parts.push('<div class="'+cls+'" style="border-style:dashed" onclick="ST.planOpen=null;selectCustomProfile(\''+cp.id+'\')">🛠 '+cp.name+'</div>');
+      });
+      parts.push('<div class="mg-pill" style="border-style:dashed;color:var(--gold)" onclick="openProfileBuilder()">＋ Build Your Own</div>');
+      parts.push('</div>');
+      if (ST.customProfiles.length) {
+        parts.push('<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);margin:-6px 0 10px;cursor:pointer" onclick="haptic(\'light\');openProfileManager()">✎ MANAGE SAVED ROUTINES</div>');
+      }
     }
 
-    parts.push('<div class="section-label">TIME AVAILABLE <span class="info-i" onclick="showBioInfo(\'timeAvail\')">i</span></div>');
-    parts.push('<div class="card mb12">');
-    parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">');
-    [15,30,45,60,null].forEach(m => {
-      const sel = ST.timeAvailMin === m;
-      parts.push('<div class="env-btn'+(sel?' sel':'')+'" style="padding:10px" onclick="ST.timeAvailMin='+(m===null?'null':m)+';persistDailyInputs();renderPage()"><div style="font-size:0.75rem;font-weight:600">'+(m===null?'Full Session':m+' min')+'</div>'+(m===null?'<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);margin-top:2px">~'+fullSessionMin+' min</div>':'')+'</div>');
-    });
-    parts.push('</div>');
-    parts.push('</div>');
-    parts.push('<div class="section-label">MISSION ENVIRONMENT</div>');
-    parts.push('<div class="env-toggle">');
-    parts.push('<div class="env-btn '+(ST.env==='room'?'sel':'')+'" onclick="setEnvManually(\'room\')"><div class="ei">🛏️</div><div class="el">HOTEL ROOM</div></div>');
-    parts.push('<div class="env-btn '+(ST.env==='hotel'?'sel':'')+'" onclick="setEnvManually(\'hotel\')"><div class="ei">🏨</div><div class="el">HOTEL GYM</div></div>');
-    parts.push('<div class="env-btn '+(ST.env==='comm'?'sel':'')+'" onclick="setEnvManually(\'comm\')"><div class="ei">🏋️</div><div class="el">COMM GYM</div></div>');
-    parts.push('<div class="env-btn '+(ST.env==='band'?'sel':'')+'" onclick="ST.env=\'band\';renderPage()"><div class="ei">➰</div><div class="el">BAND WORK</div></div>');
-    parts.push('</div>');
+    if (planRow('time', 'Time available', ST.timeAvailMin ? ST.timeAvailMin + ' min' : 'Full session, about ' + fullSessionMin + ' min')) {
+      parts.push('<div class="card mb12">');
+      parts.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">');
+      [15,30,45,60,null].forEach(m => {
+        const sel = ST.timeAvailMin === m;
+        parts.push('<div class="env-btn'+(sel?' sel':'')+'" style="padding:10px" onclick="ST.planOpen=null;ST.timeAvailMin='+(m===null?'null':m)+';persistDailyInputs();renderPage()"><div style="font-size:0.75rem;font-weight:600">'+(m===null?'Full Session':m+' min')+'</div>'+(m===null?'<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);margin-top:2px">~'+fullSessionMin+' min</div>':'')+'</div>');
+      });
+      parts.push('</div>');
+      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:8px;cursor:pointer" onclick="showBioInfo(\'timeAvail\')">How a shorter session is trimmed <span class="info-i">i</span></div>');
+      parts.push('</div>');
+    }
 
-    // Detailed phase-by-phase preview only shown while the plan editor is
-    // open — informational once you've already seen it, not a decision.
-    if (wk) {
-      parts.push('<div class="section-label">FLIGHT PLAN PREVIEW · '+totalEx+' EXERCISES ('+(ST.activeCustomProfileId?'CUSTOM · AS SAVED':levelLabel+(ST.fatigue!=='go'?' / '+fatigueLabel:'')+(ST.timeAvailMin?' / ⏱ '+ST.timeAvailMin+'min':''))+')</div>');
+    if (planRow('env', 'Mission environment', envLabel)) {
+      parts.push('<div class="env-toggle">');
+      parts.push('<div class="env-btn '+(ST.env==='room'?'sel':'')+'" onclick="ST.planOpen=null;setEnvManually(\'room\')"><div class="ei">🛏️</div><div class="el">HOTEL ROOM</div></div>');
+      parts.push('<div class="env-btn '+(ST.env==='hotel'?'sel':'')+'" onclick="ST.planOpen=null;setEnvManually(\'hotel\')"><div class="ei">🏨</div><div class="el">HOTEL GYM</div></div>');
+      parts.push('<div class="env-btn '+(ST.env==='comm'?'sel':'')+'" onclick="ST.planOpen=null;setEnvManually(\'comm\')"><div class="ei">🏋️</div><div class="el">COMM GYM</div></div>');
+      parts.push('<div class="env-btn '+(ST.env==='band'?'sel':'')+'" onclick="ST.planOpen=null;ST.env=\'band\';renderPage()"><div class="ei">➰</div><div class="el">BAND WORK</div></div>');
+      parts.push('</div>');
+    }
+
+    // The phase-by-phase preview is information, not a decision.
+    if (wk && planRow('preview', 'Flight plan preview', totalEx + ' exercises' + (ST.activeCustomProfileId ? ', custom, as saved' : ', ' + levelLabel + (ST.fatigue!=='go' ? ' / ' + fatigueLabel : '')))) {
       parts.push('<div class="card card-dark mb12"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
       [['🚕 TAXI',wk.taxi],['🛫 TAKEOFF',wk.takeoff],['✈️ EN ROUTE',wk.enroute],['🛬 LANDING',wk.landing]].forEach(([label,exs]) => {
         parts.push('<div style="background:var(--bg);border-radius:8px;padding:10px"><div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);letter-spacing:0.08em;margin-bottom:6px">'+label+'</div>');
@@ -11593,7 +11632,10 @@ function getCombinedWorkout(env, muscleGroup) {
   }
   // Custom exercises get added to enroute by default (volume/accessory slot)
   const customForThis = ST.customExercises.filter(c => c.env === env && c.muscleGroup === muscleGroup);
-  if (customForThis.length) wk.enroute = [...wk.enroute, ...customForThis.map(c => withRepRange(c.exercise, 'enroute'))];
+  customForThis.forEach(c => {
+    const ph = ['taxi', 'takeoff', 'enroute', 'landing'].includes(c.exercise && c.exercise.phase) ? c.exercise.phase : 'enroute';
+    wk[ph] = [...wk[ph], withRepRange(c.exercise, ph)];
+  });
   return wk;
 }
 
@@ -13657,6 +13699,9 @@ const POWER_RANGE = [3, 6];
 const POWER_NAME = /jump|clean|snatch|push press|throw|slam|swing|thruster|pogo|hop|depth drop|plyo/i;
 const ISOLATION_NAME = /curl|raise|fly|flye|pull-apart|pull apart|face pull|pushdown|extension|kickback|calf|shrug|crunch|abduction|adduction|rear delt|preacher|tricep|pullover|rotation|y-t-w|band/i;
 function exerciseRole(exItem, phase) {
+  // A member's own exercise says what it is (main lift, accessory or
+  // isolation) on the form, so that answer wins over a guess from its name.
+  if (exItem.role === 'compound' || exItem.role === 'accessory' || exItem.role === 'isolation') return exItem.role;
   if (POWER_NAME.test(exItem.name || '')) return 'power';
   if (phase === 'takeoff') return 'compound';
   return ISOLATION_NAME.test(exItem.name || '') ? 'isolation' : 'accessory';
@@ -13667,6 +13712,9 @@ function repRangeFor(exItem, phase, goal, level, sex) {
   if (!exItem || exItem.timed) return null;
   if (exItem.inputType !== 'reps_weight' && exItem.inputType !== 'reps_only') return null;
   if (phase !== 'takeoff' && phase !== 'enroute') return null;
+  // The member typed their own sets and reps: use exactly those, whatever
+  // the objective says. Null here leaves the target as written.
+  if (exItem.ownTarget) return null;
   const anchor = parseTargetReps(exItem.target);
   if (!anchor) return null;
   const role = exerciseRole(exItem, phase);
@@ -13678,7 +13726,7 @@ function repRangeFor(exItem, phase, goal, level, sex) {
     // low-rep work, so a beginner on the strength plan uses the next band.
     const key = (role === 'compound' && level === 'beginner' && (goal === 'strength' || goal === 'jump')) ? 'accessory' : role;
     [lo, hi] = table[key];
-    if (sex === 'female' && phase === 'enroute' && role !== 'power') { lo += 2; hi += 2; }
+    if (sex === 'female' && phase === 'enroute' && role !== 'power' && exItem.role !== 'compound') { lo += 2; hi += 2; }
   }
   // An exercise written for a very different rep count keeps a range around
   // its own number: 3x20 calf raises stay high, 5x3 heavy triples stay low.
@@ -13686,6 +13734,66 @@ function repRangeFor(exItem, phase, goal, level, sex) {
   if (anchor <= 3 && anchor < lo) { lo = anchor; hi = anchor + 2; }
   else if (anchor >= 15 && anchor > hi) { hi = anchor; lo = Math.max(1, anchor - 2); }
   return { lo, hi };
+}
+// ── Recommended sets and reps on the custom exercise forms (Nov 17 2026) ──
+// Requested: the form should show "the recommended sets and reps for the
+// member's objective as the default ... lets them keep it or type their
+// own, and asks whether it is a main lift or an accessory". Before this the
+// target was a blank text box with no guidance, and the app guessed the
+// kind of lift from the exercise's name with no way to correct it.
+// Keeping the recommendation stores an ordinary target, so the range keeps
+// following the objective if it changes later. Typing a different target
+// marks the exercise ownTarget, and that is used exactly as written.
+// The ranges come from REP_RANGES above. Three sets is this app's default
+// for a new exercise, not a figure from those papers.
+const CUSTOM_EX_SETS = 3;
+const CUSTOM_EX_KINDS = [
+  ['compound', 'Main lift: squat, press, row'],
+  ['accessory', 'Accessory: most other moves'],
+  ['isolation', 'Isolation: curls, raises'],
+];
+function customExRange(kind, goal, level, sex) {
+  const k = CUSTOM_EX_KINDS.some(x => x[0] === kind) ? kind : 'accessory';
+  return repRangeFor({ name: '', target: CUSTOM_EX_SETS + '×10', inputType: 'reps_weight', role: k }, 'enroute', goal, level, sex) || { lo: 8, hi: 12 };
+}
+function customExRecommended(kind, goal, level, sex) {
+  const r = customExRange(kind, goal, level, sex);
+  return CUSTOM_EX_SETS + ' × ' + r.lo + '-' + r.hi;
+}
+function customExRecLabel(kind, goal, level, sex) {
+  const g = GOALS[goal];
+  return 'Recommended' + (g ? ' for your ' + g.label + ' objective' : '') + ': ' + customExRecommended(kind, goal, level, sex);
+}
+// What to store for a typed target. Same as the recommendation (spacing and
+// x or × aside), or blank: follow the objective. Anything else: the member's own.
+function customExTargetFields(typed, kind, goal, level, sex, inputType) {
+  const role = CUSTOM_EX_KINDS.some(x => x[0] === kind) ? kind : 'accessory';
+  if (inputType === 'timed') return { target: String(typed || '').trim() || '–', role, ownTarget: false };
+  const norm = t => String(t || '').toLowerCase().replace(/\s+/g, '').replace(/x/g, '×');
+  const r = customExRange(role, goal, level, sex);
+  if (!norm(typed) || norm(typed) === norm(customExRecommended(role, goal, level, sex))) return { target: CUSTOM_EX_SETS + '×' + r.hi, role, ownTarget: false };
+  return { target: String(typed).trim(), role, ownTarget: true };
+}
+// The three form rows, shared by the workout page and the routine builder.
+function customExFormRows(ids) {
+  const rec = customExRecommended('accessory', ST.goal, ST.level, ST.sex);
+  return '<div class="field"><label>What kind of exercise is it?</label><select id="' + ids.kind + '" onchange="customExFormSync(\'' + ids.kind + '\',\'' + ids.target + '\',\'' + ids.type + '\',\'' + ids.rec + '\')">' +
+      CUSTOM_EX_KINDS.map(k => '<option value="' + k[0] + '"' + (k[0] === 'accessory' ? ' selected' : '') + '>' + k[1] + '</option>').join('') + '</select></div>' +
+    '<div class="field-row">' +
+    '<div class="field"><label>Sets × reps</label><input type="text" id="' + ids.target + '" value="' + rec + '" data-auto="1" oninput="this.dataset.auto=\'\'" placeholder="e.g. 3×12"></div>' +
+    '<div class="field"><label>Input Type</label><select id="' + ids.type + '" onchange="customExFormSync(\'' + ids.kind + '\',\'' + ids.target + '\',\'' + ids.type + '\',\'' + ids.rec + '\')"><option value="reps_weight">Reps + Weight</option><option value="reps_only">Reps Only</option><option value="timed">Timed (seconds)</option></select></div>' +
+    '</div>' +
+    '<div id="' + ids.rec + '" style="font-size:0.75rem;color:var(--muted);line-height:1.5;margin:-4px 0 12px">' + customExRecLabel('accessory', ST.goal, ST.level, ST.sex) + '. Keep it, or type your own.</div>';
+}
+// Keeps the recommendation line and the untouched target box in step with
+// the kind and the input type. A target the member has typed is left alone.
+function customExFormSync(kindId, targetId, typeId, recId) {
+  const kind = (document.getElementById(kindId) || {}).value || 'accessory';
+  const timed = ((document.getElementById(typeId) || {}).value) === 'timed';
+  const box = document.getElementById(targetId), note = document.getElementById(recId);
+  if (box && box.dataset.auto === '1') box.value = timed ? '' : customExRecommended(kind, ST.goal, ST.level, ST.sex);
+  if (box) box.placeholder = timed ? 'e.g. 3×30 sec' : 'e.g. 3×12';
+  if (note) note.textContent = timed ? 'Timed work has no rep range. Enter sets and seconds, for example 3×30 sec.' : customExRecLabel(kind, ST.goal, ST.level, ST.sex) + '. Keep it, or type your own.';
 }
 // Rewrites "4×10/leg" as "4 × 8-12/leg" and records the range on the item.
 function withRepRange(exItem, phase) {
@@ -14105,10 +14213,7 @@ function buildAddExerciseCard() {
     parts.push('<div id="addExCatalogResults"></div>');
     parts.push('<div style="font-family:var(--mono);font-size:0.5625rem;color:var(--muted);letter-spacing:0.08em;margin:12px 0 10px;text-align:center">OR CREATE YOUR OWN BELOW</div>');
     parts.push('<div class="field"><label>Exercise Name</label><input type="text" id="custom_ex_name" placeholder="e.g. Cable Woodchopper"></div>');
-    parts.push('<div class="field-row">');
-    parts.push('<div class="field"><label>Target (sets×reps)</label><input type="text" id="custom_ex_target" placeholder="e.g. 3×12"></div>');
-    parts.push('<div class="field"><label>Input Type</label><select id="custom_ex_type"><option value="reps_weight">Reps + Weight</option><option value="reps_only">Reps Only</option><option value="timed">Timed (seconds)</option></select></div>');
-    parts.push('</div>');
+    parts.push(customExFormRows({ kind: 'custom_ex_kind', target: 'custom_ex_target', type: 'custom_ex_type', rec: 'custom_ex_rec' }));
     // BUG FIX (reported): this always landed in En Route regardless of
     // intent — a warmup exercise added mid-workout instead of at the
     // start. There's no "natural" phase for a brand-new exercise the way
@@ -14223,8 +14328,14 @@ function sanitizeUserTextLong(s) {
 
 async function saveCustomExercise() {
   const name = sanitizeUserText(document.getElementById('custom_ex_name')?.value?.trim());
-  const target = sanitizeUserText(document.getElementById('custom_ex_target')?.value?.trim()) || '–';
   const inputType = document.getElementById('custom_ex_type')?.value || 'reps_weight';
+  const tf = customExTargetFields(sanitizeUserText(document.getElementById('custom_ex_target')?.value?.trim()), document.getElementById('custom_ex_kind')?.value, ST.goal, ST.level, ST.sex, inputType);
+  const target = tf.target;
+  // The form asks which part of the workout it belongs in. That answer was
+  // being ignored (everything went to En Route); it is used now, for this
+  // workout and for later ones.
+  const phaseSel = document.getElementById('custom_ex_phase')?.value;
+  const phase = ['taxi', 'takeoff', 'enroute', 'landing'].includes(phaseSel) ? phaseSel : 'enroute';
   const note = sanitizeUserText(document.getElementById('custom_ex_note')?.value?.trim()) || 'User-created exercise.';
   if (!name) { showToast('Enter an exercise name.'); return; }
 
@@ -14236,11 +14347,12 @@ async function saveCustomExercise() {
 
   const id = 'custom_' + Date.now();
   const newEx = ex(id, name, target, setsCount, note, inputType==='timed', inputType);
-  newEx.custom = true;
+  newEx.custom = true; newEx.role = tf.role; newEx.phase = phase;
+  if (tf.ownTarget) newEx.ownTarget = true;
 
-  // Add to current active workout (enroute slot) immediately
+  // Add to the current active workout immediately, with its range applied
   if (ST.workout) {
-    ST.workout.enroute.push(newEx);
+    (ST.workout[phase] || ST.workout.enroute).push(withRepRange(newEx, phase));
     const blankSet = inputType==='timed_distance' ? {seconds:'',miles:''} : inputType==='timed' ? {seconds:''} : inputType==='reps_only' ? {reps:''} : {reps:'',weight:''};
     ST.sets[id] = Array.from({ length: setsCount }, () => ({...blankSet}));
   }

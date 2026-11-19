@@ -952,7 +952,8 @@ test('Apple Calendar connected but no flights this month: ask for the .ics (requ
   assertEqual(N(now, [pers('2026-11-20T09:00:00')], [{ start: '2026-10-22T14:00:00' }], true), true, 'an uploaded schedule from last month does not count');
   assertEqual(N(now, null, [], true), false, 'calendar not read yet: no ask');
   assertEqual(N(now, [pers('2026-11-20T09:00:00')], [], false), false, 'calendar not connected: no ask');
-  assertEqual(N(now, [{ type: 'unknown', start: '2026-11-20T09:00:00' }], [], true), true, 'events the classifier could not type are not flights');
+  assertEqual(N(now, [{ type: 'unknown', start: '2026-11-20T09:00:00' }], [], true), false, 'every event untyped means the flight detector did not run: do not claim there are no flights');
+  assertEqual(N(now, [{ type: 'unknown', start: '2026-11-20T09:00:00' }, pers('2026-11-21T09:00:00')], [], true), true, 'one event the detector could not type, among typed ones, is not a flight');
 });
 test('daily drink goal: a base for every day, a little for flying, some for a workout (decided Nov 16)', () => {
   const k = { sex: ctx.ST.sex, hrs: ctx.ST.flightHrs, water: ctx.ST.water, cache: ctx.ST.sessionCache, units: ctx.ST.units };
@@ -2520,6 +2521,18 @@ test('arriving on the Start a workout page closes every expanded section', () =>
   assertEqual(S.showChangePlan, false); assertEqual(S.planOpen, undefined);
   assertEqual(S.showConditionDetail, false); assertEqual(S.showCondOverride, false); assertEqual(S.showInjuryDetail, false);
   S.showChangePlan = saved.a; S.planOpen = saved.b; S.showConditionDetail = saved.c; S.showCondOverride = saved.d; S.showInjuryDetail = saved.e;
+});
+
+test('Auto schedule source uses the uploaded file for a month the calendar has no flights in (review Nov 19)', () => {
+  const A = ctx.autoScheduleSource, now = new Date('2026-11-19T10:00:00');
+  const fl = d => ({ type: 'flight', start: d }), pers = d => ({ type: 'personal', start: d }), up = d => ({ start: d });
+  assertEqual(A(now, [], [up('2026-11-22T14:00:00')]), 'ics', 'no calendar: the upload');
+  assertEqual(A(now, null, null), 'ics', 'nothing at all: unchanged default');
+  assertEqual(A(now, [pers('2026-11-20T09:00:00')], []), 'calendar', 'no upload: the calendar, as before');
+  assertEqual(A(now, [fl('2026-11-20T09:00:00')], [up('2026-11-22T14:00:00')]), 'calendar', 'calendar has flights this month: calendar wins, as before');
+  assertEqual(A(now, [pers('2026-11-20T09:00:00')], [up('2026-11-22T14:00:00')]), 'ics', 'calendar has no flights this month and the upload covers it: the upload');
+  assertEqual(A(now, [fl('2026-12-02T09:00:00')], [up('2026-11-22T14:00:00')]), 'ics', 'calendar flights are next month only: the upload for this month');
+  assertEqual(A(now, [pers('2026-11-20T09:00:00')], [up('2026-10-22T14:00:00')]), 'calendar', 'a stale upload does not take over');
 });
 
 (async () => {

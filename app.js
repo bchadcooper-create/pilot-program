@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.66.2 / 20261117_03
+ * Version/build: fcf-v5.67.2 / 20261119_03
  */
 
-const FCF_VERSION = 'fcf-v5.67.1';
-const FCF_BUILD   = '20261119_02';
+const FCF_VERSION = 'fcf-v5.67.2';
+const FCF_BUILD   = '20261119_03';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -6420,13 +6420,32 @@ async function setBaseTimezone(value) {
 // (before being merged) are exactly how the app ended up showing two
 // different schedules on the same screen at once.
 function getActiveSchedule() {
+  const r = getActiveScheduleInner();
+  if (r.events === null) r.events = r.source === 'ics' ? (ST.flightSchedule || []) : (ST.calendarEvents || []);
+  return r;
+}
+function getActiveScheduleInner() {
   if (ST.scheduleSource === 'ics') return { source: 'ics', events: ST.flightSchedule || [] };
   if (ST.scheduleSource === 'calendar') return { source: 'calendar', events: ST.calendarEvents || [] };
   // 'auto' (default): prefer Apple Calendar sync if it has any data at
-  // all, falling back to the uploaded .ics — matches the original
-  // behavior from before this preference existed.
-  if (ST.calendarEvents?.length) return { source: 'calendar', events: ST.calendarEvents };
-  return { source: 'ics', events: ST.flightSchedule || [] };
+  // all, falling back to the uploaded .ics.
+  // BUG FIX (review, Nov 19 2026): v5.67.1 added a card asking a member to
+  // upload their schedule file when Apple Calendar has events but no
+  // flights this month. On Auto the upload was then ignored, because the
+  // calendar "had data", so the workouts and meals still followed a
+  // calendar with no flights and the card simply went away. Auto now uses
+  // the uploaded file for a month the calendar has no flights in.
+  return { source: autoScheduleSource(new Date(), ST.calendarEvents, ST.flightSchedule), events: null };
+}
+function autoScheduleSource(now, calendarEvents, icsEvents) {
+  const cal = calendarEvents || [], ics = icsEvents || [];
+  if (!cal.length) return 'ics';
+  if (!ics.length) return 'calendar';
+  const from = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const to = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime();
+  const inMonth = e => { const t = new Date(e && e.start).getTime(); return isFinite(t) && t >= from && t < to; };
+  if (cal.some(e => e && e.type === 'flight' && inMonth(e))) return 'calendar';
+  return ics.some(inMonth) ? 'ics' : 'calendar';
 }
 
 // ─── SCHEDULE UPLOAD PROMPT ─────────────────────────────────────────────────
@@ -6506,6 +6525,11 @@ function calendarHasNoFlightsThisMonth(now, calendarEvents, icsEvents, calendarC
   const inMonth = e => { const t = new Date(e && e.start).getTime(); return isFinite(t) && t >= from && t < to; };
   if (calendarEvents.some(e => e && e.type === 'flight' && inMonth(e))) return false;
   if ((icsEvents || []).some(inMonth)) return false;
+  // BUG FIX (review, Nov 19 2026): when the flight detector cannot run
+  // (offline, signed out, service error) every event is kept as type
+  // 'unknown'. That is "not checked", not "no flights", and the card was
+  // telling those members their calendar had no flights. Say nothing then.
+  if (calendarEvents.length && calendarEvents.every(e => !e || e.type === 'unknown')) return false;
   return true;
 }
 function noCalendarFlightsPromptHtml(now) {
@@ -15352,7 +15376,10 @@ async function saveBio() {
   const gluc  = parseInt(document.getElementById('inp_gluc')?.value)||null;
   if (!wt && !waist && !sys && !dia && !gluc) { showBigToast('Enter at least one value to log.','warn'); return; }
   // A reading over the FAA line used to save without a word here.
-  if ((sys && sys > 155) || (dia && dia > 95)) setTimeout(() => showBigToast('Logged. That reading is above the FAA limit of 155/95. One reading is not a verdict: sit quietly for five minutes and take it again. If it stays up, talk to your AME.', 'warn'), 2600);
+  // Review Nov 19 2026: this said "talk to your AME". The owner's standing
+  // rule is that the app never tells a pilot to volunteer something to the
+  // AME that the AME has not asked for, so it points to their own doctor.
+  if ((sys && sys > 155) || (dia && dia > 95)) setTimeout(() => showBigToast('Logged. That reading is above the FAA limit of 155/95. One reading is not a verdict: sit quietly for five minutes and take it again. If it stays up, see your own doctor.', 'warn'), 2600);
 
   const todayStart = new Date(); todayStart.setHours(0,0,0,0);
   const todayEnd   = new Date(); todayEnd.setHours(23,59,59,999);

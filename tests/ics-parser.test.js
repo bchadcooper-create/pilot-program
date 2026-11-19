@@ -2591,6 +2591,24 @@ test('food search: typing variants reach the same food, and every table entry is
   assertEqual(Object.keys(table).length >= 100, true, 'at least 100 common foods');
 });
 
+test('food search: a plate typed as one search leads with each part (50 common meals, Nov 19)', () => {
+  const c = ctx.commonFoodFor('Cheeseburger and French Fries');
+  assertEqual(!!c && c.parts.join('|'), 'cheeseburger|french fries');
+  assertEqual(topFood([FD('CHEESEBURGER & FRIES', 'Branded'), FD('Potato, french fries, NFS'), FD('Cheeseburger slider'), FD('Cheeseburger, NFS')], 'cheeseburger and french fries'), 'Cheeseburger, NFS');
+  assertEqual(ctx.rankUSDAFoods([FD('Potato, french fries, with chili'), FD('Potato, french fries, NFS'), FD('Cheeseburger, NFS')], 'cheeseburger and fries')[1].description, 'Potato, french fries, NFS', 'the second part comes second');
+  assertEqual(ctx.commonFoodFor('steak with mashed potatoes').parts.length, 2);
+  const plate = ctx.rankUSDAFoods([FD('Chicken breast, fried, coated, skin / coating eaten, from raw'), FD('Chicken breast, fried, coated, skin / coating eaten, from fast food'), FD('Chicken breast, fried, coated, skin / coating eaten, from pre-cooked'), FD('Gravy, beef'), FD('Gravy, NFS'), FD('Potato, mashed, NFS')], 'fried chicken with mashed potatoes and gravy').slice(0, 3).map(f => f.description);
+  assertEqual(plate.join(' | '), 'Chicken breast, fried, coated, skin / coating eaten, from raw | Potato, mashed, NFS | Gravy, NFS', 'one of each part before the look-alikes');
+  assertEqual(ctx.commonFoodFor('eggs, bacon and toast').parts.length, 3);
+  assertEqual(ctx.commonFoodFor('steak and something unknown'), null, 'a part not in the table: no guess');
+  assertEqual(ctx.commonFoodFor('mac and cheese').parts, undefined, 'a name that contains "and" is one food, not two');
+  ['spaghetti and meatballs', 'biscuits and gravy', 'chicken pot pie', 'beef stew', 'chicken alfredo', 'pulled pork sandwich', 'bacon and eggs', 'bagel with cream cheese', 'hoagie', 'buffalo chicken wrap', 'stir fry', 'cereal with milk', 'tuna melt', 'avocado toast', 'chili con carne']
+    .forEach(q => assertEqual(!!ctx.commonFoodFor(q), true, 'in the table: ' + q));
+  assertEqual(topFood([FD('Beef, stew meat'), FD('Beef stew with potatoes, Puerto Rican style'), FD('Stew, beef, canned'), FD('Stew, beef')], 'beef stew'), 'Stew, beef');
+  assertEqual(topFood([FD('Chicken pot pie, frozen entree, prepared', 'SR Legacy'), FD('Pot pie, beef'), FD('Pot pie, chicken')], 'chicken pot pie'), 'Pot pie, chicken');
+  assertEqual(topFood([FD('BISCUITS AND GRAVY', 'Branded'), FD('Gravy, NFS'), FD('Marie biscuit'), FD('Biscuit with gravy')], 'biscuits and gravy'), 'Biscuit with gravy');
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

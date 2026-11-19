@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.68.0 / 20261119_05
+ * Version/build: fcf-v5.68.1 / 20261119_06
  */
 
-const FCF_VERSION = 'fcf-v5.68.0';
-const FCF_BUILD   = '20261119_05';
+const FCF_VERSION = 'fcf-v5.68.1';
+const FCF_BUILD   = '20261119_06';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -18822,7 +18822,7 @@ const COMMON_FOODS = {
   'hard boiled egg':{ also: ['egg whole'], prefer: [/^egg, whole, boiled or poached/i] },
   'soup':           { also: ['soup NFS', 'chicken noodle soup'], prefer: [/^soup, nfs/i, /^soup, chicken noodle$/i, /^soup, chicken$/i, /^soup, vegetable$/i] },
   'chips':          { also: ['potato chips', 'tortilla chips'], prefer: [/^potato chips, plain/i, /^potato chips, nfs/i, /^tortilla chips, plain/i, /^potato chips/i] },
-  'rice': { prefer: [/^rice, white, cooked/i, /^rice, cooked, nfs/i, /^rice, brown, cooked/i] },
+  'rice': { also: ['white rice'], prefer: [/^rice, white, cooked, ns as to fat/i, /^rice, cooked, nfs/i, /^rice, brown, cooked/i] },
   'soda': { also: ['soft drink cola'], prefer: [/^soft drink, cola$/i, /^soft drink, cola, diet$/i, /^soft drink, (lemon|fruit|ginger|root)/i] },
   'beer':           { prefer: [/^beer$/i, /^beer, light$/i] },
   'toast':          { also: ['bread white toasted'], prefer: [/^bread, white, toasted$/i, /^bread, whole wheat, toasted$/i, /^bread, .*toasted$/i] },
@@ -18891,6 +18891,53 @@ const COMMON_FOODS = {
   'french toast': { prefer: [/^french toast, nfs/i, /^french toast, plain/i, /^french toast/i] },
   'sweet potato': { also: ['sweet potato baked'], prefer: [/^sweet potato, baked, nfs/i, /^sweet potato, baked, peel (not )?eaten/i, /^sweet potato, nfs/i, /^sweet potato, baked/i] },
   'hamburger patty': { also: ['ground beef patty'], prefer: [/^ground beef patty/i, /^hamburger patty/i, /^beef, ground.*patt/i, /^beef, ground$/i] },
+  // Added Nov 19 2026 from a list of the 50 most common American meals.
+  'cheerios': { also: ['cereal cheerios'], prefer: [/^cereal, o's, plain/i, /^cereal, o's/i] },
+  'corn flakes': { also: ['cereal corn flakes'], prefer: [/^cereal, corn flakes, plain/i, /^cereal, corn flakes/i] },
+  'frosted flakes': { also: ['cereal corn flakes'], prefer: [/^cereal, corn flakes, flavored/i, /^cereal, corn flakes/i] },
+  'bacon and eggs': { also: ['egg omelet', 'pork bacon'], prefer: [/^egg omelet or scrambled egg, ns as to fat$/i, /^pork bacon, smoked or cured, cooked$/i, /^egg, whole, fried/i] },
+  'bagel with cream cheese': { also: ['cream cheese'], prefer: [/^bagel$/i, /^cream cheese, regular, plain/i] },
+  'cream cheese': { prefer: [/^cream cheese, regular, plain/i, /^cream cheese/i] },
+  'granola': { also: ['granola cereal'], prefer: [/^cereal, granola$/i, /^granola/i] },
+  'biscuits and gravy': { also: ['biscuit with gravy'], prefer: [/^biscuit with gravy/i, /^sausage gravy/i, /^biscuit, nfs/i] },
+  'biscuit': { prefer: [/^biscuit, nfs/i] },
+  'gravy': { prefer: [/^gravy, nfs/i] },
+  'syrup': { prefer: [/^syrup, nfs/i, /^syrup, pancake/i] },
+  'tuna melt': { also: ['tuna melt sandwich'], prefer: [/^tuna salad sandwich on (white|wheat), with cheese$/i, /^tuna salad sandwich/i] },
+  'italian sub': { also: ['italian sub'], prefer: [/^italian sandwich or sub/i] },
+  'chicken wrap': { also: ['chicken wrap sandwich'], prefer: [/^chicken fillet wrap sandwich, grilled/i, /^chicken fillet wrap sandwich, fried/i, /^chicken salad sandwich wrap/i] },
+  'spaghetti and meatballs': { also: ['pasta with tomato sauce and meat'], prefer: [/^pasta with tomato-based sauce and meat, home recipe/i, /^pasta with tomato-based sauce and meat, restaurant/i, /^pasta with tomato-based sauce.*meat/i] },
+  'baked chicken': { also: ['chicken breast baked'], prefer: [/^chicken breast, baked, broiled, or roasted, skin not eaten, from raw/i, /^chicken breast, baked, broiled, or roasted, skin eaten, from raw/i, /^chicken breast, baked or broiled/i] },
+  'chicken stir fry': { also: ['chicken or turkey vegetables soy-based sauce', 'stir fry chicken vegetables'], prefer: [/^chicken or turkey and vegetables.*soy-based sauce/i, /^asian stir fry vegetables, cooked, fat added/i, /^stir fried beef and vegetables/i] },
+  'roasted vegetables': { also: ['vegetable combination cooked'], prefer: [/^classic mixed vegetables, ns as to form, cooked/i, /^classic mixed vegetables, cooked, from restaurant/i, /^classic mixed vegetables/i] },
+  'cornbread': { prefer: [/^cornbread, prepared from mix/i, /^cornbread, made from home recipe/i, /^cornbread muffin/i] },
+  'chicken alfredo': { also: ['pasta with cream sauce and poultry'], prefer: [/^pasta with cream sauce and poultry, restaurant/i, /^pasta with cream sauce and poultry/i] },
+  'pulled pork sandwich': { also: ['pork barbecue sandwich'], prefer: [/^barbecue pork sandwich, on white bun/i, /^barbecue pork sandwich/i, /^barbecue sandwich, nfs/i] },
+  'pulled pork': { also: ['pork barbecue sandwich'], prefer: [/^barbecue pork, with sauce/i, /^barbecue pork, no sauce/i, /^pulled pork/i] },
+  'beef stew': { also: ['stew beef'], prefer: [/^stew, beef$/i, /^stew, beef/i] },
+  'chicken pot pie': { also: ['pot pie chicken'], prefer: [/^pot pie, chicken$/i, /^pot pie, chicken/i] },
+  'pot roast': { prefer: [/^beef, pot roast/i] },
+  'avocado toast': { also: ['bread whole wheat toasted', 'avocado raw'], prefer: [/^bread, whole wheat, toasted$/i, /^avocado, raw$/i, /^avocado, for use on a sandwich/i] },
+  'chicken caesar salad': { prefer: [/^chicken or turkey caesar garden salad/i] },
+  'cobb salad': { prefer: [/^cobb salad/i] },
+  'chili': { prefer: [/^chili, nfs/i, /^chili con carne/i] },
+  'tomato soup': { prefer: [/^soup, tomato$/i, /^soup, cream of tomato/i] },
+  'burrito bowl': { prefer: [/^burrito bowl, nfs/i, /^burrito bowl, chicken/i] },
+  'fajitas': { prefer: [/^fajita, nfs/i, /^fajita, chicken/i] },
+  'chicken fajitas': { prefer: [/^fajita, chicken/i] },
+  'quesadilla': { prefer: [/^quesadilla, nfs/i] },
+  'smoothie': { prefer: [/^fruit smoothie, nfs/i] },
+  'protein smoothie': { prefer: [/^fruit and vegetable smoothie, added protein/i, /smoothie.*added protein/i] },
+  'cinnamon roll': { prefer: [/^roll, sweet, cinnamon bun, frosted/i, /^roll, sweet, cinnamon bun/i] },
+  'muffin': { prefer: [/^muffin, nfs/i] },
+  'white rice': { prefer: [/^rice, white, cooked, ns as to fat/i, /^rice, white, cooked/i] },
+  'brown rice': { prefer: [/^rice, brown, cooked, ns as to fat/i, /^rice, brown, cooked/i] },
+  'green beans': { prefer: [/^green beans, ns as to form, cooked/i, /^green beans/i] },
+  'applesauce': { prefer: [/^applesauce, regular/i, /^applesauce/i] },
+  'coleslaw': { prefer: [/^coleslaw$/i] },
+  'blueberries': { prefer: [/^blueberries, raw/i] },
+  'strawberries': { prefer: [/^strawberries, raw/i] },
+  'butter': { prefer: [/^butter, stick$/i, /^butter, nfs/i, /^butter, (salted|stick)/i] },
 };
 // Other ways members type the same thing.
 const COMMON_FOOD_ALIASES = {
@@ -18903,8 +18950,17 @@ const COMMON_FOOD_ALIASES = {
   'beef jerky': 'jerky', 'hamburger meat': 'ground beef', 'pb': 'peanut butter', 'chicken breasts': 'chicken breast',
   'wings': 'chicken wings', 'chicken wing': 'chicken wings', 'hot wings': 'chicken wings', 'buffalo wings': 'chicken wings', 'chicken strips': 'chicken tenders', 'chicken fingers': 'chicken tenders', 'chicken nugget': 'chicken nuggets', 'nuggets': 'chicken nuggets',
   'meat loaf': 'meatloaf', 'lasagne': 'lasagna', 'mashed potato': 'mashed potatoes', 'baked potatoes': 'baked potato', 'granola bars': 'granola bar', 'protein bars': 'protein bar', 'omelette': 'omelet', 'omelets': 'omelet',
-  'grilled cheese sandwich': 'grilled cheese', 'turkey and cheese': 'turkey and cheese sandwich', 'ham and cheese': 'ham and cheese sandwich', 'tuna salad sandwich': 'tuna sandwich', 'tuna fish sandwich': 'tuna sandwich',
+  'grilled cheese sandwich': 'grilled cheese', 'turkey and cheese': 'turkey and cheese sandwich', 'ham and cheese': 'ham and cheese sandwich', 'tuna fish sandwich': 'tuna sandwich',
   'pork chops': 'pork chop', 'chicken soup': 'chicken noodle soup', 'avocados': 'avocado', 'cheese slice': 'cheese', 'slice of pizza': 'pizza', 'pizza slice': 'pizza', 'cola': 'soda', 'bacon strips': 'bacon', 'egg burrito': 'breakfast burrito', 'sweet potatoes': 'sweet potato', 'burger patty': 'hamburger patty', 'beef patty': 'hamburger patty',
+  'cereal with milk': 'cereal', 'cold cereal': 'cereal', 'cornflakes': 'corn flakes', 'eggs and bacon': 'bacon and eggs', 'bacon eggs': 'bacon and eggs', 'bacon eggs and toast': 'bacon and eggs', 'scrambled eggs and toast': 'scrambled eggs',
+  'bagel and cream cheese': 'bagel with cream cheese', 'biscuit and gravy': 'biscuits and gravy', 'biscuits and sausage gravy': 'biscuits and gravy', 'biscuits gravy': 'biscuits and gravy', 'biscuits': 'biscuit',
+  'hoagie': 'italian sub', 'italian hoagie': 'italian sub', 'italian sandwich': 'italian sub', 'buffalo chicken wrap': 'chicken wrap', 'chicken ranch wrap': 'chicken wrap', 'chicken caesar wrap': 'chicken wrap',
+  'spaghetti with meat sauce': 'spaghetti and meatballs', 'spaghetti meat sauce': 'spaghetti and meatballs', 'spaghetti with meatballs': 'spaghetti and meatballs', 'spaghetti bolognese': 'spaghetti and meatballs',
+  'roasted chicken': 'baked chicken', 'roast chicken': 'baked chicken', 'baked chicken breast': 'baked chicken', 'stir fry': 'chicken stir fry', 'chicken stirfry': 'chicken stir fry', 'stirfry': 'chicken stir fry',
+  'mixed vegetables': 'roasted vegetables', 'vegetables': 'roasted vegetables', 'veggies': 'roasted vegetables', 'corn bread': 'cornbread', 'chicken fettuccine alfredo': 'chicken alfredo', 'fettuccine alfredo': 'chicken alfredo', 'alfredo': 'chicken alfredo',
+  'bbq pork sandwich': 'pulled pork sandwich', 'bbq sandwich': 'pulled pork sandwich', 'bbq pork': 'pulled pork', 'chili con carne': 'chili', 'cinnamon rolls': 'cinnamon roll', 'cinnamon bun': 'cinnamon roll', 'muffins': 'muffin',
+  'fajita': 'fajitas', 'chicken fajita': 'chicken fajitas', 'quesadillas': 'quesadilla', 'smoothies': 'smoothie', 'fruit smoothie': 'smoothie', 'cole slaw': 'coleslaw', 'apple sauce': 'applesauce', 'blueberry': 'blueberries', 'strawberry': 'strawberries', 'berries': 'blueberries',
+  'tuna salad sandwich': 'tuna sandwich', 'cheese burger': 'cheeseburger',
 };
 // Lowercase, "&" as "and", punctuation out, single spaces.
 function normalizeFoodQuery(q) {
@@ -18912,8 +18968,15 @@ function normalizeFoodQuery(q) {
 }
 function commonFoodFor(q) {
   const n = normalizeFoodQuery(q);
-  const key = COMMON_FOOD_ALIASES[n] || n;
-  return COMMON_FOODS[key] || null;
+  const one = k => COMMON_FOODS[COMMON_FOOD_ALIASES[k] || k] || null;
+  if (one(n)) return one(n);
+  // A plate typed as one search ("cheeseburger and fries", "steak with
+  // mashed potatoes", "eggs, bacon and toast"): when every part is a food
+  // in the table, lead with the everyday version of each part, in the
+  // order typed, so the member can add them one after another.
+  const parts = String(q || '').toLowerCase().split(/\s*(?:,|\band\b|\bwith\b|&|\+)\s*/).map(normalizeFoodQuery).filter(Boolean);
+  if (parts.length < 2 || parts.length > 3 || !parts.every(one)) return null;
+  return { also: parts.map(pt => (one(pt).also && one(pt).also[0]) || pt), prefer: parts.map(pt => one(pt).prefer[0]), parts };
 }
 // Words that mean "this is not the plain food" when the member did not type them.
 const FOOD_NOISE = ['sauce', 'dressing', 'spread', 'mix', 'dry', 'powder', 'baby', 'babyfood', 'toddler', 'infant', 'meatless', 'vegetarian', 'canned', 'frozen', 'dehydrated', 'lunchmeat', 'gravy', 'substitute', 'seasoning', 'topping', 'filling', 'shell', 'shells', 'imitation', 'pickled', 'crackers', 'chips', 'rolls', 'dessert', 'flavored', 'flour', 'oil', 'skin', 'feet', 'giblets', 'liver', 'school', 'human', 'ingredient', 'stuffed', 'luncheon', 'puerto', 'meal', 'squash', 'paper'];
@@ -18954,12 +19017,22 @@ function foodRankScore(food, q, common) {
   s -= Math.min(30, Math.max(0, words.length - n.split(' ').length) * 2);
   return s;
 }
-function rankUSDAFoods(foods, q) {
+function rankUSDAFoodsByScore(foods, q) {
   const common = commonFoodFor(q);
   const seen = new Set();
   return (foods || []).filter(f => f && f.description && !seen.has(f.fdcId) && seen.add(f.fdcId))
     .map((f, i) => ({ f, i, s: foodRankScore(f, q, common) }))
     .sort((a, b) => b.s - a.s || a.i - b.i).map(x => x.f);
+}
+function rankUSDAFoods(foods, q) { return leadWithEachPart(rankUSDAFoodsByScore(foods, q), commonFoodFor(q)); }
+// For a plate ("fried chicken with mashed potatoes and gravy"): the best
+// match for each part first, in the order typed, then everything else.
+// Without this, three kinds of fried chicken pushed the potatoes down.
+function leadWithEachPart(sorted, common) {
+  if (!common || !common.parts) return sorted;
+  const lead = [];
+  common.prefer.forEach(re => { const hit = sorted.find(f => f.dataType !== 'Branded' && re.test(f.description) && !lead.includes(f)); if (hit) lead.push(hit); });
+  return lead.concat(sorted.filter(f => !lead.includes(f)));
 }
 
 // One search of USDA, kept for a few minutes so the extra searches a common

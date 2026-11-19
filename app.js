@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.67.2 / 20261119_03
+ * Version/build: fcf-v5.67.3 / 20261119_04
  */
 
-const FCF_VERSION = 'fcf-v5.67.2';
-const FCF_BUILD   = '20261119_03';
+const FCF_VERSION = 'fcf-v5.67.3';
+const FCF_BUILD   = '20261119_04';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -13522,11 +13522,17 @@ function updateExDoneIndicator(exId) {
   if (pctEl)   pctEl.textContent = pct + '% complete';
 }
 
+function setHasData(x) { return !!(x && (x.reps || x.weight || x.seconds || x.height || x.distance || x.seconds_left || x.seconds_right)); }
+function exAllSetsLogged(sets) { return Array.isArray(sets) && sets.length > 0 && sets.every(setHasData); }
 function toggleEx(id) {
   // Opening the next exercise folds away the ones already logged, so a
   // workout is not a wall of open, finished cards to scroll past.
+  // Review Nov 19 2026: this folded any exercise with one set logged, so
+  // someone alternating between two exercises (a superset) saw each one
+  // close as they opened the other. Only an exercise with every set logged
+  // is folded now; one still in progress stays open.
   if (!ST.expanded[id]) Object.keys(ST.expanded).forEach(k => {
-    if (k !== id && ST.expanded[k] && (ST.sets[k] || []).some(x => x.reps || x.weight || x.seconds || x.height || x.distance || x.seconds_left || x.seconds_right)) ST.expanded[k] = false;
+    if (k !== id && ST.expanded[k] && exAllSetsLogged(ST.sets[k])) ST.expanded[k] = false;
   });
   ST.expanded[id] = !ST.expanded[id];
   renderFlight(document.getElementById('mainPage'));
@@ -20885,6 +20891,9 @@ function renderMealBuilder() {
       // whether a logged food meant one unit or several.
       const rowBits = [];
       if (item.servingDescription) rowBits.push(sanitizeUserText(item.servingDescription));
+      // Review Nov 19 2026: a changed portion updated the numbers but the
+      // row gave no sign of it. It now says how much of the serving this is.
+      if (item.portionNote && item.portionNote !== 1) rowBits.push('×' + item.portionNote + ' portion');
       rowBits.push(Math.round(item.nutrients?.calories || 0)+' cal');
       parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">'+rowBits.join(' · ')+' · <a href="javascript:void(0)" style="color:var(--gold)" onclick="ST.mealBuilder.scaleOpen='+(mb.scaleOpen===i?'null':i)+';renderMealBuilder()">Change portion</a></div>');
       // Portion fix without delete-and-re-add (Nov 19 2026 test run).

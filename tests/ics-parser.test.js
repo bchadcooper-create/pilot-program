@@ -2535,6 +2535,14 @@ test('Auto schedule source uses the uploaded file for a month the calendar has n
   assertEqual(A(now, [pers('2026-11-20T09:00:00')], [up('2026-10-22T14:00:00')]), 'calendar', 'a stale upload does not take over');
 });
 
+test('only an exercise with every set logged counts as finished for folding (review Nov 19)', () => {
+  assertEqual(ctx.exAllSetsLogged([{ reps: 8, weight: 135 }, { reps: 8, weight: 135 }, { reps: 7, weight: 135 }]), true);
+  assertEqual(ctx.exAllSetsLogged([{ reps: 8, weight: 135 }, {}, {}]), false, 'one of three logged: still in progress');
+  assertEqual(ctx.exAllSetsLogged([{ seconds: 30 }]), true, 'a timed set counts');
+  assertEqual(ctx.exAllSetsLogged([{ seconds_left: 30, seconds_right: 30 }, { seconds_left: 30 }]), true, 'a side logged counts as that set logged');
+  assertEqual(ctx.exAllSetsLogged([]), false); assertEqual(ctx.exAllSetsLogged(undefined), false);
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

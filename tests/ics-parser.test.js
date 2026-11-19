@@ -2543,6 +2543,54 @@ test('only an exercise with every set logged counts as finished for folding (rev
   assertEqual(ctx.exAllSetsLogged([]), false); assertEqual(ctx.exAllSetsLogged(undefined), false);
 });
 
+// ── Common foods first in food search (requested Nov 19 2026) ──
+// Food names below are real USDA descriptions seen in live results.
+const FD = (description, dataType) => ({ description, dataType: dataType || 'Survey (FNDDS)', fdcId: description + '|' + (dataType || 'S') });
+const topFood = (pool, q) => ctx.rankUSDAFoods(pool, q)[0].description;
+test('food search: an everyday word leads with the everyday food, not an ingredient or a sauce', () => {
+  assertEqual(topFood([FD('Lunchmeat, chicken breast, sliced', 'SR Legacy'), FD('Chicken spread', 'SR Legacy'), FD('Chicken, ground, raw', 'SR Legacy'), FD('Chicken breast, grilled with sauce, skin eaten'), FD('Chicken breast, grilled without sauce, skin not eaten')], 'chicken'), 'Chicken breast, grilled without sauce, skin not eaten');
+  assertEqual(topFood([FD('Sandwich spread, meatless', 'SR Legacy'), FD('Sandwich spread'), FD('Crackers, sandwich'), FD('Cuban sandwich'), FD('Sandwich, NFS'), FD('Turkey sandwich on wheat')], 'sandwich'), 'Sandwich, NFS');
+  assertEqual(topFood([FD('Salad dressing, coleslaw', 'SR Legacy'), FD('Salad dressing, NFS, for salads'), FD('Crab salad'), FD('Lettuce, salad with assorted vegetables including tomatoes and/or carrots, no dressing'), FD('CAESAR SALAD', 'Branded')], 'salad'), 'Lettuce, salad with assorted vegetables including tomatoes and/or carrots, no dressing');
+  assertEqual(topFood([FD('Steak sauce'), FD('Steak tartare'), FD('Beef, steak, chuck'), FD('Beef, steak, NFS')], 'steak'), 'Beef, steak, NFS');
+  assertEqual(topFood([FD('SILK Coffee, soymilk', 'SR Legacy'), FD('Beverages, coffee, instant, chicory', 'SR Legacy'), FD('Coffee substitute'), FD('Coffee, brewed, decaffeinated'), FD('Coffee, brewed')], 'coffee'), 'Coffee, brewed');
+  assertEqual(topFood([FD("McDONALD'S, BIG MAC", 'SR Legacy'), FD('Cheese spread, cream cheese base', 'SR Legacy'), FD('Macaroni or noodles with cheese and tuna'), FD('Macaroni or noodles with cheese')], 'mac and cheese'), 'Macaroni or noodles with cheese');
+  assertEqual(topFood([FD('PIZZA HUT 12" Cheese Pizza, Pan Crust', 'SR Legacy'), FD('Dessert pizza'), FD('Pizza rolls'), FD('Pizza with pepperoni, from restaurant or fast food,  medium crust'), FD('Pizza, cheese, from restaurant or fast food, medium crust')], 'pizza'), 'Pizza, cheese, from restaurant or fast food, medium crust');
+});
+test('food search: a sandwich search leads with the sandwich, not its parts', () => {
+  const pool = [FD('Peanut butter', 'SR Legacy'), FD('Peanut butter, smooth style, with salt', 'SR Legacy'), FD('PEANUT BUTTER SANDWICH CRACKERS', 'Branded'), FD('Bread, white'), FD('Peanut butter sandwich, with regular peanut butter, on white bread'), FD('Peanut butter sandwich, NFS')];
+  assertEqual(topFood(pool, 'peanut butter sandwich'), 'Peanut butter sandwich, NFS');
+  assertEqual(topFood(pool, 'Peanut Butter Sandwich'), 'Peanut butter sandwich, NFS', 'capitals do not matter');
+  const pbj = [FD('PB&J MINI BARS, PB&J', 'Branded'), FD('PB&J TOASTER PASTRIES, PB&J', 'Branded'), FD('Peanut butter and jelly'), FD('Peanut butter and jelly sandwich, with regular peanut butter, regular jelly, on white bread'), FD('Peanut butter and jelly sandwich, NFS')];
+  ['pb&j', 'PBJ', 'pb and j', 'peanut butter and jelly'].forEach(q => assertEqual(topFood(pbj, q), 'Peanut butter and jelly sandwich, NFS', q));
+  assertEqual(topFood([FD('Turkey sandwich wrap'), FD('TURKEY SANDWICH', 'Branded'), FD('Fast foods, submarine sandwich, turkey breast on white bread', 'SR Legacy'), FD('Turkey sandwich on wheat, with cheese'), FD('Turkey sandwich on wheat')], 'turkey sandwich'), 'Turkey sandwich on wheat');
+});
+test('food search: one brand\'s product named exactly what was typed does not lead', () => {
+  assertEqual(topFood([FD('FRIED CHICKEN', 'Branded'), FD('Rice, fried, with chicken'), FD('Chicken breast, fried, coated, skin / coating eaten, from raw')], 'fried chicken'), 'Chicken breast, fried, coated, skin / coating eaten, from raw');
+  assertEqual(topFood([FD('QUESADILLA', 'Branded'), FD('Quesadilla, chicken'), FD('Quesadilla, NFS')], 'quesadilla'), 'Quesadilla, NFS', 'a food not in the table: the plain one still leads');
+  assertEqual(topFood([FD('Cheeseburger (McDonalds)'), FD('Cheeseburger slider'), FD('Cheeseburger, NFS')], 'cheeseburger'), 'Cheeseburger, NFS');
+  assertEqual(topFood([FD('Hot dog, vegetarian'), FD('Hot dog, beef'), FD('Hot dog, NFS')], 'hot dog'), 'Hot dog, NFS');
+});
+test('food search: a member who types the brand or the special version still gets it', () => {
+  assertEqual(topFood([FD('Cheeseburger, NFS'), FD('Cheeseburger (McDonalds)'), FD('Cheeseburger slider')], 'mcdonalds cheeseburger'), 'Cheeseburger (McDonalds)');
+  assertEqual(topFood([FD('Steak sauce'), FD('Beef, steak, NFS')], 'steak sauce'), 'Steak sauce');
+  assertEqual(topFood([FD('Salad dressing, caesar dressing, regular', 'SR Legacy'), FD('Caesar salad, with romaine, no dressing')], 'caesar dressing'), 'Salad dressing, caesar dressing, regular');
+  assertEqual(topFood([FD('Bread, French or Vienna, toasted'), FD('French toast, plain'), FD('French toast, NFS')], 'french toast'), 'French toast, NFS', '"toast" inside "french toast" must not put bread first');
+});
+test('food search: typing variants reach the same food, and every table entry is well formed', () => {
+  assertEqual(ctx.normalizeFoodQuery('  PB&J!! '), 'pb and j');
+  assertEqual(ctx.commonFoodFor('Tacos') === ctx.commonFoodFor('taco'), true);
+  assertEqual(ctx.commonFoodFor('Mac n Cheese') === ctx.commonFoodFor('mac and cheese'), true);
+  assertEqual(ctx.commonFoodFor('zzz not a food'), null);
+  const table = vm.runInContext('COMMON_FOODS', ctx), aliases = vm.runInContext('COMMON_FOOD_ALIASES', ctx);
+  Object.keys(table).forEach(k => {
+    assertEqual(k, ctx.normalizeFoodQuery(k), 'key is written the way a search is normalized: ' + k);
+    assertEqual(Array.isArray(table[k].prefer) && table[k].prefer.length > 0, true, 'has foods to prefer: ' + k);
+    assertEqual((table[k].also || []).length <= 2, true, 'at most two extra searches: ' + k);
+  });
+  Object.keys(aliases).forEach(a => assertEqual(!!table[aliases[a]], true, 'alias points at a real entry: ' + a));
+  assertEqual(Object.keys(table).length >= 100, true, 'at least 100 common foods');
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

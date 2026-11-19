@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.67.3 / 20261119_04
+ * Version/build: fcf-v5.68.0 / 20261119_05
  */
 
-const FCF_VERSION = 'fcf-v5.67.3';
-const FCF_BUILD   = '20261119_04';
+const FCF_VERSION = 'fcf-v5.68.0';
+const FCF_BUILD   = '20261119_05';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -18765,44 +18765,236 @@ function findStapleBoost(q) {
   return bestKey ? STAPLE_FOOD_BOOSTS[bestKey] : null;
 }
 
+// ── Common foods first (Nov 19 2026) ────────────────────────────────────────
+// Requested: "common foods are what comes up at the top of the list when a
+// person searches for Chicken, or Sandwich ... peanut butter sandwich comes
+// up with the sandwich and not the components". The member base is North
+// American flight crew.
+// USDA's search has no idea which result is the everyday version of a food.
+// Before this, "chicken" led with lunchmeat, "sandwich" with sandwich
+// spread, "salad" with salad dressing, "pizza" with a Pizza Hut pan pizza
+// per 100 g, "mac and cheese" with a Big Mac.
+// Two parts fix that:
+//  1. COMMON_FOODS: for an everyday word, what the member most likely
+//     means. `also` are extra USDA searches whose results are added to the
+//     pool (the plain food is often not in USDA's own results for the bare
+//     word); `prefer` are the foods to put first, in order.
+//  2. foodRankScore: for every search, plain "as eaten" foods with a
+//     household portion (USDA's survey foods) beat ingredients, sauces,
+//     dressings, mixes, baby food and restaurant-chain entries, unless the
+//     member typed one of those words.
+// To add a food: add a COMMON_FOODS entry and a line to the test table.
+const COMMON_FOODS = {
+  'chicken':        { also: ['chicken breast grilled'], prefer: [/^chicken breast, grilled without sauce, skin not eaten/i, /^chicken breast, (grilled|baked|roasted)/i, /^chicken thigh, (grilled|baked|roasted)/i] },
+  'grilled chicken':{ also: ['chicken breast grilled'], prefer: [/^chicken breast, grilled without sauce, skin not eaten/i, /^chicken breast, grilled/i] },
+  'chicken breast': { also: ['chicken breast grilled'], prefer: [/^chicken breast, grilled without sauce, skin not eaten/i, /^chicken breast, (grilled|baked|roasted)/i] },
+  'sandwich':       { also: ['turkey sandwich', 'peanut butter and jelly sandwich'], prefer: [/^sandwich, nfs/i, /^turkey sandwich on (wheat|white)$/i, /^ham sandwich on (wheat|white)$/i, /^peanut butter and jelly sandwich, nfs/i] },
+  'pbj':            { also: ['peanut butter and jelly sandwich'], prefer: [/^peanut butter and jelly sandwich, nfs/i, /^peanut butter and jelly sandwich/i] },
+  'peanut butter and jelly': { also: ['peanut butter and jelly sandwich'], prefer: [/^peanut butter and jelly sandwich, nfs/i, /^peanut butter and jelly sandwich/i] },
+  'peanut butter sandwich': { prefer: [/^peanut butter sandwich, nfs/i] },
+  'blt': { also: ['bacon lettuce tomato sandwich'], prefer: [/^bacon, lettuce, tomato sandwich on (white|wheat)$/i, /^bacon, lettuce, tomato sandwich/i] },
+  'sub':            { also: ['turkey sandwich'], prefer: [/sandwich or sub, restaurant/i, /sandwich or sub/i] },
+  'wrap':           { prefer: [/^sandwich wrap, nfs/i, /sandwich wrap/i] },
+  'burger':         { also: ['hamburger', 'cheeseburger'], prefer: [/^hamburger, nfs/i, /^cheeseburger, nfs/i] },
+  'hamburger':      { prefer: [/^hamburger, nfs/i] },
+  'cheeseburger':   { prefer: [/^cheeseburger, nfs/i] },
+  'pizza': { also: ['pizza cheese from restaurant medium crust', 'pepperoni pizza'], prefer: [/^pizza, cheese, from restaurant or fast food,\s+medium crust/i, /^pizza with pepperoni, from restaurant or fast food,\s+medium crust/i, /^pizza, cheese, from restaurant or fast food/i, /^pizza, cheese, (medium|thin|thick) crust/i] },
+  'cheese pizza': { also: ['pizza cheese from restaurant medium crust'], prefer: [/^pizza, cheese, from restaurant or fast food,\s+medium crust/i, /^pizza, cheese, from restaurant or fast food/i, /^pizza, cheese, (medium|thin|thick) crust/i, /^pizza, cheese, from frozen/i] },
+  'pepperoni pizza': { prefer: [/^pizza with pepperoni, from restaurant or fast food,\s+medium crust/i, /^pizza with pepperoni, from restaurant or fast food/i, /^pizza with pepperoni, from frozen/i] },
+  'fries':          { also: ['french fries'], prefer: [/^potato, french fries, nfs/i, /^potato, french fries, fast food/i, /^potato, french fries/i] },
+  'french fries':   { prefer: [/^potato, french fries, nfs/i, /^potato, french fries, fast food/i, /^potato, french fries, restaurant/i] },
+  'taco':           { prefer: [/^taco, nfs/i, /^taco, meat/i, /^taco, /i] },
+  'salad': { also: ['lettuce salad', 'caesar salad'], prefer: [/^lettuce, salad with assorted vegetables including tomatoes/i, /^caesar salad/i, /^lettuce, salad with/i] },
+  'side salad': { also: ['lettuce salad'], prefer: [/^lettuce, salad with assorted vegetables including tomatoes/i, /^lettuce, salad with/i] },
+  'steak':          { also: ['beef steak'], prefer: [/^beef, steak, nfs/i, /^beef, steak, (sirloin|ribeye|tenderloin|t-bone|strip)/i, /^beef, steak/i] },
+  'coffee':         { prefer: [/^coffee, brewed$/i, /^coffee, brewed/i, /^coffee, latte$/i] },
+  'latte': { also: ['coffee latte'], prefer: [/^coffee, latte$/i, /^coffee, iced latte$/i, /^coffee, latte, nonfat$/i] },
+  'mac and cheese': { also: ['macaroni or noodles with cheese'], prefer: [/^macaroni or noodles with cheese$/i, /^macaroni or noodles with cheese/i] },
+  'macaroni and cheese': { also: ['macaroni or noodles with cheese'], prefer: [/^macaroni or noodles with cheese$/i, /^macaroni or noodles with cheese/i] },
+  'spaghetti': { also: ['pasta'], prefer: [/^pasta, cooked$/i, /^pasta with sauce, nfs/i] },
+  'pasta':          { prefer: [/^pasta, cooked$/i, /^pasta with sauce, nfs/i] },
+  'bagel':          { prefer: [/^bagel$/i, /^bagel, /i] },
+  'cereal':         { also: ['cereal NFS'], prefer: [/^cereal, ready-to-eat, nfs/i, /^cereal, o's, nfs/i, /^cereal, cooked, nfs/i] },
+  'eggs': { also: ['egg whole', 'egg omelet'], prefer: [/^egg omelet or scrambled egg, ns as to fat$/i, /^egg, whole, fried with butter/i, /^egg, whole, boiled or poached/i, /^egg, whole/i] },
+  'egg': { also: ['egg whole', 'egg omelet'], prefer: [/^egg, whole, boiled or poached/i, /^egg, whole, fried with butter/i, /^egg omelet or scrambled egg, ns as to fat$/i, /^egg, whole/i] },
+  'scrambled eggs': { also: ['egg omelet'], prefer: [/^egg omelet or scrambled egg, ns as to fat$/i, /^egg omelet or scrambled egg, made with butter$/i, /^egg omelet or scrambled egg/i] },
+  'fried egg':      { also: ['egg whole'], prefer: [/^egg, whole, fried/i] },
+  'hard boiled egg':{ also: ['egg whole'], prefer: [/^egg, whole, boiled or poached/i] },
+  'soup':           { also: ['soup NFS', 'chicken noodle soup'], prefer: [/^soup, nfs/i, /^soup, chicken noodle$/i, /^soup, chicken$/i, /^soup, vegetable$/i] },
+  'chips':          { also: ['potato chips', 'tortilla chips'], prefer: [/^potato chips, plain/i, /^potato chips, nfs/i, /^tortilla chips, plain/i, /^potato chips/i] },
+  'rice': { prefer: [/^rice, white, cooked/i, /^rice, cooked, nfs/i, /^rice, brown, cooked/i] },
+  'soda': { also: ['soft drink cola'], prefer: [/^soft drink, cola$/i, /^soft drink, cola, diet$/i, /^soft drink, (lemon|fruit|ginger|root)/i] },
+  'beer':           { prefer: [/^beer$/i, /^beer, light$/i] },
+  'toast':          { also: ['bread white toasted'], prefer: [/^bread, white, toasted$/i, /^bread, whole wheat, toasted$/i, /^bread, .*toasted$/i] },
+  'bread':          { prefer: [/^bread, white$/i, /^bread, whole wheat$/i] },
+  'milk':           { prefer: [/^milk, whole$/i, /^milk, reduced fat \(2%\)$/i, /^milk, nfs$/i] },
+  'cheese':         { prefer: [/^cheese, cheddar$/i, /^cheese, american/i, /^cheese, nfs$/i] },
+  'donut':          { also: ['doughnut'], prefer: [/^doughnut, nfs/i, /^doughnut, /i] },
+  'cookie':         { also: ['cookie chocolate chip'], prefer: [/^cookie, chocolate chip$/i, /^cookie, nfs/i] },
+  'ice cream':      { also: ['ice cream vanilla'], prefer: [/^ice cream, vanilla$/i, /^ice cream, chocolate$/i] },
+  'protein bar': { also: ['granola bar NFS'], prefer: [/^nutrition bar or meal replacement bar, nfs/i, /^nutrition bar/i] },
+  'protein shake':  { prefer: [/^nutritional drink or shake, high protein, ready-to-drink, nfs/i, /^nutritional drink or shake, high protein/i] },
+  'orange juice':   { prefer: [/^orange juice, 100%, nfs/i] },
+  'water':          { prefer: [/^water, tap$/i, /^water, bottled/i, /^water, nfs/i] },
+  'sausage':        { prefer: [/^sausage, nfs/i, /^pork sausage$/i] },
+  'burrito':        { prefer: [/^burrito, nfs/i, /^burrito with (meat|chicken)/i] },
+  'hot dog':        { prefer: [/^hot dog, nfs/i, /^hot dog, beef/i] },
+  'pancakes':       { prefer: [/^pancakes, plain$/i, /^pancakes, nfs/i, /^pancakes, plain/i] },
+  'waffles':        { prefer: [/^waffle, plain$/i, /^waffle, nfs/i, /^waffle, plain/i] },
+  'yogurt': { also: ['yogurt greek'], prefer: [/^yogurt, nfs/i, /^yogurt, greek, nonfat milk, plain/i, /^yogurt, greek, low fat milk, plain/i] },
+  'oatmeal':        { prefer: [/^oatmeal, regular or quick, made with water/i, /^oatmeal, nfs/i, /^oatmeal/i] },
+  'apple':          { prefer: [/^apple, raw$/i, /^apples, raw/i] },
+  'orange':         { prefer: [/^orange, raw$/i, /^oranges, raw/i] },
+  'almonds':        { prefer: [/^almonds, nfs/i, /^almonds, unsalted/i, /^almonds/i] },
+  'peanut butter':  { prefer: [/^peanut butter$/i, /^peanut butter, /i] },
+  'bacon': { also: ['pork bacon'], prefer: [/^pork bacon, smoked or cured, cooked$/i, /^pork bacon, ns as to/i, /^pork bacon/i] },
+  'turkey': { also: ['turkey breast'], prefer: [/^turkey, light meat, (roasted|skin not eaten)/i, /^turkey, nfs/i, /^turkey.*breast/i] },
+  'salmon': { also: ['fish salmon'], prefer: [/^fish, salmon, baked or broiled/i, /^fish, salmon, grilled/i, /^fish, salmon, nfs/i] },
+  'tuna': { prefer: [/^fish, tuna, canned/i, /^fish, tuna, cooked/i, /^fish, tuna, nfs/i] },
+  'ground beef': { also: ['beef'], prefer: [/^beef, ground$/i, /^ground beef, cooked/i, /^beef, ground/i] },
+  'beef': { also: ['beef steak'], prefer: [/^beef, ground$/i, /^beef, steak, nfs/i, /^beef, nfs/i] },
+  'potato': { also: ['potato baked'], prefer: [/^potato, baked, nfs/i, /^potato, nfs/i, /^potato, baked, peel eaten$/i] },
+  'jerky':          { prefer: [/^beef jerky/i, /^jerky/i] },
+  'caesar salad': { prefer: [/^caesar salad/i] },
+  'fried chicken': { also: ['chicken breast fried', 'chicken fried'], prefer: [/^chicken breast, fried, coated, skin \/ coating eaten/i, /^chicken (breast|thigh|drumstick|leg), fried, coated/i, /^chicken wing, fried, coated/i] },
+  'chicken wings': { also: ['chicken fried'], prefer: [/^chicken wing, ns as to cooking method/i, /^chicken wing, fried, coated, from restaurant/i, /^chicken wing, fried, coated/i, /^chicken "wings", plain/i, /^chicken wing, (baked|grilled)/i] },
+  'chicken sandwich': { also: ['chicken fried'], prefer: [/^chicken fillet sandwich, fried, on (white|wheat) bun$/i, /^chicken fillet sandwich, fried, from fast food$/i, /^chicken fillet sandwich/i] },
+  'chicken tenders': { prefer: [/^chicken tenders or strips, nfs/i, /^chicken tenders or strips, breaded, from restaurant/i] },
+  'chicken nuggets': { prefer: [/^chicken nuggets, nfs/i] },
+  'chicken salad': { also: ['chicken or turkey salad'], prefer: [/^chicken or turkey salad, made with mayonnaise$/i, /^chicken or turkey salad/i, /^chicken salad/i] },
+  'meatloaf': { also: ['meat loaf'], prefer: [/^meat loaf made with beef$/i, /^meat loaf, ns as to type of meat/i, /^meat loaf made with beef and pork/i] },
+  'lasagna': { also: ['lasagna with meat'], prefer: [/^lasagna with meat$/i, /^lasagna with meat, from restaurant/i, /^lasagna with meat, home recipe/i] },
+  'mashed potatoes': { also: ['potato mashed'], prefer: [/^potato, mashed, nfs/i, /^potato, mashed, from restaurant$/i, /^potato, mashed, from fresh/i] },
+  'baked potato': { also: ['potato baked'], prefer: [/^potato, baked, nfs/i, /^potato, baked, peel eaten$/i, /^potato, baked, peel not eaten$/i] },
+  'granola bar': { also: ['granola bar NFS'], prefer: [/^cereal or granola bar, nfs/i, /^cereal or granola bar \(/i, /^cereal or granola bar/i] },
+  'omelet': { also: ['egg omelet'], prefer: [/^egg omelet or scrambled egg, ns as to fat$/i, /^egg omelet or scrambled egg, made with butter$/i, /^egg omelet or scrambled egg, with cheese/i, /^egg omelet or scrambled egg/i] },
+  'greek yogurt': { also: ['yogurt greek'], prefer: [/^yogurt, greek, nonfat milk, plain/i, /^yogurt, greek, low fat milk, plain/i, /^yogurt, greek, whole milk, plain/i, /^yogurt, greek, ns as to type of milk or flavor/i] },
+  'cottage cheese': { also: ['cheese cottage'], prefer: [/^cheese, cottage, nfs/i, /^cheese, cottage, low ?fat$/i] },
+  'breakfast burrito': { prefer: [/^egg burrito$/i, /^egg burrito, with (sausage|bacon)/i, /^egg burrito/i] },
+  'breakfast sandwich': { also: ['egg sandwich'], prefer: [/^egg sandwich on (english muffin|biscuit|bagel|croissant)$/i, /^egg sandwich on .*with (bacon|sausage|ham)/i, /^egg sandwich/i] },
+  'egg sandwich': { prefer: [/^egg sandwich on (english muffin|biscuit|bagel|croissant|white bread)$/i, /^egg sandwich/i] },
+  'turkey sandwich': { prefer: [/^turkey sandwich on (wheat|white)$/i, /^turkey sandwich on (wheat|white), with cheese$/i] },
+  'ham sandwich': { prefer: [/^ham sandwich on (wheat|white)$/i, /^ham sandwich on (wheat|white), with cheese$/i] },
+  'ham and cheese sandwich': { also: ['ham sandwich'], prefer: [/^ham sandwich on (wheat|white), with cheese$/i, /^ham sandwich.*with cheese/i] },
+  'turkey and cheese sandwich': { also: ['turkey sandwich on wheat'], prefer: [/^turkey sandwich on (wheat|white), with cheese$/i, /^turkey sandwich.*with cheese/i] },
+  'tuna sandwich': { prefer: [/^tuna salad sandwich on (wheat|white)$/i, /^tuna salad sandwich/i] },
+  'grilled cheese': { prefer: [/^grilled cheese sandwich, nfs/i, /^grilled cheese sandwich/i] },
+  'pork chop': { prefer: [/^pork, chop, ns as to fat eaten$/i, /^pork, chop, lean and fat eaten$/i, /^pork, chop, lean only eaten$/i] },
+  'fried rice': { prefer: [/^rice, fried, nfs/i, /^rice, fried, with/i] },
+  'hummus': { prefer: [/^hummus, plain/i, /^hummus/i] },
+  'tortilla chips': { prefer: [/^tortilla chips, plain/i, /^tortilla chips, nfs/i] },
+  'potato chips': { prefer: [/^potato chips, plain/i, /^potato chips, nfs/i] },
+  'avocado': { prefer: [/^avocado, raw/i, /^avocados, raw/i] },
+  'chicken noodle soup': { prefer: [/^soup, chicken noodle$/i, /^soup, chicken noodle/i] },
+  'string cheese': { also: ['cheese mozzarella string'], prefer: [/^cheese, mozzarella.*string/i, /string cheese/i, /^cheese, mozzarella, part skim/i] },
+  'banana': { also: ['banana raw'], prefer: [/^banana, raw$/i, /^bananas, raw$/i] },
+  'french toast': { prefer: [/^french toast, nfs/i, /^french toast, plain/i, /^french toast/i] },
+  'sweet potato': { also: ['sweet potato baked'], prefer: [/^sweet potato, baked, nfs/i, /^sweet potato, baked, peel (not )?eaten/i, /^sweet potato, nfs/i, /^sweet potato, baked/i] },
+  'hamburger patty': { also: ['ground beef patty'], prefer: [/^ground beef patty/i, /^hamburger patty/i, /^beef, ground.*patt/i, /^beef, ground$/i] },
+};
+// Other ways members type the same thing.
+const COMMON_FOOD_ALIASES = {
+  'pb and j': 'pbj', 'pb j': 'pbj', 'pbandj': 'pbj', 'peanut butter jelly': 'peanut butter and jelly', 'peanut butter and jelly sandwich': 'peanut butter and jelly', 'pbj sandwich': 'pbj',
+  'tacos': 'taco', 'burgers': 'burger', 'hamburgers': 'hamburger', 'cheeseburgers': 'cheeseburger', 'sandwiches': 'sandwich', 'subs': 'sub', 'sub sandwich': 'sub', 'wraps': 'wrap',
+  'bagels': 'bagel', 'cookies': 'cookie', 'donuts': 'donut', 'doughnut': 'donut', 'doughnuts': 'donut', 'hot dogs': 'hot dog', 'hotdog': 'hot dog', 'burritos': 'burrito',
+  'pancake': 'pancakes', 'waffle': 'waffles', 'steaks': 'steak', 'salads': 'salad', 'garden salad': 'side salad', 'pop': 'soda', 'coke': 'soda', 'soft drink': 'soda',
+  'mac n cheese': 'mac and cheese', 'mac cheese': 'mac and cheese', 'scrambled egg': 'scrambled eggs', 'fried eggs': 'fried egg', 'boiled egg': 'hard boiled egg', 'hard boiled eggs': 'hard boiled egg', 'boiled eggs': 'hard boiled egg',
+  'french fry': 'french fries', 'apples': 'apple', 'bananas': 'banana', 'oranges': 'orange', 'almond': 'almonds', 'potatoes': 'potato', 'oj': 'orange juice', 'yoghurt': 'yogurt',
+  'beef jerky': 'jerky', 'hamburger meat': 'ground beef', 'pb': 'peanut butter', 'chicken breasts': 'chicken breast',
+  'wings': 'chicken wings', 'chicken wing': 'chicken wings', 'hot wings': 'chicken wings', 'buffalo wings': 'chicken wings', 'chicken strips': 'chicken tenders', 'chicken fingers': 'chicken tenders', 'chicken nugget': 'chicken nuggets', 'nuggets': 'chicken nuggets',
+  'meat loaf': 'meatloaf', 'lasagne': 'lasagna', 'mashed potato': 'mashed potatoes', 'baked potatoes': 'baked potato', 'granola bars': 'granola bar', 'protein bars': 'protein bar', 'omelette': 'omelet', 'omelets': 'omelet',
+  'grilled cheese sandwich': 'grilled cheese', 'turkey and cheese': 'turkey and cheese sandwich', 'ham and cheese': 'ham and cheese sandwich', 'tuna salad sandwich': 'tuna sandwich', 'tuna fish sandwich': 'tuna sandwich',
+  'pork chops': 'pork chop', 'chicken soup': 'chicken noodle soup', 'avocados': 'avocado', 'cheese slice': 'cheese', 'slice of pizza': 'pizza', 'pizza slice': 'pizza', 'cola': 'soda', 'bacon strips': 'bacon', 'egg burrito': 'breakfast burrito', 'sweet potatoes': 'sweet potato', 'burger patty': 'hamburger patty', 'beef patty': 'hamburger patty',
+};
+// Lowercase, "&" as "and", punctuation out, single spaces.
+function normalizeFoodQuery(q) {
+  return String(q || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9% ]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function commonFoodFor(q) {
+  const n = normalizeFoodQuery(q);
+  const key = COMMON_FOOD_ALIASES[n] || n;
+  return COMMON_FOODS[key] || null;
+}
+// Words that mean "this is not the plain food" when the member did not type them.
+const FOOD_NOISE = ['sauce', 'dressing', 'spread', 'mix', 'dry', 'powder', 'baby', 'babyfood', 'toddler', 'infant', 'meatless', 'vegetarian', 'canned', 'frozen', 'dehydrated', 'lunchmeat', 'gravy', 'substitute', 'seasoning', 'topping', 'filling', 'shell', 'shells', 'imitation', 'pickled', 'crackers', 'chips', 'rolls', 'dessert', 'flavored', 'flour', 'oil', 'skin', 'feet', 'giblets', 'liver', 'school', 'human', 'ingredient', 'stuffed', 'luncheon', 'puerto', 'meal', 'squash', 'paper'];
+const FOOD_DIET = /\b(fat[- ]free|low[- ]?fat|reduced|lite|light|diet|decaffeinated|nonfat|unsalted|low sodium|sugar[- ]free|gluten free)\b/;
+function foodRankScore(food, q, common) {
+  const desc = String((food && food.description) || '');
+  const d = normalizeFoodQuery(desc), n = normalizeFoodQuery(q);
+  let s = 0;
+  const type = food && food.dataType;
+  // The everyday version is never one brand's packaged product.
+  if (common && type !== 'Branded') { const i = common.prefer.findIndex(re => re.test(desc)); if (i >= 0) s += 10000 - i * 600; }
+  // Older, smaller list of plain staples, for words COMMON_FOODS does not cover.
+  // Exact words only: "toast" inside "french toast" must not put plain bread first.
+  if (!common && type !== 'Branded') { const sp = STAPLE_FOOD_BOOSTS[n]; if (sp && sp.test(desc)) s += 5000; }
+  const survey = type === 'Survey (FNDDS)';
+  if (survey || type === 'Foundation' || type === 'SR Legacy') s += 100;
+  if (survey) s += 40; // "as eaten", with a household portion ("1 sandwich")
+  if (usdaHasAllWords(desc, n)) s += 200;
+  if (n.includes(' ') && (' ' + d + ' ').includes(' ' + n + ' ')) s += 80; // the words together, in the order typed
+  const plain = d.replace(/ nfs$/, '');
+  const single = w => w.replace(/s$/, '');
+  // A packaged product that happens to be named exactly what was typed
+  // ("FRIED CHICKEN" from one brand) is not the everyday version of it.
+  const generic = type !== 'Branded';
+  if (generic && (plain === n || single(plain) === single(n))) s += 300;
+  if (generic && (d.startsWith(n) || d.startsWith(single(n)))) s += 60;
+  if (/\bnfs\b|\bns as to\b/.test(d)) s += 30; // USDA's own "the ordinary one"
+  const words = d.split(' ');
+  let noise = 0;
+  FOOD_NOISE.forEach(w => { if (words.includes(w) && !n.split(' ').includes(w)) noise++; });
+  s -= Math.min(2, noise) * 70;
+  if (FOOD_DIET.test(d) && !FOOD_DIET.test(n)) s -= 25;
+  // Restaurant-chain entries ("PIZZA HUT 12 inch...", "McDONALD'S, ...", "Hamburger (McDonalds)").
+  const first = desc.split(/[ ,]/)[0].replace(/[^A-Za-z]/g, '');
+  const caps = (first.match(/[A-Z]/g) || []).length;
+  const chain = (caps >= 3 && caps / Math.max(1, first.length) >= 0.7) || /\((mcdonalds|burger king|wendys|taco bell|subway|kfc|dominos|pizza hut|papa johns|little caesars|chick-fil-a|popeyes|arbys|sonic|jack in the box|dairy queen|starbucks|dunkin)[^)]*\)/i.test(desc);
+  if (chain && !n.split(' ').some(w => w.length > 2 && normalizeFoodQuery(desc.replace(/\(|\)/g, ' ')).split(' ').slice(0, 3).concat((desc.match(/\(([^)]*)\)/) || ['', ''])[1].toLowerCase().split(' ')).includes(w) && !usdaHasAllWords(desc.replace(/\([^)]*\)/, ''), w))) s -= 90;
+  s -= Math.min(30, Math.max(0, words.length - n.split(' ').length) * 2);
+  return s;
+}
+function rankUSDAFoods(foods, q) {
+  const common = commonFoodFor(q);
+  const seen = new Set();
+  return (foods || []).filter(f => f && f.description && !seen.has(f.fdcId) && seen.add(f.fdcId))
+    .map((f, i) => ({ f, i, s: foodRankScore(f, q, common) }))
+    .sort((a, b) => b.s - a.s || a.i - b.i).map(x => x.f);
+}
+
+// One search of USDA, kept for a few minutes so the extra searches a common
+// word needs are not repeated on every keystroke.
+const _usdaSearchCache = new Map();
+async function usdaSearchCached(query) {
+  const key = String(query).trim().toLowerCase();
+  const hit = _usdaSearchCache.get(key);
+  if (hit && Date.now() - hit.at < 5 * 60 * 1000) return hit.foods;
+  let res = await usdaFetch('search', { query: String(query).trim() });
+  // "partial" means one of USDA's two lists did not answer (seen while
+  // testing: the everyday foods went missing and "chicken" led with raw
+  // ground chicken). Ask once more, and never keep a partial answer.
+  if (res && res.partial) { const again = await usdaFetch('search', { query: String(query).trim() }); if (again && Array.isArray(again.foods) && (!again.partial || !Array.isArray(res.foods))) res = again; }
+  if (!res || !Array.isArray(res.foods)) return null;
+  if (!res.partial) {
+    if (_usdaSearchCache.size > 60) _usdaSearchCache.clear();
+    _usdaSearchCache.set(key, { at: Date.now(), foods: res.foods });
+  }
+  return res.foods;
+}
 async function searchUSDAFoods(query) {
   if (!query || query.trim().length < 2) return [];
-  const q = query.trim().toLowerCase();
   // BUG FIX (reported Nov 16 2026: "no match for turkey sandwich"). USDA's
   // server now and then answers with an error page; that was shown as "No
   // matches". One more try, and a failure is reported as a failure (null).
-  let res = await usdaFetch('search', { query: query.trim() });
-  if (!res || !Array.isArray(res.foods)) res = await usdaFetch('search', { query: query.trim() });
-  if (!res || !Array.isArray(res.foods)) return null;
-  const foods = res.foods;
-  const staplePattern = findStapleBoost(q);
-  const stapleExact = !!STAPLE_FOOD_BOOSTS[q];
-  // Sort tiers: (1) a curated staple match, if the query is one of the
-  // common cases above, always wins outright; (2) names holding every word
-  // typed ("turkey sandwich" before "bologna, turkey"); (3) generic before
-  // branded; (4) names starting with the search term. Stable sort keeps
-  // USDA's own ordering beyond that.
-  const sorted = [...foods].sort((a, b) => {
-    if (staplePattern) {
-      // A staple found inside a longer search ("turkey" in "turkey
-      // sandwich") only wins for a food that holds every word typed, so
-      // plain turkey breast no longer outranks the sandwiches.
-      const isStaple = d => staplePattern.test(d || '') && (stapleExact || usdaHasAllWords(d, q));
-      const aStaple = isStaple(a.description);
-      const bStaple = isStaple(b.description);
-      if (aStaple !== bStaple) return aStaple ? -1 : 1;
-    }
-    const aAll = usdaHasAllWords(a.description, q), bAll = usdaHasAllWords(b.description, q);
-    if (aAll !== bAll) return aAll ? -1 : 1;
-    const isGeneric = t => t === 'Foundation' || t === 'SR Legacy' || t === 'Survey (FNDDS)';
-    const aGeneric = isGeneric(a.dataType);
-    const bGeneric = isGeneric(b.dataType);
-    if (aGeneric !== bGeneric) return aGeneric ? -1 : 1;
-    const aStarts = (a.description || '').toLowerCase().startsWith(q);
-    const bStarts = (b.description || '').toLowerCase().startsWith(q);
-    if (aStarts !== bStarts) return aStarts ? -1 : 1;
-    return 0;
-  });
+  const common = commonFoodFor(query);
+  const extra = (common && common.also) || [];
+  const [mainFirst, ...more] = await Promise.all([usdaSearchCached(query), ...extra.map(a => usdaSearchCached(a).catch(() => null))]);
+  let foods = mainFirst;
+  if (!foods) foods = await usdaSearchCached(query);
+  // The word itself failed but the common-food searches worked: show those.
+  if (!foods && !more.some(Boolean)) return null;
+  const pool = (foods || []).concat(...more.filter(Boolean));
+  const sorted = rankUSDAFoods(pool, query);
   return sorted.slice(0, 12).map(f => ({
     fdcId: f.fdcId,
     description: f.description,

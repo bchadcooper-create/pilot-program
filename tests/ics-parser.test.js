@@ -1859,7 +1859,7 @@ test('crew feed: a saved session becomes a post, stats line, time ago, escaping'
   const lift = { date: '2026-10-18T17:35:00.000Z', muscle_group: 'Full Body', env: 'comm', durationMinutes: 60, sets: { s: [{ reps: '5', weight: '225' }, { reps: '5', weight: '225' }], p: [{ reps: '8', weight: '60' }] }, workoutSnapshot: { taxi: [], takeoff: [{ id: 's', name: 'Back Squat' }], enroute: [{ id: 'p', name: 'DB Bench Press' }], landing: [] } };
   const b = ctx.crewActivityFromSession(lift, '124', { visibility: 'followers' });
   assertEqual(b.kind + '|' + b.title + '|' + b.sets_logged + '|' + b.seconds + '|' + b.visibility, 'workout|Full Body|3|3600|followers', 'workout post');
-  assertEqual(ctx.crewStatLine(b), '1:00:00 · 3 sets · gym', 'workout stat line');
+  assertEqual(ctx.crewStatLine(b), '60 min · 3 sets · gym', 'workout stat line');
   const walk = { date: '2026-10-17T17:00:00.000Z', muscle_group: 'Cardio', importedFromOura: true, ouraActivity: 'walking', sets: { c_ca_er3: [{ miles: '1.5', seconds: '1800' }] } };
   assertEqual(ctx.crewActivityFromSession(walk, 'o1').kind + ':' + ctx.crewActivityFromSession(walk, 'o1').env, 'walk:null', 'ring walk: walk, no location');
   const now = new Date('2026-10-18T20:00:00Z');

@@ -3,8 +3,8 @@
  * Version/build: fcf-v5.66.2 / 20261117_03
  */
 
-const FCF_VERSION = 'fcf-v5.66.2';
-const FCF_BUILD   = '20261117_03';
+const FCF_VERSION = 'fcf-v5.67.0';
+const FCF_BUILD   = '20261119_01';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -2700,6 +2700,16 @@ function renderAuth(root) {
   parts.push('<button class="btn-ghost mt12" style="display:block;width:100%;text-align:center" onclick="ST.showLanding=true;renderRoot()">← Back</button>');
   parts.push('</div></div>');
   root.innerHTML = parts.join('');
+  // Nov 19 2026 test run: any error redrew this screen and wiped the email
+  // and both passwords, and the keyboard's Go key did nothing. Put back what
+  // was typed (never written into the markup) and let Enter submit.
+  const d = ST.authDraft || {};
+  ['auth_email', 'auth_pass', 'auth_pass2'].forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    if (d[id]) el.value = d[id];
+    el.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); handleAuthSubmit(); } });
+  });
+  ST.authDraft = null;
 }
 
 function renderForgotPassword(root) {
@@ -2776,6 +2786,8 @@ async function handlePasswordRecovery() {
 async function handleAuthSubmit() {
   const email = document.getElementById('auth_email')?.value?.trim();
   const pass  = document.getElementById('auth_pass')?.value;
+  // Kept in memory only, for the redraw an error causes; cleared on success.
+  ST.authDraft = { auth_email: email || '', auth_pass: pass || '', auth_pass2: document.getElementById('auth_pass2')?.value || '' };
   if (!email || !pass) { ST.authErr = 'Enter both email and password.'; renderRoot(); return; }
   if (!email.includes('@')) { ST.authErr = 'Enter a valid email address.'; renderRoot(); return; }
   if (ST.authMode === 'signup') {
@@ -2786,7 +2798,7 @@ async function handleAuthSubmit() {
   try {
     const user = ST.authMode === 'signup' ? await doSignUp(email, pass) : await doSignIn(email, pass);
     if (!user) { ST.authErr = 'Sign in failed. Check your email and password.'; renderRoot(); return; }
-    ST.user = user; ST.authed = true; ST.authErr = ''; ST.authInfo = '';
+    ST.user = user; ST.authed = true; ST.authErr = ''; ST.authInfo = ''; ST.authDraft = null;
     await bootApp();
   } catch(e) {
     let msg = e.message || 'Authentication failed.';
@@ -3283,9 +3295,13 @@ async function loadSuperUser() {
 }
 function isLbAdmin() { return isSuperUser(); } // kept as an alias — used elsewhere for leaderboard moderation
 
+// Catalog entries that are the same lift as a leaderboard lift under another
+// id. Without this a bench logged from Full Body or a custom routine never
+// reached the Barbell Bench Press board (Nov 19 2026 test run).
+const LEADERBOARD_ALIASES = { c_up_to1: ['c_fb_to2'] };
 function sessionMaxWeight(session, exId) {
-  const sets = session?.sets?.[exId];
-  if (!sets) return null;
+  const sets = [exId].concat(LEADERBOARD_ALIASES[exId] || []).reduce((all, id) => all.concat(session?.sets?.[id] || []), []);
+  if (!sets.length) return null;
   let max = 0, reps = null;
   sets.forEach(s => {
     const w = parseFloat(s.weight);
@@ -3481,9 +3497,10 @@ function crewActivityFromSession(session, sessionKey, opts) {
 function crewStatLine(a) {
   const bits = [];
   if (a.miles) bits.push(distStr(a.miles));
-  if (a.seconds) bits.push(fmtDuration(a.seconds));
+  // A gym session reads "14 min"; "14:00" looked like a clock time. Runs keep m:ss.
+  if (a.seconds) bits.push(a.kind === 'workout' ? Math.max(1, Math.round(a.seconds / 60)) + ' min' : fmtDuration(a.seconds));
   if (a.miles && a.seconds && a.kind !== 'workout') bits.push(fmtPace(a.seconds / Number(a.miles)) + paceSuffix());
-  if (a.kind === 'workout' && a.sets_logged) bits.push(a.sets_logged + ' sets');
+  if (a.kind === 'workout' && a.sets_logged) bits.push(a.sets_logged + (a.sets_logged === 1 ? ' set' : ' sets'));
   if (a.env && CREW_ENV_WORD[a.env]) bits.push(CREW_ENV_WORD[a.env]);
   if (a.airport) bits.push(a.airport);
   return bits.join(' · ');
@@ -4185,7 +4202,7 @@ function crewCardHtml(a) {
       cmts.forEach(c => { h += '<div class="fb" style="align-items:flex-start;padding:4px 0;font-size:0.8125rem"><div style="display:flex;gap:8px;align-items:flex-start;min-width:0">' + avatarHtml(c.user_id, c.crew_profiles?.callsign || 'crew', 24) + '<div style="min-width:0"><b style="cursor:pointer" onclick="crewGo(\'profile\',\'' + c.user_id + '\')">' + crewEsc(c.crew_profiles?.callsign || 'crew') + '</b> <span style="color:var(--muted);font-size:0.625rem">' + crewAgo(c.created_at) + '</span><div data-raw style="line-height:1.5">' + crewEsc(c.body) + '</div></div></div><div style="display:flex;align-items:center;gap:2px;flex-shrink:0">' + crewCommentLikeHtml(a.id, c) + (c.user_id === ST.user.id || mine ? '<button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewDeleteComment(\'' + a.id + '\',\'' + c.id + '\')">delete</button>' : '<button class="btn-ghost" style="font-size:0.625rem;color:var(--muted)" onclick="crewReport(\'comment\',\'' + c.id + '\')">report</button>') + '</div></div>'; });
       if (!cmts.length) h += '<div style="font-size:0.75rem;color:var(--muted)">No comments yet.</div>';
     }
-    h += '<div style="display:flex;gap:6px;margin-top:8px"><input id="crewCmt_' + a.id + '" type="text" maxlength="500" placeholder="Say something" style="flex:1" onkeydown="if(event.key===\'Enter\')crewComment(\'' + a.id + '\')"><button class="btn btn-outline" style="width:auto;padding:0 14px" onclick="crewComment(\'' + a.id + '\')">Post</button></div></div>';
+    h += '<div style="display:flex;gap:6px;margin-top:8px"><input id="crewCmt_' + a.id + '" class="fcf-input" type="text" maxlength="500" placeholder="Say something" style="flex:1;min-width:0" onkeydown="if(event.key===\'Enter\')crewComment(\'' + a.id + '\')"><button class="btn btn-outline" style="width:auto;padding:0 14px" onclick="crewComment(\'' + a.id + '\')">Post</button></div></div>';
   }
   return h + '</div>';
 }
@@ -4347,7 +4364,7 @@ function crewFeedListHtml() {
 function renderLeaderboard(p) {
   const parts = [];
   // Crew feed or the boards. Default to the feed once a member has joined.
-  if (!ST.ranksSeg) ST.ranksSeg = crewIsMember() ? 'crew' : 'boards';
+  if (!ST.ranksSeg) ST.ranksSeg = 'crew'; // Activity first: five empty leaderboards were a new member's first view of Crew
   const segTop = (v, label) => '<div class="env-btn" style="padding:10px 4px' + (ST.ranksSeg === v ? ';border-color:var(--gold);background:var(--gold-tint)' : '') + '" onclick="ST.ranksSeg=\'' + v + '\';renderPage()"><div style="font-size:0.75rem;font-weight:700">' + label + '</div></div>';
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:4px 0 12px">' + segTop('crew', '👥 ACTIVITY') + segTop('boards', '🏆 BOARDS') + '</div>');
   if (ST.ranksSeg === 'crew') { renderCrew(parts); p.innerHTML = parts.join(''); return; }
@@ -5461,6 +5478,7 @@ async function bootAppInner() {
   if (!ST.sex && !localStorage.getItem('fcf_profile_intro')) {
     localStorage.setItem('fcf_profile_intro', '1');
     ST.tab = 'profile';
+    ST.firstRun = true; // shows the welcome card and the Done button on Pilot Profile
   }
 
   ST.muscleGroup = getRecommendedNext();
@@ -6284,6 +6302,12 @@ async function computeTrackingNudges() {
   const suppressMs = 7 * 24 * 60 * 60 * 1000; // don't re-show a dismissed nudge for a week
 
   const dismissedRecently = (iso) => iso && (now - new Date(iso).getTime()) < suppressMs;
+  // BUG FIX (Nov 19 2026 test run): a member who joined minutes ago was told
+  // their logging "has gone quiet the last week" and offered a Turn Off
+  // Tracking button. There is no quiet week to judge until the account has
+  // existed for one.
+  const joinedMs = ST.user.created_at ? new Date(ST.user.created_at).getTime() : 0;
+  if (joinedMs && (now - joinedMs) < suppressMs) return;
 
   // Nutrition
   try {
@@ -10737,10 +10761,17 @@ function renderProfileBuilder() {
   BP_SECTIONS.forEach(([section, label]) => {
     parts.push('<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">');
     parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--gold);letter-spacing:0.08em;margin-bottom:8px">'+label+'</div>');
-    (bp[section]||[]).forEach(e => {
-      parts.push('<div class="fb" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:6px">');
-      parts.push('<div><span style="font-size:0.8125rem">'+e.name+'</span> <span style="font-family:var(--mono);font-size:0.625rem;color:var(--muted)">'+(e.target||'')+'</span></div>');
-      parts.push('<span style="color:var(--red);cursor:pointer;font-size:0.875rem" onclick="bpRemove(\''+section+'\',\''+e.id+'\')">✕</span>');
+    // Nov 19 2026 test run: a custom routine could not be reordered and its
+    // sets and reps could not be changed. Arrows move a row; tapping the
+    // target opens it for editing.
+    (bp[section]||[]).forEach((e, idx, arr) => {
+      const arrow = (dir, sym, off) => '<span style="cursor:pointer;font-size:0.875rem;padding:2px 6px;color:'+(off?'var(--border)':'var(--muted)')+'" '+(off?'':'onclick="bpMove(\''+section+'\',\''+e.id+'\','+dir+')"')+'>'+sym+'</span>';
+      parts.push('<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:6px">');
+      parts.push('<div class="fb"><div style="min-width:0"><span style="font-size:0.8125rem">'+e.name+'</span> <span style="font-family:var(--mono);font-size:0.625rem;color:var(--gold);cursor:pointer;text-decoration:underline" onclick="ST.buildProfile.editTarget='+(bp.editTarget===e.id?'null':'\''+e.id+'\'')+';renderProfileBuilder()">'+sanitizeUserText(e.target||'set target')+'</span></div>');
+      parts.push('<div style="white-space:nowrap">'+arrow(-1,'▲',idx===0)+arrow(1,'▼',idx===arr.length-1)+'<span style="color:var(--red);cursor:pointer;font-size:0.875rem;padding:2px 0 2px 8px" onclick="bpRemove(\''+section+'\',\''+e.id+'\')">✕</span></div></div>');
+      if (bp.editTarget === e.id) {
+        parts.push('<div style="display:flex;gap:6px;margin-top:8px"><input id="bpTargetInput" class="fcf-input" type="text" value="'+sanitizeUserText(e.target||'')+'" placeholder="e.g. 4×8 or 3×12/side" style="flex:1"><button class="btn btn-outline" style="width:auto;padding:0 14px" onclick="bpSetTarget(\''+section+'\',\''+e.id+'\')">OK</button></div>');
+      }
       parts.push('</div>');
     });
     parts.push('<input class="fcf-input" type="text" placeholder="Search to add…" oninput="bpFilter(\''+section+'\',this.value)" autocomplete="off" style="margin-bottom:6px">');
@@ -10770,13 +10801,30 @@ function renderProfileBuilder() {
   document.getElementById('modalRoot').innerHTML = parts.join('');
 }
 
+function bpMove(section, id, dir) {
+  const list = ST.buildProfile[section] || []; const i = list.findIndex(e => e.id === id); const j = i + dir;
+  if (i < 0 || j < 0 || j >= list.length) return;
+  [list[i], list[j]] = [list[j], list[i]];
+  renderProfileBuilder();
+}
+function bpSetTarget(section, id) {
+  const e = (ST.buildProfile[section] || []).find(x => x.id === id); if (!e) return;
+  const t = sanitizeUserText((document.getElementById('bpTargetInput')?.value || '').trim()).replace(/(\d)\s*x\s*(?=\d|max)/gi, '$1×');
+  if (!t) { showToast('Type a target like 4×8.'); return; }
+  e.target = t;
+  // Same rule the custom exercise form uses: a leading "N×" sets the number of set boxes.
+  const m = t.match(/^(\d+)\s*[x×]/i); if (m) e.sets = Math.min(12, Math.max(1, parseInt(m[1], 10)));
+  ST.buildProfile.editTarget = null;
+  renderProfileBuilder();
+}
+
 function bpFilter(section, q) {
   const box = document.getElementById('bpResults_'+section);
   if (!box) return;
   q = (q||'').trim().toLowerCase();
   if (!q) { box.innerHTML = ''; return; }
   const chosen = new Set([...ST.buildProfile.taxi, ...ST.buildProfile.takeoff, ...ST.buildProfile.enroute, ...ST.buildProfile.landing].map(e => e.id));
-  const matches = rankedExerciseMatches(bpSearchSource(), q, chosen, 5);
+  const matches = rankedExerciseMatches(bpSearchSource(), q, chosen, 12);
   const parts = [];
   matches.forEach((e, i) => {
     parts.push('<div style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:5px;cursor:pointer;font-size:0.8125rem" onclick="bpAdd(\''+section+'\','+i+',\''+q.replace(/'/g,'')+'\')">'+e.name+' <span style="font-family:var(--mono);font-size:0.625rem;color:var(--muted)">'+(e.target||'')+'</span></div>');
@@ -10839,7 +10887,7 @@ async function bpSaveCustomExercise(section) {
 }
 function bpAdd(section, matchIdx, q) {
   const chosen = new Set([...ST.buildProfile.taxi, ...ST.buildProfile.takeoff, ...ST.buildProfile.enroute, ...ST.buildProfile.landing].map(e => e.id));
-  const matches = rankedExerciseMatches(bpSearchSource(), q, chosen, 5);
+  const matches = rankedExerciseMatches(bpSearchSource(), q, chosen, 12);
   const exDef = matches[matchIdx];
   if (!exDef) return;
   ST.buildProfile[section].push(JSON.parse(JSON.stringify(exDef)));
@@ -10868,6 +10916,7 @@ async function saveBuildProfile() {
   if (!bp.name) { showToast('Give your routine a name.'); return; }
   const total = bp.taxi.length + bp.takeoff.length + bp.enroute.length + bp.landing.length;
   if (!total) { showToast('Add at least one exercise.'); return; }
+  delete bp.editTarget;
   const idx = ST.customProfiles.findIndex(p => p.id === bp.id);
   if (idx >= 0) ST.customProfiles[idx] = bp; else ST.customProfiles.push(bp);
   await withDialogSpinner('Saving routine…', () => saveCustomProfilesToDb());
@@ -10955,7 +11004,7 @@ async function renderPreflight(p) {
   const parts = [];
   parts.push('<button class="btn-ghost" style="font-size:0.75rem;margin-bottom:10px" onclick="switchTab(\'today\')">← Back to Today</button>');
   parts.push('<div class="section-label">PREFLIGHT BRIEFING</div>');
-  parts.push(installPromptHtml);
+  // (The add-to-home-screen card is pushed at the end of this page now; it sat above Engage.)
   if (profileIncomplete) {
     parts.push('<div class="card mb12" style="border-color:var(--gold);cursor:pointer" onclick="haptic(\'light\');switchTab(\'profile\')">');
     parts.push('<div class="fb"><div><div style="font-size:0.8125rem;font-weight:600">👤 Complete your profile</div>');
@@ -10993,7 +11042,7 @@ async function renderPreflight(p) {
     parts.push('<div class="alert alert-info mb12"><div class="alert-icon">🏃</div><div><b>' + (rn.kind === 'long' ? 'Long run day' : 'Easy run') + '.</b> ' + rn.note + '</div></div>');
   }
   parts.push('<div class="edit-row-fb" style="display:flex;justify-content:space-between;align-items:center;padding:8px 2px;font-size:0.75rem;color:var(--muted)" onclick="ST.showChangePlan=!ST.showChangePlan;renderPage()">');
-  parts.push('<span>'+(ST.scheduleEnvNote || (ST.activeCustomProfileId ? 'Custom routine, used as saved.' : 'Same as your usual plan.'))+'</span>');
+  parts.push('<span>'+(ST.scheduleEnvNote || (ST.activeCustomProfileId ? 'Custom routine, used as saved.' : (isNewUser ? 'Built from your objective and level.' : 'Same as your usual plan.')))+'</span>');
   parts.push('<span style="font-family:var(--mono);font-size:0.75rem;font-weight:700;color:var(--gold);cursor:pointer;padding:8px 14px;border:1.5px solid var(--gold);border-radius:8px;background:rgba(201,168,76,0.1);white-space:nowrap">'+(showPlan?'HIDE ▴':'CHANGE PLAN ▾')+'</span>');
   parts.push('</div>');
 
@@ -11193,6 +11242,7 @@ async function renderPreflight(p) {
     parts.push('</div>');
   }
 
+  parts.push(installPromptHtml);
   p.innerHTML = parts.join('');
 }
 
@@ -11270,6 +11320,10 @@ async function saveBodyMetrics() {
   const ageEl = document.getElementById('bmAge');
   const ft = parseInt(ftEl?.value) || 0;
   const inches = parseFloat(inEl?.value) || 0;
+  // An untouched form used to answer "Body metrics saved."
+  if (!sexEl?.value && !ft && !inches && !(ageEl?.value || '').trim() && !(document.getElementById('bmWeight')?.value || '').trim() && !(document.getElementById('bmUsername')?.value || '').trim() && !(document.getElementById('bmBase')?.value || '').trim() && !ST.sex && !ST.lastWeight) {
+    showBigToast('Nothing to save yet. Add your sex and weight at least: they set your calorie targets and strength scoring.', 'warn'); return;
+  }
   ST.sex = sexEl?.value || null;
   ST.heightIn = (ft || inches) ? ft*12 + inches : null;
   ST.age = parseInt(ageEl?.value) || null;
@@ -11307,11 +11361,12 @@ async function saveBodyMetrics() {
     return;
   }
   if (newWeight) ensureProfileWeightLogged(newWeight).catch(e => console.warn('Logging the profile weight failed:', e));
-  showToast('Body metrics saved.');
+  showToast(ST.firstRun ? 'Saved. Next: pick your mission objective.' : 'Body metrics saved.');
   // Call sign just set for the first time: put their existing lift history
   // on the boards so months of logged work isn't invisible.
   if (!hadUsername && ST.username) backfillLeaderboard().catch(() => {});
   renderPage();
+  if (ST.firstRun) { const g = document.getElementById('profileGoalCard'); if (g) g.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 }
 
 function setReadiness(n) {
@@ -11341,6 +11396,7 @@ async function toggleInjury(region) {
 }
 
 async function saveGoalLevel() {
+  ST.goalPicked = true; // ticks step 2 on the first-run welcome card
   try {
     const profile = (await dbGetProfile()) || {};
     profile.goal = ST.goal;
@@ -12720,6 +12776,9 @@ function alternatesSheetHtml(exId, exName, phaseKey) {
   parts.push('<div class="modal-sheet" style="max-height:85vh;overflow-y:auto">');
   parts.push('<div class="modal-handle"></div>');
   parts.push('<div class="modal-title">Alternate Exercises</div>');
+  if ((ST.sets[exId] || []).some(x => x.reps || x.weight || x.seconds || x.seconds_left || x.seconds_right)) {
+    parts.push('<div class="alert alert-warn" style="margin-bottom:12px"><div>You have sets logged for this one. Swapping replaces the exercise and clears those sets.</div></div>');
+  }
   if (alts.length) {
     parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:14px">Same muscle group, different movement. Tap to swap in.</div>');
     alts.forEach((alt, altIdx) => {
@@ -13237,13 +13296,13 @@ function buildExCard(exItem, phaseKey) {
       const valL = sets[0]?.seconds_left || '';
       const valR = sets[0]?.seconds_right || '';
       parts.push('<div style="display:flex;gap:8px">');
-      parts.push('<div class="timed-box" style="flex:1" id="tb_'+exItem.id+'_left">');
+      parts.push('<div class="timed-box" style="flex:1;min-width:0;padding:10px" id="tb_'+exItem.id+'_left">');
       parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">LEFT SIDE</div>');
       parts.push('<input class="timed-inp" type="number" inputmode="numeric" placeholder="0" value="'+valL+'" oninput="ensureSetEntry(\''+exItem.id+'\',0);ST.sets[\''+exItem.id+'\'][0].seconds_left=this.value;persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
       parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">seconds</div>');
       parts.push(buildStopwatchWidget(exItem.id, 'left', exItem.target));
       parts.push('</div>');
-      parts.push('<div class="timed-box" style="flex:1" id="tb_'+exItem.id+'_right">');
+      parts.push('<div class="timed-box" style="flex:1;min-width:0;padding:10px" id="tb_'+exItem.id+'_right">');
       parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);letter-spacing:0.08em;margin-bottom:8px">RIGHT SIDE</div>');
       parts.push('<input class="timed-inp" type="number" inputmode="numeric" placeholder="0" value="'+valR+'" oninput="ensureSetEntry(\''+exItem.id+'\',0);ST.sets[\''+exItem.id+'\'][0].seconds_right=this.value;persistWorkoutState();updateExDoneIndicator(\''+exItem.id+'\')">');
       parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">seconds</div>');
@@ -13417,6 +13476,11 @@ function updateExDoneIndicator(exId) {
 }
 
 function toggleEx(id) {
+  // Opening the next exercise folds away the ones already logged, so a
+  // workout is not a wall of open, finished cards to scroll past.
+  if (!ST.expanded[id]) Object.keys(ST.expanded).forEach(k => {
+    if (k !== id && ST.expanded[k] && (ST.sets[k] || []).some(x => x.reps || x.weight || x.seconds || x.height || x.distance || x.seconds_left || x.seconds_right)) ST.expanded[k] = false;
+  });
   ST.expanded[id] = !ST.expanded[id];
   renderFlight(document.getElementById('mainPage'));
 }
@@ -14798,6 +14862,7 @@ async function setTheChocks() {
     workoutSnapshot: wk,
   };
   const savedKey = String(Date.now());
+  let savedToServer = false;
   try {
     const { error } = await SB.from('workout_sessions').insert([{
       user_id: ST.user?.id || null,
@@ -14808,6 +14873,7 @@ async function setTheChocks() {
     }]);
     if (error) throw error;
     showToast('✅ Chocks set. Data synced.');
+    savedToServer = true;
     crewPostSession(session, savedKey).catch(() => {});
     cancelWorkoutReminderNative(); // suppress 3-day reminder — user just trained
   } catch(e) {
@@ -14818,7 +14884,11 @@ async function setTheChocks() {
   const recentSessions = await dbGetRecentSessions(7);
   const profile = await dbGetProfile();
   const bodyWeight = profile?.lastWeight || null;
-  const summary = buildWorkoutSummary(session, allEx, [...recentSessions, session], bodyWeight);
+  // BUG FIX (Nov 19 2026 test run): the workout was just saved, so the list
+  // read back from the server already holds it. Adding it again counted one
+  // session too many ("2 of 3" after a first workout) and compared today's
+  // lifts against their own saved copy, so a personal record never showed.
+  const summary = buildWorkoutSummary(session, allEx, [...recentSessions.filter(s => s.date !== session.date), session], bodyWeight);
   const debriefMsgs = buildDebriefMessages(summary);
 
   ST.lastSession = session;
@@ -14834,6 +14904,10 @@ async function setTheChocks() {
   // a workout never updated it. The calendar (which re-fetches from the
   // DB directly) correctly showed the session; Today's briefing, reading
   // the stale in-memory list, did not — until the next full app reload.
+  // The saved key rides along (as it does on sessions loaded at start-up):
+  // joining the crew feed shares "your last 14 days" from this list and
+  // skipped anything logged since the app was opened (Nov 19 2026 test run).
+  if (savedToServer) session._key = savedKey;
   ST.sessionCache = [...(ST.sessionCache || []), session];
   ST.muscleGroup = getRecommendedNext(); // pre-select tomorrow's recommended profile
   clearWorkoutState();
@@ -15254,6 +15328,8 @@ async function saveBio() {
   const dia   = parseInt(document.getElementById('inp_dia')?.value)||null;
   const gluc  = parseInt(document.getElementById('inp_gluc')?.value)||null;
   if (!wt && !waist && !sys && !dia && !gluc) { showBigToast('Enter at least one value to log.','warn'); return; }
+  // A reading over the FAA line used to save without a word here.
+  if ((sys && sys > 155) || (dia && dia > 95)) setTimeout(() => showBigToast('Logged. That reading is above the FAA limit of 155/95. One reading is not a verdict: sit quietly for five minutes and take it again. If it stays up, talk to your AME.', 'warn'), 2600);
 
   const todayStart = new Date(); todayStart.setHours(0,0,0,0);
   const todayEnd   = new Date(); todayEnd.setHours(23,59,59,999);
@@ -16767,6 +16843,15 @@ async function fetchOuraReadiness() {
 }
 
 // ─── PHOTO PROGRESS ───────────────────────────────────────────────────────────
+// Tap a progress photo to see it full width (it was thumbnail-only).
+function viewProgressPhoto(idx) {
+  const ph = (ST.photoTimeline || [])[idx]; if (!ph) return;
+  document.getElementById('modalRoot').innerHTML = '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet" style="max-height:92vh;overflow-y:auto"><div class="modal-handle"></div>' +
+    '<div class="modal-title">' + sanitizeUserText(ph.date || 'Progress photo') + '</div>' +
+    '<img src="' + ph.url + '" style="width:100%;border-radius:10px;display:block">' +
+    '<button class="btn btn-outline mt12" onclick="closeModal()">Close</button></div></div>';
+}
+
 async function uploadProgressPhoto(useCamera) {
   if (!ST.user) { showBigToast('Sign in to save photos.','warn'); return; }
   const input = document.createElement('input');
@@ -16928,7 +17013,7 @@ function buildPhotoTimelineHTML() {
     photos.forEach((p, i) => {
       const photoIdx = i;
       parts.push('<div style="border-radius:8px;overflow:hidden;position:relative;background:var(--bg3)">');
-      parts.push('<img src="'+p.url+'" style="width:100%;aspect-ratio:3/4;object-fit:cover;display:block">');
+      parts.push('<img src="'+p.url+'" onclick="viewProgressPhoto('+photoIdx+')" style="width:100%;aspect-ratio:3/4;object-fit:cover;display:block;cursor:pointer">');
       parts.push('<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.65);display:flex;justify-content:space-between;align-items:center;padding:4px 6px">');
       parts.push('<span style="font-family:var(--mono);font-size:0.5625rem;color:#fff">'+p.date+'</span>');
       parts.push('<button onclick="deleteProgressPhoto('+photoIdx+')" aria-label="Delete photo from '+p.date+'" style="background:rgba(255,66,69,0.8);border:none;color:white;font-size:0.875rem;min-width:36px;min-height:36px;margin:-4px -2px;border-radius:6px;cursor:pointer">✕</button>');
@@ -16946,7 +17031,18 @@ function buildPhotoTimelineHTML() {
 
 // ─── PROFILE TAB ──────────────────────────────────────────────────────────────
 function renderProfile(p) {
-  const parts = [moreBackLink()];
+  const parts = [ST.firstRun ? '' : moreBackLink()];
+  // First visit after sign-up (Nov 19 2026 test run: a new member landed on
+  // this long settings page with no welcome and no way to tell when they
+  // were finished).
+  if (ST.firstRun) {
+    const done = (ok) => ok ? '<span style="color:var(--green)">✓</span>' : '<span style="color:var(--muted)">○</span>';
+    parts.push('<div class="card mb12" style="border-color:var(--gold);background:linear-gradient(160deg, rgba(201,168,76,0.08), var(--bg3))">' +
+      '<div style="font-size:1.0625rem;font-weight:700;margin-bottom:6px">Welcome aboard</div>' +
+      '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.55;margin-bottom:10px">Two minutes of setup and your workouts and targets are built around you. Everything here can be changed later.</div>' +
+      '<div style="font-size:0.8125rem;line-height:1.9">' + done(!!ST.sex && !!ST.lastWeight) + ' 1. Body metrics: sex, height, age, weight<br>' + done(!!ST.goalPicked) + ' 2. Mission objective and fitness level<br>' + done(!!ST.nutritionGoals) + ' 3. Fuel plan (optional)</div>' +
+      '</div>');
+  }
   parts.push('<div class="section-label" style="margin-top:0">PILOT PROFILE</div>');
 
   // Account card
@@ -16973,13 +17069,13 @@ function renderProfile(p) {
   // Native selects render as a compact picker wheel on iOS — tidier than
   // free-text entry for a value with exactly 4x12 sane combinations.
   parts.push('<div class="field" style="margin-bottom:0"><label>Height</label><div style="display:flex;gap:6px">');
-  parts.push('<select id="bmFt" style="flex:1">');
-  parts.push('<option value=""'+(hFt===null?' selected':'')+'>– ft</option>');
-  for (let f=4; f<=7; f++) parts.push('<option value="'+f+'"'+(hFt===f?' selected':'')+'>'+f+' ft</option>');
+  parts.push('<select id="bmFt" style="flex:1;min-width:0;padding-left:10px">');
+  parts.push('<option value=""'+(hFt===null?' selected':'')+'>ft</option>');
+  for (let f=4; f<=7; f++) parts.push('<option value="'+f+'"'+(hFt===f?' selected':'')+'>'+f+'′</option>');
   parts.push('</select>');
-  parts.push('<select id="bmIn" style="flex:1">');
-  parts.push('<option value=""'+(hIn===null?' selected':'')+'>– in</option>');
-  for (let i2=0; i2<=11; i2++) parts.push('<option value="'+i2+'"'+(hIn===i2?' selected':'')+'>'+i2+' in</option>');
+  parts.push('<select id="bmIn" style="flex:1;min-width:0;padding-left:10px">');
+  parts.push('<option value=""'+(hIn===null?' selected':'')+'>in</option>');
+  for (let i2=0; i2<=11; i2++) parts.push('<option value="'+i2+'"'+(hIn===i2?' selected':'')+'>'+i2+'″</option>');
   parts.push('</select>');
   parts.push('</div></div>');
   parts.push('</div>');
@@ -17001,7 +17097,7 @@ function renderProfile(p) {
   parts.push('</div>');
 
   // Mission objective (goal)
-  parts.push('<div class="card mb12">');
+  parts.push('<div class="card mb12" id="profileGoalCard">');
   parts.push('<div class="section-label" style="margin-top:0">MISSION OBJECTIVE</div>');
   parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px">Your overall training goal. This determines which mission profile gets recommended next.</div>');
   parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">');
@@ -17072,6 +17168,7 @@ function renderProfile(p) {
   // ── Tracking toggles (nutrition + hydration) ─────────────────────────────
   // Same control used on More — single source of truth via setTrackingPref.
   parts.push(renderTrackingToggles());
+  if (ST.firstRun) parts.push('<button class="btn btn-gold mt16" onclick="haptic(\'light\');ST.firstRun=false;switchTab(\'today\')">Done. Take me to Today</button>');
 
   p.innerHTML = parts.join('');
 
@@ -19409,7 +19506,7 @@ function buildTodayBriefing(ctx) {
     };
     return { tone:'go', headline:'Session logged',
       body: tierCopy[tier],
-      action: (showProtein && tier !== 'on_track') ? { label:'Log a meal', fn:"switchTab('nutrition')" } : null };
+      action: (showProtein && tier !== 'on_track') ? { label:'Log a meal', fn:"quickLogMeal()" } : null };
   }
 
   // 5. A gap while there's STILL FLYING LEFT today is not a training window,
@@ -19489,7 +19586,7 @@ function buildTodayBriefing(ctx) {
         body += 'Not enough ground time for a real meal. Late landing means restaurants will be closed, so grab anything portable you can find now.';
       }
       const action = (!ate && usableMin >= 10)
-        ? { label: 'Fuel up: log a meal', fn: "switchTab('nutrition')" }
+        ? { label: 'Fuel up: log a meal', fn: "quickLogMeal()" }
         : null;
       return { tone: 'neutral', headline: ord + ' leg done: ' + gapStr + where, body, action };
     }
@@ -19520,7 +19617,7 @@ function buildTodayBriefing(ctx) {
     // meal" regardless of the toggle, unlike every other action button
     // in this function.
     const action = (usableMin >= 5 && ST.trackNutrition)
-      ? { label: (usableMin >= 20 && !ate) ? 'Fuel up: log a meal' : 'Log a meal', fn:"switchTab('nutrition')" }
+      ? { label: (usableMin >= 20 && !ate) ? 'Fuel up: log a meal' : 'Log a meal', fn:"quickLogMeal()" }
       : null;
     return { tone:'neutral', headline:ord+' leg done: '+gapStr+where, body, action };
   }
@@ -20069,7 +20166,9 @@ function renderToday(p) {
   // otherwise completely bypass the only place this used to be mentioned,
   // meaning most schedule-less users would never actually see it.
   const hasAnySchedule = ST.flightSchedule?.length || ST.calendarEvents?.length;
-  if (!hasAnySchedule) {
+  // While the Preflight Checklist is up it already carries "Upload your
+  // schedule"; the same ask a third time pushed food and water off screen.
+  if (!hasAnySchedule && !buildSetupChecklistHTML()) {
     const isNative = typeof FCFBridge !== 'undefined' && FCFBridge.isNative;
     if (isNative && !ST.calendarGranted) {
       parts.push('<div class="card mb12"><div style="font-size:1.0625rem;font-weight:600;letter-spacing:-.01em;margin-bottom:7px">📅 Connect your calendar</div><div style="font-size:0.8125rem;color:var(--muted);line-height:1.65;margin-bottom:14px">Grant calendar access and FCF will automatically detect your flights, layovers, and free time. No manual upload needed.</div><button class="btn btn-outline" onclick="if(typeof FCFBridge!==\'undefined\')FCFBridge.requestCalendar(ST.baseTimezone)">Connect Calendar</button></div>');
@@ -20231,7 +20330,7 @@ function renderToday(p) {
     parts.push('</div>');
   }
 
-  parts.push('<button class="btn btn-outline" onclick="switchTab(\'nutrition\')">🍽️ Log a meal</button>');
+  parts.push('<button class="btn btn-outline" onclick="quickLogMeal()">🍽️ Log a meal</button>');
   parts.push(todayWisdomCardHtml());
   const html = parts.join('');
   // A repaint that produces the same markup (HealthKit arriving with no
@@ -20288,6 +20387,10 @@ function renderNutritionGoalsSetup(p) {
     if (ST.nutritionGoals && ST.nutritionGoals.mode) {
       ST.goalDraft = ST.nutritionGoals.mode;
       ST.trainDaysDraft = ST.nutritionGoals.trainingDays || '3-4';
+    } else {
+      // No plan yet: start from the mission objective they already picked,
+      // not Maintain (a Muscle Gain member was asked the question twice).
+      ST.goalDraft = ({ muscle: 'muscle', strength: 'muscle', chest: 'muscle', glute: 'muscle', fatloss: 'fatloss' })[ST.goal] || 'maintain';
     }
     ST.fuelPlanDraftSynced = true;
   }
@@ -20611,6 +20714,13 @@ function saveQuickWater(setMode) {
   const raw = document.getElementById('quickWaterInput')?.value || '';
   const entered = waterFromInput(raw);
   if (!raw.trim() || isNaN(entered)) { showBigToast('Enter an amount first.', 'warn'); return; }
+  // Sanity limits (Nov 19 2026 test run: "35" typed into a liters box saved
+  // as 35 L and read NOMINAL). `entered` is always liters here.
+  if (entered < 0 || (!setMode && entered === 0)) { showBigToast('Enter an amount above zero. To lower today\'s total, use "Correct today\'s total instead".', 'warn'); return; }
+  if ((!setMode && entered > 3) || (setMode && entered > 12)) {
+    const other = unitWater() === 'oz' ? '' : ' If you meant ounces, switch Water to ounces under Pilot Profile, Units.';
+    showBigToast('That is ' + (Math.round(entered * 10) / 10) + ' liters' + (setMode ? ' for the day' : ' in one drink') + ', which looks like a typo.' + other, 'warn'); return;
+  }
   applyWaterChange(setMode ? entered : (ST.waterIn || 0) + entered);
   closeModal();
   renderPage();
@@ -20723,7 +20833,11 @@ function renderMealBuilder() {
       const rowBits = [];
       if (item.servingDescription) rowBits.push(sanitizeUserText(item.servingDescription));
       rowBits.push(Math.round(item.nutrients?.calories || 0)+' cal');
-      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">'+rowBits.join(' · ')+'</div>');
+      parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:2px">'+rowBits.join(' · ')+' · <a href="javascript:void(0)" style="color:var(--gold)" onclick="ST.mealBuilder.scaleOpen='+(mb.scaleOpen===i?'null':i)+';renderMealBuilder()">Change portion</a></div>');
+      // Portion fix without delete-and-re-add (Nov 19 2026 test run).
+      if (mb.scaleOpen === i) {
+        parts.push('<div style="display:flex;gap:6px;align-items:center;margin-top:6px"><input type="text" inputmode="decimal" id="mealScaleInput" placeholder="e.g. 0.5 or 2" style="flex:1"><button class="btn btn-outline" style="width:auto;padding:0 14px" onclick="scaleMealItem('+i+')">Apply</button></div><div style="font-size:0.6875rem;color:var(--muted);margin-top:4px">How much you ate compared with what is shown: 0.5 is half, 2 is double.</div>');
+      }
       parts.push('</div>');
     });
     const runningTotals = sumMealNutrients(mb.items);
@@ -20762,9 +20876,9 @@ function renderMealBuilder() {
   parts.push('<div class="field"><input type="text" id="foodSearchInput" placeholder="Search a food (e.g. chicken breast)..." oninput="filterUSDASearch(this.value)"></div>');
   parts.push('<div id="usdaSearchResults"></div>');
   parts.push('<div class="fb mt8">');
-  parts.push('<button class="btn btn-outline" style="flex:1;margin-right:8px" onclick="analyzeFoodPhoto()">📷 Retake Photo</button>');
-  parts.push('<button class="btn btn-outline" style="flex:1;margin-right:8px" onclick="analyzeFoodPhotoFromLibrary()">🖼 Library</button>');
-  parts.push('<button class="btn btn-outline" style="flex:1" onclick="scanFoodBarcode()">🔢 Barcode</button>');
+  parts.push('<button class="btn btn-outline" style="flex:1;min-width:0;padding-left:4px;padding-right:4px;margin-right:8px" onclick="analyzeFoodPhoto()">📷 '+(window._foodRecPendingImageUrl ? 'Retake Photo' : 'Take Photo')+'</button>');
+  parts.push('<button class="btn btn-outline" style="flex:1;min-width:0;padding-left:4px;padding-right:4px;margin-right:8px" onclick="analyzeFoodPhotoFromLibrary()">🖼 Library</button>');
+  parts.push('<button class="btn btn-outline" style="flex:1;min-width:0;padding-left:4px;padding-right:4px" onclick="scanFoodBarcode()">🔢 Barcode</button>');
   parts.push('</div>');
   parts.push('<button class="btn-ghost mt8" onclick="showManualFoodEntry()">Can\'t find it? Enter manually</button>');
   parts.push('<div id="manualFoodEntryRoot"></div>');
@@ -21509,14 +21623,18 @@ function scanFoodBarcode() {
     () => {} // per-frame decode failures are normal while aiming — ignore
   ).catch((e) => {
     const status = document.getElementById('barcodeScannerStatus');
-    if (status) status.textContent = 'Camera unavailable: ' + (e.message || e);
+    // Plain words, not the browser's raw error text.
+    console.warn('Barcode camera failed:', e);
+    if (status) status.textContent = 'The camera did not start. Check that this app is allowed to use the camera in your phone\'s Settings, or cancel and type the food into the search box.';
   });
 }
 
 function stopFoodBarcodeScanner() {
   const scanner = window._barcodeScanner;
   window._barcodeScanner = null;
-  if (scanner) { scanner.stop().then(() => scanner.clear()).catch(() => {}); }
+  // stop() throws outright (not a rejected promise) when the camera never
+  // started, which put the red error bar on screen after a plain Cancel.
+  if (scanner) { try { scanner.stop().then(() => scanner.clear()).catch(() => {}); } catch (e) { try { scanner.clear(); } catch (e2) { /* nothing to clear */ } } }
   closeModal();
 }
 
@@ -21549,10 +21667,25 @@ function showManualFoodEntry() {
     '</div>';
 }
 
+// Multiplies one meal item's numbers by the typed factor.
+function scaleMealItem(i) {
+  const item = ST.mealBuilder && ST.mealBuilder.items[i]; if (!item) return;
+  const f = parseFloat(String(document.getElementById('mealScaleInput')?.value || '').replace(',', '.'));
+  if (!isFinite(f) || f <= 0 || f > 20) { showToast('Type a number like 0.5 for half or 2 for double.'); return; }
+  const n = item.nutrients || {};
+  Object.keys(n).forEach(k => { if (typeof n[k] === 'number') n[k] = Math.round(n[k] * f * 10) / 10; });
+  item.portionNote = Math.round((item.portionNote || 1) * f * 100) / 100;
+  ST.mealBuilder.scaleOpen = null;
+  renderMealBuilder();
+  showToast('Portion updated.');
+}
+
 function addManualFoodToMeal() {
   const name = sanitizeUserText(document.getElementById('manualFoodName')?.value?.trim());
-  if (!name) return;
+  if (!name) { showToast('Give the food a name.'); return; }
   const num = id => parseFloat(document.getElementById(id)?.value) || 0;
+  // A name with no numbers used to save as a 0-calorie item without a word.
+  if (!(num('manualCal') > 0 || num('manualProtein') > 0 || num('manualCarbs') > 0 || num('manualFat') > 0)) { showToast('Add the calories (or at least one macro) so this counts toward today.'); return; }
   ST.mealBuilder.items.push({
     description: name,
     nutrients: { calories: num('manualCal'), protein: num('manualProtein'), carbs: num('manualCarbs'), fat: num('manualFat'), fiber: 0, sugar: 0 },

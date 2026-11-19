@@ -941,6 +941,19 @@ test('members with an uploaded schedule are asked for next month once it should 
   assertEqual([ctx.cleanScheduleOutDay(31), ctx.cleanScheduleOutDay('x'), ctx.cleanScheduleOutDay(7)].join(','), '20,20,7', 'only days 1 to 28; anything else is the 20th');
   assertEqual([1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 28].map(ctx.ordinalDay).join(' '), '1st 2nd 3rd 4th 11th 12th 13th 21st 22nd 23rd 28th', 'day names read correctly');
 });
+test('Apple Calendar connected but no flights this month: ask for the .ics (requested Nov 19)', () => {
+  const N = ctx.calendarHasNoFlightsThisMonth, now = new Date('2026-11-19T10:00:00');
+  const fl = d => ({ type: 'flight', start: d }), pers = d => ({ type: 'personal', start: d });
+  assertEqual(N(now, [pers('2026-11-20T09:00:00')], [], true), true, 'personal events only: ask');
+  assertEqual(N(now, [fl('2026-12-02T09:00:00')], [], true), true, 'flights next month only: still ask for this month');
+  assertEqual(N(now, [fl('2026-11-03T09:00:00')], [], true), false, 'a flight earlier this month counts');
+  assertEqual(N(now, [fl('2026-11-30T23:00:00')], [], true), false, 'a flight on the last day of the month counts');
+  assertEqual(N(now, [pers('2026-11-20T09:00:00')], [{ start: '2026-11-22T14:00:00' }], true), false, 'an uploaded schedule covering this month: no ask');
+  assertEqual(N(now, [pers('2026-11-20T09:00:00')], [{ start: '2026-10-22T14:00:00' }], true), true, 'an uploaded schedule from last month does not count');
+  assertEqual(N(now, null, [], true), false, 'calendar not read yet: no ask');
+  assertEqual(N(now, [pers('2026-11-20T09:00:00')], [], false), false, 'calendar not connected: no ask');
+  assertEqual(N(now, [{ type: 'unknown', start: '2026-11-20T09:00:00' }], [], true), true, 'events the classifier could not type are not flights');
+});
 test('daily drink goal: a base for every day, a little for flying, some for a workout (decided Nov 16)', () => {
   const k = { sex: ctx.ST.sex, hrs: ctx.ST.flightHrs, water: ctx.ST.water, cache: ctx.ST.sessionCache, units: ctx.ST.units };
   try {

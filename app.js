@@ -3,8 +3,8 @@
  * Version/build: fcf-v5.66.2 / 20261117_03
  */
 
-const FCF_VERSION = 'fcf-v5.67.0';
-const FCF_BUILD   = '20261119_01';
+const FCF_VERSION = 'fcf-v5.67.1';
+const FCF_BUILD   = '20261119_02';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -6493,6 +6493,29 @@ function schedulePromptSnoozed(now) {
 function snoozeSchedulePrompt() {
   try { localStorage.setItem(SCHED_PROMPT_SNOOZE_KEY, String(Date.now())); } catch (e) { /* fine */ }
   renderPage();
+}
+// Apple Calendar is connected and has been read, but it holds no flights for
+// the current calendar month, and no uploaded schedule covers the month
+// either. Requested Nov 19 2026: prompt for the .ics file in that case. Many
+// crew calendars carry personal events only, so a connected calendar is not
+// the same thing as a schedule.
+function calendarHasNoFlightsThisMonth(now, calendarEvents, icsEvents, calendarConnected) {
+  if (!calendarConnected || !Array.isArray(calendarEvents)) return false; // not connected, or not read yet
+  const from = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const to = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime();
+  const inMonth = e => { const t = new Date(e && e.start).getTime(); return isFinite(t) && t >= from && t < to; };
+  if (calendarEvents.some(e => e && e.type === 'flight' && inMonth(e))) return false;
+  if ((icsEvents || []).some(inMonth)) return false;
+  return true;
+}
+function noCalendarFlightsPromptHtml(now) {
+  const connected = !!ST.calendarGranted || Array.isArray(ST.calendarEvents);
+  if (!calendarHasNoFlightsThisMonth(now, ST.calendarEvents, ST.flightSchedule, connected) || schedulePromptSnoozed(now)) return '';
+  const month = now.toLocaleDateString('en-US', { month: 'long' });
+  return '<div class="card mb12" style="border-color:var(--gold)"><div style="font-size:1.0625rem;font-weight:600;letter-spacing:-.01em;margin-bottom:7px">📅 No flights on your calendar for ' + month + '</div>' +
+    '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.65;margin-bottom:14px">Your Apple Calendar is connected, but it has no flights this month. Export your schedule from your crew scheduling system as a calendar file (.ics) and upload it, so your workouts and meals fit the trips you are flying.</div>' +
+    '<button class="btn btn-gold" onclick="switchTab(\'data\')">Upload Schedule File</button>' +
+    '<button class="btn-ghost mt8" style="display:block;width:100%;text-align:center" onclick="snoozeSchedulePrompt()">Not yet</button></div>';
 }
 function scheduleUploadPromptHtml(now) {
   const a = getActiveSchedule();
@@ -20178,6 +20201,9 @@ function renderToday(p) {
   }
 
   parts.push(scheduleUploadPromptHtml(ctx.now));
+  // Calendar connected with events but no flights this month. (A connected
+  // calendar with nothing in it at all is the "No flight schedule" card above.)
+  if (ST.calendarEvents?.length) parts.push(noCalendarFlightsPromptHtml(ctx.now));
 
   // Tracking disengagement / re-engagement nudges — see
   // computeTrackingNudges() for the trigger logic. Same card style as
@@ -21821,6 +21847,9 @@ function renderData(p) {
       const flights = ST.calendarEvents.filter(e => e.type === 'flight').length;
       const total   = ST.calendarEvents.length;
       parts.push('<div style="font-size:0.6875rem;color:var(--green);margin-bottom:8px">✅ Connected: '+total+' events classified ('+flights+' flights)</div>');
+      if (calendarHasNoFlightsThisMonth(new Date(), ST.calendarEvents, ST.flightSchedule, true)) {
+        parts.push('<div style="font-size:0.75rem;color:var(--amber);margin-bottom:8px;line-height:1.6">No flights found on this calendar for '+new Date().toLocaleDateString('en-US',{month:'long'})+'. Upload your schedule file (.ics) below.</div>');
+      }
       if (ST.calendarDuplicatesRemoved > 0) {
         parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:8px">ℹ️ '+ST.calendarDuplicatesRemoved+' duplicate calendar entries were automatically filtered out.</div>');
       }
@@ -21829,7 +21858,7 @@ function renderData(p) {
       }
       parts.push('<button class="btn btn-outline" onclick="haptic(\'light\');showToast(\'Syncing calendar\u2026\');if(typeof FCFBridge!==\'undefined\')FCFBridge.syncCalendar(ST.baseTimezone)">↻ Sync Now</button>');
     } else if (ST.calendarGranted && !ST.calendarEvents?.length) {
-      const msg = ST.calendarSyncError || 'Calendar access granted but no events found in the next 60 days.';
+      const msg = ST.calendarSyncError || 'Calendar access granted but no events found in the next 60 days. Upload your schedule file (.ics) below instead.';
       parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:10px;line-height:1.6">'+msg+'</div>');
       parts.push('<button class="btn btn-outline" onclick="haptic(\'light\');showToast(\'Syncing calendar\u2026\');if(typeof FCFBridge!==\'undefined\')FCFBridge.syncCalendar(ST.baseTimezone)">↻ Sync Now</button>');
     } else {

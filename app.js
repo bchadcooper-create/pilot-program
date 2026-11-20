@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.68.1 / 20261119_06
+ * Version/build: fcf-v5.68.2 / 20261120_01
  */
 
-const FCF_VERSION = 'fcf-v5.68.1';
-const FCF_BUILD   = '20261119_06';
+const FCF_VERSION = 'fcf-v5.68.2';
+const FCF_BUILD   = '20261120_01';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -8645,9 +8645,37 @@ function weeklyCoachSessions(sessionCache, now) {
         // followed by "your leg days have been thinning out").
         trained: autoDetected || incidentalWalk ? [] : sessionTrainedAreas(main, s.muscle_group),
         durationIsReal: !!s.durationEdited || autoDetected,
+        // Reported Nov 20 2026: "the trends coach [must take] into account
+        // my condition for today. It was marginal, and I did a workout
+        // anyways, and that's why it was light." Every saved session
+        // already records the Pilot Condition it was done under, but the
+        // weekly note was never told, so it praised a cut-down session as
+        // ordinary work and then pitched a heavy leg day. Now it is told.
+        condition: autoDetected || incidentalWalk ? null : coachCondition(s.fatigue),
+        scaledBackOnPurpose: !autoDetected && !incidentalWalk && (s.fatigue === 'marginal' || s.fatigue === 'nogo'),
       };
     })
     .sort((a, b) => a.daysAgo - b.daysAgo); // newest first
+}
+function coachCondition(f) { return f === 'go' || f === 'marginal' || f === 'nogo' ? f : null; }
+// Today's condition for the weekly note, with the rules for using it written
+// out in plain words. They travel inside the request so the note follows
+// them without waiting on a change to the server's own instructions.
+function weeklyCoachToday(condition, readiness, sleepScore, sessions) {
+  const c = coachCondition(condition);
+  const todays = (sessions || []).filter(x => x.daysAgo === 0 && !x.incidentalWalk && !x.autoDetected);
+  const lowSleep = typeof sleepScore === 'number' && sleepScore < 70;
+  const below = c === 'marginal' || c === 'nogo' || lowSleep;
+  const rules = [];
+  if (todays.some(x => x.scaledBackOnPurpose)) rules.push("Today's session was done on a " + (todays.find(x => x.scaledBackOnPurpose).condition === 'nogo' ? 'no-go' : 'marginal') + " day, so the app cut it down and it was light ON PURPOSE. Say so and credit the judgment: they trained smart on a below-par day. Never describe it as a normal full session, and never treat its small size as a pattern.");
+  if (below) rules.push("Today is below par (" + [c && c !== 'go' ? 'condition ' + (c === 'nogo' ? 'no-go' : c) : null, lowSleep ? 'short sleep' : null].filter(Boolean).join(', ') + "). The next step you offer must be recovery first: protect sleep tonight, keep the rest of today easy. If you mention a harder session (legs, heavy lifts), place it later in the week, once they are recovered, never as something to do today or tomorrow.");
+  if (!rules.length && c === 'go') rules.push('Today is a go day. No special handling.');
+  return {
+    condition: c, readiness: typeof readiness === 'number' ? readiness : null, sleepScore: typeof sleepScore === 'number' ? sleepScore : null,
+    belowPar: below, workoutLoggedToday: todays.length > 0,
+    howToRead: 'condition is the app\'s read of how recovered they are today: go, marginal (light work only) or nogo (rest). Each session also carries the condition it was done under, and scaledBackOnPurpose: true means the app deliberately made that session lighter. Do not quote the readiness or sleep numbers.',
+    rulesForThisNote: rules,
+  };
 }
 function coachWhenLabel(daysAgo, day0) {
   const wd = day0.toLocaleDateString('en-US', { weekday: 'long' });
@@ -8785,18 +8813,27 @@ async function loadProgressionAnalytics() {
       } catch (e) { /* non-fatal */ }
     }
 
+    let todayForCoach;
+    try { const tc = getTodayContext(); todayForCoach = weeklyCoachToday(ST.fatigue, tc && tc.oura ? tc.oura.readiness : null, tc && tc.oura ? tc.oura.sleep : null, sessions); }
+    catch (e) { todayForCoach = weeklyCoachToday(ST.fatigue, null, null, sessions); }
     const context = {
       windowDays: 42,
       // Goal decides how a weight trend should be read: up is progress for
       // 'muscle', a warning for 'fatloss', neutral-ish for the others.
       trainingGoal: ST.goal || 'longevity',
       dailyStepGoal: activeStepGoal(),
-      sessionKey: weeklyCoachSessionKey(sessions),
+      // Today's condition is part of the key, so a note written before the
+      // condition was known (or changed) is not served back from the cache.
+      sessionKey: weeklyCoachSessionKey(sessions) + '_c' + (todayForCoach.condition || 'x') + (todayForCoach.belowPar ? 'b' : '') + '_t2',
       sessionsByEnvironment: weeklyCoachEnvironments(sessions),
       // The last seven days in plain words, newest first. The note's
       // "yesterday" and "today" must come from here.
       recentWeek: sessions.filter(x => x.daysAgo <= 6 && !x.incidentalWalk && !x.autoDetected)
-        .map(x => x.when + ': ' + (x.muscleGroup || 'workout') + (x.trained.length ? ' (worked: ' + x.trained.join(', ') + ')' : '')),
+        .map(x => x.when + ': ' + (x.muscleGroup || 'workout') + (x.trained.length ? ' (worked: ' + x.trained.join(', ') + ')' : '') +
+          (x.scaledBackOnPurpose ? ' [' + (x.condition === 'nogo' ? 'no-go' : 'marginal') + ' condition that day: kept light on purpose]' : '')),
+      // Read this first. It says how recovered they are today and what
+      // that means for this note.
+      today: todayForCoach,
       lowerBodySessionsLast14Days: sessions.filter(x => x.daysAgo <= 13 && x.trained.includes('lower body')).length,
       sessions: sessionsWithTripContext,
       weightTrend,

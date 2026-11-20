@@ -2609,6 +2609,26 @@ test('food search: a plate typed as one search leads with each part (50 common m
   assertEqual(topFood([FD('BISCUITS AND GRAVY', 'Branded'), FD('Gravy, NFS'), FD('Marie biscuit'), FD('Biscuit with gravy')], 'biscuits and gravy'), 'Biscuit with gravy');
 });
 
+test('weekly coach is told the condition each session was done under, and today\'s (reported Nov 20)', () => {
+  const now = new Date('2026-11-20T10:00:00');
+  const mk = (iso, fatigue, extra) => Object.assign({ date: iso, muscle_group: 'Upper Push', env: 'hotel', fatigue, sets: { a: [{ reps: 10 }] }, workoutSnapshot: { takeoff: [{ name: 'Push-Up' }], enroute: [] } }, extra || {});
+  const list = ctx.weeklyCoachSessions([mk('2026-11-20T08:00:00', 'marginal'), mk('2026-11-17T08:00:00', 'go'), mk('2026-11-16T08:00:00', undefined), mk('2026-11-15T08:00:00', 'go', { importedFromOura: true, ouraActivity: 'walking' })], now);
+  assertEqual(list[0].condition, 'marginal'); assertEqual(list[0].scaledBackOnPurpose, true);
+  assertEqual(list[1].condition, 'go'); assertEqual(list[1].scaledBackOnPurpose, false);
+  assertEqual(list[2].condition, null, 'older sessions with nothing recorded say nothing');
+  assertEqual(list[3].condition, null, 'a ring-detected walk has no condition');
+  const t = ctx.weeklyCoachToday('marginal', 68, 60, list);
+  assertEqual(t.condition, 'marginal'); assertEqual(t.belowPar, true); assertEqual(t.workoutLoggedToday, true);
+  assertEqual(t.rulesForThisNote.length, 2);
+  assertEqual(/light ON PURPOSE/.test(t.rulesForThisNote[0]), true, 'says today\'s session was cut down on purpose');
+  assertEqual(/recovery first/.test(t.rulesForThisNote[1]) && /later in the week/.test(t.rulesForThisNote[1]), true, 'next step is recovery, hard work later');
+  const go = ctx.weeklyCoachToday('go', 85, 82, list.slice(1));
+  assertEqual(go.belowPar, false); assertEqual(go.rulesForThisNote.join(' '), 'Today is a go day. No special handling.');
+  const tired = ctx.weeklyCoachToday('go', 80, 55, []);
+  assertEqual(tired.belowPar, true, 'short sleep alone counts as below par'); assertEqual(/short sleep/.test(tired.rulesForThisNote[0]), true);
+  assertEqual(ctx.weeklyCoachToday(undefined, null, null, []).rulesForThisNote.length, 0, 'nothing known: no rules invented');
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

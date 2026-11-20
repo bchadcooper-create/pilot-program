@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.68.3 / 20261120_02
+ * Version/build: fcf-v5.69.0 / 20261120_03
  */
 
-const FCF_VERSION = 'fcf-v5.68.3';
-const FCF_BUILD   = '20261120_02';
+const FCF_VERSION = 'fcf-v5.69.0';
+const FCF_BUILD   = '20261120_03';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -5194,6 +5194,14 @@ function applyScheduleEnvironmentSuggestion() {
     ST.scheduleEnvNote = '📅 Layover' + (layover.airport ? ' in ' + layover.airport : '') + ' today: set to Hotel Gym.';
     return;
   }
+  // Trip-block fallback: away from base between check-in and check-out of
+  // a trip that has an overnight.
+  const tb = tripBlockToday(events, new Date());
+  if (tb && !tb.before && !tb.after && tb.totalDays > 1 && !events.some(e => e && e.type === 'flight' && new Date(e.end).getTime() > tb.start && new Date(e.start).getTime() < tb.end)) {
+    if (ST.env !== 'hotel' && ST.env !== 'room') ST.env = 'hotel';
+    ST.scheduleEnvNote = '📅 Day ' + tb.dayNumber + ' of ' + tb.totalDays + ' on your trip' + (tb.tonightLayover ? ', layover in ' + tb.tonightLayover + ' tonight' : '') + ': set to Hotel Gym.';
+    return;
+  }
   const status = getCurrentScheduleStatus(events);
   if (status?.type === 'dutyfree') {
     ST.env = 'comm';
@@ -6554,6 +6562,42 @@ function tripBlockLayovers(e) {
 }
 function tagTripBlocks(events) {
   return (events || []).map(e => (e && e.type !== 'trip' && isTripBlock(e)) ? Object.assign({}, e, { type: 'trip', confidence: e.confidence || 0.9 }) : e);
+}
+// FALLBACK (approved Nov 20 2026: "You can use that type of file as a
+// fallback"). When the schedule has trip blocks and no flights, the app
+// still knows three things for a given day: whether it is a trip day, which
+// day of the trip, and where tonight's layover is. It does NOT know report
+// or leg times, so nothing here invents them. Before this, a trip day with
+// no flights read as "No duty today... best chance for a full session".
+// Tonight's layover is named only when it is certain: one layover listed
+// per night, or every layover the same city.
+function tripBlockToday(events, now) {
+  const t = now.getTime();
+  const dayOf = ms => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  const today = dayOf(t);
+  let best = null;
+  for (const e of (events || [])) {
+    if (!isTripBlock(e) || e.isAllDay) continue;
+    const s = new Date(e.start).getTime(), en = new Date(e.end).getTime();
+    if (!isFinite(s) || !isFinite(en) || en <= s) continue;
+    if (dayOf(s) > today || dayOf(en - 1) < today) continue;
+    // Two trips touching the same day (one ends, one starts): the one in
+    // progress now wins, then the one still ahead, then the one finished.
+    const rank = (t >= s && t <= en) ? 0 : (t < s ? 1 : 2);
+    if (!best || rank < best.rank || (rank === best.rank && s < best.s)) best = { e, s, en, rank };
+  }
+  if (!best) return null;
+  const totalDays = Math.round((dayOf(best.en - 1) - dayOf(best.s)) / 86400000) + 1;
+  const dayNumber = Math.round((today - dayOf(best.s)) / 86400000) + 1;
+  const layovers = tripBlockLayovers(best.e);
+  let tonightLayover = null;
+  if (dayNumber < totalDays && layovers.length) {
+    if (layovers.length === totalDays - 1) tonightLayover = layovers[dayNumber - 1];
+    else if (layovers.every(x => x === layovers[0])) tonightLayover = layovers[0];
+  }
+  return { title: (String(best.e.title || '').match(/\d{4,6}/) || [''])[0], start: best.s, end: best.en,
+           dayNumber, totalDays, firstDay: dayNumber === 1, lastDay: dayNumber === totalDays,
+           tonightLayover, layovers, before: t < best.s, after: t > best.en };
 }
 // What the calendar holds, for the status line and the upload card.
 function calendarSummary(events, now) {
@@ -8827,6 +8871,10 @@ async function loadProgressionAnalytics() {
       if (trip?.tripDayNumber) {
         out.tripDayNumber = trip.tripDayNumber;
         out.tripTotalDays = trip.tripTotalDays;
+      } else if (!flightsThatDay.length) {
+        // Trip-block fallback: a trip day with no flights on the calendar.
+        const tb = tripBlockToday(ST.calendarEvents, day);
+        if (tb) { out.workingThatDay = true; out.tripDayNumber = tb.dayNumber; out.tripTotalDays = tb.totalDays; out.flightTimesKnownThatDay = false; }
       }
       return out;
     };
@@ -9034,6 +9082,11 @@ async function loadFatigueCalibration(ctx) {
       selfReportedFatigue: ST.readiness ?? null, // 1-5 scale, used when no Oura connected
       tripDayNumber: sched.tripDayNumber ?? null,
       tripTotalDays: sched.tripTotalDays ?? null,
+      // Trip known only as a block: the model must not read "no flights
+      // listed" as a day off.
+      tripWithoutFlightDetail: sched.tripBlock
+        ? 'Working a trip today (day ' + sched.tripBlock.dayNumber + ' of ' + sched.tripBlock.totalDays + '). The calendar lists the trip but not its flights, so report and leg times are unknown. This is NOT a day off; do not assume a free day or quote duty times.'
+        : null,
       legsCompletedToday: sched.legsTodayCompleted ?? 0,
       legsRemainingToday: sched.legsTodayRemaining ?? 0,
       // BUG FIX (reported Oct 23: between legs, 1.5 h sit, sleep 67, and the
@@ -19409,6 +19462,17 @@ function scheduleContextForToday(schedule, now) {
   if (trip.current) ctx.current = trip.current;
   if (trip.dutyEndsAt) ctx.dutyEndsAt = trip.dutyEndsAt;
   if (!ctx.layoverAirport && trip.current?.type === 'layover') ctx.layoverAirport = trip.current.airport;
+  // Trip-block fallback: only when no flight or layover covers today.
+  ctx.tripBlock = null;
+  if (!ctx.flightsToday && !trip.current && !ctx.tripDayNumber) {
+    const tb = tripBlockToday(schedule, now);
+    if (tb) {
+      ctx.tripBlock = tb;
+      ctx.tripDayNumber = tb.dayNumber;
+      ctx.tripTotalDays = tb.totalDays;
+      if (tb.tonightLayover) ctx.tonightLayoverAirport = tb.tonightLayover;
+    }
+  }
   return ctx;
 }
 
@@ -20112,6 +20176,29 @@ function buildTodayBriefing(ctx) {
       action:null };
   }
 
+  // 7b. A trip day known only from a trip block (no flights on the
+  // calendar). The day is not open, and the leg times are not known, so
+  // say what is known and leave the timing to the pilot.
+  if (sched.tripBlock) {
+    const tb = sched.tripBlock;
+    const at = ms => new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const tonight = tb.tonightLayover ? 'Layover in ' + tb.tonightLayover + ' tonight. ' : '';
+    if (tb.before) {
+      return { tone:'go', headline:'Trip starts today',
+        body:'Check-in at ' + at(tb.start) + '. ' + tonight + 'If you want a full session, the time before you leave is your window.',
+        action:{ label:'Start a workout', fn:"switchTab('preflight')" } };
+    }
+    if (tb.after) {
+      return { tone:'neutral', headline:'Trip complete',
+        body:'Check-out was at ' + at(tb.end) + '. If you train tonight, keep it moderate: mobility or an easy session.',
+        action:{ label:'Start a session', fn:"switchTab('preflight')" } };
+    }
+    return { tone:'neutral', headline: tb.totalDays > 1 ? 'Day ' + tb.dayNumber + ' of ' + tb.totalDays + ' on your trip' : 'On a trip today',
+      body: (tonight || (tb.lastDay ? 'Check-out at ' + at(tb.end) + '. ' : '')) +
+        'Your calendar shows this trip but not its flights, so fit a session around your own report times.',
+      action:{ label:'Start a session', fn:"switchTab('preflight')" } };
+  }
+
   // 8. Nothing scheduled — the best day of the week to train properly.
   // Checks flightsToday specifically, not todayEvents.length — a
   // duty-free block IS a today-event, so counting raw events never
@@ -20642,7 +20729,7 @@ function renderToday(p) {
     ), calLabel).sort((a,b) => new Date(a.start) - new Date(b.start));
 
     if (calToday.length) {
-      const typeIcon = { flight:'✈️', layover:'🏨', reserve:'📟', training:'🎓', duty:'📋', rest:'😴', unknown:'📅' };
+      const typeIcon = { flight:'✈️', layover:'🏨', reserve:'📟', training:'🎓', duty:'📋', rest:'😴', trip:'✈️', unknown:'📅' };
       parts.push('<div class="section-label">TODAY\'S SCHEDULE</div>');
       parts.push('<div class="card mb12">');
       calToday.slice(0, 6).forEach(e => {
@@ -22231,7 +22318,7 @@ function renderData(p) {
         parts.push('<div style="font-size:0.75rem;color:var(--amber);margin-bottom:8px;line-height:1.6">'+calSum.unread+' of these could not be read this time. Tap Sync Now to try again.</div>');
       }
       if (calSum.trips && !calSum.flights) {
-        parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:8px;line-height:1.6">This calendar shows each trip as one block (check-in, check-out and layover cities) without the flights inside it. For flight-by-flight planning, upload your schedule file (.ics) below.</div>');
+        parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:8px;line-height:1.6">This calendar shows each trip as one block (check-in, check-out and layover cities) without the flights inside it. The app plans around your trip days and layover cities. For flight-by-flight planning, upload your schedule file (.ics) below.</div>');
       } else if (calendarHasNoFlightsThisMonth(new Date(), ST.calendarEvents, ST.flightSchedule, true)) {
         parts.push('<div style="font-size:0.75rem;color:var(--amber);margin-bottom:8px;line-height:1.6">No flights found on this calendar for '+new Date().toLocaleDateString('en-US',{month:'long'})+'. Upload your schedule file (.ics) below.</div>');
       }

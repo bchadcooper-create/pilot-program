@@ -2647,6 +2647,39 @@ test('calendar: a trip shown as one block is recognized and counted (reported No
   assertEqual(ctx.calendarStatusLine({ total: 30, flights: 0, trips: 0 }), 'Connected: 30 events (0 flights)');
 });
 
+test('trip-block fallback: a trip day with no flights is not an open day (approved Nov 20)', () => {
+  const L = (d, h, m) => new Date(2026, 11, d, h, m || 0); // December, device-local
+  const blk = (title, s, e, notes) => ({ title, start: s.toISOString(), end: e.toISOString(), notes, type: 'trip' });
+  const t3 = blk('10215', L(8, 17, 18), L(10, 22, 11), 'C/I: 17:18C/O: 22:11 Credit: 013:54 L/O: RDM,RDM');
+  const t4 = blk('10027 (Historical)', L(1, 14, 40), L(4, 19, 57), 'C/I: 14:40C/O: 19:57 L/O: BOI,GEG,FAT');
+  const day = blk('10103', L(14, 7, 45), L(14, 16, 0), 'C/I: 07:45C/O: 16:00');
+  const odd = blk('10300', L(20, 6, 0), L(23, 18, 0), 'C/I: 06:00C/O: 18:00 L/O: SBA,MFR');
+  const ev = [t3, t4, day, odd, { title: 'Dentist', start: L(9, 9).toISOString(), end: L(9, 10).toISOString(), type: 'personal' }];
+  assertEqual(ctx.tripBlockToday(ev, L(6, 12)), null, 'a day with no trip');
+  let tb = ctx.tripBlockToday(ev, L(8, 9));
+  assertEqual(tb.title, '10215'); assertEqual(tb.dayNumber, 1); assertEqual(tb.totalDays, 3); assertEqual(tb.before, true); assertEqual(tb.tonightLayover, 'RDM');
+  tb = ctx.tripBlockToday(ev, L(9, 12));
+  assertEqual(tb.dayNumber, 2); assertEqual(tb.before, false); assertEqual(tb.after, false); assertEqual(tb.tonightLayover, 'RDM');
+  tb = ctx.tripBlockToday(ev, L(10, 23));
+  assertEqual(tb.lastDay, true); assertEqual(tb.after, true); assertEqual(tb.tonightLayover, null, 'home on the last night');
+  assertEqual(ctx.tripBlockToday(ev, L(2, 12)).tonightLayover, 'GEG', 'one layover per night, second night');
+  assertEqual(ctx.tripBlockToday(ev, L(14, 12)).totalDays, 1);
+  assertEqual(ctx.tripBlockToday(ev, L(21, 12)).tonightLayover, null, '2 layovers listed for 3 nights: not guessed');
+  // the day context and the Today recommendation
+  const sc = ctx.scheduleContextForToday(ev, L(9, 12));
+  assertEqual(sc.tripBlock.dayNumber, 2); assertEqual(sc.tripDayNumber, 2); assertEqual(sc.tripTotalDays, 3); assertEqual(sc.tonightLayoverAirport, 'RDM');
+  assertEqual(sc.layoverAirport, null, 'not claimed to be at the hotel right now');
+  const brief = (now) => ctx.buildTodayBriefing({ sched: ctx.scheduleContextForToday(ev, now), oura: { readiness: null }, training: {}, hour: now.getHours() });
+  let b = brief(L(9, 12));
+  assertEqual(b.headline, 'Day 2 of 3 on your trip'); assertEqual(/Layover in RDM tonight/.test(b.body), true);
+  assertEqual(brief(L(8, 9)).headline, 'Trip starts today');
+  assertEqual(brief(L(10, 23)).headline, 'Trip complete');
+  assertEqual(brief(L(6, 12)).headline, 'No duty today', 'a real open day is unchanged');
+  // real flights on the day win over the block
+  const withFlights = ev.concat([{ title: 'AA4114 PHX-RDM', type: 'flight', start: L(9, 13).toISOString(), end: L(9, 15).toISOString() }]);
+  assertEqual(ctx.scheduleContextForToday(withFlights, L(9, 12)).tripBlock, null);
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

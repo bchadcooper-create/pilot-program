@@ -2629,6 +2629,24 @@ test('weekly coach is told the condition each session was done under, and today\
   assertEqual(ctx.weeklyCoachToday(undefined, null, null, []).rulesForThisNote.length, 0, 'nothing known: no rules invented');
 });
 
+test('calendar: a trip shown as one block is recognized and counted (reported Nov 20)', () => {
+  const blk = (title, s, e, notes, type) => ({ title, start: s, end: e, notes, type: type || 'unknown' });
+  const a = blk('10215', '2026-12-09T01:18:00Z', '2026-12-11T06:11:00Z', 'C/I: 17:18C/O: 22:11 Credit: 013:54 In-Period-Credit: 013:54 L/O: RDM,RDM');
+  const b = blk('11107 (Historical)', '2026-11-27T15:46:00Z', '2026-11-27T23:52:00Z', 'C/I: 07:46C/O: 15:52 Credit: 005:40');
+  assertEqual(ctx.isTripBlock(a), true); assertEqual(ctx.isTripBlock(b), true, 'a one-day trip, marked Historical');
+  assertEqual(ctx.isTripBlock(blk('Dentist', 'x', 'y', null)), false);
+  assertEqual(ctx.isTripBlock(blk('10215', 'x', 'y', null)), false, 'a bare number with no check-in note is not assumed to be a trip');
+  assertEqual(ctx.isTripBlock(blk('12345', 'x', 'y', 'C/I: 08:00', 'personal')), false, 'the detector\'s own answer is not overruled');
+  assertEqual(ctx.isTripBlock({ title: 'anything', type: 'trip' }), true, 'the server said trip');
+  assertEqual(ctx.tripBlockLayovers(a).join('|'), 'RDM|RDM'); assertEqual(ctx.tripBlockLayovers(b).length, 0);
+  const tagged = ctx.tagTripBlocks([a, blk('Thanksgiving', '2026-11-26T08:00:00Z', '2026-11-27T07:59:00Z', null)]);
+  assertEqual(tagged[0].type, 'trip'); assertEqual(tagged[1].type, 'unknown'); assertEqual(a.type, 'unknown', 'the original is not changed');
+  const sm = ctx.calendarSummary(ctx.tagTripBlocks([a, b, blk('Thanksgiving', '2026-11-26T08:00:00Z', '2026-11-27T07:59:00Z', null), { title: 'AA1 PHX-RDM', type: 'flight', start: '2026-12-09T02:00:00Z', end: '2026-12-09T04:00:00Z' }]), new Date('2026-12-05T10:00:00'));
+  assertEqual(sm.total, 4); assertEqual(sm.flights, 1); assertEqual(sm.trips, 2); assertEqual(sm.tripsThisMonth, 1); assertEqual(sm.unread, 1);
+  assertEqual(ctx.calendarStatusLine(sm), 'Connected: 4 events (1 flight, 2 trips)');
+  assertEqual(ctx.calendarStatusLine({ total: 30, flights: 0, trips: 0 }), 'Connected: 30 events (0 flights)');
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

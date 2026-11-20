@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.68.2 / 20261120_01
+ * Version/build: fcf-v5.68.3 / 20261120_02
  */
 
-const FCF_VERSION = 'fcf-v5.68.2';
-const FCF_BUILD   = '20261120_01';
+const FCF_VERSION = 'fcf-v5.68.3';
+const FCF_BUILD   = '20261120_02';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -5135,7 +5135,7 @@ function applyProfileToState(profile) {
   // via getActiveSchedule() once hydrated here — no other call site needed
   // to change.
   if (profile.calendarClassified && profile.calendarClassified.length) {
-    ST.calendarEvents = profile.calendarClassified;
+    ST.calendarEvents = tagTripBlocks(profile.calendarClassified);
     ST.calendarFingerprint = profile.calendarFingerprint || null;
   }
 }
@@ -6532,12 +6532,55 @@ function calendarHasNoFlightsThisMonth(now, calendarEvents, icsEvents, calendarC
   if (calendarEvents.length && calendarEvents.every(e => !e || e.type === 'unknown')) return false;
   return true;
 }
+// Reported Nov 20 2026: Apple Calendar "says zero flights", while the
+// calendar plainly showed the month's trips. Two things were true. The
+// flight detector had failed on that sync (fixed on the server), so every
+// event was unlabeled. And this crew calendar shows each trip as ONE block
+// titled with its pairing number ("10215"), with check-in, check-out and
+// layover airports in the notes and no flights inside it, so "0 flights"
+// was literally right and still useless. Trip blocks are now recognized
+// and counted, here by their shape (so it works even when the detector is
+// down) and on the server as their own type.
+const TRIP_BLOCK_TITLE = /^\s*\d{4,6}\s*(\(historical\))?\s*$/i;
+function isTripBlock(e) {
+  if (!e) return false;
+  if (e.type === 'trip') return true;
+  return (!e.type || e.type === 'unknown' || e.type === 'duty') && TRIP_BLOCK_TITLE.test(String(e.title || '')) && /\bC\/I\s*:/i.test(String(e.notes || ''));
+}
+// Layover airports from a trip block's notes: "L/O: RDM,RDM" -> ['RDM','RDM'].
+function tripBlockLayovers(e) {
+  const m = String((e && e.notes) || '').match(/\bL\/O\s*:\s*([A-Z]{3}(?:\s*,\s*[A-Z]{3})*)/);
+  return m ? m[1].split(',').map(x => x.trim()) : [];
+}
+function tagTripBlocks(events) {
+  return (events || []).map(e => (e && e.type !== 'trip' && isTripBlock(e)) ? Object.assign({}, e, { type: 'trip', confidence: e.confidence || 0.9 }) : e);
+}
+// What the calendar holds, for the status line and the upload card.
+function calendarSummary(events, now) {
+  const list = events || [];
+  const from = new Date(now.getFullYear(), now.getMonth(), 1).getTime(), to = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime();
+  const touchesMonth = e => { const a = new Date(e.start).getTime(), b = new Date(e.end || e.start).getTime(); return isFinite(a) && a < to && (isFinite(b) ? b : a) >= from; };
+  return {
+    total: list.length,
+    flights: list.filter(e => e && e.type === 'flight').length,
+    trips: list.filter(isTripBlock).length,
+    tripsThisMonth: list.filter(e => isTripBlock(e) && touchesMonth(e)).length,
+    unread: list.filter(e => e && e.type === 'unknown' && !isTripBlock(e)).length,
+  };
+}
+function calendarStatusLine(sm) {
+  const bits = [sm.flights + (sm.flights === 1 ? ' flight' : ' flights')];
+  if (sm.trips) bits.push(sm.trips + (sm.trips === 1 ? ' trip' : ' trips'));
+  return 'Connected: ' + sm.total + ' events (' + bits.join(', ') + ')';
+}
 function noCalendarFlightsPromptHtml(now) {
   const connected = !!ST.calendarGranted || Array.isArray(ST.calendarEvents);
   if (!calendarHasNoFlightsThisMonth(now, ST.calendarEvents, ST.flightSchedule, connected) || schedulePromptSnoozed(now)) return '';
   const month = now.toLocaleDateString('en-US', { month: 'long' });
   return '<div class="card mb12" style="border-color:var(--gold)"><div style="font-size:1.0625rem;font-weight:600;letter-spacing:-.01em;margin-bottom:7px">📅 No flights on your calendar for ' + month + '</div>' +
-    '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.65;margin-bottom:14px">Your Apple Calendar is connected, but it has no flights this month. Export your schedule from your crew scheduling system as a calendar file (.ics) and upload it, so your workouts and meals fit the trips you are flying.</div>' +
+    '<div style="font-size:0.8125rem;color:var(--muted);line-height:1.65;margin-bottom:14px">' + (calendarSummary(ST.calendarEvents, now).tripsThisMonth
+      ? 'Your Apple Calendar shows your trips this month as blocks, without the flights inside them. To plan around each flight and layover, the app needs the flights. Export your schedule'
+      : 'Your Apple Calendar is connected, but it has no flights this month. Export your schedule') + ' from your crew scheduling system as a calendar file (.ics) and upload it, so your workouts and meals fit the trips you are flying.</div>' +
     '<button class="btn btn-gold" onclick="switchTab(\'data\')">Upload Schedule File</button>' +
     '<button class="btn-ghost mt8" style="display:block;width:100%;text-align:center" onclick="snoozeSchedulePrompt()">Not yet</button></div>';
 }
@@ -9170,7 +9213,7 @@ async function classifyCalendarEvents(events, fingerprint) {
   const rawFallback = (events || []).map(e => ({ ...e, type: 'unknown', confidence: 0 }));
   try {
     const { data: { session } } = await SB.auth.getSession();
-    if (!session) { ST.calendarEvents = rawFallback; ST.calendarSyncError = 'Not signed in'; renderPage(); return; }
+    if (!session) { ST.calendarEvents = tagTripBlocks(rawFallback); ST.calendarSyncError = 'Not signed in'; renderPage(); return; }
     // BUG FIX (reported: "Load failed" during sync at 291 events / 8
     // parallel batches server-side — see the matching fix and comment in
     // fcf-calendar-classify's per-batch fetch for the full root-cause
@@ -9193,7 +9236,7 @@ async function classifyCalendarEvents(events, fingerprint) {
     if (!res.ok) {
       const errText = await res.text();
       console.warn('Calendar classify failed:', errText);
-      ST.calendarEvents = rawFallback;
+      ST.calendarEvents = tagTripBlocks(rawFallback);
       ST.calendarSyncError = 'Classification temporarily unavailable. Showing ' + rawFallback.length + ' unclassified events. Try Sync Now again shortly.';
       renderPage();
       return;
@@ -9201,7 +9244,7 @@ async function classifyCalendarEvents(events, fingerprint) {
     const data = await res.json();
     if (data.limitReached) {
       showBigToast('Calendar AI limit reached for this month. Upgrade to Pro for unlimited.', 'info');
-      ST.calendarEvents = (data.classified?.length) ? data.classified : rawFallback;
+      ST.calendarEvents = tagTripBlocks((data.classified?.length) ? data.classified : rawFallback);
       ST.calendarFingerprint = fingerprint;
       ST.calendarSyncError = null;
       renderPage();
@@ -9211,7 +9254,7 @@ async function classifyCalendarEvents(events, fingerprint) {
     // function merges classification onto every original event, even
     // ones it couldn't confidently type) — but fall back defensively
     // anyway rather than trust that invariant blindly.
-    ST.calendarEvents = (data.classified?.length) ? data.classified : rawFallback;
+    ST.calendarEvents = tagTripBlocks((data.classified?.length) ? data.classified : rawFallback);
     ST.calendarFingerprint = fingerprint;
     ST.calendarSyncError = data.classified?.length ? null : 'Classification returned no results. Showing ' + rawFallback.length + ' unclassified events.';
     renderPage();
@@ -9225,7 +9268,7 @@ async function classifyCalendarEvents(events, fingerprint) {
     const reason = e.name === 'AbortError'
       ? 'timed out; this can happen with a very large calendar'
       : (e.message || 'network error');
-    ST.calendarEvents = rawFallback;
+    ST.calendarEvents = tagTripBlocks(rawFallback);
     ST.calendarSyncError = rawFallback.length
       ? 'Classification failed (' + reason + '). Showing ' + rawFallback.length + ' unclassified events.'
       : 'Sync failed: ' + reason;
@@ -22182,10 +22225,14 @@ function renderData(p) {
     // decoupled from "did the AI successfully type them". A separate
     // warning banner covers the classification-failed case specifically.
     if (ST.calendarGranted && ST.calendarEvents?.length) {
-      const flights = ST.calendarEvents.filter(e => e.type === 'flight').length;
-      const total   = ST.calendarEvents.length;
-      parts.push('<div style="font-size:0.6875rem;color:var(--green);margin-bottom:8px">✅ Connected: '+total+' events classified ('+flights+' flights)</div>');
-      if (calendarHasNoFlightsThisMonth(new Date(), ST.calendarEvents, ST.flightSchedule, true)) {
+      const calSum = calendarSummary(ST.calendarEvents, new Date());
+      parts.push('<div style="font-size:0.6875rem;color:var(--green);margin-bottom:8px">✅ '+calendarStatusLine(calSum)+'</div>');
+      if (calSum.unread) {
+        parts.push('<div style="font-size:0.75rem;color:var(--amber);margin-bottom:8px;line-height:1.6">'+calSum.unread+' of these could not be read this time. Tap Sync Now to try again.</div>');
+      }
+      if (calSum.trips && !calSum.flights) {
+        parts.push('<div style="font-size:0.75rem;color:var(--muted);margin-bottom:8px;line-height:1.6">This calendar shows each trip as one block (check-in, check-out and layover cities) without the flights inside it. For flight-by-flight planning, upload your schedule file (.ics) below.</div>');
+      } else if (calendarHasNoFlightsThisMonth(new Date(), ST.calendarEvents, ST.flightSchedule, true)) {
         parts.push('<div style="font-size:0.75rem;color:var(--amber);margin-bottom:8px;line-height:1.6">No flights found on this calendar for '+new Date().toLocaleDateString('en-US',{month:'long'})+'. Upload your schedule file (.ics) below.</div>');
       }
       if (ST.calendarDuplicatesRemoved > 0) {

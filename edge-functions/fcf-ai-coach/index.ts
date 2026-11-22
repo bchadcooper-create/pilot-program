@@ -58,7 +58,7 @@ const WEEKLY_SUMMARY_PROMPT_VERSION = 8; // v8: runner goal; // v7: always posit
 // (added the same day this constant was) doesn't keep serving a
 // pre-fix response — that field didn't exist in the context sent to
 // earlier cached responses, so their advice can't reflect it either.
-const FATIGUE_CALIBRATION_PROMPT_VERSION = 13; // v13: never train between legs, sleep under 70 caps the call; // v12: runPlan; // v11: never a second workout; // v10: pilotCondition is the ceiling; // v9: Walking First plan; // v8: ring data missing today, use the self-check; // v7: workout-already-logged and legs-flown guidance; // v6: plain-words opener, house style; // v5: bodyClock awareness (v4: Sonnet 5)
+const FATIGUE_CALIBRATION_PROMPT_VERSION = 14; // v14: go days graded (peak, strong, steady) with a rotating opener, "full send" no longer the only phrase; // v13: never train between legs, sleep under 70 caps the call; // v12: runPlan; // v11: never a second workout; // v10: pilotCondition is the ceiling; // v9: Walking First plan; // v8: ring data missing today, use the self-check; // v7: workout-already-logged and legs-flown guidance; // v6: plain-words opener, house style; // v5: bodyClock awareness (v4: Sonnet 5)
 // BUG FIX (found while updating this prompt): fuel_logistics' cache key
 // (below) never had a prompt-version component at all, unlike the other
 // two cached modes — so a stale response from before this exact prompt
@@ -84,6 +84,38 @@ const FUEL_LOGISTICS_PROMPT_VERSION = 4; // v4: house style; // v3: model upgrad
 // (see localTimezoneName() in app.js) - using that to compute "today"
 // here instead of the server's own clock is the actual fix; falls back
 // to server UTC only if the timezone is missing or invalid.
+// Reported Nov 22 2026: "I see full send way too much... There's degrees to
+// readiness and these words help define it better." Every go day opened
+// with the same two words, whether readiness was 71 or 93. A go day is now
+// graded, and each grade has its own set of openers that rotates by date,
+// so two good days in a row do not read the same. The grade and the phrase
+// are worked out here, not left to the model, so they cannot drift.
+const GO_OPENERS: Record<string, string[]> = {
+  peak:   ['Max effort today', 'All out today', 'Beast mode today', 'Full send today', 'Empty the tank today'],
+  strong: ['Go for it today', 'Push it today', 'Green light for a hard one', 'Good day to go heavy'],
+  steady: ['Good to go today', 'Solid day to train', 'Train as planned today', 'Clear for a normal session'],
+};
+function goTierFor(c: any): string | null {
+  if (!c || c.pilotCondition !== 'go') return null;
+  if (c.betweenLegsOnDuty || c.workoutLoggedToday || c.walkingPlan || c.runPlan) return null;
+  if (typeof c.sleepScore === 'number' && c.sleepScore < 70) return null;
+  const free = c.minutesActuallyFreeBeforeNeedingToLeave;
+  if (typeof free === 'number' && free < 45) return null;
+  if (typeof c.readiness === 'number') {
+    if (c.readiness >= 90) return (typeof c.sleepScore === 'number' && c.sleepScore < 80) ? 'strong' : 'peak';
+    if (c.readiness >= 80) return 'strong';
+    return c.readiness >= 70 ? 'steady' : null;
+  }
+  // No ring: the 1 to 5 self-check.
+  if (typeof c.selfReportedFatigue === 'number') return c.selfReportedFatigue >= 5 ? 'peak' : c.selfReportedFatigue >= 4 ? 'strong' : 'steady';
+  return 'steady';
+}
+function goOpenerFor(tier: string | null, dateKey: string): string | null {
+  const list = tier ? GO_OPENERS[tier] : null;
+  if (!list) return null;
+  const day = Math.floor(Date.parse(dateKey + 'T00:00:00Z') / 86400000);
+  return list[(isFinite(day) ? day : 0) % list.length];
+}
 function localDateKeyFor(timezone) {
   if (timezone) {
     try {
@@ -206,20 +238,31 @@ off mid-thought. Talk like you're texting a friend a quick note, not writing the
 headers, no bold text, no jargon, no hedging phrases like "I want to flag" or "the thing I'd point out."` + HOUSE_STYLE,
 
   fatigue_calibration: `You're a strength coach passing a pilot or flight crew member one quick line before they
-train today, this is a text message, not a briefing. Give the call (full send, dial it back, or take the day)
+train today, this is a text message, not a briefing. Give the call (go hard, dial it back, or take the day)
 and the ONE reason why, tied to their actual trip. That's it.
 
 pilotCondition is the app's own call, shown on the user's screen right above your note: go, marginal or nogo.
 It comes from readiness (70 and up is go, 60 to 69 is marginal, under 60 is nogo) or from their self-check or
-their own manual setting. Your call may never be stronger than pilotCondition. Only go allows "Full send". On
+their own manual setting. Your call may never be stronger than pilotCondition. Only go allows a go-hard call. On
 marginal, the most you may say is "Dial it back": a moderate session, lighter loads or fewer sets, no max
 efforts. On nogo, say "Take the day", or offer only an easy walk or mobility. A readiness in the 60s is below
 par: never call it fine, solid or good. Time available never upgrades the call; plenty of time on a marginal
 day is still a dial-it-back day.
 
-Sleep counts on its own too. If sleepScore is under 70, never say "Full send", even when pilotCondition is go:
+Sleep counts on its own too. If sleepScore is under 70, never give a go-hard call, even when pilotCondition is go:
 the most you may say is "Dial it back" (a normal session at moderate effort, no max lifts), and give the short
 sleep as the reason. Under 60, treat it like marginal or worse.
+
+A go day comes in degrees. goTier says which one today is, and openerToUse is the phrase to open with:
+- peak: readiness 90 or higher with sleep to match. An all-out day: max efforts and personal records are on
+  the table. The words should sound like it.
+- strong: readiness in the 80s. A hard session: push the main lifts, add the extra set.
+- steady: readiness in the 70s. The planned session at normal effort. A good training day, not a day to chase
+  records, and never described as all-out.
+When goTier is set and your call is go, open with openerToUse word for word, then give the reason, and make the
+rest of the note fit that tier. Do not swap in another hype phrase, and never say "full send" unless
+openerToUse says it: the phrase rotates from day to day on purpose so the note does not read the same every
+morning. goTier is null whenever a go-hard call is not allowed or does not apply; then openerToUse is null too.
 
 betweenLegsOnDuty: true means they are mid duty day, sitting in a terminal between two legs. Nobody trains
 there, however long the sit. Never suggest a workout, a session or "getting work in" between legs. Give one
@@ -243,7 +286,7 @@ ringDataMissingToday: true means their Oura ring has nothing for last night (not
 synced yet), so readiness and sleepScore are null on purpose and yesterday's numbers are NOT available to you.
 If selfReportedFatigue is present (1 = barely recovered, 5 = fully recovered) with manualCondition (go, marginal
 or nogo), base the call on that and open with it, for example "Ring didn't sync, going on your 4 out of 5,
-full send". If both are null, your whole reply is one short line asking them to rate how recovered they feel on
+go for it today" (use openerToUse when it is set). If both are null, your whole reply is one short line asking them to rate how recovered they feel on
 the card, nothing else, no training call.
 
 walkingPlan is null for most people. When present, their objective is Walking First: they are building up from
@@ -265,7 +308,7 @@ You will also receive minutesActuallyFreeBeforeNeedingToLeave, this already acco
 layover hotel back to the airport (transport, security, crew report time), which the raw gap to departure
 does NOT. Use this figure, not the raw time to departure, when deciding whether there's realistically time
 for a workout. If it's null, there's no known upcoming departure constraining the window. If it's under
-roughly 45, do not suggest "full send" or a real training session, say something else useful instead
+roughly 45, do not give a go-hard call or suggest a real training session, say something else useful instead
 (a walk, mobility work, or just get ready and go), the same way you would if readiness itself ruled it out.
 
 You may receive bodyClock (null when they're home or less than an hour off local time): hoursOffLocal, a
@@ -288,7 +331,8 @@ thorough. If they're doing well on a hard trip day, say that.
 TWO SENTENCES MAXIMUM. One for the call, one for the reason, combine them into one sentence if you can. If
 your draft runs longer, you're including detail nobody asked for; cut it. Talk directly and warmly, no clinical
 tone, no restating the raw numbers back at them. Open with the call in plain words a reader can't misparse:
-"Full send today", "Dial it back", "Take the day", "No time to train before report", or, once a workout is
+"Dial it back", "Take the day", "No time to train before report", openerToUse when the call is go (for example
+"Go for it today"), or, once a workout is
 already logged, "Work's done" and then the reason.` + HOUSE_STYLE,
 
   fuel_logistics: `You're a coach passing a pilot or flight crew member one quick line about today's eating window
@@ -481,6 +525,10 @@ Deno.serve(async (req) => {
     // over) — ouraConnected is what actually distinguishes the two, not
     // readiness alone.
     let fatigueCacheKey: string | null = null;
+    if (mode === 'fatigue_calibration') {
+      context.goTier = goTierFor(context);
+      context.openerToUse = goOpenerFor(context.goTier, localDateKeyFor(context.timezone));
+    }
     const ringMissingNoSelfReport = !!context.ringDataMissingToday && context.selfReportedFatigue == null;
     if (mode === 'fatigue_calibration' && !ringMissingNoSelfReport && !(context.ouraConnected && context.readiness === null && !context.ringDataMissingToday)) {
       // BUG FIX (reported: re-uploaded a corrected ICS after Apple Calendar
@@ -527,6 +575,7 @@ Deno.serve(async (req) => {
       // where nothing else in the key would ever move. Worst case is a
       // handful of extra low-cost calls per user per day, not one per load.
       fatigueCacheKey = localDateKeyFor(context.timezone) + '_v' + FATIGUE_CALIBRATION_PROMPT_VERSION
+        + '_g' + (context.goTier ? context.goTier.charAt(0) : 0)
         + '_f' + (context.todaysFlights?.length ?? 0) + '_t' + (context.tripDayNumber ?? 'null')
         + '_o' + (context.ouraConnected ? 1 : 0)
         + '_b' + (context.bodyClock ? (context.bodyClock.hoursOffLocal + context.bodyClock.strategy.charAt(0)) : 0)

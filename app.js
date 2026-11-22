@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.69.0 / 20261120_03
+ * Version/build: fcf-v5.70.0 / 20261122_01
  */
 
-const FCF_VERSION = 'fcf-v5.69.0';
-const FCF_BUILD   = '20261120_03';
+const FCF_VERSION = 'fcf-v5.70.0';
+const FCF_BUILD   = '20261122_01';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -3707,7 +3707,7 @@ async function crewLoadFeed(more) {
   if (error) throw error;
   c.feed = more ? c.feed.concat(data || []) : (data || []);
   c.feedEnd = (data || []).length < 30;
-  await Promise.all([crewLoadPhotos((data || []).map(a => a.id)), crewLoadFounders((data || []).map(a => a.user_id)), crewLoadAvatars((data || []).map(a => a.user_id))]);
+  await Promise.all([crewLoadPhotos((data || []).map(a => a.id)), crewLoadRoutes((data || []).map(a => a.id)), crewLoadFounders((data || []).map(a => a.user_id)), crewLoadAvatars((data || []).map(a => a.user_id))]);
 }
 // Photos come in a second read so crew_feed's return shape stays put.
 // Founding Crew flags for the authors on screen (set server-side only).
@@ -4159,7 +4159,7 @@ function crewMenu(id) {
     '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet"><div class="modal-handle"></div>' +
     '<div class="modal-title">' + crewEsc(a.title) + '</div>' +
     (mine
-      ? (a.visibility === 'private' ? btn('Share to the feed', "crewSetVisibility('" + id + "','everyone')") : btn('Hide from the feed', "crewSetVisibility('" + id + "','private')")) + btn('Remove this post', "crewDeleteActivity('" + id + "')", true)
+      ? (a.visibility === 'private' ? btn('Share to the feed', "crewSetVisibility('" + id + "','everyone')") : btn('Hide from the feed', "crewSetVisibility('" + id + "','private')")) + (ST.crew.routes && ST.crew.routes[id] ? btn('Remove the route map', "crewUnshareRoute('" + id + "')") : '') + btn('Remove this post', "crewDeleteActivity('" + id + "')", true)
       : btn('Report this post', "crewReport('activity','" + id + "')") + btn('Block ' + crewEsc(a.callsign), "crewBlock('" + a.user_id + "','" + crewEsc(a.callsign).replace(/'/g, '') + "')", true)) +
     '<button class="btn btn-outline mt8" onclick="closeModal()">Cancel</button></div></div>';
 }
@@ -4190,6 +4190,7 @@ function crewCardHtml(a) {
   if (face.detail) h += '<div style="font-size:0.8125rem;color:var(--muted);margin-bottom:6px">' + crewEsc(face.detail) + '</div>';
   const stat = crewStatLine(a); if (stat) h += '<div style="font-family:var(--mono);font-size:0.75rem;color:var(--gold);margin-bottom:6px">' + crewEsc(stat) + '</div>';
   if (a.note) h += '<div data-raw style="font-size:0.8125rem;line-height:1.5;margin-bottom:6px">' + crewEsc(a.note) + '</div>';
+  if (ST.crew.routes && ST.crew.routes[a.id]) h += routeMapHtml(ST.crew.routes[a.id], 190);
   h += crewPhotosHtml(a);
   h += '<div style="display:flex;gap:8px;margin-top:8px">' +
     '<button class="btn-ghost" style="padding:6px 10px;font-size:0.8125rem;border:1px solid ' + (a.my_kudos ? 'var(--gold)' : 'var(--border)') + ';border-radius:8px;color:' + (a.my_kudos ? 'var(--gold)' : 'var(--text)') + '" onclick="crewKudos(\'' + a.id + '\')">👏 ' + (a.kudos_count || 0) + '</button>' +
@@ -7719,6 +7720,7 @@ function restoreWorkoutState() {
 
 function clearWorkoutState() {
   localStorage.removeItem(WORKOUT_STATE_KEY);
+  localStorage.removeItem('fcf_route_drafts'); // a discarded workout takes its route with it
 }
 
 function persistTimerState() {
@@ -8427,6 +8429,262 @@ window.addEventListener('fcf:healthDistance', (e) => {
   }
   if (r.message) showToast(r.message);
 });
+
+// ─── ROUTE MAPS FOR RUNS AND WALKS ──────────────────────────────────────────
+// Requested Nov 22 2026: "a map would be good if we allow a person the
+// privacy to either share it or not share it."
+//
+// Where a route comes from. The page itself cannot record one (it is paused
+// when the phone locks), so the iPhone app supplies it, in one of two ways,
+// both arriving as the same fcf:healthRoute event:
+//   capabilities.healthRoute    the app can read the route another app (an
+//                               Apple Watch, Oura) saved to Apple Health
+//   capabilities.routeRecorder  the app records the route itself between
+//                               Start and Stop on the stopwatch
+// Neither is in the build on the App Store today. Until a build announces
+// one, nothing here is shown and nothing is asked. See docs/route-map-spec.md.
+//
+// Privacy. A route is private unless its owner turns on "Share route with
+// Crew" for that one run or walk. A private route is kept on this phone
+// only (localStorage) and never sent anywhere. A shared one is stored whole
+// with the post (the owner decided against trimming the ends: "If a person
+// wants to share it, then that's on them"), and can be removed again.
+const ROUTE_MAX_POINTS = 400;
+const ROUTE_KEEP = 40;
+const ROUTE_STORE_KEY = 'fcf_routes';
+const ROUTE_DRAFT_KEY = 'fcf_route_drafts';
+// Street tiles. OpenStreetMap's own servers are fine for light use with
+// credit shown; a busy app must move to a paid tile service (their policy).
+const ROUTE_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const ROUTE_TILE_CREDIT = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
+
+// Any list of points ([lat, lon, ...] or {lat, lon}) -> a clean, light list
+// of [lat, lon] rounded to about a meter, bad fixes and repeats dropped,
+// thinned evenly to ROUTE_MAX_POINTS with both ends kept.
+function routeClean(raw, max) {
+  const out = [];
+  (Array.isArray(raw) ? raw : []).forEach(p => {
+    const lat = Number(Array.isArray(p) ? p[0] : p && (p.lat ?? p.latitude));
+    const lon = Number(Array.isArray(p) ? p[1] : p && (p.lon ?? p.lng ?? p.longitude));
+    if (!isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180 || (lat === 0 && lon === 0)) return;
+    const q = [Math.round(lat * 1e5) / 1e5, Math.round(lon * 1e5) / 1e5];
+    const last = out[out.length - 1];
+    if (!last || last[0] !== q[0] || last[1] !== q[1]) out.push(q);
+  });
+  const cap = max || ROUTE_MAX_POINTS;
+  if (out.length <= cap) return out;
+  const thin = [];
+  for (let i = 0; i < cap; i++) thin.push(out[Math.round(i * (out.length - 1) / (cap - 1))]);
+  return thin;
+}
+function routeMiles(pts) {
+  let m = 0;
+  for (let i = 1; i < (pts || []).length; i++) {
+    const a = pts[i - 1], b = pts[i], R = 3958.8, toR = Math.PI / 180;
+    const dLat = (b[0] - a[0]) * toR, dLon = (b[1] - a[1]) * toR;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * toR) * Math.cos(b[0] * toR) * Math.sin(dLon / 2) ** 2;
+    m += 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+  return Math.round(m * 100) / 100;
+}
+// The route as a plain line drawing. Shown at once, and it is all there is
+// when the street map cannot load (offline).
+function routeSvg(pts, w, h) {
+  if (!pts || pts.length < 2) return '';
+  const pad = 14, lat0 = pts[0][0] * Math.PI / 180, kx = Math.cos(lat0);
+  const xs = pts.map(p => p[1] * kx), ys = pts.map(p => p[0]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const sc = Math.min((w - 2 * pad) / Math.max(maxX - minX, 1e-6), (h - 2 * pad) / Math.max(maxY - minY, 1e-6));
+  const ox = (w - (maxX - minX) * sc) / 2, oy = (h - (maxY - minY) * sc) / 2;
+  const X = i => Math.round((ox + (xs[i] - minX) * sc) * 10) / 10, Y = i => Math.round((h - oy - (ys[i] - minY) * sc) * 10) / 10;
+  const line = pts.map((_, i) => X(i) + ',' + Y(i)).join(' ');
+  const n = pts.length - 1;
+  return '<svg viewBox="0 0 ' + w + ' ' + h + '" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:block">' +
+    '<polyline points="' + line + '" fill="none" stroke="#2f6fed" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>' +
+    '<circle cx="' + X(0) + '" cy="' + Y(0) + '" r="6" fill="#3aa655" stroke="#fff" stroke-width="2"/>' +
+    '<circle cx="' + X(n) + '" cy="' + Y(n) + '" r="6" fill="#e0533d" stroke="#fff" stroke-width="2"/></svg>';
+}
+// A map block. The line drawing is in the page straight away; the street
+// map is laid over it when the block scrolls into view (routeMapWatch).
+function routeMapHtml(pts, height) {
+  const clean = routeClean(pts);
+  if (clean.length < 2) return '';
+  const hgt = height || 200;
+  return '<div class="route-map" data-route="' + JSON.stringify(clean) + '" onclick="routeMapOpen(this)" style="position:relative;height:' + hgt + 'px;border-radius:12px;overflow:hidden;background:var(--bg3);border:1px solid var(--border);margin:8px 0;cursor:pointer">' +
+    routeSvg(clean, 340, hgt) + '</div>';
+}
+let _leafletLoading = null;
+function routeLoadLeaflet() {
+  if (typeof L !== 'undefined' && L.map) return Promise.resolve(true);
+  if (_leafletLoading) return _leafletLoading;
+  _leafletLoading = new Promise(resolve => {
+    try {
+      const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'vendor/leaflet-1.9.4.css'; document.head.appendChild(css);
+      const small = document.createElement('style'); small.textContent = '.route-map .leaflet-control-attribution{font-size:10px;line-height:1.4;padding:0 4px}'; document.head.appendChild(small);
+      const js = document.createElement('script'); js.src = 'vendor/leaflet-1.9.4.js';
+      js.onload = () => resolve(typeof L !== 'undefined');
+      js.onerror = () => { _leafletLoading = null; resolve(false); };
+      document.head.appendChild(js);
+    } catch (e) { _leafletLoading = null; resolve(false); }
+  });
+  return _leafletLoading;
+}
+async function routeMapMount(el, interactive) {
+  if (!el || el.dataset.mounted) return;
+  el.dataset.mounted = '1';
+  let pts; try { pts = JSON.parse(el.dataset.route || '[]'); } catch (e) { pts = []; }
+  if (pts.length < 2 || !(await routeLoadLeaflet()) || !el.isConnected) { delete el.dataset.mounted; return; }
+  try {
+    const holder = document.createElement('div');
+    holder.style.cssText = 'position:absolute;inset:0;z-index:1';
+    el.appendChild(holder);
+    const on = !!interactive;
+    const map = L.map(holder, { zoomControl: on, attributionControl: true, dragging: on, scrollWheelZoom: on, doubleClickZoom: on, touchZoom: on, boxZoom: false, keyboard: false, tap: false });
+    map.attributionControl.setPrefix(false);
+    L.tileLayer(ROUTE_TILE_URL, { maxZoom: 19, attribution: ROUTE_TILE_CREDIT }).addTo(map);
+    const line = L.polyline(pts, { color: '#2f6fed', weight: 4, opacity: 0.95 }).addTo(map);
+    L.circleMarker(pts[0], { radius: 6, color: '#fff', weight: 2, fillColor: '#3aa655', fillOpacity: 1 }).addTo(map);
+    L.circleMarker(pts[pts.length - 1], { radius: 6, color: '#fff', weight: 2, fillColor: '#e0533d', fillOpacity: 1 }).addTo(map);
+    map.fitBounds(line.getBounds(), { padding: [18, 18] });
+  } catch (e) { console.warn('route map could not be drawn', e); }
+}
+// Tap a map to open it large, where it can be dragged and zoomed.
+function routeMapOpen(el) {
+  const raw = el && el.dataset ? el.dataset.route : '';
+  if (!raw) return;
+  document.getElementById('modalRoot').innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal-sheet"><div class="modal-handle"></div>' +
+    '<div class="modal-title">Route</div>' +
+    '<div class="route-map" id="routeMapBig" data-big="1" data-route="' + raw.replace(/"/g, '&quot;') + '" style="position:relative;height:60vh;border-radius:12px;overflow:hidden;background:var(--bg3);border:1px solid var(--border)"></div>' +
+    '<button class="btn btn-outline mt8" onclick="closeModal()">Close</button></div></div>';
+  routeMapMount(document.getElementById('routeMapBig'), true);
+}
+// Every map block added to the page gets its street map when it comes
+// into view, whichever screen drew it.
+function routeMapWatch() {
+  if (typeof MutationObserver === 'undefined' || typeof IntersectionObserver === 'undefined' || !document.body) return;
+  const io = new IntersectionObserver(entries => entries.forEach(en => { if (en.isIntersecting) { io.unobserve(en.target); routeMapMount(en.target, false); } }), { rootMargin: '150px' });
+  const scan = () => document.querySelectorAll('.route-map:not([data-mounted]):not([data-seen]):not([data-big])').forEach(el => { el.dataset.seen = '1'; io.observe(el); });
+  new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
+  scan();
+}
+try {
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    if (document.readyState && document.readyState !== 'loading') routeMapWatch(); else document.addEventListener('DOMContentLoaded', routeMapWatch);
+  }
+} catch (e) { /* no page (tests) */ }
+
+// ── Storage: drafts for the workout in progress, then one per saved session
+function routeReadJson(key) { try { const v = JSON.parse(localStorage.getItem(key) || '{}'); return v && typeof v === 'object' ? v : {}; } catch (e) { return {}; } }
+function routeWriteJson(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); return true; } catch (e) { return false; } }
+function routeDraft(exId) { return routeReadJson(ROUTE_DRAFT_KEY)[exId] || null; }
+function routeDraftSet(exId, draft) {
+  const all = routeReadJson(ROUTE_DRAFT_KEY);
+  if (draft) all[exId] = draft; else delete all[exId];
+  routeWriteJson(ROUTE_DRAFT_KEY, all);
+}
+function routeSetShare(exId, on) {
+  const d = routeDraft(exId); if (!d) return;
+  d.share = !!on; routeDraftSet(exId, d);
+}
+function routeDraftRemove(exId) {
+  routeDraftSet(exId, null);
+  if (ST.tab === 'flight') renderFlight(document.getElementById('mainPage'));
+}
+function routeStored(sessionKey) { return routeReadJson(ROUTE_STORE_KEY)[String(sessionKey)] || null; }
+// What saving a workout does with its drafts. Pure: (drafts, stored routes,
+// the session's exercise ids, the new key) -> the new store and the route
+// that now belongs to the session. Keeps the newest ROUTE_KEEP routes.
+function routeStoreAfterSave(drafts, store, exIds, sessionKey, nowIso) {
+  const next = Object.assign({}, store || {});
+  const id = (exIds || []).find(x => drafts && drafts[x] && Array.isArray(drafts[x].pts) && drafts[x].pts.length >= 2);
+  let route = null;
+  if (id) {
+    route = { pts: drafts[id].pts, share: !!drafts[id].share, src: drafts[id].src || null, at: nowIso };
+    next[String(sessionKey)] = route;
+  }
+  const keys = Object.keys(next).sort((a, b) => String(next[b].at || '').localeCompare(String(next[a].at || '')));
+  keys.slice(ROUTE_KEEP).forEach(k => { delete next[k]; });
+  return { store: next, route };
+}
+function routeTakeForSession(session, sessionKey) {
+  const r = routeStoreAfterSave(routeReadJson(ROUTE_DRAFT_KEY), routeReadJson(ROUTE_STORE_KEY), Object.keys((session && session.sets) || {}), sessionKey, new Date().toISOString());
+  if (r.route) routeWriteJson(ROUTE_STORE_KEY, r.store);
+  try { localStorage.removeItem(ROUTE_DRAFT_KEY); } catch (e) { /* nothing to clear */ }
+  return r.route;
+}
+
+// ── The iPhone app's side
+function healthRouteAvailable() {
+  return !!(inIOSApp() && typeof FCFBridge !== 'undefined' && FCFBridge.capabilities
+    && (FCFBridge.capabilities.healthRoute || FCFBridge.capabilities.routeRecorder) && window.webkit?.messageHandlers?.healthkit);
+}
+// With a start and an end: the route of the workout that covers that window.
+// Without: the latest run, walk or hike with a route in the last 24 hours.
+function requestHealthRoute(exId, startMs, endMs) {
+  if (!healthRouteAvailable()) return false;
+  window.webkit.messageHandlers.healthkit.postMessage({ action: 'workoutRoute', exId, startMs: startMs || null, endMs: endMs || null });
+  return true;
+}
+// What an arriving route does to the draft. Pure.
+function healthRouteUpdate(current, p) {
+  const payload = p || {};
+  const pts = routeClean(payload.points);
+  if (!payload.success || pts.length < 2) return null; // no route for this one: say nothing, keep what was there
+  return { pts, share: !!(current && current.share), src: payload.source || null };
+}
+window.addEventListener('fcf:healthRoute', (e) => {
+  const p = e.detail || {};
+  if (!p.exId || !findWorkoutEx(p.exId)) return;
+  const d = healthRouteUpdate(routeDraft(p.exId), p);
+  if (!d) return;
+  routeDraftSet(p.exId, d);
+  if (ST.tab === 'flight') renderFlight(document.getElementById('mainPage'));
+});
+// The block under a run or walk in the workout: the map and its switch.
+function routeDraftHtml(exId) {
+  const d = routeDraft(exId);
+  if (!d || !Array.isArray(d.pts) || d.pts.length < 2) return '';
+  const member = crewIsMember();
+  return '<div style="margin-top:12px"><div class="fb" style="align-items:center"><div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);letter-spacing:0.08em">YOUR ROUTE' + (d.src ? ' · ' + crewEsc(d.src).toUpperCase() : '') + '</div>' +
+    '<button class="btn-ghost" style="font-size:0.75rem;padding:2px 6px" onclick="routeDraftRemove(\'' + exId + '\')">Remove</button></div>' +
+    routeMapHtml(d.pts, 200) +
+    (member
+      ? '<label style="display:flex;align-items:center;gap:10px;font-size:0.875rem;cursor:pointer"><input type="checkbox" ' + (d.share ? 'checked' : '') + ' onchange="routeSetShare(\'' + exId + '\',this.checked)" style="width:20px;height:20px;accent-color:var(--gold)">Share route with Crew</label>' +
+        '<div style="font-size:0.6875rem;color:var(--muted);margin-top:4px;line-height:1.5">Off: your crew sees distance and time only, and the map stays on this phone. On: the whole route is posted, start and finish included.</div>'
+      : '<div style="font-size:0.6875rem;color:var(--muted);line-height:1.5">Private. This map stays on this phone.</div>') +
+    '</div>';
+}
+// ── Sharing with Crew
+async function crewShareRoute(sessionKey, pts) {
+  if (!ST.user || !crewIsMember()) return false;
+  const clean = routeClean(pts);
+  if (clean.length < 2) return false;
+  try {
+    const { data, error } = await withTimeout(SB.from('crew_activities').select('id').eq('user_id', ST.user.id).eq('session_key', String(sessionKey)).maybeSingle(), 10000);
+    if (error || !data) return false;
+    const { error: e2 } = await withTimeout(SB.from('crew_routes').upsert({ activity_id: data.id, user_id: ST.user.id, points: clean }, { onConflict: 'activity_id' }), 15000);
+    if (e2) throw e2;
+    return true;
+  } catch (e) { console.warn('route share failed', e); return false; }
+}
+async function crewUnshareRoute(activityId) {
+  try {
+    const { error } = await withTimeout(SB.from('crew_routes').delete().eq('activity_id', activityId)); if (error) throw error;
+    if (ST.crew.routes) delete ST.crew.routes[activityId];
+    crewRedrawCard(activityId);
+    showToast('Route removed from this post.');
+  } catch (e) { showToast('⚠️ Could not remove the route. Try again.'); }
+}
+async function crewLoadRoutes(ids) {
+  if (!ST.crew.routes) ST.crew.routes = {};
+  if (!ids.length) return;
+  try {
+    const { data } = await withTimeout(SB.from('crew_routes').select('activity_id,points').in('activity_id', ids), 10000);
+    ids.forEach(id => { delete ST.crew.routes[id]; });
+    (data || []).forEach(r => { ST.crew.routes[r.activity_id] = r.points; });
+  } catch (e) { /* the map is extra; the feed works without it */ }
+}
 
 // Calendar data arrives from the native shell. Run it through the AI
 // classifier — the edge function handles caching via fingerprint comparison.
@@ -10567,6 +10825,8 @@ function renderSessionEditor() {
   parts.push('<div class="modal-handle"></div>');
   parts.push('<div class="modal-title">'+(ed.isNew ? 'Add Workout' : 'Edit Workout')+'</div>');
   parts.push('<div style="font-family:var(--mono);font-size:0.625rem;color:var(--muted);margin-bottom:14px">'+dateLabel+'</div>');
+  const edRoute = ed.isNew ? null : routeStored(ed.key);
+  if (edRoute) parts.push(routeMapHtml(edRoute.pts, 180) + '<div style="font-size:0.6875rem;color:var(--muted);margin-bottom:12px">' + (edRoute.share ? 'This route was shared with your crew.' : 'Private. This map is kept on this phone only.') + '</div>');
 
   parts.push('<div class="field"><label>Muscle Group</label><select onchange="ST.editSession.session.muscle_group=this.value">');
   MUSCLE_GROUPS.forEach(mg => parts.push('<option value="'+mg+'"'+(s.muscle_group===mg?' selected':'')+'>'+mg+'</option>'));
@@ -13509,9 +13769,10 @@ function buildExCard(exItem, phaseKey) {
       // one here also gives Apple Health an exact window to measure.
       parts.push(buildStopwatchWidget(exItem.id, null, exItem.target));
       if (healthDistanceAvailable()) {
-        parts.push('<button class="btn btn-outline mt8" onclick="haptic(\'light\');requestRecentHealthWorkout(\''+exItem.id+'\')">Fill from Apple Health</button>');
+        parts.push('<button class="btn btn-outline mt8" onclick="haptic(\'light\');requestRecentHealthWorkout(\''+exItem.id+'\');requestHealthRoute(\''+exItem.id+'\')">Fill from Apple Health</button>');
         parts.push('<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px;text-align:center">Uses your latest run or walk recorded in the last 24 hours. Timing it with the stopwatch here fills the distance on its own.</div>');
       }
+      parts.push(routeDraftHtml(exItem.id));
     } else if (exItem.timed && isMinuteScale(exItem)) {
       // Reported bug: Walking, Treadmill, and similar 20-45 min activities
       // forced entry in raw seconds (e.g. typing "1200" for 20 minutes) —
@@ -14395,7 +14656,7 @@ function stopStopwatch(exId, side) {
   persistWorkoutState();
   showToast('⏱ Recorded '+total+' seconds'+(multi?' for set '+(idx+1):'')+(side?' ('+side+' side)':'')+'.');
   // A run or walk timed here: ask Apple Health how far that was.
-  if (found && found.exItem.inputType === 'timed_distance' && startedTs) requestHealthDistance(exId, startedTs, Date.now());
+  if (found && found.exItem.inputType === 'timed_distance' && startedTs) { requestHealthDistance(exId, startedTs, Date.now()); requestHealthRoute(exId, startedTs, Date.now()); }
   renderFlight(document.getElementById('mainPage'));
 }
 
@@ -15048,6 +15309,8 @@ async function setTheChocks() {
     workoutSnapshot: wk,
   };
   const savedKey = String(Date.now());
+  // A route recorded with this workout now belongs to the saved session.
+  const savedRoute = routeTakeForSession(session, savedKey);
   let savedToServer = false;
   try {
     const { error } = await SB.from('workout_sessions').insert([{
@@ -15060,7 +15323,7 @@ async function setTheChocks() {
     if (error) throw error;
     showToast('✅ Chocks set. Data synced.');
     savedToServer = true;
-    crewPostSession(session, savedKey).catch(() => {});
+    crewPostSession(session, savedKey).then(row => { if (row && savedRoute && savedRoute.share) return crewShareRoute(savedKey, savedRoute.pts); }).catch(() => {});
     cancelWorkoutReminderNative(); // suppress 3-day reminder — user just trained
   } catch(e) {
     showToast('⚠️ Saved locally. Will sync when online.');

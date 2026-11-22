@@ -1,6 +1,6 @@
 // Flight Crew Fitness — Service Worker
-// Version: 5.69.0
-const CACHE = 'fcf-v5.69.0';
+// Version: 5.70.0
+const CACHE = 'fcf-v5.70.0';
 const CORE = [
   './',
   './index.html',
@@ -75,6 +75,7 @@ self.addEventListener('fetch', e => {
     url.hostname.includes('jsdelivr.net') ||
     url.hostname.includes('googleapis.com') ||
     url.hostname.includes('ouraring.com') ||
+    url.hostname.includes('openstreetmap.org') || // street map tiles for route maps: never stored by the app
     url.hostname.includes('google.com')
   );
 

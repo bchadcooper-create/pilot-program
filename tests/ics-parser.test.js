@@ -2680,6 +2680,40 @@ test('trip-block fallback: a trip day with no flights is not an open day (approv
   assertEqual(ctx.scheduleContextForToday(withFlights, L(9, 12)).tripBlock, null);
 });
 
+test('route maps: cleaned, private unless shared, kept with the saved session (requested Nov 22)', () => {
+  // cleaning: both shapes accepted, bad fixes and repeats dropped, rounded to about a meter
+  const raw = [[33.300001, -111.800004, 1], [33.300001, -111.800004, 2], { lat: 33.3011, lon: -111.8002 }, [0, 0], [91, 5], ['x', 3], { latitude: 33.3022, longitude: -111.8011 }];
+  const pts = ctx.routeClean(raw);
+  assertEqual(JSON.stringify(pts), '[[33.3,-111.8],[33.3011,-111.8002],[33.3022,-111.8011]]');
+  const long = []; for (let i = 0; i < 2000; i++) long.push([33.3 + i * 0.00002, -111.8]);
+  const thin = ctx.routeClean(long);
+  assertEqual(thin.length, 400); assertEqual(thin[0][0], 33.3); assertEqual(thin[399][0], Math.round((33.3 + 1999 * 0.00002) * 1e5) / 1e5, 'both ends kept');
+  // one hundredth of a degree of latitude is about 0.69 miles
+  const mi = ctx.routeMiles([[33.30, -111.8], [33.31, -111.8]]);
+  assertEqual(mi > 0.68 && mi < 0.70, true, 'got ' + mi);
+  // drawing
+  assertEqual(ctx.routeMapHtml([[33.3, -111.8]]), '', 'one point is not a route');
+  const html = ctx.routeMapHtml(pts, 200);
+  assertEqual(/class="route-map"/.test(html) && /<polyline/.test(html) && /data-route="\[\[33.3,-111.8\]/.test(html), true);
+  assertEqual(/"[^"]*"[^>]*data-route="[^"]*"/.test(html), true, 'the route sits in one attribute');
+  // a route from the phone: share stays as the member left it; a failed or empty reply changes nothing
+  assertEqual(ctx.healthRouteUpdate(null, { success: false, points: raw }), null);
+  assertEqual(ctx.healthRouteUpdate(null, { success: true, points: [[33.3, -111.8]] }), null);
+  const d1 = ctx.healthRouteUpdate(null, { success: true, points: raw, source: 'Oura' });
+  assertEqual(d1.share, false, 'private by default'); assertEqual(d1.src, 'Oura'); assertEqual(d1.pts.length, 3);
+  assertEqual(ctx.healthRouteUpdate({ share: true, pts: [] }, { success: true, points: raw }).share, true);
+  // saving: the draft moves under the session key; only the newest 40 are kept
+  const store = {}; for (let i = 0; i < 45; i++) store['k' + i] = { pts, share: false, at: '2026-10-' + String(1 + (i % 28)).padStart(2, '0') + 'T00:00:' + String(i).padStart(2, '0') + 'Z' };
+  const r = ctx.routeStoreAfterSave({ exB: { pts, share: true, src: 'FCF' } }, store, ['exA', 'exB'], '1795000000000', '2026-11-22T22:00:00Z');
+  assertEqual(r.route.share, true); assertEqual(r.store['1795000000000'].pts.length, 3);
+  assertEqual(Object.keys(r.store).length, 40); assertEqual('1795000000000' in r.store, true, 'the new one is never the one dropped');
+  const none = ctx.routeStoreAfterSave({ other: { pts, share: true } }, {}, ['exA'], 'k', 'now');
+  assertEqual(none.route, null, 'a route for another exercise is not attached');
+  // nothing is asked of a build that cannot answer
+  assertEqual(ctx.healthRouteAvailable(), false);
+  assertEqual(ctx.requestHealthRoute('ex1', 1, 2), false);
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

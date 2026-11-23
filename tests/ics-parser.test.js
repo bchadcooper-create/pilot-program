@@ -2714,6 +2714,21 @@ test('route maps: cleaned, private unless shared, kept with the saved session (r
   assertEqual(ctx.requestHealthRoute('ex1', 1, 2), false);
 });
 
+test("today's schedule: no duty free row and no trip block on a day with flights (reported Nov 23)", () => {
+  const df = { title: 'Duty free period', type: 'rest' };
+  const trip = { title: '11168', type: 'trip', notes: 'C/I: 08:15C/O: 13:05 L/O: STS,SBA' };
+  const f1 = { title: 'PHX-BUR', type: 'flight' }, f2 = { title: 'BUR-PHX', type: 'flight' };
+  const lay = { title: 'Layover in STS', type: 'layover' };
+  const titles = l => l.map(e => e.title || e.summary).join('|');
+  assertEqual(titles(ctx.todayScheduleTidy([df, trip, f1, f2, lay])), 'PHX-BUR|BUR-PHX|Layover in STS', 'the reported day');
+  assertEqual(titles(ctx.todayScheduleTidy([df, trip])), '11168', 'no flights: the trip block stands in, and it is not a duty free day');
+  assertEqual(titles(ctx.todayScheduleTidy([df])), 'Duty free period', 'a real day off still says so');
+  assertEqual(titles(ctx.todayScheduleTidy([trip])), '11168');
+  assertEqual(titles(ctx.todayScheduleTidy([{ summary: 'Duty free period', type: 'dutyfree' }, { summary: 'AA4114 PHX-RDM', type: 'flight' }])), 'AA4114 PHX-RDM', 'uploaded schedule file rows too');
+  assertEqual(titles(ctx.todayScheduleTidy([df, { title: 'Dentist', type: 'unknown' }])), 'Duty free period|Dentist', 'a personal item does not make it a duty day');
+  assertEqual(ctx.todayScheduleTidy([]).length, 0); assertEqual(ctx.todayScheduleTidy(null).length, 0);
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

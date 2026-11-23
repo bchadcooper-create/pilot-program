@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.70.0 / 20261122_01
+ * Version/build: fcf-v5.70.1 / 20261123_01
  */
 
-const FCF_VERSION = 'fcf-v5.70.0';
-const FCF_BUILD   = '20261122_01';
+const FCF_VERSION = 'fcf-v5.70.1';
+const FCF_BUILD   = '20261123_01';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -5204,7 +5204,11 @@ function applyScheduleEnvironmentSuggestion() {
     return;
   }
   const status = getCurrentScheduleStatus(events);
-  if (status?.type === 'dutyfree') {
+  // A duty free period that runs up to this morning's report is not a
+  // duty-free day: with a flight or a trip on today, leave the gym alone.
+  const d0 = new Date(); d0.setHours(0, 0, 0, 0); const d1 = d0.getTime() + 86400000;
+  const dutyToday = !!tb || events.some(e => e && e.type === 'flight' && new Date(e.start).getTime() < d1 && new Date(e.end).getTime() > d0.getTime());
+  if (status?.type === 'dutyfree' && !dutyToday) {
     ST.env = 'comm';
     ST.scheduleEnvNote = '📅 Duty-free day today: set to Commercial Gym.';
   }
@@ -20636,6 +20640,22 @@ function updateOuraTopSection() {
 // data worth preserving. Keeps the first matching entry (arbitrary,
 // since the display is forced to "All day" regardless of which one's
 // kept) and drops the rest; everything else passes through untouched.
+// Reported Nov 23 2026, a trip day's list read: "All day: Duty free period",
+// then the trip block "11168", then the day's flights. Two rules:
+//   1. A day with duty on it is not shown as duty free ("Can't be duty free
+//      if I have a trip"). The duty free period that ends at report time,
+//      or starts after the last leg, is left off that day's list.
+//   2. A trip block is only a stand-in for missing flights ("only as a
+//      backup if no flights are available"). With flights listed it is
+//      left off.
+function todayScheduleTidy(events, getLabel) {
+  const list = events || [];
+  const label = e => String((getLabel ? getLabel(e) : (e.title || e.summary)) || '');
+  const isDutyFree = e => e.type === 'dutyfree' || /duty\s*free/i.test(label(e));
+  const hasFlights = list.some(e => e.type === 'flight');
+  const hasDuty = hasFlights || list.some(e => !isDutyFree(e) && (isTripBlock(e) || ['layover', 'reserve', 'training', 'duty'].includes(e.type)));
+  return list.filter(e => !(hasDuty && isDutyFree(e)) && !(hasFlights && isTripBlock(e)));
+}
 function dedupeDutyFreeEvents(events, getLabel) {
   let keptOne = false;
   return events.filter(e => {
@@ -20984,10 +21004,10 @@ function renderToday(p) {
   if (activeSchedule.source === 'calendar') {
     const calLabel = e => e.origin && e.destination ? e.origin + '→' + e.destination : e.title;
     const calToday = dedupeDutyFreeEvents(mergeAdjacentEvents(
-      activeSchedule.events.filter(e => {
+      todayScheduleTidy(activeSchedule.events.filter(e => {
         const s = new Date(e.start), en = new Date(e.end);
         return s <= todayEnd && en >= todayStart && e.type !== 'personal';
-      }),
+      }), calLabel),
       calLabel
     ), calLabel).sort((a,b) => new Date(a.start) - new Date(b.start));
 
@@ -20998,10 +21018,15 @@ function renderToday(p) {
       calToday.slice(0, 6).forEach(e => {
         const s = new Date(e.start), en = new Date(e.end);
         const icon = typeIcon[e.type] || '📅';
-        const timeStr = e.isAllDay ? 'All day' :
+        // A trip block standing in for missing flights: its clock times are
+        // the first check-in and the last check-out, days apart, so show
+        // which day of the trip this is instead.
+        const tbRow = isTripBlock(e) ? tripBlockToday([e], new Date()) : null;
+        const timeStr = tbRow && tbRow.totalDays > 1 ? 'Day ' + tbRow.dayNumber + ' of ' + tbRow.totalDays :
+          e.isAllDay ? 'All day' :
           s.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false}) + '–' +
           en.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
-        const label = e.origin && e.destination ? e.origin + ' → ' + e.destination : e.title;
+        const label = e.origin && e.destination ? e.origin + ' → ' + e.destination : (tbRow ? 'Trip ' + (tbRow.title || e.title) + (tbRow.tonightLayover ? ', layover ' + tbRow.tonightLayover : '') : e.title);
         parts.push('<div class="fb" style="padding:7px 0;border-bottom:1px solid var(--border)">');
         parts.push('<span style="font-family:var(--mono);font-size:0.6875rem;color:var(--muted);min-width:90px">'+timeStr+'</span>');
         parts.push('<span style="font-size:0.75rem;flex:1;text-align:right">'+icon+' '+label+'</span>');
@@ -21012,7 +21037,7 @@ function renderToday(p) {
   } else if (ctx.sched.todayEvents.length) {
     parts.push('<div class="section-label">TODAY\'S SCHEDULE</div>');
     parts.push('<div class="card mb12">');
-    mergeAdjacentEvents(ctx.sched.todayEvents).slice(0,6).forEach(e => {
+    mergeAdjacentEvents(todayScheduleTidy(ctx.sched.todayEvents)).slice(0,6).forEach(e => {
       const s = new Date(e.start), en = new Date(e.end);
       const isNow = ctx.sched.current && e.uids.includes(ctx.sched.current.uid);
       parts.push('<div class="fb" style="padding:7px 0;'+(isNow?'':'opacity:.72')+'">');

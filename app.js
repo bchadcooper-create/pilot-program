@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.70.1 / 20261123_01
+ * Version/build: fcf-v5.70.2 / 20261123_02
  */
 
-const FCF_VERSION = 'fcf-v5.70.1';
-const FCF_BUILD   = '20261123_01';
+const FCF_VERSION = 'fcf-v5.70.2';
+const FCF_BUILD   = '20261123_02';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -5136,7 +5136,7 @@ function applyProfileToState(profile) {
   // via getActiveSchedule() once hydrated here — no other call site needed
   // to change.
   if (profile.calendarClassified && profile.calendarClassified.length) {
-    ST.calendarEvents = tagTripBlocks(profile.calendarClassified);
+    ST.calendarEvents = normalizeCalendarEvents(profile.calendarClassified);
     ST.calendarFingerprint = profile.calendarFingerprint || null;
   }
 }
@@ -6565,6 +6565,46 @@ function tripBlockLayovers(e) {
   const m = String((e && e.notes) || '').match(/\bL\/O\s*:\s*([A-Z]{3}(?:\s*,\s*[A-Z]{3})*)/);
   return m ? m[1].split(',').map(x => x.trim()) : [];
 }
+// Reported Nov 23 2026: the layover row read 23:55 to 14:20 on a day whose
+// last leg landed at 16:55. The calendar feed's flights are right, but its
+// layover blocks are not: for "Layover in STS" the block started at
+// 06:55Z, which is the arrival's UTC clock time (23:55) stamped as Phoenix
+// time, and it ran 14h 25m where arrival to departure is 15h 25m (the feed
+// mixed Phoenix time for the arrival with California time for the
+// departure). The same pattern showed on the next night's layover.
+// The flights on either side say exactly when a layover starts and ends,
+// so those are used: from the arrival of the flight into that airport to
+// the departure of the next flight out of it. A layover with no such pair
+// of flights is left as the calendar gave it.
+function layoverAirportOf(e) {
+  const m = String((e && e.title) || '').match(/layover\s+(?:in|at)\s+([A-Z]{3})\b/i);
+  const loc = String((e && e.location) || '').trim().toUpperCase();
+  return m ? m[1].toUpperCase() : (/^[A-Z]{3}$/.test(loc) ? loc : null);
+}
+function fixLayoverTimes(events) {
+  const list = events || [];
+  const flights = list.filter(e => e && e.type === 'flight' && e.origin && e.destination)
+    .map(e => ({ o: String(e.origin).toUpperCase(), d: String(e.destination).toUpperCase(), s: new Date(e.start).getTime(), en: new Date(e.end).getTime() }))
+    .filter(f => isFinite(f.s) && isFinite(f.en));
+  if (!flights.length) return list;
+  const H = 3600000;
+  return list.map(e => {
+    if (!e || e.type !== 'layover') return e;
+    const ap = layoverAirportOf(e); if (!ap) return e;
+    const ls = new Date(e.start).getTime(), le = new Date(e.end).getTime();
+    if (!isFinite(ls) || !isFinite(le)) return e;
+    // The flight in: the latest arrival at this airport before the block ends, no more than a day before it starts.
+    const ins = flights.filter(f => f.d === ap && f.en <= le && f.en >= ls - 24 * H).sort((a, b) => b.en - a.en);
+    const fin = ins[0]; if (!fin) return e;
+    // The flight out: the next departure from this airport after that arrival, within two days.
+    const out = flights.filter(f => f.o === ap && f.s > fin.en && f.s <= fin.en + 48 * H).sort((a, b) => a.s - b.s)[0];
+    if (!out) return e;
+    if (Math.abs(fin.en - ls) < 5 * 60000 && Math.abs(out.s - le) < 5 * 60000) return e;
+    return Object.assign({}, e, { start: new Date(fin.en).toISOString(), end: new Date(out.s).toISOString(), timesFromFlights: true });
+  });
+}
+// Everything done to calendar events before the app uses them.
+function normalizeCalendarEvents(events) { return fixLayoverTimes(tagTripBlocks(events)); }
 function tagTripBlocks(events) {
   return (events || []).map(e => (e && e.type !== 'trip' && isTripBlock(e)) ? Object.assign({}, e, { type: 'trip', confidence: e.confidence || 0.9 }) : e);
 }
@@ -9528,7 +9568,7 @@ async function classifyCalendarEvents(events, fingerprint) {
   const rawFallback = (events || []).map(e => ({ ...e, type: 'unknown', confidence: 0 }));
   try {
     const { data: { session } } = await SB.auth.getSession();
-    if (!session) { ST.calendarEvents = tagTripBlocks(rawFallback); ST.calendarSyncError = 'Not signed in'; renderPage(); return; }
+    if (!session) { ST.calendarEvents = normalizeCalendarEvents(rawFallback); ST.calendarSyncError = 'Not signed in'; renderPage(); return; }
     // BUG FIX (reported: "Load failed" during sync at 291 events / 8
     // parallel batches server-side — see the matching fix and comment in
     // fcf-calendar-classify's per-batch fetch for the full root-cause
@@ -9551,7 +9591,7 @@ async function classifyCalendarEvents(events, fingerprint) {
     if (!res.ok) {
       const errText = await res.text();
       console.warn('Calendar classify failed:', errText);
-      ST.calendarEvents = tagTripBlocks(rawFallback);
+      ST.calendarEvents = normalizeCalendarEvents(rawFallback);
       ST.calendarSyncError = 'Classification temporarily unavailable. Showing ' + rawFallback.length + ' unclassified events. Try Sync Now again shortly.';
       renderPage();
       return;
@@ -9559,7 +9599,7 @@ async function classifyCalendarEvents(events, fingerprint) {
     const data = await res.json();
     if (data.limitReached) {
       showBigToast('Calendar AI limit reached for this month. Upgrade to Pro for unlimited.', 'info');
-      ST.calendarEvents = tagTripBlocks((data.classified?.length) ? data.classified : rawFallback);
+      ST.calendarEvents = normalizeCalendarEvents((data.classified?.length) ? data.classified : rawFallback);
       ST.calendarFingerprint = fingerprint;
       ST.calendarSyncError = null;
       renderPage();
@@ -9569,7 +9609,7 @@ async function classifyCalendarEvents(events, fingerprint) {
     // function merges classification onto every original event, even
     // ones it couldn't confidently type) — but fall back defensively
     // anyway rather than trust that invariant blindly.
-    ST.calendarEvents = tagTripBlocks((data.classified?.length) ? data.classified : rawFallback);
+    ST.calendarEvents = normalizeCalendarEvents((data.classified?.length) ? data.classified : rawFallback);
     ST.calendarFingerprint = fingerprint;
     ST.calendarSyncError = data.classified?.length ? null : 'Classification returned no results. Showing ' + rawFallback.length + ' unclassified events.';
     renderPage();
@@ -9583,7 +9623,7 @@ async function classifyCalendarEvents(events, fingerprint) {
     const reason = e.name === 'AbortError'
       ? 'timed out; this can happen with a very large calendar'
       : (e.message || 'network error');
-    ST.calendarEvents = tagTripBlocks(rawFallback);
+    ST.calendarEvents = normalizeCalendarEvents(rawFallback);
     ST.calendarSyncError = rawFallback.length
       ? 'Classification failed (' + reason + '). Showing ' + rawFallback.length + ' unclassified events.'
       : 'Sync failed: ' + reason;

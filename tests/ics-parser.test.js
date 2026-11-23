@@ -2729,6 +2729,33 @@ test("today's schedule: no duty free row and no trip block on a day with flights
   assertEqual(ctx.todayScheduleTidy([]).length, 0); assertEqual(ctx.todayScheduleTidy(null).length, 0);
 });
 
+test('layover times come from the flights on either side (reported Nov 23: 23:55 to 14:20)', () => {
+  const fl = (o, d, s, e) => ({ title: 'FLT', type: 'flight', origin: o, destination: d, start: s, end: e });
+  // the real events from the calendar feed
+  const ev = [
+    fl('PHX', 'BUR', '2026-11-23T16:00:00Z', '2026-11-23T17:40:00Z'), fl('BUR', 'PHX', '2026-11-23T18:10:00Z', '2026-11-23T19:50:00Z'),
+    fl('PHX', 'STS', '2026-11-23T21:35:00Z', '2026-11-23T23:55:00Z'),
+    { title: 'Layover in STS', type: 'layover', location: 'STS', start: '2026-11-24T06:55:00Z', end: '2026-11-24T21:20:00Z', notes: 'Duration: 14h 25m' },
+    fl('STS', 'PHX', '2026-11-24T15:20:00Z', '2026-11-24T17:35:00Z'), fl('PHX', 'CLD', '2026-11-24T18:25:00Z', '2026-11-24T19:54:00Z'),
+    { title: 'Layover in CLD', type: 'layover', location: 'CLD', start: '2026-11-25T02:54:00Z', end: '2026-11-25T20:00:00Z', notes: 'Duration: 17h 06m' },
+    fl('CLD', 'PHX', '2026-11-25T14:00:00Z', '2026-11-25T15:20:00Z'),
+  ];
+  const out = ctx.fixLayoverTimes(ev);
+  const sts = out.find(e => e.title === 'Layover in STS'), cld = out.find(e => e.title === 'Layover in CLD');
+  assertEqual(sts.start, '2026-11-23T23:55:00.000Z', 'starts when the leg into STS lands'); assertEqual(sts.end, '2026-11-24T15:20:00.000Z', 'ends when the leg out departs');
+  assertEqual(cld.start, '2026-11-24T19:54:00.000Z'); assertEqual(cld.end, '2026-11-25T14:00:00.000Z');
+  assertEqual(sts.timesFromFlights, true); assertEqual(ev[3].start, '2026-11-24T06:55:00Z', 'the original is not changed');
+  assertEqual(out.filter(e => e.type === 'flight').every((e, i) => e === ev.filter(x => x.type === 'flight')[i]), true, 'flights untouched');
+  // a layover the flights already agree with, and one with no flights around it, are left alone
+  const good = { title: 'Layover in RDM', type: 'layover', start: '2026-12-09T04:40:00Z', end: '2026-12-09T15:00:00Z' };
+  const g = ctx.fixLayoverTimes([fl('PHX', 'RDM', '2026-12-09T02:03:00Z', '2026-12-09T04:40:00Z'), good, fl('RDM', 'PHX', '2026-12-09T15:00:00Z', '2026-12-09T17:35:00Z')]);
+  assertEqual(g[1], good);
+  const alone = { title: 'Layover in SBA', type: 'layover', start: '2026-12-01T04:00:00Z', end: '2026-12-01T15:00:00Z' };
+  assertEqual(ctx.fixLayoverTimes([alone, fl('PHX', 'BUR', '2026-11-23T16:00:00Z', '2026-11-23T17:40:00Z')])[1 - 1], alone);
+  assertEqual(ctx.layoverAirportOf({ title: 'Layover in STS' }), 'STS'); assertEqual(ctx.layoverAirportOf({ title: 'Hotel', location: 'cld' }), 'CLD'); assertEqual(ctx.layoverAirportOf({ title: 'Hotel', location: 'Santa Rosa' }), null);
+  assertEqual(ctx.normalizeCalendarEvents(ev).find(e => e.title === 'Layover in STS').start, '2026-11-23T23:55:00.000Z');
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

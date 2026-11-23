@@ -1,6 +1,6 @@
 // Flight Crew Fitness — Service Worker
-// Version: 5.70.2
-const CACHE = 'fcf-v5.70.2';
+// Version: 5.70.3
+const CACHE = 'fcf-v5.70.3';
 const CORE = [
   './',
   './index.html',
@@ -41,12 +41,28 @@ self.addEventListener('install', e => {
       // cache:'reload' bypasses the HTTP cache — without it, a freshly
       // installing SW can populate its new cache with a STALE app.js served
       // from the browser/CDN HTTP cache (GitHub Pages max-age is 10 min).
-      .then(c => Promise.allSettled(CORE.concat(CDN_LIBS).map(url =>
-        fetch(new Request(url, { cache: 'reload' })).then(res => {
-          if (res.ok) return c.put(url, res);
-        })
-      )))
+      // BUG FIX (found Nov 23 2026 while checking an offline white screen).
+      // A failed download used to be ignored, and the new version took over
+      // anyway and deleted the old saved copy. An update caught on a weak
+      // signal could leave the phone with no saved app.js or index.html, so
+      // the next launch without signal had nothing to start from. Now every
+      // file of the app itself must be saved before the update takes over;
+      // if one is missing, this update is dropped, the old version and its
+      // complete saved copy stay in place, and the update is tried again
+      // next time. The barcode library on jsDelivr stays optional.
+      .then(c => Promise.all([
+        Promise.all(CORE.map(url =>
+          fetch(new Request(url, { cache: 'reload' })).then(res => {
+            if (!res.ok) throw new Error('could not save ' + url + ' (' + res.status + ')');
+            return c.put(url, res);
+          })
+        )),
+        Promise.allSettled(CDN_LIBS.map(url =>
+          fetch(new Request(url, { cache: 'reload' })).then(res => { if (res.ok) return c.put(url, res); })
+        )),
+      ]))
       .then(() => self.skipWaiting())
+      .catch(err => caches.delete(CACHE).then(() => { throw err; }))
   );
 });
 

@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.70.2 / 20261123_02
+ * Version/build: fcf-v5.70.3 / 20261123_03
  */
 
-const FCF_VERSION = 'fcf-v5.70.2';
-const FCF_BUILD   = '20261123_02';
+const FCF_VERSION = 'fcf-v5.70.3';
+const FCF_BUILD   = '20261123_03';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';

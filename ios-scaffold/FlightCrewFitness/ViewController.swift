@@ -505,6 +505,21 @@ extension ViewController: WKNavigationDelegate {
         deliverPendingPushTap()
     }
 
+    // BUG FIX (reported Nov 23 2026: "Tried to open in airplane mode. Just
+    // got a white screen", with the app already opened that day). iOS can
+    // stop the web page's process while the app sits in the background, to
+    // free memory. The app itself stays alive, so on return there is no
+    // launch and no load: WKWebView just shows a blank white view until it
+    // is told to load again, and nothing here told it to. Reload the same
+    // way a launch does: try the network, and with no signal the existing
+    // retry in didFailProvisionalNavigation lets the service worker answer
+    // from the on-device copy.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        let current = webView.url
+        let ownPage = current.map { $0.host == "flightcrew.fit" || ($0.host ?? "").hasSuffix(".flightcrew.fit") } ?? false
+        loadURL(ownPage ? current! : targetURL)
+    }
+
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         let nsError = error as NSError
         if nsError.code == NSURLErrorCancelled { return }

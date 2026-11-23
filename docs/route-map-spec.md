@@ -34,6 +34,9 @@ Everything above is in app.js under "ROUTE MAPS FOR RUNS AND WALKS". It stays do
 - On Stop, dispatch the same `fcf:healthRoute` event with `source: "FCF"`.
 - App Store review: say plainly in the review notes that location is used only to draw the member's own run or walk, only while they are timing it, and that sharing is off by default.
 
+## Also in the next build (not route related)
+- `webViewWebContentProcessDidTerminate` in ViewController.swift reloads the page. Without it, a page that iOS stopped in the background came back as a blank white screen (reported Nov 23 2026, airplane mode). Already written in the repo; ships with the build.
+
 ## Street map tiles
 The map uses OpenStreetMap's public tile server with credit shown. Their policy allows light use and forbids heavy use without permission, so if map views grow, move to a paid tile service or draw the map with Apple Maps in the native app. The tile address is one constant, `ROUTE_TILE_URL`. Tiles are never stored by the app (sw.js passes them through).
 

@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.70.4 / 20261124_01
+ * Version/build: fcf-v5.70.5 / 20261124_02
  */
 
-const FCF_VERSION = 'fcf-v5.70.4';
-const FCF_BUILD   = '20261124_01';
+const FCF_VERSION = 'fcf-v5.70.5';
+const FCF_BUILD   = '20261124_02';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -4990,6 +4990,7 @@ function renderPage() {
     return;
   }
 
+  if (ST.tab === 'flight' && typingInSetBox()) { holdFlightRender(); return; } // see typingInSetBox
   p.innerHTML = '';
   if (ST.tab === 'preflight') {
     renderPreflight(p).catch(e => {
@@ -13533,7 +13534,37 @@ const PHASES_META = [
   { key:'landing', label:'LANDING',  sub:'Descent: decompression and CNS down-reg ⓘ',  icon:'🛬', cls:'phase-landing' },
 ];
 
+// BUG FIX (reported Nov 24 2026, and before: "I go to enter 10, it takes
+// the one and tells me I failed before I can put in the zero").
+// The miss message already waits while the cursor is in the set's box. What
+// beat it was a redraw: Apple Health and calendar deliveries, the rest
+// timer finishing, the app coming back to the screen and other background
+// updates all rebuild the workout screen. A rebuild replaces the box being
+// typed in, so the cursor (and the keyboard) went away after the "1", the
+// "0" had nowhere to go, and with the cursor gone the message showed the
+// set as a miss. While a set box has the cursor, those redraws now wait,
+// and run once the box is left for something other than another set box.
+function typingInSetBox() {
+  if (typeof document === 'undefined') return null;
+  const a = document.activeElement;
+  const page = document.getElementById('mainPage');
+  if (!a || !page || !a.classList || !page.contains(a)) return null;
+  return (a.classList.contains('set-inp') || a.classList.contains('timed-inp')) ? a : null;
+}
+let _flightRenderHeld = false;
+function holdFlightRender() {
+  if (_flightRenderHeld) return;
+  _flightRenderHeld = true;
+  const onLeave = () => setTimeout(() => {
+    if (typingInSetBox()) return; // moved to another set box: keep waiting
+    document.removeEventListener('focusout', onLeave, true);
+    _flightRenderHeld = false;
+    if (ST.tab === 'flight') renderFlight(document.getElementById('mainPage'));
+  }, 0);
+  document.addEventListener('focusout', onLeave, true);
+}
 function renderFlight(p) {
+  if (typingInSetBox()) { holdFlightRender(); return; }
   if (!ST.workout) {
     p.innerHTML = '<div style="height:20px"></div><div class="alert alert-info"><div class="alert-icon">ℹ️</div><div>No active flight plan. Configure and engage from Preflight.</div></div><button class="btn btn-outline mt12" onclick="switchTab(\'preflight\')">← Go to Preflight</button>';
     return;

@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.70.3 / 20261123_03
+ * Version/build: fcf-v5.70.4 / 20261124_01
  */
 
-const FCF_VERSION = 'fcf-v5.70.3';
-const FCF_BUILD   = '20261123_03';
+const FCF_VERSION = 'fcf-v5.70.4';
+const FCF_BUILD   = '20261124_01';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -1562,6 +1562,7 @@ const EX_REGION_TAGS = {
   "Lateral Raise (Machine)": 'S',
   "Leg Extension (Machine)": 'K',
   "Leg Press": 'B H K',
+  "Seated Leg Press (Machine)": 'B H K',
   "Leg Press Calf Raise": 'A',
   "Leg Raise": 'B H',
   "Leg Swings (Front & Side)": 'H',
@@ -2058,6 +2059,10 @@ const EXERCISE_VIDEOS = {
   'Standing Calf Raise (Machine)':  'https://www.youtube.com/watch?v=GAQ-oohMhog', // SIU Rec Center
   'Seated Calf Raise (Machine)':    'https://www.youtube.com/watch?v=3gXOhpOcD2c', // Hammer Strength seated calf
   'Horizontal Calf Press (Machine)':'https://www.youtube.com/watch?v=dkeweUb_Nd4', // Life Fitness, Pro2 Horizontal Calf
+  'Seated Leg Press (Machine)':     'https://www.youtube.com/watch?v=30N6fKpuTNo', // Life Fitness, Pro2 Seated Leg Press
+  // TODO: this clip shows the seated stack machine. Leg Press is the
+  // 45-degree plate sled; swap in a checked sled clip when one is found
+  // (Nov 24 2026: none verified yet, and a search link is not allowed here).
   'Leg Press':                      'https://www.youtube.com/watch?v=30N6fKpuTNo', // Life Fitness, Pro2 Seated Leg Press
   'Stair Climber':                  'https://www.youtube.com/watch?v=ihNNujnvqBs', // ClubSport, StairMaster 10G
   'Recumbent Bike':                 'https://www.youtube.com/watch?v=XugMoMDxyhM', // SilverSneakers
@@ -10471,7 +10476,9 @@ const EXERCISE_SYNONYMS = {
   'recumbent': 'Recumbent Bike',
   'upright bicycle': 'Upright Bike',
   'exercise bike': 'Upright Bike',
-  'seated leg press': 'Leg Press',
+  'seated leg press': 'Seated Leg Press (Machine)',
+  'seated leg press machine': 'Seated Leg Press (Machine)',
+  'selectorized leg press': 'Seated Leg Press (Machine)',
   'assisted dip': 'Assisted Dip (Machine)',
   'assisted dip machine': 'Assisted Dip (Machine)',
   'dip machine': 'Assisted Dip (Machine)',
@@ -10743,6 +10750,11 @@ const CATALOG_EXTRAS = [
 const altEx = (name, target, sets, note, timed, inputType, phase) =>
   ({ ...ex('swap_' + slugify(name), name, target, sets, note, timed, inputType), phase: phase || 'enroute' });
 const CATALOG_ALTERNATES = [
+  // Requested Nov 24 2026: the seated, weight-stack leg press is its own
+  // exercise. Its pin number and a 45-degree plate sled's number measure
+  // different things (the sled only puts about 70% of the plates on your
+  // feet), so logging both as "Leg Press" made a normal day look like a drop.
+  altEx('Seated Leg Press (Machine)',  '3×12', 3, 'Sit upright, back flat on the pad, feet shoulder width in the middle of the plate. Press out until the knees are straight but not locked, then let the plate come back slowly until the knees are about 90 degrees. Log it here, not as Leg Press: the stack number does not compare with a plate-loaded sled.'),
   altEx('Goblet Squat (Heavy)',        '4×10', 4, 'Hold one heavy dumbbell against your chest, elbows under it, squat to depth and stand. Front loading keeps the torso upright with less load on the spine.'),
   altEx('Goblet Squat',                '4×12', 4, 'Hold a dumbbell or kettlebell at your chest and squat to depth. A lighter, higher-rep version of the heavy goblet squat.'),
   altEx('Smith Machine Squat',         '4×8',  4, 'Bar on the upper back in the Smith machine, feet slightly forward of the bar, squat to depth. The fixed bar path needs less balance.'),
@@ -13001,10 +13013,17 @@ const ALTERNATES = {
     {name:'Triceps Extension (Machine)',target:'3×12',note:'Elbow-only extension, arms braced on the pad.'},
   ],
   'Leg Press': [
+    {name:'Seated Leg Press (Machine)',target:'3×12',note:'Weight-stack seated version. Logged on its own: the numbers do not compare with a plate sled.'},
     {name:'Back Squat',target:'5×5',note:'Free weight. More total body demand.'},
     {name:'Goblet Squat (Heavy)',target:'4×10',note:'DB front-loaded. Good hotel substitute.'},
     {name:'Hack Squat (Machine)',target:'4×10',note:'More quad emphasis than leg press.'},
     {name:'Hip Thrust (Machine)',target:'3×10',note:'Glute-focused instead of quad-focused, knee friendly.'},
+    {name:'Leg Extension (Machine)',target:'3×15',note:'Quad isolation if the back needs a break from pressing.'},
+  ],
+  'Seated Leg Press (Machine)': [
+    {name:'Leg Press',target:'4×12',note:'Plate-loaded sled. Logged on its own: the numbers do not compare with the stack.'},
+    {name:'Hack Squat (Machine)',target:'4×10',note:'More quad emphasis, plate loaded.'},
+    {name:'Goblet Squat (Heavy)',target:'4×10',note:'DB front-loaded. Good hotel substitute.'},
     {name:'Leg Extension (Machine)',target:'3×15',note:'Quad isolation if the back needs a break from pressing.'},
   ],
   'Standing Calf Raise': [

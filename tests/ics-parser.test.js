@@ -2756,6 +2756,18 @@ test('layover times come from the flights on either side (reported Nov 23: 23:55
   assertEqual(ctx.normalizeCalendarEvents(ev).find(e => e.title === 'Layover in STS').start, '2026-11-23T23:55:00.000Z');
 });
 
+test('Seated Leg Press (Machine) is its own exercise, separate from Leg Press (requested Nov 24)', () => {
+  const cat = ctx.buildExerciseCatalog();
+  const seated = cat.find(e => e.name === 'Seated Leg Press (Machine)'), sled = cat.find(e => e.name === 'Leg Press');
+  assertEqual(!!seated, true); assertEqual(!!sled, true);
+  assertEqual(seated.id !== sled.id, true, 'separate ids mean separate history');
+  assertEqual(cat.filter(e => e.id === seated.id).length, 1);
+  const ALT = vm.runInContext('ALTERNATES', ctx);
+  assertEqual(ALT['Leg Press'].some(a => a.name === 'Seated Leg Press (Machine)'), true, 'reachable with the Alternate button');
+  assertEqual(ALT['Seated Leg Press (Machine)'].some(a => a.name === 'Leg Press'), true);
+  assertEqual(ctx.exerciseVideoUrl('Seated Leg Press (Machine)'), 'https://www.youtube.com/watch?v=30N6fKpuTNo');
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

@@ -160,7 +160,7 @@ document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ checkUp
 // ---------- self-update ----------
 // GitHub Pages lets phones keep the page for 10 minutes. On open and on return to the app,
 // ask for the latest copy directly; if the version differs, reload onto it.
-const APP_VERSION = '2026.11.16-1';
+const APP_VERSION = '2026.11.26-1';
 async function checkUpdate(){
   try{
     const r = await fetch(location.pathname+'?check='+Date.now(), { cache:'no-store' });
@@ -584,6 +584,17 @@ function vMoney(){
     <div><h3>Recent payments</h3><table><tr><th>Date</th><th>Who</th><th>For</th><th class="r">Amt</th></tr>${recent.map(p=>`<tr data-act="payedit" data-id="${p.id}" style="cursor:pointer"><td>${fmtD(p.received_on)}</td><td>${esc(p.tenant_name||'')}<div class="small muted">${esc(p.type)} · ${esc(p.method)}</div></td><td class="small">${p.for_month?monthLabel(new Date(p.for_month+'T12:00:00')):''}</td><td class="r mono">${money(p.amount)} <button class="btn sm" data-act="paydelete" data-id="${p.id}" title="Delete">&times;</button></td></tr>`).join('')}</table></div>
   </div>`;
 }
+// The method this person paid with last (refunds skipped: those are how Chad
+// paid them). Payments arrive newest first. Requested Nov 26 2026.
+function lastPayMethod(tenantId){
+  const p=(S.data.payments||[]).find(x=>x.tenant_id===tenantId&&x.type!=='Refund'&&PAY_METHODS.includes(x.method));
+  return p?p.method:null;
+}
+// Picking a different tenant in the form switches the method to theirs.
+function wirePayForm(){
+  const sel=$('pf-tenant'); if(!sel) return;
+  sel.onchange=()=>{ const m=lastPayMethod(sel.value); if(m) $('pf-method').value=m; };
+}
 function payForm(tenantId){
   const d=S.data; const t=tenantId?tenantById(tenantId):null;
   const now=new Date(); let def = now.getDate()>=20 ? addMonths(firstOfMonth(now),1) : firstOfMonth(now);
@@ -593,10 +604,12 @@ function payForm(tenantId){
   // Someone still owes for the month on screen: that month, that amount.
   const amt=(r&&Number(r.owed)>0)?Number(r.owed):(t?t.rent:'');
   if(r&&Number(r.owed)>0) def=S.month;
+  const firstId=tenantId||(d.tenants.find(x=>x.status!=='Moved Out')||{}).id;
+  const meth=lastPayMethod(firstId);
   return `<h2>Log payment</h2><div class="stack">
     <label class="f">Tenant<select id="pf-tenant">${d.tenants.filter(x=>x.status!=='Moved Out'||x.id===tenantId).map(x=>`<option value="${x.id}" ${x.id===tenantId?'selected':''}>${esc(x.name)}${x.bed_id?' · '+x.bed_id:''}</option>`).join('')}</select></label>
     <div class="grid2"><label class="f">Amount $<input id="pf-amount" inputmode="decimal" value="${amt}"></label><label class="f">Received<input id="pf-date" type="date" value="${today()}"></label></div>
-    <div class="grid2"><label class="f">Type<select id="pf-type">${['Rent','Reservation fee','Late fee','Refund','Other'].map(o=>`<option>${o}</option>`).join('')}</select></label><label class="f">Method<select id="pf-method">${PAY_METHODS.map(o=>`<option>${o}</option>`).join('')}</select></label></div>
+    <div class="grid2"><label class="f">Type<select id="pf-type">${['Rent','Reservation fee','Late fee','Refund','Other'].map(o=>`<option>${o}</option>`).join('')}</select></label><label class="f">Method<select id="pf-method">${PAY_METHODS.map(o=>`<option ${o===meth?'selected':''}>${o}</option>`).join('')}</select></label></div>
     <label class="f">For month<select id="pf-month">${months.map(m=>`<option value="${iso(m)}" ${iso(m)===iso(def)?'selected':''}>${monthLabel(m)}</option>`).join('')}</select></label>
     <label class="f">Note<input id="pf-note"></label>
     <button class="btn pri" data-act="paysave" data-id="x">Save payment</button>
@@ -745,7 +758,7 @@ const ACT = {
     if((p.suggested_type||'Rent')==='Reservation fee'&&!t.fee_paid_on) await sb.from('cp_tenants').update({fee_paid_on:p.received_on||today()}).eq('id',t.id);
     await run(sb.from('cp_payment_inbox').update({status:'accepted',resolved_at:new Date().toISOString()}).eq('id',id)); },
   inboxdismiss:async(id)=>{ await run(sb.from('cp_payment_inbox').update({status:'dismissed',resolved_at:new Date().toISOString()}).eq('id',id),'Dismissed'); },
-  inboxedit:(id)=>{ const p=S.data.inbox.find(x=>x.id===id); S.inboxEdit=id; sheet(payForm(p.suggested_tenant_id||null)); $('pf-amount').value=p.amount; if(p.received_on) $('pf-date').value=p.received_on; if(p.method&&PAY_METHODS.includes(p.method)) $('pf-method').value=p.method; if(p.suggested_type) $('pf-type').value=p.suggested_type; if(p.suggested_month) $('pf-month').value=p.suggested_month; wire(); },
+  inboxedit:(id)=>{ const p=S.data.inbox.find(x=>x.id===id); S.inboxEdit=id; sheet(payForm(p.suggested_tenant_id||null)); $('pf-amount').value=p.amount; if(p.received_on) $('pf-date').value=p.received_on; if(p.method&&PAY_METHODS.includes(p.method)) $('pf-method').value=p.method; if(p.suggested_type) $('pf-type').value=p.suggested_type; if(p.suggested_month) $('pf-month').value=p.suggested_month; wire(); wirePayForm(); },
   remind:(id)=>{ const t=tenantById(id); const r=S.data.rent.find(x=>x.tenant_id===id); if(!t||!r) return; S.keyMsg=rentMsg(t,r);
     sheet(`<h2>Rent reminder</h2><div class="stack"><div class="card small">${esc(S.keyMsg)}</div>
       ${t.phone?`<button class="btn" data-act="copynum" data-id="${t.id}">Copy number ${esc(fmtPhone(t.phone))}</button><a class="btn pri" href="${gvUrl(t.phone)}" target="_blank" rel="noopener" data-act="keymsgcopy" data-id="x">Copy message + open Google Voice</a><div class="small muted">Paste the number as the recipient, then paste the message.</div>`:`<button class="btn" data-act="keymsgcopy" data-id="x">Copy message</button><div class="small muted">No phone on file.</div>`}
@@ -891,7 +904,7 @@ const ACT = {
     sheet(`<h2>Assign ${bedId}</h2><div class="stack"><label class="f">Tenant<select id="as-t"><option value="">Choose…</option>${cands.map(t=>`<option value="${t.id}">${esc(t.name)} (${t.status}${t.bed_id?', now '+t.bed_id:''})</option>`).join('')}</select></label><label class="f">Rent $/mo<input id="as-rent" inputmode="numeric" value="${b.list_price}"></label><button class="btn pri" data-act="assignsave" data-id="${bedId}">Assign</button><button class="btn" data-act="addtenant" data-id="x">Or add a new tenant</button></div>`); wire(); },
   assignsave:async(bedId)=>{ const tid=$('as-t').value; if(!tid) return toast('Pick a tenant'); const rent=Number($('as-rent').value)||0; closeSheet(); await run(sb.from('cp_tenants').update({bed_id:bedId,rent,payment_code:bedId.replace('-',''),category_hold:null}).eq('id',tid),'Assigned'); },
   bednotes:async(id)=>{ const v=$('bed-notes').value.trim()||null; closeSheet(); await run(sb.from('cp_beds').update({notes:v}).eq('id',id),'Saved'); },
-  pay:(id)=>{ sheet(payForm(id||null)); wire(); },
+  pay:(id)=>{ sheet(payForm(id||null)); wire(); wirePayForm(); },
   // Read every field BEFORE closeSheet(): it removes the inputs from the page.
   paysave:async()=>{ const fromInbox=S.inboxEdit; S.inboxEdit=null; if(fromInbox) await sb.from('cp_payment_inbox').update({status:'accepted',resolved_at:new Date().toISOString()}).eq('id',fromInbox); const tid=$('pf-tenant').value; const t=tenantById(tid); const amt=Number($('pf-amount').value);
     const method=$('pf-method').value, forMonth=$('pf-month').value, type=$('pf-type').value,

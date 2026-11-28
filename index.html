@@ -467,6 +467,10 @@ a{color:inherit}
 <body>
 <div id="bootLoader"><div class="boot-spinner"></div><div class="boot-logo">Flight Crew Fitness</div></div>
 <script>
+/* Startup log (Nov 27 2026, airplane mode white screen): note that the page
+   itself began, before anything else can fail. app.js adds its own steps and
+   sends the log for the owner's account when there is signal. */
+try { var _bl = JSON.parse(localStorage.getItem('fcf_boot_log') || '[]'); _bl.push({ t: new Date().toISOString(), onLine: navigator.onLine, sw: !!(navigator.serviceWorker && navigator.serviceWorker.controller), steps: ['page'] }); localStorage.setItem('fcf_boot_log', JSON.stringify(_bl.slice(-15))); } catch (e) {}
 /* If the spinner is still up after 20 seconds, something in startup stalled
    (reported Nov 16 2026: it spun until the app was force-closed). This runs
    on its own, so it works even if app.js never loaded. It offers a Reload

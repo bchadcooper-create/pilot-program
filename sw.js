@@ -1,6 +1,6 @@
 // Flight Crew Fitness — Service Worker
-// Version: 5.70.5
-const CACHE = 'fcf-v5.70.5';
+// Version: 5.70.6
+const CACHE = 'fcf-v5.70.6';
 const CORE = [
   './',
   './index.html',
@@ -28,6 +28,19 @@ const isCdnLib = url => CDN_LIBS.includes(url.href);
 // the network gets a few seconds and the saved copy answers if it is slower.
 const NETWORK_WAIT_MS = 6000;
 const deviceOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false;
+// Startup log (Nov 27 2026: white screen opening the iPhone app in airplane
+// mode, even after closing it). Each page open this worker handles is noted
+// in its own small cache, which survives version changes, and the app sends
+// the notes for the owner's account the next time it starts with signal.
+// Timings and yes/no flags only.
+const DIAG_CACHE = 'fcf-diag';
+const DIAG_URL = '/__fcf_diag__/sw';
+function diagNote(entry) {
+  return caches.open(DIAG_CACHE).then(c => c.match(DIAG_URL)
+    .then(old => old ? old.json() : []).catch(() => [])
+    .then(list => { list.push(Object.assign({ t: new Date().toISOString(), v: CACHE }, entry)); return c.put(DIAG_URL, new Response(JSON.stringify(list.slice(-20)), { headers: { 'content-type': 'application/json' } })); }))
+    .catch(() => {});
+}
 function fetchWithTimeout(request, ms) {
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error('network timeout')), ms);
@@ -69,7 +82,8 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE && k !== DIAG_CACHE).map(k => caches.delete(k))))
+      .then(() => diagNote({ kind: 'activate' }))
       .then(() => self.clients.claim())
   );
 });
@@ -133,14 +147,19 @@ self.addEventListener('fetch', e => {
   );
 
   if (isCoreFile) {
+    const isNav = e.request.mode === 'navigate';
+    const t0 = Date.now(), onLineAtStart = self.navigator ? self.navigator.onLine : null;
+    const note = (src, res) => { if (isNav) diagNote({ kind: 'nav', src, ms: Date.now() - t0, onLine: onLineAtStart, cacheMode: e.request.cache, status: res ? res.status : null }); return res; };
     const fromCache = () => caches.match(e.request, { ignoreSearch: true })
-      .then(hit => hit || (e.request.mode === 'navigate' ? caches.match('./index.html') : undefined));
+      .then(hit => hit || (isNav ? caches.match('./index.html') : undefined))
+      .then(hit => note(hit ? 'cache' : 'cache-miss', hit));
     if (deviceOffline()) {
       e.respondWith(fromCache().then(hit => hit || fetch(e.request)));
       return;
     }
     e.respondWith(
       fetchWithTimeout(e.request, NETWORK_WAIT_MS).then(res => {
+        note('network', res);
         if (res.status === 200) {
           const resClone = res.clone();
           caches.open(CACHE).then(c => c.put(e.request, resClone));

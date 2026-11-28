@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.70.5 / 20261124_02
+ * Version/build: fcf-v5.70.6 / 20261127_01
  */
 
-const FCF_VERSION = 'fcf-v5.70.5';
-const FCF_BUILD   = '20261124_02';
+const FCF_VERSION = 'fcf-v5.70.6';
+const FCF_BUILD   = '20261127_01';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -8065,9 +8065,37 @@ async function checkForAppUpdate() {
 // whichever one fires first wins and the other becomes a no-op,
 // regardless of the readyState timing that got them both scheduled.
 let _appInitStarted = false;
+// Startup log (see the note in index.html and sw.js). Each step is added to
+// the newest entry, so a stuck start shows where it stopped.
+function bootStep(name) {
+  try {
+    const log = JSON.parse(localStorage.getItem('fcf_boot_log') || '[]');
+    if (!log.length) log.push({ t: new Date().toISOString(), onLine: navigator.onLine, steps: [] });
+    const last = log[log.length - 1];
+    last.steps.push(name + '@' + (Date.now() - Date.parse(last.t)) + 'ms');
+    localStorage.setItem('fcf_boot_log', JSON.stringify(log.slice(-15)));
+  } catch (e) { /* the log is optional */ }
+}
+const DIAG_OWNER = '7e41ca46-6e00-4c54-bc3f-2e45d923fe0b';
+async function sendBootDiag() {
+  if (!ST.user || ST.user.id !== DIAG_OWNER || navigator.onLine === false) return;
+  try {
+    const boots = JSON.parse(localStorage.getItem('fcf_boot_log') || '[]');
+    let swNotes = [];
+    try { const c = await caches.open('fcf-diag'); const r = await c.match('/__fcf_diag__/sw'); if (r) swNotes = await r.json(); } catch (e) { /* no notes */ }
+    if (!boots.length && !swNotes.length) return;
+    const ua = navigator.userAgent, native = !!(typeof FCFBridge !== 'undefined' && FCFBridge.isNative);
+    const { error } = await withTimeout(SB.from('app_diag').insert({ user_id: ST.user.id, kind: 'boot', data: { boots, swNotes, ua, native, version: FCF_VERSION } }), 10000);
+    if (error) throw error;
+    // Sent: start fresh, keeping only this start so its later steps still land.
+    localStorage.setItem('fcf_boot_log', JSON.stringify(boots.slice(-1)));
+    try { const c = await caches.open('fcf-diag'); await c.delete('/__fcf_diag__/sw'); } catch (e) { /* fine */ }
+  } catch (e) { console.warn('boot log not sent', e); }
+}
 async function initApp() {
   if (_appInitStarted) return;
   _appInitStarted = true;
+  bootStep('app.js');
   try {
     // Last resort: nothing in startup may hold the spinner past 25 seconds.
     await Promise.race([initAppInner(), new Promise((_, rej) => setTimeout(() => rej(new Error('startup took too long')), 25000))]);
@@ -8079,6 +8107,8 @@ async function initApp() {
     // Hide the boot loader regardless of success or failure above — it
     // exists purely to cover this window, not to gate on any specific
     // outcome, so it should never stay stuck showing.
+    bootStep(ST.authed ? 'shown-signed-in' : 'shown');
+    setTimeout(() => { sendBootDiag(); }, 4000);
     const loader = document.getElementById('bootLoader');
     if (loader) loader.classList.add('hidden');
     // Startup finished, so the spinner's own one-time reload may be used again.

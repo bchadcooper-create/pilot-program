@@ -74,6 +74,17 @@ class ViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        // Build 9 (Nov 27 2026): the strip behind the clock and battery was
+        // black with white text, left from the old dark design, so it showed
+        // as a black band over the light header. It now matches the page
+        // header in both looks (white in light, #0d1520 in dark), and the
+        // status bar text follows the phone's light or dark setting
+        // (UIStatusBarStyleDefault in Info.plist).
+        view.backgroundColor = UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 0x0d / 255.0, green: 0x15 / 255.0, blue: 0x20 / 255.0, alpha: 1)
+                : UIColor.white
+        }
         setupWebView()
         loadApp()
         observePushTaps()

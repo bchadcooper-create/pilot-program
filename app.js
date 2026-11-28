@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.71.0 / 20261127_03
+ * Version/build: fcf-v5.71.1 / 20261127_04
  */
 
-const FCF_VERSION = 'fcf-v5.71.0';
-const FCF_BUILD   = '20261127_03';
+const FCF_VERSION = 'fcf-v5.71.1';
+const FCF_BUILD   = '20261127_04';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -20826,6 +20826,20 @@ function airportTimezone(code) {
   return _airportTzMap[String(code).trim().toUpperCase()] || null;
 }
 
+// Flight number for a flight event, from whichever place the schedule put
+// it: the calendar reader's flightNumber, the title ("FLT 3441", "AA4114
+// PHX-RDM") or the notes ("Flight#: 3441"). Reported Nov 27 2026: Today's
+// Schedule showed PHX → SEA with no flight number.
+function flightNumberOf(e) {
+  if (!e) return '';
+  const clean = v => String(v || '').trim().replace(/^(FLT|FLIGHT)\s*#?\s*/i, '');
+  if (e.flightNumber) return clean(e.flightNumber);
+  const text = String(e.title || e.summary || '');
+  let m = text.match(/\b(?:FLT|Flight)\s*#?\s*([A-Z]{0,3}\d{1,4}[A-Z]?)\b/i) || text.match(/\b([A-Z]{2}\d{1,4})\b/);
+  if (m) return m[1].toUpperCase();
+  m = String(e.notes || e.description || '').match(/Flight\s*#\s*:?\s*([A-Z]{0,3}\d{1,4}[A-Z]?)\b/i);
+  return m ? m[1].toUpperCase() : '';
+}
 // Origin/destination for a flight event from either schedule source. Calendar
 // events carry them as fields (from classification); uploaded .ics events only
 // have them in the summary text, e.g. "FLT 3809 PHX-CID".
@@ -21167,7 +21181,8 @@ function renderToday(p) {
           e.isAllDay ? 'All day' :
           s.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false}) + '–' +
           en.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
-        const label = e.origin && e.destination ? e.origin + ' → ' + e.destination : (tbRow ? 'Trip ' + (tbRow.title || e.title) + (tbRow.tonightLayover ? ', layover ' + tbRow.tonightLayover : '') : e.title);
+        const fltNo = e.type === 'flight' ? flightNumberOf(e) : '';
+        const label = e.origin && e.destination ? (fltNo ? fltNo + ' · ' : '') + e.origin + ' → ' + e.destination : (tbRow ? 'Trip ' + (tbRow.title || e.title) + (tbRow.tonightLayover ? ', layover ' + tbRow.tonightLayover : '') : e.title);
         parts.push('<div class="fb" style="padding:7px 0;border-bottom:1px solid var(--border)">');
         parts.push('<span style="font-family:var(--mono);font-size:0.6875rem;color:var(--muted);min-width:90px">'+timeStr+'</span>');
         parts.push('<span style="font-size:0.75rem;flex:1;text-align:right">'+icon+' '+label+'</span>');

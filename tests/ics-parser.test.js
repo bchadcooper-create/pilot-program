@@ -2780,6 +2780,17 @@ test('route maps: a route recorded in the app is not replaced by one from Apple 
   assertEqual(ctx.routeRecorderAvailable(), false); assertEqual(ctx.routeRecorderSend('start', 'x'), false, 'nothing is sent outside the iPhone app');
 });
 
+test('flight numbers are found wherever the schedule put them (reported Nov 27)', () => {
+  assertEqual(ctx.flightNumberOf({ title: 'FLT 3441', notes: 'SEQ#: 11168\nFlight#: 3441' }), '3441');
+  assertEqual(ctx.flightNumberOf({ title: 'Trip', notes: 'SEQ#: 11168\nFlight#: 4115\nStations: PHX→STS' }), '4115', 'notes only');
+  assertEqual(ctx.flightNumberOf({ summary: 'FLT 3809 PHX-CID' }), '3809', 'uploaded schedule file');
+  assertEqual(ctx.flightNumberOf({ title: 'AA4114 PHX-RDM' }), 'AA4114');
+  assertEqual(ctx.flightNumberOf({ flightNumber: 'FLT 4227', title: 'x' }), '4227', 'the calendar reader');
+  assertEqual(ctx.flightNumberOf({ title: 'Layover in STS' }), '');
+  assertEqual(ctx.flightNumberOf({ title: 'PHX-SEA' }), '', 'no number, no guess');
+  assertEqual(ctx.flightNumberOf(null), '');
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

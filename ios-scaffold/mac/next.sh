@@ -30,6 +30,8 @@ HEALTH='Flight Crew Fitness reads your activity, sleep, and health data from App
 LOCATION='Flight Crew Fitness uses your location only while you time a run or walk, to draw your route. Routes stay on your iPhone unless you choose to share one with your crew.'
 HEALTH="$HEALTH" perl -pi -e 's/(INFOPLIST_KEY_NSHealthShareUsageDescription = )"[^"]*";/$1"$ENV{HEALTH}";/' "$PBX"
 LOCATION="$LOCATION" perl -pi -e 's/(INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = )"[^"]*";/$1"$ENV{LOCATION}";/' "$PBX"
+# Build 9: status bar text follows light and dark (was forced white).
+sed -i '' 's/INFOPLIST_KEY_UIStatusBarStyle = [A-Za-z]*;/INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDefault;/g' "$PBX"
 if grep -q 'INFOPLIST_KEY_NSHealthShareUsageDescription' "$PBX" && ! grep -q 'INFOPLIST_KEY_NSLocationWhenInUseUsageDescription' "$PBX"; then
   LOCATION="$LOCATION" perl -pi -e 's/^(\s*)(INFOPLIST_KEY_NSHealthShareUsageDescription = [^\n]*\n)/$1$2$1INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "$ENV{LOCATION}";\n/' "$PBX"
 fi
@@ -45,6 +47,7 @@ APP="$ARCH/Products/Applications/FlightCrewFitness.app"
 if [ -d "$APP" ]; then
   echo "== archive: version $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist") build $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.plist")"
   echo "== background modes: $(/usr/libexec/PlistBuddy -c 'Print :UIBackgroundModes' "$APP/Info.plist" 2>&1 | tr '\n' ' ')"
+  echo "== status bar style: $(/usr/libexec/PlistBuddy -c 'Print :UIStatusBarStyle' "$APP/Info.plist" 2>&1)"
   echo "== location text: $(/usr/libexec/PlistBuddy -c 'Print :NSLocationWhenInUseUsageDescription' "$APP/Info.plist" 2>&1 | cut -c1-90)"
   echo "== health text: $(/usr/libexec/PlistBuddy -c 'Print :NSHealthShareUsageDescription' "$APP/Info.plist" 2>&1 | cut -c150-330)"
   open "$ARCH"

@@ -51,7 +51,7 @@
     <h1 id="title">A crew member invited you</h1>
     <p>Follow their workouts and train around the trips you actually fly. Free to start.</p>
     <a class="btn gold" href="https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Invite&amp;mt=8">Get the app</a>
-    <div class="steps" id="steps">Then open the app, tap <b>Crew</b>, then <b>Find</b>, and search their call sign.</div>
+    <div class="steps" id="steps"><b>After installing, come back and tap this link again.</b> It opens the app right on their profile.</div>
     <a class="btn outline" id="web" href="/?ref=invite">Use it in the browser instead</a>
   </div>
 </div>
@@ -63,13 +63,13 @@
     var s = document.createElement('span'); s.className = 'cs'; s.textContent = n;
     t.appendChild(s); t.appendChild(document.createTextNode(' invited you to Flight Crew Fitness'));
     var st = document.getElementById('steps'); st.textContent = '';
-    st.appendChild(document.createTextNode('Already have the app? Open it, tap '));
-    var b1 = document.createElement('b'); b1.textContent = 'Crew'; st.appendChild(b1);
-    st.appendChild(document.createTextNode(', then '));
-    var b2 = document.createElement('b'); b2.textContent = 'Find'; st.appendChild(b2);
-    st.appendChild(document.createTextNode(', and search '));
-    var b3 = document.createElement('b'); b3.textContent = n; st.appendChild(b3);
-    st.appendChild(document.createTextNode('.'));
+    var b0 = document.createElement('b'); b0.textContent = 'After installing, come back and tap this link again.'; st.appendChild(b0);
+    st.appendChild(document.createTextNode(' It opens the app right on ' + n + '\u2019s profile.'));
+    var more = document.createElement('div'); more.style.marginTop = '8px'; more.style.fontSize = '.85rem'; more.style.color = '#64748b';
+    more.appendChild(document.createTextNode('Or open the app, tap Crew, then Find, and search '));
+    var b3 = document.createElement('b'); b3.textContent = n; more.appendChild(b3);
+    more.appendChild(document.createTextNode('.'));
+    st.appendChild(more);
   }
   if (window.__inviteWeb) document.getElementById('web').setAttribute('href', window.__inviteWeb);
 })();

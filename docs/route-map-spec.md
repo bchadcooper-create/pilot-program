@@ -54,6 +54,8 @@ Review notes for 1.2: location is used only while the member times a run or walk
 
 - The strip behind the clock and battery matches the header in light and dark (was a black band with white text over the light design). ViewController.swift viewDidLoad and UIStatusBarStyleDefault in Info.plist. Nov 27 2026.
 
+- "Rate this app": Apple's star-rating popup, asked for after a saved workout once the member has 5+ logged workouts, at most every 4 months (app.js maybeAskForRating; ViewController.swift message handler `review`, SKStoreReviewController). Per Apple it has no effect in TestFlight builds, so it can only be seen once the version is on the App Store, where iOS limits it to 3 times a year. Nov 27 2026.
+
 ## Street map tiles
 The map uses OpenStreetMap's public tile server with credit shown. Their policy allows light use and forbids heavy use without permission, so if map views grow, move to a paid tile service or draw the map with Apple Maps in the native app. The tile address is one constant, `ROUTE_TILE_URL`. Tiles are never stored by the app (sw.js passes them through).
 

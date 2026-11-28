@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.71.1 / 20261127_04
+ * Version/build: fcf-v5.71.2 / 20261127_05
  */
 
-const FCF_VERSION = 'fcf-v5.71.1';
-const FCF_BUILD   = '20261127_04';
+const FCF_VERSION = 'fcf-v5.71.2';
+const FCF_BUILD   = '20261127_05';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -15409,6 +15409,38 @@ function discardWorkout() {
 }
 
 // ─── SET THE CHOCKS (formerly "Secure Flight") ───────────────────────────────
+// ─── "Rate this app" (build 9, requested Nov 27 2026) ───────────────────────
+// Apple's own star-rating popup. iOS decides whether it actually shows and
+// shows it at most three times a year; the app only chooses when to ask:
+// after a saved workout (never during one), once the member has logged at
+// least 5 workouts, and not more than once every 4 months.
+const RATING_MIN_WORKOUTS = 5;
+const RATING_GAP_MS = 120 * 24 * 60 * 60 * 1000;
+function shouldAskForRating(workoutCount, lastAskedMs, nowMs) {
+  if (!(workoutCount >= RATING_MIN_WORKOUTS)) return false;
+  return !lastAskedMs || nowMs - lastAskedMs >= RATING_GAP_MS;
+}
+function ratingPromptAvailable() {
+  return !!(inIOSApp() && typeof FCFBridge !== 'undefined' && FCFBridge.capabilities && FCFBridge.capabilities.review && window.webkit?.messageHandlers?.review);
+}
+async function maybeAskForRating() {
+  if (!ratingPromptAvailable() || !ST.user) return;
+  let last = 0;
+  try { last = parseInt(localStorage.getItem('fcf_rating_asked_at') || '0', 10) || 0; } catch (e) { return; }
+  if (last && Date.now() - last < RATING_GAP_MS) return; // skip the count when it can't pass anyway
+  try {
+    // Workouts the member logged, not activities imported from Oura.
+    const { count, error } = await withTimeout(SB.from('workout_sessions').select('session_key', { count: 'exact', head: true })
+      .eq('user_id', ST.user.id).not('session_key', 'like', 'oura_%'), 8000);
+    if (error || !shouldAskForRating(count, last, Date.now())) return;
+  } catch (e) { return; }
+  // A moment after the debrief appears, so it is not on top of the save.
+  setTimeout(() => {
+    if (ST.tab !== 'debrief') return;
+    try { localStorage.setItem('fcf_rating_asked_at', String(Date.now())); } catch (e) { /* fine */ }
+    window.webkit.messageHandlers.review.postMessage({ action: 'request' });
+  }, 3000);
+}
 async function setTheChocks() {
   const wk = ST.workout;
   if (!wk) return;
@@ -15468,6 +15500,7 @@ async function setTheChocks() {
     if (error) throw error;
     showToast('✅ Chocks set. Data synced.');
     savedToServer = true;
+    maybeAskForRating().catch(() => {});
     crewPostSession(session, savedKey).then(row => { if (row && savedRoute && savedRoute.share) return crewShareRoute(savedKey, savedRoute.pts); }).catch(() => {});
     cancelWorkoutReminderNative(); // suppress 3-day reminder — user just trained
   } catch(e) {

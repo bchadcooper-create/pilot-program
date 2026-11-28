@@ -2791,6 +2791,16 @@ test('flight numbers are found wherever the schedule put them (reported Nov 27)'
   assertEqual(ctx.flightNumberOf(null), '');
 });
 
+test('rate this app: after 5 workouts, at most once every 4 months (build 9)', () => {
+  const now = Date.parse('2026-12-01T12:00:00Z'), day = 86400000;
+  assertEqual(ctx.shouldAskForRating(4, 0, now), false, 'fewer than 5 workouts');
+  assertEqual(ctx.shouldAskForRating(5, 0, now), true, 'the fifth workout, never asked');
+  assertEqual(ctx.shouldAskForRating(40, now - 30 * day, now), false, 'asked a month ago');
+  assertEqual(ctx.shouldAskForRating(40, now - 121 * day, now), true, 'asked over 4 months ago');
+  assertEqual(ctx.shouldAskForRating(null, 0, now), false, 'count unknown');
+  assertEqual(ctx.ratingPromptAvailable(), false, 'outside the iPhone app nothing is asked');
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

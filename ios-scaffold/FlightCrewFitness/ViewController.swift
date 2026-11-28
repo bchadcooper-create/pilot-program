@@ -167,6 +167,8 @@ class ViewController: UIViewController {
               // Both reply on fcf:healthRoute.
               healthRoute:     !!(window.webkit?.messageHandlers?.healthkit),
               routeRecorder:   !!(window.webkit?.messageHandlers?.location),
+              // Build 9. Apple's "rate this app" popup (review "request").
+              review:          !!(window.webkit?.messageHandlers?.review),
             },
             getProducts:      () => send('storeKit',      { action: 'getProducts' }),
             purchase:         (o) => send('storeKit',      { action: 'purchase', productId: o.productId, appAccountToken: o.appAccountToken }),
@@ -197,6 +199,8 @@ class ViewController: UIViewController {
         contentController.add(weakDelegate, name: "share")
         // Build 9: records a run or walk's route between Start and Stop.
         contentController.add(weakDelegate, name: "location")
+        // Build 9: asks iOS for its star-rating popup (iOS decides if it shows).
+        contentController.add(weakDelegate, name: "review")
         // Used only by the native offline page's Retry button (see
         // showOfflinePage) — not part of the FCFBridge surface the real
         // web app uses, so it's intentionally left out of bridgeJS above.
@@ -440,6 +444,14 @@ extension ViewController: WKScriptMessageHandler {
             handleShareMessage(body)
         case "location":
             handleLocationMessage(body)
+        case "review":
+            // Build 9: Apple's own rating popup. The web page decides when
+            // to ask (after a saved workout, 5+ workouts, at most every 4
+            // months); iOS decides whether it actually appears (at most 3
+            // times a year). Apple: it has no effect in TestFlight builds.
+            if let scene = view.window?.windowScene {
+                SKStoreReviewController.requestReview(in: scene)
+            }
         case "pushToken":
             // BUG FIX (independent review finding): this handler was
             // registered but did nothing, and separately, the token was

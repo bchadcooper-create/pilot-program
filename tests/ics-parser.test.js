@@ -2801,6 +2801,17 @@ test('rate this app: after 5 workouts, at most once every 4 months (build 9)', (
   assertEqual(ctx.ratingPromptAvailable(), false, 'outside the iPhone app nothing is asked');
 });
 
+test('Crew invite link carries the member id and the call sign, encoded', () => {
+  vm.runInContext("ST.user = { id: '7e41ca46-6e00-4c54-bc3f-2e45d923fe0b' }; ST.crew = ST.crew || {}; ST.crew.profile = { callsign: 'Capt Coop&x' };", ctx);
+  const u = vm.runInContext('crewInviteUrl()', ctx);
+  if (u !== 'https://flightcrew.fit/go/crew/?u=7e41ca46-6e00-4c54-bc3f-2e45d923fe0b&n=Capt%20Coop%26x') throw new Error(u);
+});
+test('Invite follow ids must be real member ids', () => {
+  const re = vm.runInContext('UUID_RE', ctx);
+  if (!re.test('7e41ca46-6e00-4c54-bc3f-2e45d923fe0b')) throw new Error('rejects a real id');
+  ['', 'abc', "7e41ca46-6e00-4c54-bc3f-2e45d923fe0b'", '../x'].forEach(v => { if (re.test(v)) throw new Error('accepts ' + v); });
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }

@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.71.2 / 20261127_05
+ * Version/build: fcf-v5.72.0 / 20261127_06
  */
 
-const FCF_VERSION = 'fcf-v5.71.2';
-const FCF_BUILD   = '20261127_05';
+const FCF_VERSION = 'fcf-v5.72.0';
+const FCF_BUILD   = '20261127_06';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -2805,6 +2805,7 @@ async function handleAuthSubmit() {
     if (!user) { ST.authErr = 'Sign in failed. Check your email and password.'; renderRoot(); return; }
     ST.user = user; ST.authed = true; ST.authErr = ''; ST.authInfo = ''; ST.authDraft = null;
     await bootApp();
+    if (pendingFollow()) setTimeout(() => { try { openPendingFollow(); } catch (e) {} }, 300); // came from a crew invite link
   } catch(e) {
     let msg = e.message || 'Authentication failed.';
     if (msg.includes('Invalid login') || msg.includes('invalid_credentials')) msg = 'Incorrect email or password.';
@@ -3205,6 +3206,22 @@ function cleanRef(v) { const r = String(v || '').toLowerCase().replace(/[^a-z0-9
     if (r && !localStorage.getItem(REF_LS_KEY)) localStorage.setItem(REF_LS_KEY, r); // first touch wins
   } catch (e) { /* no storage or no URL: nothing to record */ }
 })();
+// ?follow=<member id> from an invite link: open that member's Crew profile
+// once signed in (and once the crew feed is joined). Kept until used.
+const PENDING_FOLLOW_KEY = 'fcf_pending_follow';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+(function capturePendingFollow() {
+  try {
+    const f = new URLSearchParams(location.search).get('follow');
+    if (f && UUID_RE.test(f)) localStorage.setItem(PENDING_FOLLOW_KEY, f.toLowerCase());
+  } catch (e) { /* no storage or no URL */ }
+})();
+function pendingFollow() { try { const f = localStorage.getItem(PENDING_FOLLOW_KEY); return f && UUID_RE.test(f) ? f : null; } catch (e) { return null; } }
+function openPendingFollow() {
+  const f = pendingFollow(); if (!f || !ST.user) return;
+  if (f === ST.user.id) { try { localStorage.removeItem(PENDING_FOLLOW_KEY); } catch (e) {} return; }
+  crewOpenProfile(f); // renderCrew clears the key once the profile actually shows
+}
 // The choices offered. The key is what is stored; keep keys stable.
 const HEARD_OPTIONS = [
   ['crew', 'A crew member told me'],
@@ -4254,8 +4271,10 @@ async function crewLoadBlocks() {
 }
 function crewFindHtml() {
   return '<div class="card mb12"><div class="section-label" style="margin-top:0">FIND CREW</div>' +
-    '<div class="field"><input id="crewFindInput" type="text" placeholder="Search by call sign" value="' + crewEsc(ST.crew.find || '') + '" oninput="crewFindTyped(this.value)"></div>' +
-    '<div id="crewFindResults"></div></div>' +
+    '<div class="field"><input id="crewFindInput" type="text" placeholder="Call sign or email" autocapitalize="off" autocorrect="off" spellcheck="false" value="' + crewEsc(ST.crew.find || '') + '" oninput="crewFindTyped(this.value)"></div>' +
+    '<div id="crewFindResults"></div>' +
+    '<div style="font-size:0.6875rem;color:var(--muted);margin-top:6px">Searching by email? Type the whole address.</div>' +
+    '<button class="btn btn-outline mt8" onclick="crewInvite()">📤 Invite crew to follow you</button></div>' +
     (ST.crew.profile.base ? '<div class="card mb12"><div class="section-label" style="margin-top:0">CREW AT ' + crewEsc(ST.crew.profile.base) + ' · THIS MONTH</div><div id="crewBaseLeaders"></div><div id="crewBaseBoard"><div style="font-size:0.75rem;color:var(--muted)">Loading…</div></div></div>' : '<div class="card mb12" style="font-size:0.75rem;color:var(--muted)">Set your home base in Crew settings to see the crew at your base.</div>');
 }
 let _crewFindTimer = null;
@@ -4263,6 +4282,7 @@ function crewFindTyped(v) { ST.crew.find = v; clearTimeout(_crewFindTimer); _cre
 async function crewFindRun() {
   const box = document.getElementById('crewFindResults'); if (!box) return;
   const q = (ST.crew.find || '').trim(); if (q.length < 2) { box.innerHTML = ''; return; }
+  if (q.includes('@')) { crewFindByEmail(q, box); return; }
   try {
     const { data } = await withTimeout(SB.from('crew_profiles').select('user_id,callsign,base,avatar_path').ilike('callsign', '%' + q.replace(/[%_]/g, '') + '%').neq('user_id', ST.user.id).limit(20));
     if (!ST.crew.avatars) ST.crew.avatars = {};
@@ -4270,6 +4290,32 @@ async function crewFindRun() {
     box.innerHTML = (data || []).map(crewPersonRow).join('') || '<div style="font-size:0.75rem;color:var(--muted)">No one by that call sign.</div>';
   } catch (e) { box.innerHTML = '<div style="font-size:0.75rem;color:var(--muted)">Search failed.</div>'; }
 }
+// Email search (Chad, Nov 27 2026). The server matches the WHOLE address
+// only (sql/crew_find_by_email.sql) and never sends an email back, so
+// members' addresses cannot be browsed. A half-typed address just finds no
+// one until it is complete.
+async function crewFindByEmail(q, box) {
+  const looksDone = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(q);
+  if (!looksDone) { box.innerHTML = '<div style="font-size:0.75rem;color:var(--muted)">Keep typing the whole email address.</div>'; return; }
+  try {
+    const { data, error } = await withTimeout(SB.rpc('crew_find_by_email', { p_email: q })); if (error) throw error;
+    if ((ST.crew.find || '').trim() !== q) return; // a newer search is on its way
+    if (!ST.crew.avatars) ST.crew.avatars = {};
+    (data || []).forEach(r => { ST.crew.avatars[r.user_id] = cleanAvatarPath(r.avatar_path); });
+    box.innerHTML = (data || []).map(crewPersonRow).join('') || '<div style="font-size:0.75rem;color:var(--muted);line-height:1.5">No crew member with that email. They may not have joined the crew feed yet, or they signed up with Apple\'s Hide My Email. Try their call sign, or send them an invite.</div>';
+  } catch (e) { box.innerHTML = '<div style="font-size:0.75rem;color:var(--muted)">Search failed.</div>'; }
+}
+// Invite link (Chad, Nov 27 2026). Opens flightcrew.fit/go/crew/, which
+// shows "<call sign> invited you" with the App Store button and the call sign
+// to search. On a computer or Android it opens the web app straight to this
+// profile (?follow=). The iPhone app has no universal links yet, so on an
+// iPhone the link cannot open the app itself.
+const INVITE_BASE = 'https://flightcrew.fit/go/crew/';
+function crewInviteUrl() {
+  const cs = (ST.crew.profile && ST.crew.profile.callsign) || '';
+  return INVITE_BASE + '?u=' + encodeURIComponent(ST.user.id) + '&n=' + encodeURIComponent(cs);
+}
+function crewInvite() { shareCrewLink(crewInviteUrl()); }
 function crewPersonRow(r) {
   const f = ST.crew.followingSet && ST.crew.followingSet.has(r.user_id);
   const pend = ST.crew.pendingSet && ST.crew.pendingSet.has(r.user_id);
@@ -4332,6 +4378,11 @@ function renderCrew(parts) {
   const c = ST.crew;
   if (!c.loaded) { parts.push('<div class="card mb12" style="text-align:center;color:var(--muted);font-size:0.75rem">Loading…</div>'); loadCrewProfile().then(renderPage); return; }
   if (!c.profile) { parts.push(crewJoinCardHtml()); return; }
+  const pf = pendingFollow();
+  if (pf) {
+    try { localStorage.removeItem(PENDING_FOLLOW_KEY); } catch (e) {}
+    if (pf !== ST.user.id) { c.view = 'profile'; c.viewUser = pf; c.feed = []; c.loadedKey = null; }
+  }
   if (!c.followingSet) crewLoadFollowing().then(renderPage); else crewRefreshRequests();
   if (c.view === 'feed' && (c.news || []).length) crewMarkSeen();
   setTimeout(updateCrewTabDot, 0);
@@ -8109,6 +8160,7 @@ async function initApp() {
     // exists purely to cover this window, not to gate on any specific
     // outcome, so it should never stay stuck showing.
     bootStep(ST.authed ? 'shown-signed-in' : 'shown');
+    if (ST.authed && pendingFollow()) setTimeout(() => { try { openPendingFollow(); } catch (e) {} }, 300);
     setTimeout(() => { sendBootDiag(); }, 4000);
     const loader = document.getElementById('bootLoader');
     if (loader) loader.classList.add('hidden');

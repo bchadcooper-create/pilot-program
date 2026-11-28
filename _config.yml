@@ -1,0 +1,5 @@
+# GitHub Pages builds this site with Jekyll, which skips folders that start
+# with a dot. .well-known holds apple-app-site-association, the file that lets
+# crew invite links (flightcrew.fit/go/crew/) open the iPhone app (build 10,
+# Nov 27 2026). Only this line is set; everything else stays Jekyll's default.
+include: [".well-known"]

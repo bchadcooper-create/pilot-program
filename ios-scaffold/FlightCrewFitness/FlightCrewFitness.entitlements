@@ -48,6 +48,14 @@
   <key>com.apple.developer.sustained-execution</key>
   <true/>
 
+  <!-- 8. Associated Domains (build 10): crew invite links
+       flightcrew.fit/go/crew/ open the app. The site serves
+       .well-known/apple-app-site-association listing only /go/crew. -->
+  <key>com.apple.developer.associated-domains</key>
+  <array>
+    <string>applinks:flightcrew.fit</string>
+  </array>
+
   <!-- 7. Time Sensitive Notifications -->
   <key>com.apple.developer.usernotifications.time-sensitive</key>
   <true/>

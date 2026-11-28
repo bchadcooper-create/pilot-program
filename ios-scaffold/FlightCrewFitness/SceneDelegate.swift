@@ -9,6 +9,11 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                willConnectTo session: UISceneSession,
                options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
+        // A crew invite link that launched the app. Set before the screen is
+        // made so its first page load goes straight to the invite.
+        if let link = connectionOptions.userActivities.first(where: { $0.activityType == NSUserActivityTypeBrowsingWeb })?.webpageURL {
+            ViewController.pendingLaunchLink = link
+        }
         window = UIWindow(windowScene: windowScene)
         window?.rootViewController = ViewController()
         window?.makeKeyAndVisible()
@@ -31,5 +36,12 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 userInfo: response.notification.request.content.userInfo
             )
         }
+    }
+
+    // A crew invite link tapped while the app is already running.
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
+              let link = userActivity.webpageURL else { return }
+        (window?.rootViewController as? ViewController)?.openUniversalLink(link)
     }
 }

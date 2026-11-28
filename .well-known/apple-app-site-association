@@ -1,0 +1,16 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": ["3772GZ4MD5.fit.flightcrew.app"],
+        "components": [
+          { "/": "/go/crew/*", "comment": "Crew invite links open the app on the inviter's profile" },
+          { "/": "/go/crew", "comment": "Same, without the trailing slash" }
+        ],
+        "appID": "3772GZ4MD5.fit.flightcrew.app",
+        "paths": ["/go/crew/*", "/go/crew"]
+      }
+    ]
+  }
+}

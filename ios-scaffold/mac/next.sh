@@ -1,13 +1,14 @@
 #!/bin/bash
 # Run on the cloud Mac from ~/Desktop/pilot-program:
-#     git pull -q origin main; sh ios-scaffold/mac/next.sh 9 1.2
+#     git pull -q origin main; sh ios-scaffold/mac/next.sh 10 1.2
 # (the build number, then the version if it changes: a version already
 # live on the App Store takes no new builds, so after 1.1 went live the
 # next upload is 1.2). One step for a follow-up build:
 # copies the code from the repo into the Xcode project, sets the build
 # number, makes the signed archive and opens it in Xcode's Organizer, ready
 # for Distribute App > App Store Connect > Distribute. It does not upload.
-# The entitlements file is never touched.
+# The entitlements file is never replaced; build 10 only adds the
+# Associated Domains key (crew invite links) to it if it is missing.
 N="$1"
 V="$2"
 case "$N" in ''|*[!0-9]*) echo "give the build number, e.g. sh ios-scaffold/mac/next.sh 9 1.2"; exit 1;; esac
@@ -35,6 +36,18 @@ sed -i '' 's/INFOPLIST_KEY_UIStatusBarStyle = [A-Za-z]*;/INFOPLIST_KEY_UIStatusB
 if grep -q 'INFOPLIST_KEY_NSHealthShareUsageDescription' "$PBX" && ! grep -q 'INFOPLIST_KEY_NSLocationWhenInUseUsageDescription' "$PBX"; then
   LOCATION="$LOCATION" perl -pi -e 's/^(\s*)(INFOPLIST_KEY_NSHealthShareUsageDescription = [^\n]*\n)/$1$2$1INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "$ENV{LOCATION}";\n/' "$PBX"
 fi
+# Build 10: Associated Domains, so flightcrew.fit/go/crew/ invite links
+# open the app. Added to the project's own entitlements file if missing;
+# nothing else in that file is changed.
+ENT_REL=$(grep -o 'CODE_SIGN_ENTITLEMENTS = [^;]*' "$PBX" | head -1 | sed 's/CODE_SIGN_ENTITLEMENTS = //; s/"//g')
+ENT="$PROJ/$ENT_REL"
+if [ -n "$ENT_REL" ] && [ -f "$ENT" ]; then
+  if ! /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.associated-domains' "$ENT" >/dev/null 2>&1; then
+    /usr/libexec/PlistBuddy -c 'Add :com.apple.developer.associated-domains array' -c 'Add :com.apple.developer.associated-domains:0 string applinks:flightcrew.fit' "$ENT" && echo "added associated domains to $ENT_REL"
+  fi
+else
+  echo "WARNING: entitlements file not found ($ENT_REL); invite links will not open the app"
+fi
 echo "project: $(grep -o 'MARKETING_VERSION = [0-9.]*\|CURRENT_PROJECT_VERSION = [0-9]*' "$PBX" | sort -u | tr '\n' ' ')"
 rm -rf "$ARCH"
 echo "archiving (several minutes)..."
@@ -50,6 +63,7 @@ if [ -d "$APP" ]; then
   echo "== status bar style: $(/usr/libexec/PlistBuddy -c 'Print :UIStatusBarStyle' "$APP/Info.plist" 2>&1)"
   echo "== location text: $(/usr/libexec/PlistBuddy -c 'Print :NSLocationWhenInUseUsageDescription' "$APP/Info.plist" 2>&1 | cut -c1-90)"
   echo "== health text: $(/usr/libexec/PlistBuddy -c 'Print :NSHealthShareUsageDescription' "$APP/Info.plist" 2>&1 | cut -c150-330)"
+  echo "== associated domains: $(codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -o 'applinks:[a-z.]*' | tr '\n' ' ')"
   open "$ARCH"
   echo "opened in Xcode Organizer: Distribute App > App Store Connect > Distribute"
 fi

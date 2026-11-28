@@ -225,7 +225,44 @@ class ViewController: UIViewController {
     }
 
     private func loadApp() {
+        // A crew invite link that launched the app (SceneDelegate sets this
+        // before this screen exists) opens the inviter's profile instead of
+        // the plain start page.
+        if let link = ViewController.pendingLaunchLink, let url = ViewController.webURL(forUniversalLink: link) {
+            ViewController.pendingLaunchLink = nil
+            loadURL(url)
+            return
+        }
+        ViewController.pendingLaunchLink = nil
         loadURL(targetURL)
+    }
+
+    // MARK: - Universal links (build 10, Nov 27 2026)
+    // flightcrew.fit/go/crew/?u=<member id>&n=<call sign> is a crew invite
+    // (Crew > Find > Invite crew). With the Associated Domains entitlement
+    // and .well-known/apple-app-site-association on the site, tapping that
+    // link on an iPhone with the app opens the app here instead of Safari.
+    // The web app is told through ?follow=<id>, which it already handles
+    // (opens that profile once signed in). Only /go/crew is claimed, so every
+    // other flightcrew.fit link still opens in Safari.
+    static var pendingLaunchLink: URL?
+
+    static func webURL(forUniversalLink link: URL) -> URL? {
+        guard let host = link.host?.lowercased(), host == "flightcrew.fit" || host == "www.flightcrew.fit",
+              link.path.hasPrefix("/go/crew") else { return nil }
+        let u = URLComponents(url: link, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "u" })?.value?.lowercased() ?? ""
+        var items = [URLQueryItem(name: "ref", value: "invite")]
+        if UUID(uuidString: u) != nil { items.append(URLQueryItem(name: "follow", value: u)) }
+        var comps = URLComponents(string: "https://flightcrew.fit/")!
+        comps.queryItems = items
+        return comps.url
+    }
+
+    // App already running: open the invite in the page that is showing.
+    func openUniversalLink(_ link: URL) {
+        guard let url = ViewController.webURL(forUniversalLink: link) else { return }
+        loadURL(url)
     }
 
     // True while the one offline retry (see didFailProvisionalNavigation)

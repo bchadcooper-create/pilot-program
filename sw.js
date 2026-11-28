@@ -1,6 +1,6 @@
 // Flight Crew Fitness — Service Worker
-// Version: 5.70.6
-const CACHE = 'fcf-v5.70.6';
+// Version: 5.70.7
+const CACHE = 'fcf-v5.70.7';
 const CORE = [
   './',
   './index.html',
@@ -27,6 +27,11 @@ const isCdnLib = url => CDN_LIBS.includes(url.href);
 // saved copy answers first and the network is not asked at all; otherwise
 // the network gets a few seconds and the saved copy answers if it is slower.
 const NETWORK_WAIT_MS = 6000;
+// Opening the app itself (index.html and app.js) waits less (Nov 27 2026: Wi-Fi joined with no
+// internet hangs instead of failing, so every second here is a second of
+// white screen). A slow but working connection may get the saved copy for
+// one open; the newer version is fetched in the background and used next time.
+const NAV_NETWORK_WAIT_MS = 3000;
 const deviceOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false;
 // Startup log (Nov 27 2026: white screen opening the iPhone app in airplane
 // mode, even after closing it). Each page open this worker handles is noted
@@ -158,7 +163,7 @@ self.addEventListener('fetch', e => {
       return;
     }
     e.respondWith(
-      fetchWithTimeout(e.request, NETWORK_WAIT_MS).then(res => {
+      fetchWithTimeout(e.request, NAV_NETWORK_WAIT_MS).then(res => {
         note('network', res);
         if (res.status === 200) {
           const resClone = res.clone();

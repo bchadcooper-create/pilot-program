@@ -215,9 +215,15 @@ class ViewController: UIViewController {
         // gets the latest index.html and app.js. The offline retry uses the
         // default policy instead, which lets the service worker (and any
         // cached copy) answer when there's no network at all.
+        // BUG FIX (reported Nov 27 2026: white screen on launch with Wi-Fi
+        // joined but no internet, as on an airplane before paying for it).
+        // True airplane mode fails at once and the retry below opens the
+        // saved copy. Wi-Fi with no internet does not fail, it hangs, and the
+        // first load waited 30 seconds on a white screen before giving up.
+        // Ten seconds of silence is now enough to try the saved copy.
         let request = URLRequest(url: url,
                                  cachePolicy: offlineRetry ? .useProtocolCachePolicy : .reloadIgnoringLocalAndRemoteCacheData,
-                                 timeoutInterval: offlineRetry ? 10 : 30)
+                                 timeoutInterval: 10)
         webView.load(request)
     }
 
@@ -546,6 +552,13 @@ extension ViewController: WKNavigationDelegate {
             NSURLErrorDNSLookupFailed,
             NSURLErrorInternationalRoamingOff,
             NSURLErrorDataNotAllowed,
+            // Wi-Fi that is joined but not paid for (airplane, hotel) often
+            // answers in place of the real site, which fails the secure
+            // connection. That is no internet too: try the saved copy.
+            NSURLErrorSecureConnectionFailed,
+            NSURLErrorServerCertificateUntrusted,
+            NSURLErrorServerCertificateHasUnknownRoot,
+            NSURLErrorCannotLoadFromNetwork,
         ]
         return connectivityCodes.contains(error.code)
     }

@@ -1,5 +1,6 @@
 import UIKit
 import WebKit
+import CoreLocation
 import AuthenticationServices
 import StoreKit
 import HealthKit
@@ -149,6 +150,12 @@ class ViewController: UIViewController {
               audiogram:       !!(window.webkit?.messageHandlers?.healthkit),
               // Build 7. Last Sleep adds up the whole night (sleepCalc 2).
               sleepWholeNight: !!(window.webkit?.messageHandlers?.healthkit),
+              // Build 9. Route maps: read a run or walk's route from Apple
+              // Health (healthkit action "workoutRoute"), and record one in
+              // the app between Start and Stop (location "start" / "stop").
+              // Both reply on fcf:healthRoute.
+              healthRoute:     !!(window.webkit?.messageHandlers?.healthkit),
+              routeRecorder:   !!(window.webkit?.messageHandlers?.location),
             },
             getProducts:      () => send('storeKit',      { action: 'getProducts' }),
             purchase:         (o) => send('storeKit',      { action: 'purchase', productId: o.productId, appAccountToken: o.appAccountToken }),
@@ -177,6 +184,8 @@ class ViewController: UIViewController {
         contentController.add(weakDelegate, name: "haptics")
         // "Share with Crew": native share sheet (AirDrop works with no internet).
         contentController.add(weakDelegate, name: "share")
+        // Build 9: records a run or walk's route between Start and Stop.
+        contentController.add(weakDelegate, name: "location")
         // Used only by the native offline page's Retry button (see
         // showOfflinePage) — not part of the FCFBridge surface the real
         // web app uses, so it's intentionally left out of bridgeJS above.
@@ -418,6 +427,8 @@ extension ViewController: WKScriptMessageHandler {
             handleHapticsMessage(body)
         case "share":
             handleShareMessage(body)
+        case "location":
+            handleLocationMessage(body)
         case "pushToken":
             // BUG FIX (independent review finding): this handler was
             // registered but did nothing, and separately, the token was
@@ -862,6 +873,18 @@ extension ViewController {
                 out["kind"] = "workout"
                 self?.postToWeb("fcf:healthDistance", data: out)
             }
+        case "workoutRoute":
+            // Build 9: the GPS route of a run or walk in Health. startMs and
+            // endMs are the stopwatch's window, or both missing for "the
+            // latest one". Replies on fcf:healthRoute.
+            let exId = body["exId"] as? String ?? ""
+            let startDate = (body["startMs"] as? Double).map { Date(timeIntervalSince1970: $0 / 1000) }
+            let endDate = (body["endMs"] as? Double).map { Date(timeIntervalSince1970: $0 / 1000) }
+            HealthKitManager.shared.workoutRoute(start: startDate, end: endDate) { [weak self] payload in
+                var out = payload
+                out["exId"] = exId
+                self?.postToWeb("fcf:healthRoute", data: out)
+            }
         case "audiogram":
             // Build 7: the latest hearing test in Apple Health (AirPods Pro).
             // Replies on fcf:audiogram, never fcf:healthkit (the web app
@@ -1072,5 +1095,141 @@ extension ViewController {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             }
         }
+    }
+}
+
+// MARK: - Route recording (build 9, route maps requested Nov 22 2026)
+//
+// Records the route of a run or walk with the phone's GPS, only between
+// Start and Stop on the workout's stopwatch, and hands it to the web page on
+// fcf:healthRoute (source "FCF"). The web page keeps it on the phone unless
+// the member turns on "Share route with Crew" for that run or walk.
+// Needs NSLocationWhenInUseUsageDescription, and the "location" background
+// mode to keep recording with the phone locked (iOS shows the blue location
+// indicator while it does). Without that mode it still records while the
+// app is on screen. Written without a compiler; see docs/route-map-spec.md.
+
+extension ViewController {
+    func handleLocationMessage(_ body: [String: Any]) {
+        guard let action = body["action"] as? String else { return }
+        let exId = body["exId"] as? String ?? ""
+        switch action {
+        case "start":
+            RouteRecorder.shared.start(exId: exId)
+        case "stop":
+            let result = RouteRecorder.shared.stop()
+            if (body["discard"] as? Bool) == true { return }
+            guard let recordedId = result.exId, !recordedId.isEmpty else { return }
+            var out: [String: Any] = ["exId": recordedId, "source": "FCF", "activityType": "Recorded in the app"]
+            if result.points.count >= 2 {
+                out["success"] = true
+                out["points"] = result.points
+                if let started = result.startedAt { out["startMs"] = started.timeIntervalSince1970 * 1000 }
+                out["endMs"] = Date().timeIntervalSince1970 * 1000
+            } else {
+                out["success"] = false
+                out["code"] = RouteRecorder.shared.permissionDenied ? "location_denied" : "no_points"
+            }
+            postToWeb("fcf:healthRoute", data: out)
+        default:
+            break
+        }
+    }
+}
+
+final class RouteRecorder: NSObject, CLLocationManagerDelegate {
+    static let shared = RouteRecorder()
+    private let manager = CLLocationManager()
+    private var exId: String?
+    private var startedAt: Date?
+    private var points: [[Double]] = []
+    private var waitingForPermission = false
+    private(set) var permissionDenied = false
+
+    private override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.distanceFilter = 5          // meters between points
+        manager.activityType = .fitness
+        manager.pausesLocationUpdatesAutomatically = false
+    }
+
+    func start(exId: String) {
+        manager.stopUpdatingLocation()
+        self.exId = exId
+        startedAt = Date()
+        points = []
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            waitingForPermission = true
+            manager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse, .authorizedAlways:
+            permissionDenied = false
+            beginUpdates()
+        default:
+            // Location turned off for the app: nothing is recorded, and the
+            // web page falls back to a route from Apple Health if there is one.
+            permissionDenied = true
+        }
+    }
+
+    func stop() -> (exId: String?, points: [[Double]], startedAt: Date?) {
+        manager.stopUpdatingLocation()
+        if canRecordInBackground { manager.allowsBackgroundLocationUpdates = false }
+        let result = (exId: exId, points: points, startedAt: startedAt)
+        exId = nil
+        startedAt = nil
+        points = []
+        waitingForPermission = false
+        return result
+    }
+
+    // Setting allowsBackgroundLocationUpdates without the "location"
+    // background mode in Info.plist crashes the app, so it is checked first.
+    private var canRecordInBackground: Bool {
+        let modes = Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String] ?? []
+        return modes.contains("location")
+    }
+
+    private func beginUpdates() {
+        if canRecordInBackground {
+            manager.allowsBackgroundLocationUpdates = true
+            manager.showsBackgroundLocationIndicator = true
+        }
+        manager.startUpdatingLocation()
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        guard waitingForPermission else { return }
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            waitingForPermission = false
+            permissionDenied = false
+            if exId != nil { beginUpdates() }
+        case .denied, .restricted:
+            waitingForPermission = false
+            permissionDenied = true
+        default:
+            break
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard exId != nil, let started = startedAt else { return }
+        for location in locations {
+            // Skip rough fixes (GPS still settling, indoors) and anything
+            // cached from before Start.
+            guard location.horizontalAccuracy >= 0, location.horizontalAccuracy <= 50,
+                  location.timestamp >= started.addingTimeInterval(-5) else { continue }
+            points.append([location.coordinate.latitude, location.coordinate.longitude,
+                           location.timestamp.timeIntervalSince1970 * 1000])
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        #if DEBUG
+        print("FCF RouteRecorder:", error)
+        #endif
     }
 }

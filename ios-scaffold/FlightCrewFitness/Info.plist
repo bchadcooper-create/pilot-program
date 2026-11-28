@@ -154,9 +154,9 @@
   <key>NSMicrophoneUsageDescription</key>
   <string>Flight Crew Fitness may use your microphone for voice-based food logging.</string>
 
-  <!-- Location — not used currently, omit unless added -->
-  <!-- <key>NSLocationWhenInUseUsageDescription</key> -->
-  <!-- <string>...</string> -->
+  <!-- Location: build 9, route maps. Only while a run or walk is being timed. -->
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>Flight Crew Fitness uses your location only while you time a run or walk, to draw your route. Routes stay on your iPhone unless you choose to share one with your crew.</string>
 
   <!-- Push notifications are requested at runtime; no plist key needed -->
 
@@ -165,7 +165,8 @@
        ───────────────────────────────────────────── -->
   <key>UIBackgroundModes</key>
   <array>
-    <string>remote-notification</string>   <!-- Push notifications — the only background mode actually implemented -->
+    <string>remote-notification</string>   <!-- Push notifications -->
+    <string>location</string>              <!-- Build 9: keeps recording a run or walk's route with the phone locked (RouteRecorder in ViewController.swift) -->
   </array>
   <!-- BUG FIX: "processing" and "fetch" were previously declared here with
        nothing behind them — no BGTaskScheduler registration exists anywhere

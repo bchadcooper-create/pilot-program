@@ -1,5 +1,6 @@
 import HealthKit
 import Foundation
+import CoreLocation
 
 // MARK: - HealthKitManager
 //
@@ -350,6 +351,108 @@ class HealthKitManager {
                 "endedAt": Self.iso8601Formatter.string(from: workout.endDate),
                 "source": workout.sourceRevision.source.name
             ])
+        }
+        store.execute(query)
+    }
+
+    // ── Route of a run or walk (route maps, requested Nov 22 2026) ──────────
+    //
+    // Reads the GPS route another app (Apple Watch, Oura, Strava) saved with
+    // a run, walk or hike in Apple Health. With a window (the stopwatch's
+    // start and stop) it picks the workout that overlaps it most; without
+    // one, the latest such workout in the last 24 hours that has a route.
+    // Read-only. The web app keeps the route on the phone unless the member
+    // shares it. Written without a compiler; see docs/route-map-spec.md.
+
+    private var routeReadTypes: Set<HKObjectType> {
+        var types = Set<HKObjectType>()
+        types.insert(HKObjectType.workoutType())
+        types.insert(HKSeriesType.workoutRoute())
+        return types
+    }
+
+    func workoutRoute(start: Date?, end: Date?, completion: @escaping ([String: Any]) -> Void) {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            completion(["success": false, "code": "unavailable"]); return
+        }
+        store.requestAuthorization(toShare: nil, read: routeReadTypes) { [weak self] _, error in
+            guard let self = self else { return }
+            if let error = error { self.logNative("workoutRoute authorization error: \(error)") }
+            let now = Date()
+            // Search a little past both ends of the window: a watch workout
+            // is often started a few seconds before or after the stopwatch.
+            let from = start.map { $0.addingTimeInterval(-10 * 60) } ?? now.addingTimeInterval(-24 * 60 * 60)
+            let to = end.map { $0.addingTimeInterval(10 * 60) } ?? now
+            let predicate = HKQuery.predicateForSamples(withStart: from, end: to)
+            let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+            let query = HKSampleQuery(sampleType: HKWorkoutType.workoutType(), predicate: predicate,
+                                      limit: 20, sortDescriptors: [sort]) { [weak self] _, samples, error in
+                guard let self = self else { return }
+                if let error = error { self.logNative("workoutRoute workout query error: \(error)") }
+                let wanted: [HKWorkoutActivityType] = [.running, .walking, .hiking]
+                var candidates = ((samples as? [HKWorkout]) ?? []).filter { wanted.contains($0.workoutActivityType) }
+                if let s = start, let e = end {
+                    func overlap(_ w: HKWorkout) -> TimeInterval {
+                        return max(0, min(w.endDate, e).timeIntervalSince(max(w.startDate, s)))
+                    }
+                    candidates = candidates.filter { overlap($0) > 0 }.sorted { overlap($0) > overlap($1) }
+                }
+                self.firstRoute(in: candidates, completion: completion)
+            }
+            self.store.execute(query)
+        }
+    }
+
+    // Tries each workout in order until one has a route with points.
+    private func firstRoute(in workouts: [HKWorkout], completion: @escaping ([String: Any]) -> Void) {
+        guard let workout = workouts.first else {
+            completion(["success": false, "code": "no_route"]); return
+        }
+        let rest = Array(workouts.dropFirst())
+        let routePredicate = HKQuery.predicateForObjects(from: workout)
+        let routeQuery = HKSampleQuery(sampleType: HKSeriesType.workoutRoute(), predicate: routePredicate,
+                                       limit: HKObjectQueryNoLimit, sortDescriptors: nil) { [weak self] _, samples, error in
+            guard let self = self else { return }
+            if let error = error { self.logNative("workoutRoute route query error: \(error)") }
+            let routes = ((samples as? [HKWorkoutRoute]) ?? []).sorted { $0.startDate < $1.startDate }
+            self.readLocations(of: routes, collected: []) { points in
+                if points.count >= 2 {
+                    completion([
+                        "success": true,
+                        "points": points,
+                        "source": workout.sourceRevision.source.name,
+                        "activityType": workout.workoutActivityType.name,
+                        "startMs": workout.startDate.timeIntervalSince1970 * 1000,
+                        "endMs": workout.endDate.timeIntervalSince1970 * 1000,
+                    ])
+                } else {
+                    self.firstRoute(in: rest, completion: completion)
+                }
+            }
+        }
+        store.execute(routeQuery)
+    }
+
+    // A route arrives in batches; `done` is true on the last one.
+    private func readLocations(of routes: [HKWorkoutRoute], collected: [[Double]],
+                               completion: @escaping ([[Double]]) -> Void) {
+        guard let route = routes.first else { completion(collected); return }
+        var points = collected
+        var finished = false
+        let query = HKWorkoutRouteQuery(route: route) { [weak self] _, locations, done, error in
+            if let error = error {
+                self?.logNative("workoutRoute locations error: \(error)")
+                if !finished { finished = true; self?.readLocations(of: Array(routes.dropFirst()), collected: points, completion: completion) }
+                return
+            }
+            for location in locations ?? [] where location.horizontalAccuracy >= 0 {
+                points.append([location.coordinate.latitude, location.coordinate.longitude,
+                               location.timestamp.timeIntervalSince1970 * 1000])
+            }
+            if done && !finished {
+                finished = true
+                self?.readLocations(of: Array(routes.dropFirst()), collected: points, completion: completion)
+            }
         }
         store.execute(query)
     }

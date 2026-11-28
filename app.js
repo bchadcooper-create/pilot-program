@@ -1,10 +1,10 @@
  /**
  * Flight Crew Fitness — app.js
- * Version/build: fcf-v5.70.7 / 20261127_02
+ * Version/build: fcf-v5.71.0 / 20261127_03
  */
 
-const FCF_VERSION = 'fcf-v5.70.7';
-const FCF_BUILD   = '20261127_02';
+const FCF_VERSION = 'fcf-v5.71.0';
+const FCF_BUILD   = '20261127_03';
 // The App Store listing, with Chad's campaign tag so App Store Connect
 // counts installs that came from this website (Nov 14 2026).
 const APP_STORE_URL = 'https://apps.apple.com/app/apple-store/id6807968764?pt=129388803&amp;ct=Website&amp;mt=8';
@@ -7771,6 +7771,7 @@ function restoreWorkoutState() {
 function clearWorkoutState() {
   localStorage.removeItem(WORKOUT_STATE_KEY);
   localStorage.removeItem('fcf_route_drafts'); // a discarded workout takes its route with it
+  try { routeRecorderSend('stop', '', true); } catch (e) { /* no recorder */ }
 }
 
 function persistTimerState() {
@@ -8706,15 +8707,30 @@ function requestHealthRoute(exId, startMs, endMs) {
   window.webkit.messageHandlers.healthkit.postMessage({ action: 'workoutRoute', exId, startMs: startMs || null, endMs: endMs || null });
   return true;
 }
-// What an arriving route does to the draft. Pure.
+// Build 9: the iPhone app records the route itself between Start and Stop.
+function routeRecorderAvailable() {
+  return !!(inIOSApp() && typeof FCFBridge !== 'undefined' && FCFBridge.capabilities && FCFBridge.capabilities.routeRecorder && window.webkit?.messageHandlers?.location);
+}
+function routeRecorderSend(action, exId, discard) {
+  if (!routeRecorderAvailable()) return false;
+  window.webkit.messageHandlers.location.postMessage({ action, exId: exId || '', discard: !!discard });
+  return true;
+}
+// What an arriving route does to the draft. Pure. A route recorded in the
+// app (source FCF) covers exactly Start to Stop, so a route from Apple
+// Health arriving after it does not replace it.
 function healthRouteUpdate(current, p) {
   const payload = p || {};
   const pts = routeClean(payload.points);
   if (!payload.success || pts.length < 2) return null; // no route for this one: say nothing, keep what was there
+  if (current && current.src === 'FCF' && payload.source !== 'FCF' && Array.isArray(current.pts) && current.pts.length >= 2) return null;
   return { pts, share: !!(current && current.share), src: payload.source || null };
 }
 window.addEventListener('fcf:healthRoute', (e) => {
   const p = e.detail || {};
+  if (p.code === 'location_denied' && p.source === 'FCF') {
+    showToast('Location is off for Flight Crew Fitness, so no route was drawn. Turn it on in Settings, Flight Crew Fitness, Location.');
+  }
   if (!p.exId || !findWorkoutEx(p.exId)) return;
   const d = healthRouteUpdate(routeDraft(p.exId), p);
   if (!d) return;
@@ -14738,6 +14754,11 @@ function startStopwatch(exId, side, targetSec) {
   // created later with no tap behind it and iOS dropped it silently. It
   // also never asked for a vibration. Unlock here, buzz at the target.
   unlockChimeAudio();
+  // Route maps (build 9): a stopwatch started elsewhere ends any recording,
+  // and a run or walk's stopwatch starts one.
+  routeRecorderSend('stop', '', true);
+  const swFound = findWorkoutEx(exId);
+  if (swFound && swFound.exItem.inputType === 'timed_distance' && !side) routeRecorderSend('start', exId);
   ST.stopwatch = { active: true, seconds: 0, exId, side: side||null, interval: null, startTs: Date.now(), targetSec: targetSec||null, chimed: false };
   persistTimerState();
   renderFlight(document.getElementById('mainPage'));
@@ -14780,7 +14801,7 @@ function stopStopwatch(exId, side) {
   persistWorkoutState();
   showToast('⏱ Recorded '+total+' seconds'+(multi?' for set '+(idx+1):'')+(side?' ('+side+' side)':'')+'.');
   // A run or walk timed here: ask Apple Health how far that was.
-  if (found && found.exItem.inputType === 'timed_distance' && startedTs) { requestHealthDistance(exId, startedTs, Date.now()); requestHealthRoute(exId, startedTs, Date.now()); }
+  if (found && found.exItem.inputType === 'timed_distance' && startedTs) { requestHealthDistance(exId, startedTs, Date.now()); routeRecorderSend('stop', exId); requestHealthRoute(exId, startedTs, Date.now()); }
   renderFlight(document.getElementById('mainPage'));
 }
 

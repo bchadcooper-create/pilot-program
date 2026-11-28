@@ -2768,6 +2768,18 @@ test('Seated Leg Press (Machine) is its own exercise, separate from Leg Press (r
   assertEqual(ctx.exerciseVideoUrl('Seated Leg Press (Machine)'), 'https://www.youtube.com/watch?v=30N6fKpuTNo');
 });
 
+test('route maps: a route recorded in the app is not replaced by one from Apple Health (build 9)', () => {
+  const pts = [[33.3, -111.8], [33.301, -111.801], [33.302, -111.802]];
+  const mine = { pts, share: true, src: 'FCF' };
+  assertEqual(ctx.healthRouteUpdate(mine, { success: true, points: [[1, 1], [2, 2]], source: 'Oura' }), null, 'Health arriving later keeps the recorded route');
+  const again = ctx.healthRouteUpdate(mine, { success: true, points: pts, source: 'FCF' });
+  assertEqual(again.src, 'FCF'); assertEqual(again.share, true, 'the share choice is kept');
+  const fromHealth = ctx.healthRouteUpdate({ pts, share: false, src: 'Oura' }, { success: true, points: pts, source: 'FCF' });
+  assertEqual(fromHealth.src, 'FCF', 'the recorded route replaces a Health one');
+  assertEqual(ctx.healthRouteUpdate(null, { success: false, code: 'location_denied', source: 'FCF' }), null);
+  assertEqual(ctx.routeRecorderAvailable(), false); assertEqual(ctx.routeRecorderSend('start', 'x'), false, 'nothing is sent outside the iPhone app');
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) {
     try { await fn(); passed++; console.log('  ✓ ' + name); }
